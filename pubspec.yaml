@@ -12,17 +12,19 @@ dependencies:
 
   # ── Phase 1: Foundation & Window Framework ──────────────────────────────
   # Borderless window, hidden native title bar, drag-to-move, min/max/close.
-  window_manager: ^0.4.3
+  # (APIs verified compatible across 0.4.x–0.5.x.)
+  window_manager: ">=0.4.3 <0.6.0"
   # Strict single-instance enforcement + file argument forwarding.
   windows_single_instance: ^1.0.1
 
   # ── Phase 2: Core Media Engine ──────────────────────────────────────────
   # The holy trinity of media_kit (libmpv wrapper).
   media_kit: ^1.1.11 # Core playback logic.
-  media_kit_video: ^1.2.5 # The Video widget that renders frames.
+  media_kit_video: ">=1.2.5 <3.0.0" # The Video widget that renders frames.
   media_kit_libs_video: ^1.0.5 # Native Windows libmpv-2.dll binaries.
   # Drag & drop of local media files onto the window.
-  desktop_drop: ^0.4.4
+  # (APIs verified compatible across 0.4.x–0.8.x.)
+  desktop_drop: ">=0.4.4 <0.9.0"
 
   # Utilities.
   path: ^1.9.0
