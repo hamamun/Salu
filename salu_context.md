@@ -3,8 +3,8 @@
 ## 📍 Phase Execution Tracker
 *This section tracks the build progress. Each phase will have its own detailed `.md` file during execution.*
 
-- [ ] **Phase 1: Foundation & Window Framework** (Setup `pubspec.yaml`, `window_manager` for borderless edge-to-edge window, custom title bar, Segoe UI Variable font, dark theme base).
-- [ ] **Phase 2: Core Media Engine** (Integrate `media_kit`, initialize `mpv`, basic video rendering, hardware acceleration check).
+- [x] **Phase 1: Foundation & Window Framework** ✅ (Setup `pubspec.yaml`, `window_manager` for borderless edge-to-edge window, custom title bar, Segoe UI Variable font, dark theme base).
+- [x] **Phase 2: Core Media Engine** ✅ (Integrate `media_kit`, initialize `mpv`, basic video rendering, hardware acceleration check).
 - [ ] **Phase 3: The IINA-Style UI & OSC** (Floating bottom glass controller using `BackdropFilter`, auto-hide logic, play/pause animations, OSD indicators).
 - [ ] **Phase 4: Slide-Out Panels & Menus** (Right panel for Quick Settings [Video/Audio/Subtitles], slide-out Playlist/Chapter menus).
 - [ ] **Phase 5: Media Intelligence** (Drag-and-drop files/folders/srt, smart queuing/folder auto-play, multi-audio/subtitle track selector).

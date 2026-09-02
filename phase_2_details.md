@@ -1,5 +1,5 @@
 # Phase 2: Core Media Engine
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 
 ## 🎯 Goal
 Breathe life into the player. By the end of this phase, SALU will successfully load and play a video file using the powerful `mpv` engine with hardware acceleration active. The video will sit perfectly behind the Phase 1 invisible title bar.

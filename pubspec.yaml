@@ -1,0 +1,47 @@
+name: salu
+description: "SALU — A modern, IINA-inspired media player for Windows."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ── Phase 1: Foundation & Window Framework ──────────────────────────────
+  # Borderless window, hidden native title bar, drag-to-move, min/max/close.
+  # (APIs verified compatible across 0.4.x–0.5.x.)
+  window_manager: ">=0.4.3 <0.6.0"
+  # Strict single-instance enforcement + file argument forwarding.
+  windows_single_instance: ^1.0.1
+
+  # ── Phase 2: Core Media Engine ──────────────────────────────────────────
+  # The holy trinity of media_kit (libmpv wrapper).
+  media_kit: ^1.1.11 # Core playback logic.
+  media_kit_video: ">=1.2.5 <3.0.0" # The Video widget that renders frames.
+  media_kit_libs_video: ^1.0.5 # Native Windows libmpv-2.dll binaries.
+  # Drag & drop of local media files onto the window.
+  # (APIs verified compatible across 0.4.x–0.8.x.)
+  desktop_drop: ">=0.4.4 <0.9.0"
+
+  # Utilities.
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+
+  # NOTE ON TYPOGRAPHY:
+  # SALU strictly uses "Segoe UI Variable". It ships with Windows 11 as a
+  # system font, so we reference it by family name in the ThemeData instead
+  # of bundling the (non-redistributable) font file. On Windows 10 the theme
+  # gracefully falls back to classic "Segoe UI" via fontFamilyFallback.
