@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_info.dart';
 import '../../core/app_prefs.dart';
 import '../../core/history_manager.dart';
+import '../../core/language_utils.dart';
 import '../../core/player_service.dart';
+import '../../core/remote/remote_server.dart';
+import '../../core/subtitles_api.dart';
 import '../../core/thumbnail_service.dart';
 import '../../core/updater_service.dart';
 import '../../theme/app_theme.dart';
+import '../modals/about_modal.dart';
 import '../widgets/osd_indicator.dart';
 import 'browser_screen.dart';
 
-/// Global Settings overlay (Phase 4 · Step 5 — UI only).
+/// Global Settings overlay (Phase 4 · Step 5).
 ///
-/// Drafts the IINA-style preferences window. Controls bind to [AppPrefs]
-/// (in-memory for now); the heavy logic behind each category connects in
-/// Phases 5–8 as noted in each section.
+/// The IINA-style preferences window. Every control binds to [AppPrefs] and
+/// persists through `shared_preferences`; Phases 5–8 wired up the logic for
+/// resume/history, hwdec, updates, the stream library, the OpenSubtitles
+/// subtitle engine (Phase 7) and the Android remote server (Phase 8).
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -34,8 +40,10 @@ enum _Category {
   interface('User Interface', Icons.view_agenda_outlined),
   playback('Playback', Icons.play_circle_outline),
   subtitles('Subtitles', Icons.subtitles_outlined),
+  remote('Remote', Icons.smartphone_rounded),
   updates('Updates', Icons.system_update_alt_rounded),
-  keys('Key Bindings', Icons.keyboard_outlined);
+  keys('Key Bindings', Icons.keyboard_outlined),
+  about('About', Icons.info_outline_rounded);
 
   const _Category(this.label, this.icon);
 
@@ -81,11 +89,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case _Category.playback:
         return _PlaybackTab();
       case _Category.subtitles:
-        return _SubtitlesTab();
+        return const _SubtitlesTab();
+      case _Category.remote:
+        return const _RemoteTab();
       case _Category.updates:
         return const _UpdatesTab();
       case _Category.keys:
         return const _KeysTab();
+      // Phase 9: About is a floating modal, not a page — the rail opens it
+      // directly. This case is just the (never-selected) fallback.
+      case _Category.about:
+        return const AboutSection();
     }
   }
 }
@@ -125,16 +139,19 @@ class _NavRail extends StatelessWidget {
             _NavItem(
               category: category,
               selected: category == selected,
-              onTap: () => onSelect(category),
+              // "About" pops the dedicated modal instead of switching pages.
+              onTap: category == _Category.about
+                  ? () => AboutModal.show(context)
+                  : () => onSelect(category),
             ),
           const Spacer(),
-          const Padding(
-            padding: EdgeInsets.all(16),
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'SALU 0.1.0',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                'SALU ${AppInfo.version}',
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ),
           ),
@@ -395,21 +412,67 @@ class _PlaybackTab extends StatelessWidget {
   }
 }
 
-class _SubtitlesTab extends StatelessWidget {
+class _SubtitlesTab extends StatefulWidget {
+  const _SubtitlesTab();
+
+  @override
+  State<_SubtitlesTab> createState() => _SubtitlesTabState();
+}
+
+class _SubtitlesTabState extends State<_SubtitlesTab> {
+  final TextEditingController _keyField =
+      TextEditingController(text: AppPrefs.instance.openSubtitlesApiKey);
+  bool _revealed = false;
+  bool _testing = false;
+
+  @override
+  void dispose() {
+    _keyField.dispose();
+    super.dispose();
+  }
+
+  Future<void> _testConnection() async {
+    setState(() => _testing = true);
+    final String? problem = await SubtitlesApi.instance.testConnection();
+    if (!mounted) return;
+    setState(() => _testing = false);
+    if (problem == null) {
+      OsdController.instance
+          .show('OpenSubtitles reachable — key accepted', icon: Icons.verified_rounded);
+    } else {
+      OsdController.instance.show(problem, icon: Icons.error_outline_rounded);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return _ScrollBody(
       children: <Widget>[
         const _Title('Subtitles'),
-        const _BodyText('OpenSubtitles API setup for the auto-download feature (Phase 7).'),
+        const _BodyText(
+          'Paste a free OpenSubtitles API key to unlock the in-player search, '
+          'the "Top 3 Best Matches" flow and silent auto-download. Create one '
+          'at opensubtitles.com → Developers → New API Key (username "SALU").',
+        ),
         const SizedBox(height: 14),
         TextField(
-          obscureText: true,
+          controller: _keyField,
+          obscureText: !_revealed,
           onChanged: (String v) => AppPrefs.instance.openSubtitlesApiKey = v.trim(),
           style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary),
           decoration: InputDecoration(
             labelText: 'OpenSubtitles API Key',
             labelStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            isDense: true,
+            suffixIcon: IconButton(
+              tooltip: _revealed ? 'Hide key' : 'Reveal key',
+              icon: Icon(
+                _revealed ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: 18,
+                color: AppColors.textSecondary,
+              ),
+              onPressed: () => setState(() => _revealed = !_revealed),
+            ),
             enabledBorder: OutlineInputBorder(
               borderSide: const BorderSide(color: AppColors.divider),
               borderRadius: BorderRadius.circular(10),
@@ -420,15 +483,275 @@ class _SubtitlesTab extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
+        Row(
+          children: <Widget>[
+            OutlinedButton.icon(
+              onPressed: _testing ? null : _testConnection,
+              icon: _testing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.wifi_tethering_rounded, size: 16),
+              label: const Text('Test connection'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.divider),
+              ),
+            ),
+            const SizedBox(width: 10),
+            TextButton.icon(
+              onPressed: () => AppInfo.openExternal(AppInfo.opensubtitlesKeyUrl),
+              icon: const Icon(Icons.open_in_new_rounded, size: 15),
+              label: const Text('Get a key'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.accent),
+            ),
+          ],
+        ),
+        const SizedBox(height: 22),
+        const _Title('Auto-download'),
         ListenableBuilder(
           listenable: AppPrefs.instance,
           builder: (BuildContext context, Widget? _) {
-            return _SwitchRow(
-              label: 'Auto-download subtitles on video load',
-              subtitle: 'Silently fetch a perfect hash match (Phase 7).',
-              value: AppPrefs.instance.autoDownloadSubtitles,
-              onChanged: (bool v) => AppPrefs.instance.autoDownloadSubtitles = v,
+            final String current = AppPrefs.instance.defaultSubtitleLanguage;
+            final List<String> codes = <String>{
+              'all',
+              ...LanguageUtils.commonCodes,
+              if (current != 'all' && current.isNotEmpty) current,
+            }.toList()
+              ..sort((String a, String b) {
+                if (a == 'all') return -1;
+                if (b == 'all') return 1;
+                return LanguageUtils.displayName(a)
+                    .compareTo(LanguageUtils.displayName(b));
+              });
+            return Column(
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    const Expanded(
+                      child: Text(
+                        'Default language for downloads',
+                        style: TextStyle(
+                            fontSize: 13.5, color: AppColors.textPrimary),
+                      ),
+                    ),
+                    DropdownButton<String>(
+                      value: codes.contains(current) ? current : 'all',
+                      isDense: true,
+                      dropdownColor: AppColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      underline: const SizedBox.shrink(),
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textPrimary),
+                      items: <DropdownMenuItem<String>>[
+                        for (final String code in codes)
+                          DropdownMenuItem<String>(
+                            value: code,
+                            child: Text(
+                              code == 'all'
+                                  ? 'All languages'
+                                  : '${LanguageUtils.flagEmoji(code)}  '
+                                      '${LanguageUtils.displayName(code)}',
+                            ),
+                          ),
+                      ],
+                      onChanged: (String? value) {
+                        if (value != null) {
+                          AppPrefs.instance.defaultSubtitleLanguage = value;
+                        }
+                      },
+                      menuMaxHeight: 340,
+                    ),
+                  ],
+                ),
+                _SwitchRow(
+                  label: 'Auto-download subtitles on video load',
+                  subtitle: 'Silent OpenSubtitles hash match, saved next to '
+                      'the video as movie.srt — never downloaded twice.',
+                  value: AppPrefs.instance.autoDownloadSubtitles,
+                  onChanged: (bool v) => AppPrefs.instance.autoDownloadSubtitles = v,
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Remote control server (Phase 8 · Step 4): the single privacy switch that
+/// starts/stops the whole LAN surface, plus a live status card.
+class _RemoteTab extends StatelessWidget {
+  const _RemoteTab();
+
+  static const List<(String, String)> _commands = <(String, String)>[
+    ('play_pause', 'Toggle play / pause'),
+    ('volume_up · volume_down', '±5 % base volume'),
+    ('set_volume', 'Absolute level 0–200 % (boost included)'),
+    ('mute_toggle', 'Mute / unmute'),
+    ('seek_forward · seek_backward', '±5 s'),
+    ('seek_to', 'Jump to {"position_ms": 125000}'),
+    ('next_track · previous_track', 'Playlist navigation'),
+    ('set_rate', 'Playback speed 0.25×–4×'),
+    ('get_state', 'Full snapshot reply'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return _ScrollBody(
+      children: <Widget>[
+        const _Title('Remote Control'),
+        const _BodyText(
+          'SALU can run a lightweight local WebSocket server (ws://0.0.0.0:8080) '
+          'and announce itself over mDNS, so the future Android companion app '
+          'finds this PC on the Wi-Fi automatically and drives the player. '
+          'Commands flow in, live state broadcasts flow out.',
+        ),
+        const SizedBox(height: 14),
+        ListenableBuilder(
+          listenable: Listenable.merge(
+              <Listenable>[AppPrefs.instance, RemoteServer.instance]),
+          builder: (BuildContext context, Widget? _) {
+            final RemoteServer remote = RemoteServer.instance;
+            final bool running = remote.running;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _SwitchRow(
+                  label: 'Enable Remote Control Server',
+                  subtitle: 'Off = the server is completely shut down: zero '
+                      'open ports, zero background network activity.',
+                  value: AppPrefs.instance.remoteControlEnabled,
+                  onChanged: (bool v) =>
+                      AppPrefs.instance.remoteControlEnabled = v,
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.divider),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Icon(
+                            running
+                                ? Icons.broadcast_on_home_rounded
+                                : Icons.circle_outlined,
+                            size: 15,
+                            color: running
+                                ? const Color(0xFF3ECF8E)
+                                : AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            running
+                                ? 'Listening on port ${remote.port}'
+                                : 'Stopped',
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.textPrimary),
+                          ),
+                          const Spacer(),
+                          if (running)
+                            Text(
+                              remote.clientCount == 1
+                                  ? '1 client connected'
+                                  : '${remote.clientCount} clients connected',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary),
+                            ),
+                        ],
+                      ),
+                      if (running && remote.endpoints().isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 8),
+                        for (final String endpoint in remote.endpoints())
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              endpoint,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontFamily: 'Consolas',
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Auto-discovery: _salu-remote._tcp.local (mDNS/Bonjour)',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      ],
+                      if (!running)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Enable the switch to open the server. Windows will '
+                            'ask once for a private-network firewall allowance.',
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                        ),
+                      if (running && remote.lastError != null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Text(
+                            'First bind attempt failed on port 8080 — SALU '
+                            'climbed to the next free port.',
+                            style: TextStyle(
+                                fontSize: 11.5, color: AppColors.textSecondary),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const _Title('Wire protocol (JSON per frame)'),
+                const SizedBox(height: 6),
+                for (final (String action, String desc) in _commands)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: <Widget>[
+                        SizedBox(
+                          width: 220,
+                          child: Text(
+                            action,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontFamily: 'Consolas',
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            desc,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                const _BodyText(
+                  '…and SALU broadcasts {"type":"state", title, playing, '
+                  'volume, position_ms, duration_ms, …} — instantly on every '
+                  'state change, throttled to 4 Hz while scrubbing.',
+                ),
+              ],
             );
           },
         ),

@@ -1,5 +1,5 @@
 # Phase 7: Advanced Player Tools & Search Logic
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed — lyrics engine (`core/lyrics_parser.dart` + `ui/widgets/lyrics_view.dart` injected into Music Mode), OpenSubtitles v1 API (`core/subtitles_api.dart` with the classic size+128KB 64-bit hash), the reworked `ui/modals/subtitle_search_modal.dart` (Top-3 hash matches + all results + flag chips + one-click download next to the video), and the silent auto-download hook in `PlayerService._maybeAutoDownloadSubtitles` wired to the Settings toggle.
 
 ## 🎯 Goal
 Implement the heavy logic for the features that required standalone architecture. By the end of this phase, SALU will feature a dynamic scrolling Lyrics engine synced to audio files, and a fully functional OpenSubtitles API integration for instant subtitle downloading.
