@@ -1,6 +1,6 @@
 # SALU
 
-A modern, borderless, IINA-inspired media player for **Windows 10/11**, built with Flutter and powered by the `mpv` engine (`media_kit`).
+A modern, borderless,  -inspired media player for **Windows 10/11**, built with Flutter and powered by the `mpv` engine (`media_kit`).
 
 ![SALU](assets/images/salu_logo.png)
 
@@ -10,7 +10,7 @@ A modern, borderless, IINA-inspired media player for **Windows 10/11**, built wi
 |-------|-------------|--------|
 | 1 | Foundation & Window Framework | ✅ Completed |
 | 2 | Core Media Engine | ✅ Completed |
-| 3 | IINA-Style UI & OSC | ⏳ Not started |
+| 3 |  -Style UI & OSC | ⏳ Not started |
 | 4 | Slide-Out Panels & Menus | ⏳ Not started |
 | 5 | Media Intelligence | ⏳ Not started |
 | 6 | Web & Stream Manager | ⏳ Not started |
@@ -27,7 +27,7 @@ A modern, borderless, IINA-inspired media player for **Windows 10/11**, built wi
 - **Edge-to-edge video** — aspect-ratio-correct scaling behind the invisible title bar.
 - **Drag & drop** — drop a video/audio file to play it instantly, drop multiple files to queue them, drop a **folder** to queue its media, drop an `.srt`/`.ass` onto a playing video to load subtitles.
 - **Single instance** — only one SALU window can ever exist. Double-clicking a media file while SALU is open routes the file into the running window instantly.
-- **Basic transport for testing** — click the video or press <kbd>Space</kbd> to play/pause (the full IINA-style OSC arrives in Phase 3).
+- **Basic transport for testing** — click the video or press <kbd>Space</kbd> to play/pause (the full  -style OSC arrives in Phase 3).
 
 ## Requirements
 

@@ -12,7 +12,7 @@ import 'player_service.dart';
 ///  • Drop a `.srt`/`.ass` file → attach as subtitle to the current media.
 ///  • Drop a folder → scan it for media, queue everything, play the first.
 ///
-/// The full IINA-grade intelligence (playlist-panel-aware drops, natural
+/// The full  -grade intelligence (playlist-panel-aware drops, natural
 /// episode sorting, smart queuing) lands in Phase 5 on top of this.
 class DropHandler {
   DropHandler._();

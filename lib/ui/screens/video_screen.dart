@@ -28,7 +28,7 @@ class VideoScreen extends StatelessWidget {
               controller: service.videoController,
               fit: BoxFit.contain,
               fill: AppColors.videoBackdrop,
-              // SALU builds its own IINA-style OSC in Phase 3 — the stock
+              // SALU builds its own  -style OSC in Phase 3 — the stock
               // media_kit controls are disabled entirely.
               controls: NoVideoControls,
               subtitleViewConfiguration: const SubtitleViewConfiguration(

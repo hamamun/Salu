@@ -5,13 +5,13 @@
 
 - [x] **Phase 1: Foundation & Window Framework** ✅ (Setup `pubspec.yaml`, `window_manager` for borderless edge-to-edge window, custom title bar, Segoe UI Variable font, dark theme base).
 - [x] **Phase 2: Core Media Engine** ✅ (Integrate `media_kit`, initialize `mpv`, basic video rendering, hardware acceleration check).
-- [ ] **Phase 3: The IINA-Style UI & OSC** (Floating bottom glass controller using `BackdropFilter`, auto-hide logic, play/pause animations, OSD indicators).
+- [ ] **Phase 3: The UI & OSC** (Floating bottom glass controller using `BackdropFilter`, auto-hide logic, play/pause animations, OSD indicators).
 - [ ] **Phase 4: Slide-Out Panels & Menus** (Right panel for Quick Settings [Video/Audio/Subtitles], slide-out Playlist/Chapter menus).
 - [ ] **Phase 5: Media Intelligence** (Drag-and-drop files/folders/srt, smart queuing/folder auto-play, multi-audio/subtitle track selector).
 - [ ] **Phase 6: Web & Stream Manager** (`webview_windows` implementation for built-in browser, saving 10 M3U URLs and 15 Bookmarks using `shared_preferences`, sidebar library UI).
 - [ ] **Phase 7: Advanced Player Tools & Search Logic** (Lyrics engine with `.lrc` parsing and interactive scrolling view, OpenSubtitles API integration, Smart auto-download logic, and Top-3 Match search modal).
 - [ ] **Phase 8: Android Remote Server** (Local WebSocket server setup inside SALU to receive play/pause/volume commands and broadcast current player state. *Note: Android app itself will be built separately after SALU is completed*).
-- [ ] **Phase 9: Branding & About Section** (App icon integration, IINA-style About modal with `mpv` version info, and GitHub credits).
+- [ ] **Phase 9: Branding & About Section** (App icon integration,  -style About modal with `mpv` version info, and GitHub credits).
 
 ---
 
@@ -28,7 +28,7 @@
 *   **OS Integration:** Strictly **Single Instance** (only one app window allowed). App will accept incoming file path arguments so double-clicking media anywhere in Windows instantly plays it in the active SALU window.
 *   **Exceptions:** NO hardware media key support. NO pure native Windows frosted glass (using Flutter's `BackdropFilter` instead).
 
-### 2. Design & UI Rules (IINA-Inspired)
+### 2. Design & UI Rules ( -Inspired)
 *   **Window:** 100% borderless, video stretches edge-to-edge. Invisible window controls (Close/Min/Max) appear only on mouse hover at the top.
 *   **Colors:** Deep dark grays (`#121212` or `#1E1E1E`), NOT pure black. Smooth rounded corners on all UI elements.
 *   **Typography:** Strictly **Segoe UI Variable**.
@@ -48,7 +48,7 @@
 *   **Audio Tab:** 10-Band Graphic EQ with presets, volume boost.
 *   **Subtitle Tab:** Position slider (up/down screen), style overrides (font/color/size).
 
-### 5. Unique SALU Features (Not in IINA)
+### 5. Unique SALU Features (Not in  )
 *   **Web Browser:** Built-in `webview_windows` screen to navigate streaming sites directly inside SALU.
 *   **Stream Library:** A saved list of up to 10 M3U URLs and 15 Web Bookmarks, stored instantly via `shared_preferences`.
 *   **Lyrics View:** Scrolling, animated text view synced to audio/music.

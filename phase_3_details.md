@@ -1,4 +1,4 @@
-# Phase 3: The IINA-Style UI & OSC (On-Screen Controller)
+# Phase 3: The  -Style UI & OSC (On-Screen Controller)
 **Status:** ⏳ Not Started
 
 ## 🎯 Goal

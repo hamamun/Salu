@@ -38,7 +38,7 @@ Build the "Quick Settings" architecture. By the end of this phase, SALU will hav
 
 ### Step 5: Subtitle Tab Implementation (`lib/ui/panels/tabs/subtitle_tab.dart`)
 *   Build the subtitle formatting & management UI:
-    *   **Subtitle Search & Load (Dedicated Modal):** A primary button that opens a beautiful, floating pop-up window (mimicking IINA). This window contains:
+    *   **Subtitle Search & Load (Dedicated Modal):** A primary button that opens a beautiful, floating pop-up window (mimicking  ). This window contains:
         *   A button to "Load Local Subtitle" from the computer.
         *   A live list of search results from OpenSubtitles (with language flags) that the user can click to instantly download and apply.
     *   **Position Slider:** A vertical slider to manually push the subtitle text higher up or lower down on the screen.
@@ -46,7 +46,7 @@ Build the "Quick Settings" architecture. By the end of this phase, SALU will hav
 
 ### Step 5: Global App Preferences/Settings (UI Only) (`lib/ui/screens/settings_screen.dart`)
 *   Create the main Settings window (accessed via a gear icon on the OSC or Right Panel).
-*   Unlike the sliding panel, this will be a clean, centralized overlay (or a dedicated page state) mimicking the IINA preferences window.
+*   Unlike the sliding panel, this will be a clean, centralized overlay (or a dedicated page state) mimicking the   preferences window.
 *   **Categories to Draft:** 
     *   **General:** Theme/Accent Colors. Include a **"Clear Cache & Data"** section here to manually wipe the browser cache, delete temporary downloaded `.srt` files, and clear the video resume history.
     *   **User Interface:** A dropdown to change the **OSC Layout Architecture** (Top-Anchored, Floating Bottom, or Fixed Bottom).

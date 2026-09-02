@@ -2,7 +2,7 @@
 **Status:** ⏳ Not Started
 
 ## 🎯 Goal
-Apply the final coat of paint. By the end of this phase, SALU will have a dedicated, beautiful "About" window mimicking IINA, fully compiled Windows `.ico` assets, and all final branding applied to the app.
+Apply the final coat of paint. By the end of this phase, SALU will have a dedicated, beautiful "About" window mimicking  , fully compiled Windows `.ico` assets, and all final branding applied to the app.
 
 ## 🛠️ Step-by-Step Execution Plan
 
