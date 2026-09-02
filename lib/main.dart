@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,8 +6,11 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/app_prefs.dart';
+import 'core/history_manager.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
+import 'core/stream_manager.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/home_screen.dart';
 
@@ -15,6 +19,16 @@ Future<void> main(List<String> args) async {
 
   // ── Phase 2 · Step 2: boot the mpv C++ engine before any UI draws. ────
   MediaKit.ensureInitialized();
+
+  // ── Phase 5/6: restore persisted state before the first frame. ────────
+  await AppPrefs.instance.load();
+  await HistoryManager.instance.load();
+  await StreamManager.instance.load();
+
+  // Apply the stored hardware-decoding preference to the live engine and
+  // point mpv at the yt-dlp binary SALU keeps updated.
+  unawaited(PlayerService.instance.applyHwdecPreference());
+  unawaited(PlayerService.instance.applyYtDlpPath());
 
   // ── Phase 1 · Step 6: strict single instance + file argument routing. ─
   // If SALU is already running and the user double-clicks a media file,

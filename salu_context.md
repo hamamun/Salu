@@ -7,8 +7,8 @@
 - [x] **Phase 2: Core Media Engine** ✅ (Integrate `media_kit`, initialize `mpv`, basic video rendering, hardware acceleration check).
 - [x] **Phase 3: The IINA-Style UI & OSC** ✅ (Top-anchored glass controller using `BackdropFilter` [default; also Floating/Fixed Bottom], auto-hide logic, timeline with frame-thumbnail hover preview, play/pause animations, OSD indicators).
 - [x] **Phase 4: Slide-Out Panels & Menus** ✅ (Right panel for Quick Settings [Playlist/Video/Audio/Subtitles], slide-out Playlist/Chapter menus).
-- [ ] **Phase 5: Media Intelligence** (Drag-and-drop files/folders/srt, smart queuing/folder auto-play, multi-audio/subtitle track selector).
-- [ ] **Phase 6: Web & Stream Manager** (`webview_windows` implementation for built-in browser, saving 10 M3U URLs and 15 Bookmarks using `shared_preferences`, sidebar library UI).
+- [x] **Phase 5: Media Intelligence** ✅ (Drag-and-drop files/folders/srt, smart queuing/folder auto-play, multi-audio/subtitle track selector).
+- [x] **Phase 6: Web & Stream Manager** ✅ (`webview_windows` implementation for built-in browser, saving 10 M3U URLs and 15 Bookmarks using `shared_preferences`, sidebar library UI).
 - [ ] **Phase 7: Advanced Player Tools & Search Logic** (Lyrics engine with `.lrc` parsing and interactive scrolling view, OpenSubtitles API integration, Smart auto-download logic, and Top-3 Match search modal).
 - [ ] **Phase 8: Android Remote Server** (Local WebSocket server setup inside SALU to receive play/pause/volume commands and broadcast current player state. *Note: Android app itself will be built separately after SALU is completed*).
 - [ ] **Phase 9: Branding & About Section** (App icon integration, IINA-style About modal with `mpv` version info, and GitHub credits).
