@@ -10,6 +10,7 @@ import 'core/app_prefs.dart';
 import 'core/history_manager.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
+import 'core/remote/remote_server.dart';
 import 'core/stream_manager.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/home_screen.dart';
@@ -29,6 +30,11 @@ Future<void> main(List<String> args) async {
   // point mpv at the yt-dlp binary SALU keeps updated.
   unawaited(PlayerService.instance.applyHwdecPreference());
   unawaited(PlayerService.instance.applyYtDlpPath());
+
+  // ── Phase 8: bring up the Android remote backend ──────────────────────
+  // The WebSocket server + mDNS responder only run while the
+  // Settings → Remote toggle is ON; install() honours the stored state.
+  unawaited(RemoteServer.instance.install());
 
   // ── Phase 1 · Step 6: strict single instance + file argument routing. ─
   // If SALU is already running and the user double-clicks a media file,

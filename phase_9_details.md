@@ -1,5 +1,5 @@
 # Phase 9: Branding, About Section & Final Polish
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed — `windows/runner/resources/app_icon.ico` recompiled from the SALU logo (16/24/32/48 BMP + 64/128/256 PNG entries), `lib/ui/modals/about_modal.dart` (logo, `Version 1.0.0`, live mpv build read from the engine, credits + links, opened from Settings → About), and `windows/installer/SALU.iss` (+ `build_installer.ps1`) registering file associations, the "Open with SALU" context menu and `App Paths` so double-clicked media routes into the Phase 1 single-instance window.
 
 ## 🎯 Goal
 Apply the final coat of paint. By the end of this phase, SALU will have a dedicated, beautiful "About" window mimicking IINA, fully compiled Windows `.ico` assets, and all final branding applied to the app.
