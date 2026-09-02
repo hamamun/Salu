@@ -39,4 +39,14 @@ class MediaUtils {
 
   /// Display name for a media path — the file name without its extension.
   static String displayName(String path) => p.basenameWithoutExtension(path);
+
+  /// Formats a duration as `h:mm:ss` or `m:ss` depending on length.
+  static String formatDuration(Duration d) {
+    final int hours = d.inHours;
+    final int minutes = d.inMinutes.remainder(60);
+    final int seconds = d.inSeconds.remainder(60);
+    final String mm = minutes.toString().padLeft(2, '0');
+    final String ss = seconds.toString().padLeft(2, '0');
+    return hours > 0 ? '$hours:$mm:$ss' : '$minutes:$ss';
+  }
 }
