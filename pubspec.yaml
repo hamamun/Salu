@@ -1,7 +1,7 @@
 name: salu
 description: "SALU — A modern, IINA-inspired media player for Windows."
 publish_to: "none"
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -41,6 +41,16 @@ dependencies:
   # ── Phase 6: Web & Stream Manager ───────────────────────────────────────
   # Built-in browser powered by the Windows WebView2 runtime.
   webview_windows: ^0.4.0
+
+  # ── Phase 8: Android Remote Server ──────────────────────────────────────
+  # Tiny local HTTP/WebSocket stack powering ws://0.0.0.0:8080 for the
+  # future Android companion app. (webSocketHandler's 2-argument connection
+  # callback works across shelf_web_socket 2.x and 3.x.)
+  shelf: ^1.4.1
+  shelf_web_socket: ">=2.0.1 <4.0.0"
+  # Shared WebSocketChannel type + the mDNS broadcaster is hand-rolled
+  # dart:io, so no native Zeroconf/Bonjour dependency is needed.
+  web_socket_channel: ">=2.4.0 <4.0.0"
 
   # Utilities.
   path: ^1.9.0

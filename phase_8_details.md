@@ -1,5 +1,5 @@
 # Phase 8: Android Remote Server
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed — `lib/core/remote/` now ships the `shelf_web_socket` server (`websocket_server.dart`, plus a `GET /health` probe endpoint), the JSON command interpreter (`command_handler.dart` → `PlayerService`), the throttled state broadcaster (`state_broadcaster.dart`), a zero-dependency mDNS responder (`mdns_broadcaster.dart` announcing `_salu-remote._tcp.local`), and the `remote_server.dart` facade honoring the Settings → Remote "Enable Remote Control Server" switch (off = everything shut down).
 
 ## 🎯 Goal
 Prepare SALU to be controlled remotely. By the end of this phase, the Windows application will run a lightweight, invisible local server in the background that is ready to accept commands (Play, Pause, Volume, Seek) from the future Android companion app.

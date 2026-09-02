@@ -9,8 +9,11 @@ import 'package:window_manager/window_manager.dart';
 import 'app_prefs.dart';
 import 'history_manager.dart';
 import 'hwdec_manager.dart';
+import 'language_utils.dart';
+import 'lyrics_parser.dart';
 import 'media_utils.dart';
 import 'smart_queue_service.dart';
+import 'subtitles_api.dart';
 import 'updater_service.dart';
 
 /// SALU's dedicated playback manager.
@@ -200,6 +203,10 @@ class PlayerService {
       _resumeTargetUri = uri;
       _resumeHandled = false;
       _attachSidecarSubtitle(uri);
+      // Phase 7 · Step 1 — silently look for `song.lrc` beside the track.
+      LyricsController.instance.onMediaOpened(uri);
+      // Phase 7 · Step 5 — background OpenSubtitles fetch (when enabled).
+      unawaited(_maybeAutoDownloadSubtitles(uri));
     }
 
     final String title = MediaUtils.displayName(uri);
@@ -284,6 +291,48 @@ class PlayerService {
         SmartQueueService.findSidecar(path, MediaUtils.subtitleExtensions);
     if (sidecar == null) return;
     unawaited(loadExternalSubtitle(sidecar));
+  }
+
+  // ── Phase 7 · Step 5: silent subtitle auto-download ──────────────────
+
+  String? _autoSubPendingPath;
+
+  /// When "Auto-download Subtitles on Video Load" is enabled, silently pings
+  /// OpenSubtitles with the file hash. Only a perfect hash match in the
+  /// user's default language is downloaded — quietly, next to the video, so
+  /// the sidecar logic picks it up for good and it is never fetched twice.
+  Future<void> _maybeAutoDownloadSubtitles(String uri) async {
+    if (!AppPrefs.instance.autoDownloadSubtitles) return;
+    if (_isNetworkUri(uri)) return;
+    final String path = SmartQueueService.toLocalPath(uri);
+    if (!MediaUtils.isVideo(path)) return;
+    // A sidecar subtitle already sitting there beats a download.
+    if (SmartQueueService.findSidecar(path, MediaUtils.subtitleExtensions) != null) {
+      return;
+    }
+    if (!SubtitlesApi.instance.hasApiKey) return;
+    if (_autoSubPendingPath == path) return;
+    _autoSubPendingPath = path;
+    try {
+      final SubtitleDownloadOutcome? outcome =
+          await SubtitlesApi.instance.autoFetchBest(path);
+      if (outcome == null) return;
+      final String? file = outcome.path;
+      if (!outcome.success || file == null) {
+        debugPrint('[SALU] auto subtitles: ${outcome.message}');
+        return;
+      }
+      // The user may have skipped ahead — never apply to the wrong video.
+      final String? now = currentMediaUri;
+      if (now == null || SmartQueueService.toLocalPath(now) != path) return;
+      await loadExternalSubtitle(file);
+      emitOsd('Subtitle Downloaded: '
+          '${LanguageUtils.displayName(outcome.language ?? '')}');
+    } catch (error) {
+      debugPrint('[SALU] auto subtitle fetch failed: $error');
+    } finally {
+      if (_autoSubPendingPath == path) _autoSubPendingPath = null;
+    }
   }
 
   static bool _isNetworkUri(String uri) {

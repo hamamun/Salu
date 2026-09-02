@@ -42,6 +42,7 @@ class AppPrefs extends ChangeNotifier {
   static const String _kAutoQueue = 'playback.autoQueueFolder';
   static const String _kApiKey = 'subtitles.openSubtitlesApiKey';
   static const String _kAutoSubs = 'subtitles.autoDownload';
+  static const String _kDefaultSubLang = 'subtitles.defaultLanguage';
   static const String _kRemote = 'remote.enabled';
 
   /// Reads every stored value into memory. Safe to call more than once.
@@ -66,6 +67,8 @@ class AppPrefs extends ChangeNotifier {
       _autoQueueFolder = store.getBool(_kAutoQueue) ?? _autoQueueFolder;
       _openSubtitlesApiKey = store.getString(_kApiKey) ?? _openSubtitlesApiKey;
       _autoDownloadSubtitles = store.getBool(_kAutoSubs) ?? _autoDownloadSubtitles;
+      _defaultSubtitleLanguage =
+          store.getString(_kDefaultSubLang) ?? _defaultSubtitleLanguage;
       _remoteControlEnabled = store.getBool(_kRemote) ?? _remoteControlEnabled;
     } catch (error) {
       debugPrint('[SALU] preferences load failed: $error');
@@ -177,6 +180,17 @@ class AppPrefs extends ChangeNotifier {
     if (_autoDownloadSubtitles == value) return;
     _autoDownloadSubtitles = value;
     _writeBool(_kAutoSubs, value);
+    notifyListeners();
+  }
+
+  /// ISO code used by the OpenSubtitles auto-download + search default.
+  /// `all` means "no language filter".
+  String _defaultSubtitleLanguage = 'en';
+  String get defaultSubtitleLanguage => _defaultSubtitleLanguage;
+  set defaultSubtitleLanguage(String value) {
+    if (_defaultSubtitleLanguage == value) return;
+    _defaultSubtitleLanguage = value;
+    _writeString(_kDefaultSubLang, value);
     notifyListeners();
   }
 

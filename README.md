@@ -14,11 +14,11 @@ A modern, borderless, IINA-inspired media player for **Windows 10/11**, built wi
 | 4 | Slide-Out Panels & Menus | ✅ Completed |
 | 5 | Media Intelligence | ✅ Completed |
 | 6 | Web & Stream Manager | ✅ Completed |
-| 7 | Advanced Player Tools & Search Logic | ⏳ Not started |
-| 8 | Android Remote Server | ⏳ Not started |
-| 9 | Branding & About Section | ⏳ Not started |
+| 7 | Advanced Player Tools & Search Logic | ✅ Completed |
+| 8 | Android Remote Server | ✅ Completed |
+| 9 | Branding & About Section | ✅ Completed |
 
-## What works right now (Phase 1–6)
+## What works right now (Phase 1–9)
 
 - **Borderless window** — the native Windows title bar is gone; SALU draws its own invisible chrome that fades in when the mouse moves and fades out after 3 seconds of stillness.
 - **Custom caption buttons** — Minimize / Maximize / Close rendered with native Segoe Fluent glyphs, with the classic red close-hover. Drag anywhere on the top strip to move the window; double-click it to maximize/restore.
@@ -69,6 +69,29 @@ A modern, borderless, IINA-inspired media player for **Windows 10/11**, built wi
 - **Live stream OSC** — when the duration is unknown the timeline is replaced by a **LIVE** badge, the ±10 s buttons disappear, and Previous/Next become Channel Down / Channel Up.
 - **Built-in browser** — `webview_windows` (Windows WebView2) with a multi-tab top bar and exactly four navigation actions: **Home, Back, Forward, Close Browser**. Opening another bookmark while the browser is up spawns a new tab. SALU's OSC is hidden in browser mode, and "Close Browser" destroys every controller, clears cache/cookies and frees the RAM.
 
+### Phase 7 · Advanced Player Tools & Search Logic
+
+- **Lyrics engine** — a full `.lrc` parser (multi-stamp lines, `[ti:]/[ar:]/[al:]` metadata, `[offset:±ms]` shift) with **smart matching**: play `song.mp3` and `song.lrc` in the same folder is found and loaded silently.
+- **Scrolling Lyrics view** — injected next to the album art in Music Mode: a glass panel that auto-scrolls with the `mpv` position stream, glows the sung line bright white while neighbours dim, pauses auto-follow while you browse, and **seeks to any line you click**. A visibility-off button hides it for the track.
+- **OpenSubtitles API integration** — the classic OpenSubtitles **file hash** (size + 64-bit checksum of the first/last 64 KB) plus a filename query are sent to `api.opensubtitles.com/api/v1` with the key from Settings → Subtitles.
+- **Top-3 Match search modal** — results split into "Top matches · exact file hash" and "All results", each with a language flag chip, download stats and rating. Clicking a row downloads the `.srt` **directly next to the video under its own base name** (`movie.mp4` → `movie.srt`), loads it into `mpv` instantly and flashes *"Subtitle Downloaded: [Language]"* — and since it's now a sidecar, the Phase 5 loader means it never downloads twice.
+- **Smart auto-download** — the Settings toggle pings OpenSubtitles in the background on every video load; a perfect hash match in your default language is fetched and applied silently.
+- **Language plumbing** — default-language dropdown (Settings and modal share it), per-language flags, and a "Test connection" key validator.
+
+### Phase 8 · Android Remote Server
+
+- **Local WebSocket server** — `shelf` + `shelf_web_socket` listening on `ws://0.0.0.0:8080` (auto-climbs to a free port), plus a tiny `GET /health` probe for companion apps. New clients get a `hello` + full state snapshot the moment they connect.
+- **Command receiver** — JSON actions `play_pause`, `volume_up/down`, `set_volume` (0–200 % incl. boost), `mute_toggle`, `seek_forward/backward`, `seek_to`, `next_track`, `previous_track`, `set_rate` and `get_state`, dispatched straight into `PlayerService`.
+- **State broadcaster** — every engine change (`playing`, title, volume, mute, duration…) pushes `{"type":"state", position_ms, duration_ms, …}` to all clients instantly; position ticks are throttled to 4 Hz so scrubs never flood the LAN.
+- **mDNS auto-discovery** — a hand-built RFC 6762 broadcaster announces `_salu-remote._tcp.local` (PTR + SRV + TXT + A records) with zero native dependencies, so the future Android app finds the PC without typing an IP.
+- **Privacy kill switch** — Settings → Remote *"Enable Remote Control Server"*. OFF means the sockets are closed and there is **zero background network activity**; the status card shows the live port, endpoints and connected-client count.
+
+### Phase 9 · Branding, About & Installer
+
+- **App icon** — `windows/runner/resources/app_icon.ico` compiled from the SALU logo into a multi-resolution icon (16/24/32/48 BMP + 64/128/256 PNG entries) — razor-sharp on taskbar, Start menu, Alt-Tab and window corners.
+- **About window** — IINA-style floating modal (Settings → About): the SALU mark, `Version 1.0.0`, the **live `mpv` engine version read from the running player**, and one-tap links to the GitHub repo and every library SALU stands on (mpv, media_kit, yt-dlp, OpenSubtitles, Flutter), with an IINA nod in the credits.
+- **Installer** — `windows/installer/SALU.iss` (Inno Setup 6) registers the `SALU.Media` ProgID for 22 common extensions, adds **"Open with SALU"** to the right-click menu and writes `App Paths`, so double-clicking any media file anywhere routes straight into the single-instance window. Uninstalling removes every key.
+
 ## Requirements
 
 - Windows 10/11
@@ -90,6 +113,13 @@ flutter build windows --release
 ```
 
 > `flutter pub get` regenerates the `windows/flutter/generated_*` plugin glue automatically — no manual steps needed.
+
+Installer (Inno Setup 6 required, see `windows/installer/README.md`):
+
+```powershell
+.\windows\installer\build_installer.ps1
+# → windows\installer\output\SALU-1.0.0-setup.exe
+```
 
 ## Testing checklist (Phase 1 + 2)
 
@@ -121,6 +151,19 @@ flutter build windows --release
 7. Open the Library (video-library icon on the OSC) → add an M3U URL → click it → channels populate the Playlist tab; a big list shows the Group By filter, and the OSC shows the LIVE badge.
 8. Add a bookmark → click it → the built-in browser opens; add a second bookmark → it opens as a new tab; "Close Browser" returns to the player.
 
+## Testing checklist (Phase 7 + 8 + 9)
+
+1. Play an `.mp3` that has a `song.lrc` next to it → Music Mode shifts and the lyrics panel slides in beside the album art, auto-scrolling with playback; the current line is bright white.
+2. Click a later lyric line → audio jumps exactly to its timestamp; scroll the wheel while playing → auto-follow pauses ~6 s, then glides back onto the sung line.
+3. Settings → Subtitles → paste an OpenSubtitles.com API key → *Test connection* → OSD confirms. Open a `.mp4`, press the Subtitles-tab **Search & Load Subtitles** → the modal auto-searches; "TOP MATCHES · exact file hash" appears when the file is known to the DB.
+4. Click a result → `<video>.srt` appears next to the video, plays instantly on the subtitle track, OSD reads *"Subtitle Downloaded: [Language]"*; reopen the video later → subtitle auto-loads via the sidecar with no download.
+5. Enable *Auto-download subtitles on video load* → play a well-known movie file → after a few seconds the subtitle appears with an OSD flash, no clicks.
+6. Settings → Remote → toggle **Enable Remote Control Server** → status card shows `ws://<your-LAN-IP>:8080`. From another machine on the Wi-Fi: `curl http://<ip>:8080/health` answers; an mDNS browser (`dns-sd -B _salu-remote._tcp` / Android `multicast_dns`) finds the `_salu-remote._tcp.local` service.
+7. Point any WebSocket client at the port and send `{"action":"play_pause"}`, `{"action":"volume_up"}`, `{"action":"seek_forward"}` → SALU reacts live, and `{"type":"state", …}` broadcasts stream back with position/volume updates.
+8. Toggle the switch off → port closes (`curl` fails) — zero LAN surface while disabled.
+9. Rebuild → the taskbar, window corner and Alt-Tab show the new SALU icon; Settings → **About** → the modal shows `Version 1.0.0` plus the live `mpv` engine line, and every link opens your default browser.
+10. `.\windows\installer\build_installer.ps1` → install `SALU-1.0.0-setup.exe`, tick *Open with SALU* → right-click any `.mp4` in Explorer → "Open with SALU" plays it; with SALU already running, double-clicking another file routes into the existing window.
+
 ## Project layout
 
 ```
@@ -130,6 +173,7 @@ lib/
 ├── core/
 │   ├── player_service.dart       # mpv Player + VideoController + UI state
 │   ├── app_prefs.dart            # Persisted user preferences (shared_preferences)
+│   ├── app_info.dart             # Version, links, live mpv build (Phase 9)
 │   ├── history_manager.dart      # Playback history + seamless resume
 │   ├── smart_queue_service.dart  # Folder scan, sibling queue, sidecar lookup
 │   ├── natural_sort.dart         # Human-order sorting (Episode_2 < Episode_10)
@@ -141,16 +185,25 @@ lib/
 │   ├── thumbnail_service.dart    # Headless mpv → timeline hover frame captures
 │   ├── drag_drop_handler.dart    # IINA-style drop rules (zone aware)
 │   ├── drop_handler.dart         # Legacy Phase 2 shim → drag_drop_handler
-│   └── media_utils.dart          # Media/subtitle/playlist detection + formatting
+│   ├── lyrics_parser.dart        # .lrc parsing + Music Mode lyrics state (Phase 7)
+│   ├── subtitles_api.dart        # OpenSubtitles v1 client + 64-bit file hash
+│   ├── language_utils.dart       # Language names + flag chips
+│   ├── media_utils.dart          # Media/subtitle/playlist detection + formatting
+│   └── remote/                   # Android remote backend (Phase 8)
+│       ├── remote_server.dart    # Facade: lifecycle + Settings kill switch
+│       ├── websocket_server.dart # shelf + shelf_web_socket server (0.0.0.0:8080)
+│       ├── command_handler.dart  # JSON {"action": …} → PlayerService
+│       ├── state_broadcaster.dart# Throttled {"type":"state", …} broadcasts
+│       └── mdns_broadcaster.dart # Hand-rolled _salu-remote._tcp announcer
 └── ui/
     ├── managers/
     │   └── ui_visibility_manager.dart   # Chrome auto-hide state
     ├── screens/
     │   ├── home_screen.dart      # Main canvas + overlay composition + hotkeys
     │   ├── video_screen.dart     # Edge-to-edge mpv video canvas
-    │   ├── music_mode.dart       # Album art + metadata (audio-only files)
+    │   ├── music_mode.dart       # Album art + metadata + lyrics (Phase 7)
     │   ├── browser_screen.dart   # Built-in WebView2 browser (tabs + nav)
-    │   └── settings_screen.dart  # Global settings overlay
+    │   └── settings_screen.dart  # Global settings overlay (incl. Remote tab)
     ├── osc/
     │   ├── osc_panel.dart        # Glass OSC bar (3 layouts)
     │   ├── control_buttons.dart  # Transport, volume, track menus, view modes
@@ -161,10 +214,17 @@ lib/
     │   ├── library_panel.dart           # Left sidebar: streams + bookmarks
     │   └── tabs/                        # playlist / video / audio / subtitle
     ├── modals/
-    │   └── subtitle_search_modal.dart   # Local load + OpenSubtitles placeholder
+    │   ├── subtitle_search_modal.dart   # OpenSubtitles Top-3 + results flow
+    │   └── about_modal.dart             # IINA-style About window (Phase 9)
     └── widgets/
         ├── custom_title_bar.dart # Invisible hover title bar + caption buttons
         ├── center_play_pause.dart# Center-screen play/pause flash
+        ├── lyrics_view.dart      # Auto-scrolling synced lyrics panel
         ├── osd_indicator.dart    # Top-right OSD flashes
         └── media_hud.dart        # Media Inspector stats
+
+windows/installer/
+├── SALU.iss                      # Inno Setup: file associations + context menu
+├── build_installer.ps1           # Release build → setup.exe one-shot
+└── README.md                     # What the installer registers and why
 ```
