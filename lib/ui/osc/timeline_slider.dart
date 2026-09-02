@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart' show PointerHoverEvent;
 import 'package:flutter/material.dart';
 
 import '../../core/app_prefs.dart';
