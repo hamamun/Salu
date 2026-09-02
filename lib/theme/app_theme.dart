@@ -56,7 +56,7 @@ class AppTheme {
   ];
 
   static ThemeData get dark {
-    final ColorScheme scheme = const ColorScheme.dark(
+    const ColorScheme scheme = ColorScheme.dark(
       surface: AppColors.background,
       primary: AppColors.accent,
       secondary: AppColors.accent,

@@ -5,9 +5,9 @@ import '../../core/history_manager.dart';
 import '../../core/player_service.dart';
 import '../../core/thumbnail_service.dart';
 import '../../core/updater_service.dart';
-import 'browser_screen.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/osd_indicator.dart';
+import 'browser_screen.dart';
 
 /// Global Settings overlay (Phase 4 · Step 5 — UI only).
 ///
@@ -128,13 +128,13 @@ class _NavRail extends StatelessWidget {
               onTap: () => onSelect(category),
             ),
           const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(16),
+          const Padding(
+            padding: EdgeInsets.all(16),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'SALU 0.1.0',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ),
           ),
@@ -276,7 +276,7 @@ class _InterfaceTab extends StatelessWidget {
           listenable: AppPrefs.instance,
           builder: (BuildContext context, Widget? _) {
             return DropdownButtonFormField<OscLayout>(
-              value: AppPrefs.instance.oscLayout,
+              initialValue: AppPrefs.instance.oscLayout,
               dropdownColor: AppColors.surface,
               decoration: InputDecoration(
                 enabledBorder: OutlineInputBorder(
@@ -356,7 +356,7 @@ class _PlaybackTab extends StatelessWidget {
                 const _Title('Hardware decoding'),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: AppPrefs.instance.hwdec,
+                  initialValue: AppPrefs.instance.hwdec,
                   dropdownColor: AppColors.surface,
                   decoration: InputDecoration(
                     enabledBorder: OutlineInputBorder(
@@ -652,7 +652,7 @@ class _SwitchRow extends StatelessWidget {
         style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
       ),
       value: value,
-      activeColor: AppColors.accent,
+      activeThumbColor: AppColors.accent,
       onChanged: onChanged,
     );
   }
