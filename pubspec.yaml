@@ -26,6 +26,10 @@ dependencies:
   # (APIs verified compatible across 0.4.x–0.8.x.)
   desktop_drop: ">=0.4.4 <0.9.0"
 
+  # ── Phase 4: Slide-Out Panels & Menus ───────────────────────────────────
+  # Native file dialogs for the Playlist "+ Add" and "Load Local Subtitle".
+  file_selector: ^1.0.3
+
   # Utilities.
   path: ^1.9.0
 

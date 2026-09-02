@@ -104,7 +104,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: (MediaQuery.of(context).size.width - 320)
-                          .clamp(0.0, double.infinity),
+                          .clamp(0.0, double.infinity).toDouble(),
                     ),
                     child: Text(
                       widget.title ?? 'SALU',

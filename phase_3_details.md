@@ -1,5 +1,5 @@
 # Phase 3: The IINA-Style UI & OSC (On-Screen Controller)
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 
 ## 🎯 Goal
 Transform the raw video player into a premium, interactive experience. By the end of this phase, SALU will feature a beautiful, floating "glass" control bar at the bottom, smooth center-screen animations, and intelligent auto-hiding logic based on mouse movement.
