@@ -7,7 +7,12 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'app_prefs.dart';
+import 'history_manager.dart';
+import 'hwdec_manager.dart';
 import 'media_utils.dart';
+import 'smart_queue_service.dart';
+import 'updater_service.dart';
 
 /// SALU's dedicated playback manager.
 ///
@@ -92,6 +97,25 @@ class PlayerService {
   /// True while the mini always-on-top window (SALU's PiP) is active.
   final ValueNotifier<bool> pip = ValueNotifier<bool>(false);
 
+  /// True when the current media has no known duration (live stream).
+  /// The OSC hides the timeline and seek buttons in this state (Phase 6).
+  final ValueNotifier<bool> isLiveStream = ValueNotifier<bool>(false);
+
+  // ── Phase 5 · notifications for the UI layer ──────────────────────────
+
+  /// Hook the UI layer installs so the core can flash OSD messages (e.g.
+  /// "Resumed from 12:04") without importing any widget code.
+  void Function(String message)? onOsdMessage;
+
+  void emitOsd(String message) {
+    final void Function(String)? hook = onOsdMessage;
+    if (hook != null) {
+      hook(message);
+    } else {
+      debugPrint('[SALU] $message');
+    }
+  }
+
   // PiP bookkeeping so we can restore the window afterwards.
   Size? _prePipSize;
   Offset? _prePipPosition;
@@ -120,11 +144,26 @@ class PlayerService {
     unawaited(_setMpvProperty('volume-max', '200'));
 
     _subs.add(player.stream.playlist.listen(_onPlaylist));
-    _subs.add(player.stream.playing.listen((bool v) => playing.value = v));
-    _subs.add(player.stream.completed.listen((bool v) => completed.value = v));
+    _subs.add(player.stream.playing.listen((bool v) {
+      playing.value = v;
+      if (!v) _flushHistory(force: true);
+    }));
+    _subs.add(player.stream.completed.listen((bool v) {
+      completed.value = v;
+      if (v) _flushHistory(force: true);
+    }));
     _subs.add(player.stream.buffering.listen((bool v) => buffering.value = v));
-    _subs.add(player.stream.position.listen((Duration v) => position.value = v));
-    _subs.add(player.stream.duration.listen((Duration v) => duration.value = v));
+    _subs.add(player.stream.position.listen((Duration v) {
+      position.value = v;
+      _rememberPosition();
+    }));
+    _subs.add(player.stream.duration.listen((Duration v) {
+      duration.value = v;
+      // A live stream (IPTV/HLS) reports no duration — Phase 6 uses this to
+      // strip the timeline and seek controls out of the OSC.
+      isLiveStream.value = hasMedia.value && v <= Duration.zero;
+      _maybeResume();
+    }));
     _subs.add(player.stream.buffer.listen((Duration v) => buffered.value = v));
     _subs.add(player.stream.rate.listen((double v) => rate.value = v));
     _subs.add(player.stream.playlistMode.listen((PlaylistMode v) => playlistMode.value = v));
@@ -154,6 +193,16 @@ class PlayerService {
     if (p.medias.isEmpty) return;
     final int index = p.index.clamp(0, p.medias.length - 1).toInt();
     final String uri = p.medias[index].uri;
+
+    // A new item started — flush the previous one's position and arm the
+    // resume logic for this one (Phase 5 · Step 3).
+    if (uri != _resumeTargetUri) {
+      _flushHistory(force: true);
+      _resumeTargetUri = uri;
+      _resumeHandled = false;
+      _attachSidecarSubtitle(uri);
+    }
+
     final String title = MediaUtils.displayName(uri);
     currentTitle.value = title;
     hasMedia.value = true;
@@ -169,6 +218,84 @@ class PlayerService {
     }
   }
 
+  // ── Phase 5 · Seamless resume & history ───────────────────────────────
+
+  /// URI whose resume position hasn't been applied yet.
+  String? _resumeTargetUri;
+  bool _resumeHandled = false;
+
+  /// URI whose position we are currently recording.
+  String? _historyUri;
+  Duration _historyPosition = Duration.zero;
+  Duration _historyDuration = Duration.zero;
+
+  /// Applies the stored playback position once mpv reports a real duration.
+  void _maybeResume() {
+    final String? uri = _resumeTargetUri;
+    if (uri == null || _resumeHandled) return;
+    if (duration.value <= Duration.zero) return;
+    _resumeHandled = true;
+
+    if (!AppPrefs.instance.resumeLastPosition) return;
+    if (_isNetworkUri(uri)) return;
+
+    final Duration? target = HistoryManager.instance.resumePositionFor(uri);
+    if (target == null || target >= duration.value) return;
+
+    // No pop-up — IINA-style silent resume plus a quick OSD flash.
+    unawaited(seek(target));
+    emitOsd('Resumed from ${MediaUtils.formatDuration(target)}');
+  }
+
+  void _rememberPosition() {
+    final String? uri = currentMediaUri;
+    if (uri == null || _isNetworkUri(uri)) return;
+    _historyUri = uri;
+    _historyPosition = position.value;
+    _historyDuration = duration.value;
+    if (!AppPrefs.instance.resumeLastPosition) return;
+    if (_historyDuration <= Duration.zero) return;
+    HistoryManager.instance.remember(
+      uri: uri,
+      position: _historyPosition,
+      duration: _historyDuration,
+    );
+  }
+
+  /// Writes the pending position immediately (track change / app exit).
+  void _flushHistory({bool force = false}) {
+    final String? uri = _historyUri;
+    if (uri == null) return;
+    if (!AppPrefs.instance.resumeLastPosition) return;
+    if (_historyDuration <= Duration.zero) return;
+    HistoryManager.instance.remember(
+      uri: uri,
+      position: _historyPosition,
+      duration: _historyDuration,
+      force: force,
+    );
+  }
+
+  /// Auto-loads `movie.srt` sitting next to `movie.mp4` (Phase 5 · Step 1/3).
+  void _attachSidecarSubtitle(String uri) {
+    if (_isNetworkUri(uri)) return;
+    // mpv may report the item back as a `file:///…` URI — normalise first.
+    final String path = SmartQueueService.toLocalPath(uri);
+    final String? sidecar =
+        SmartQueueService.findSidecar(path, MediaUtils.subtitleExtensions);
+    if (sidecar == null) return;
+    unawaited(loadExternalSubtitle(sidecar));
+  }
+
+  static bool _isNetworkUri(String uri) {
+    final String lower = uri.toLowerCase();
+    return lower.startsWith('http://') ||
+        lower.startsWith('https://') ||
+        lower.startsWith('rtmp') ||
+        lower.startsWith('rtsp') ||
+        lower.startsWith('udp://');
+  }
+
   /// URI of the media currently playing, if any.
   String? get currentMediaUri {
     final Playlist? p = playlist.value;
@@ -182,15 +309,52 @@ class PlayerService {
   // ── Opening media ─────────────────────────────────────────────────────
 
   /// Open a single local file or network URL and start playing.
-  Future<void> openPath(String path, {bool play = true}) async {
+  ///
+  /// Phase 5 · Step 2: when [smartQueue] is on (and the user hasn't disabled
+  /// it), the rest of the folder is silently queued behind the opened file in
+  /// natural episode order.
+  Future<void> openPath(String path, {bool play = true, bool smartQueue = true}) async {
+    _flushHistory(force: true);
+
+    if (smartQueue &&
+        AppPrefs.instance.autoQueueFolder &&
+        !_isNetworkUri(path) &&
+        MediaUtils.isMedia(path)) {
+      final List<String> queue = SmartQueueService.queueForFile(path);
+      if (queue.length > 1) {
+        final int index = SmartQueueService.indexOf(queue, path);
+        await player.open(
+          Playlist(
+            queue.map((String item) => Media(item)).toList(),
+            index: index,
+          ),
+          play: play,
+        );
+        return;
+      }
+    }
+
     await player.open(Media(path), play: play);
   }
 
   /// Open several files as a queue; playback starts with the first one.
   Future<void> openPaths(List<String> paths, {bool play = true}) async {
     if (paths.isEmpty) return;
+    _flushHistory(force: true);
     final Playlist p = Playlist(paths.map((String path) => Media(path)).toList());
     await player.open(p, play: play);
+  }
+
+  /// Replaces the queue with [paths] and starts at [startIndex].
+  Future<void> openQueue(List<String> paths,
+      {int startIndex = 0, bool play = true}) async {
+    if (paths.isEmpty) return;
+    _flushHistory(force: true);
+    final int index = startIndex.clamp(0, paths.length - 1).toInt();
+    await player.open(
+      Playlist(paths.map((String path) => Media(path)).toList(), index: index),
+      play: play,
+    );
   }
 
   /// Attach an external subtitle file (.srt/.ass/…) to the current media.
@@ -215,6 +379,28 @@ class PlayerService {
     final Duration max = duration.value;
     if (max > Duration.zero && target > max) target = max;
     await player.seek(target);
+  }
+
+  /// Phase 5 · Step 5 — Exact vs. keyframe seeking.
+  ///
+  /// By default the arrow keys perform fast **keyframe** seeking; holding
+  /// `Shift` switches to **exact** (millisecond-accurate) seeking. The
+  /// Settings toggle `exactSeekByDefault` flips that relationship.
+  ///
+  /// [shiftHeld] reports whether the modifier was down for this keystroke.
+  Future<void> seekByWithMode(Duration offset, {bool shiftHeld = false}) async {
+    final bool exact = AppPrefs.instance.exactSeekByDefault ? !shiftHeld : shiftHeld;
+    await setSeekPrecision(exact: exact);
+    await seekBy(offset);
+  }
+
+  bool? _lastExactSeek;
+
+  /// Switches mpv between `hr-seek=yes` (exact) and `hr-seek=no` (keyframe).
+  Future<void> setSeekPrecision({required bool exact}) async {
+    if (_lastExactSeek == exact) return;
+    _lastExactSeek = exact;
+    await _setMpvProperty('hr-seek', exact ? 'yes' : 'no');
   }
 
   Future<void> next() => player.next();
@@ -393,6 +579,29 @@ class PlayerService {
     }
   }
 
+  /// Points mpv's built-in `ytdl_hook` at the yt-dlp binary SALU manages, so
+  /// updating it from Settings → Updates actually affects stream parsing.
+  Future<void> applyYtDlpPath() async {
+    try {
+      final String path = await UpdaterService.instance.ytDlpPath();
+      if (!File(path).existsSync()) return;
+      await _setMpvProperty('script-opts', 'ytdl_hook-ytdl_path=$path');
+      debugPrint('[SALU] yt-dlp wired to mpv: $path');
+    } catch (error) {
+      debugPrint('[SALU] yt-dlp wiring failed: $error');
+    }
+  }
+
+  // ── Phase 5 · Step 4: hardware decoding preference ───────────────────
+
+  /// Pushes the stored `hwdec` preference into mpv and refreshes the HUD
+  /// status. Called at startup and whenever the user changes the setting.
+  Future<void> applyHwdecPreference() async {
+    final HwdecMode mode = HwdecMode.fromPref(AppPrefs.instance.hwdec);
+    await HwdecManager.apply(mode, _setMpvProperty);
+    await _refreshHwdecStatus();
+  }
+
   // ── Hardware acceleration check (Phase 2 requirement) ────────────────
 
   /// Queries mpv for the decoder that is actually active right now.
@@ -415,6 +624,7 @@ class PlayerService {
 
   /// Release the native engine (called when the window closes).
   Future<void> dispose() async {
+    _flushHistory(force: true);
     for (final StreamSubscription<dynamic> sub in _subs) {
       await sub.cancel();
     }

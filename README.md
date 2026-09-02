@@ -12,13 +12,13 @@ A modern, borderless, IINA-inspired media player for **Windows 10/11**, built wi
 | 2 | Core Media Engine | ✅ Completed |
 | 3 | IINA-Style UI & OSC | ✅ Completed |
 | 4 | Slide-Out Panels & Menus | ✅ Completed |
-| 5 | Media Intelligence | ⏳ Not started |
-| 6 | Web & Stream Manager | ⏳ Not started |
+| 5 | Media Intelligence | ✅ Completed |
+| 6 | Web & Stream Manager | ✅ Completed |
 | 7 | Advanced Player Tools & Search Logic | ⏳ Not started |
 | 8 | Android Remote Server | ⏳ Not started |
 | 9 | Branding & About Section | ⏳ Not started |
 
-## What works right now (Phase 1–4)
+## What works right now (Phase 1–6)
 
 - **Borderless window** — the native Windows title bar is gone; SALU draws its own invisible chrome that fades in when the mouse moves and fades out after 3 seconds of stillness.
 - **Custom caption buttons** — Minimize / Maximize / Close rendered with native Segoe Fluent glyphs, with the classic red close-hover. Drag anywhere on the top strip to move the window; double-click it to maximize/restore.
@@ -48,6 +48,26 @@ A modern, borderless, IINA-inspired media player for **Windows 10/11**, built wi
 - **Audio tab** — volume boost up to 200 %, audio delay/sync, and a 10-band graphic EQ with dynamic presets (music vs video).
 - **Subtitles tab** — search & load modal (local load works now; OpenSubtitles results land in Phase 7), vertical position slider, and delay/sync slider.
 - **Settings screen** — General, User Interface, Playback, Subtitles, Updates and Key Bindings categories (UI drafted; heavy logic wires up in Phases 5–8).
+
+### Phase 5 · Media Intelligence
+
+- **Intelligent drag & drop** — a media file dropped on the video replaces the queue and plays; dropped on the open **Playlist panel** it is appended without interrupting playback; an `.srt`/`.ass` is attached and enabled instantly; a folder is scanned, queued and started.
+- **Smart queuing & folder auto-play** — opening `Episode_1.mp4` silently queues the rest of the folder using **natural sorting** (`Episode_2 … Episode_10`, never `1, 10, 2`), matching only files of the same kind (video vs audio).
+- **Sidecar subtitles** — `movie.srt` sitting next to `movie.mp4` loads automatically.
+- **Seamless resume** — playback positions are persisted with `shared_preferences`; reopening a file resumes silently (no pop-up) with a *"Resumed from 12:04"* OSD flash. Toggleable in Settings → Playback, along with a "Clear playback history" action.
+- **Hardware decoding control** — Settings → Playback exposes `Auto (GPU)` / `Disabled (CPU)`, applied live to the running mpv instance.
+- **Exact vs. keyframe seeking** — arrow keys seek by keyframe, <kbd>Shift</kbd> + arrows seek exactly (millisecond `hr-seek`); a Settings toggle flips the default.
+- **Persisted preferences** — every setting now survives a restart.
+- **Component updater** — Settings → Updates downloads the newest `yt-dlp.exe` from GitHub releases and refreshes the `WebView2Loader.dll` linker into `%APPDATA%/SALU/bin`.
+
+### Phase 6 · Web & Stream Manager
+
+- **Left Library sidebar** — slides in from the left (so it never clashes with the right Quick Settings panel) with two sections: **Saved Streams** and **Web Bookmarks**, each with `+` add and trash delete, and an empty-state message.
+- **Persistent library** — up to **10** M3U/network streams and **15** bookmarks stored in `shared_preferences`, with duplicate and limit validation.
+- **IPTV / M3U playback** — clicking a saved stream fetches and parses the extended M3U (`#EXTINF` with `group-title`, `tvg-country`, `tvg-language`), loads every channel into the queue, and shows the channel names in the Playlist tab.
+- **Massive playlist UI** — playlists past 25 entries unlock a **Clear Playlist** button and a **Group By** dropdown (Category / Country / Language / Flat) with chip filters.
+- **Live stream OSC** — when the duration is unknown the timeline is replaced by a **LIVE** badge, the ±10 s buttons disappear, and Previous/Next become Channel Down / Channel Up.
+- **Built-in browser** — `webview_windows` (Windows WebView2) with a multi-tab top bar and exactly four navigation actions: **Home, Back, Forward, Close Browser**. Opening another bookmark while the browser is up spawns a new tab. SALU's OSC is hidden in browser mode, and "Close Browser" destroys every controller, clears cache/cookies and frees the RAM.
 
 ## Requirements
 
@@ -90,6 +110,17 @@ flutter build windows --release
 6. Play an MP3/FLAC → Music Mode shows album art + metadata.
 7. Settings (gear in the panel) → change the OSC layout and watch it re-position live.
 
+## Testing checklist (Phase 5 + 6)
+
+1. Drop `Episode_3.mp4` from a season folder → it plays and the Playlist tab shows the whole folder in natural order.
+2. Close and reopen the same file → it resumes silently with a *"Resumed from …"* OSD; turn the toggle off in Settings → Playback and confirm it starts from zero.
+3. Open the right panel on the Playlist tab and drop files onto it → they append instead of interrupting playback.
+4. Hold <kbd>Shift</kbd> while pressing <kbd>←</kbd>/<kbd>→</kbd> → the OSD reads "· exact".
+5. Settings → Playback → switch hardware decoding to *Disabled (CPU)* and check the HUD's decoder line.
+6. Settings → Updates → "Check for yt-dlp updates" downloads/updates `%APPDATA%/SALU/bin/yt-dlp.exe`.
+7. Open the Library (video-library icon on the OSC) → add an M3U URL → click it → channels populate the Playlist tab; a big list shows the Group By filter, and the OSC shows the LIVE badge.
+8. Add a bookmark → click it → the built-in browser opens; add a second bookmark → it opens as a new tab; "Close Browser" returns to the player.
+
 ## Project layout
 
 ```
@@ -98,10 +129,18 @@ lib/
 ├── theme/app_theme.dart          # Colors, Segoe UI Variable, dark theme
 ├── core/
 │   ├── player_service.dart       # mpv Player + VideoController + UI state
-│   ├── app_prefs.dart            # In-memory user preferences (OSC layout…)
+│   ├── app_prefs.dart            # Persisted user preferences (shared_preferences)
+│   ├── history_manager.dart      # Playback history + seamless resume
+│   ├── smart_queue_service.dart  # Folder scan, sibling queue, sidecar lookup
+│   ├── natural_sort.dart         # Human-order sorting (Episode_2 < Episode_10)
+│   ├── hwdec_manager.dart        # Hardware-decoding modes → mpv `hwdec`
+│   ├── updater_service.dart      # yt-dlp / WebView2 loader updates
+│   ├── stream_manager.dart       # Saved M3U streams (10) + bookmarks (15)
+│   ├── network_player.dart       # M3U parsing, IPTV queue, grouping
 │   ├── audio_presets.dart        # 10-band EQ preset curves
 │   ├── thumbnail_service.dart    # Headless mpv → timeline hover frame captures
-│   ├── drop_handler.dart         # Drag & drop routing rules
+│   ├── drag_drop_handler.dart    # IINA-style drop rules (zone aware)
+│   ├── drop_handler.dart         # Legacy Phase 2 shim → drag_drop_handler
 │   └── media_utils.dart          # Media/subtitle/playlist detection + formatting
 └── ui/
     ├── managers/
@@ -110,6 +149,7 @@ lib/
     │   ├── home_screen.dart      # Main canvas + overlay composition + hotkeys
     │   ├── video_screen.dart     # Edge-to-edge mpv video canvas
     │   ├── music_mode.dart       # Album art + metadata (audio-only files)
+    │   ├── browser_screen.dart   # Built-in WebView2 browser (tabs + nav)
     │   └── settings_screen.dart  # Global settings overlay
     ├── osc/
     │   ├── osc_panel.dart        # Glass OSC bar (3 layouts)
@@ -118,6 +158,7 @@ lib/
     │   └── osc_bar_anchor.dart   # Shared key for OSC bar geometry
     ├── panels/
     │   ├── right_panel_container.dart   # Slide-out Quick Settings
+    │   ├── library_panel.dart           # Left sidebar: streams + bookmarks
     │   └── tabs/                        # playlist / video / audio / subtitle
     ├── modals/
     │   └── subtitle_search_modal.dart   # Local load + OpenSubtitles placeholder

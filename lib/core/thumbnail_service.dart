@@ -133,6 +133,11 @@ class ThumbnailService {
     return file;
   }
 
+  /// Drops every cached thumbnail (Settings → General → Clear Cache & Data).
+  void clearCache() {
+    _cache.clear();
+  }
+
   void _trimCache() {
     while (_cache.length > 160) {
       _cache.remove(_cache.keys.first);

@@ -1,5 +1,5 @@
 # Phase 5: Media Intelligence
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 
 ## 🎯 Goal
 Make the player "smart." By the end of this phase, SALU will intuitively understand how to handle dragged files, remember where you stopped watching a movie, and automatically queue up TV show episodes in a folder without you having to click anything.

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_prefs.dart';
+import '../../core/history_manager.dart';
+import '../../core/player_service.dart';
+import '../../core/thumbnail_service.dart';
+import '../../core/updater_service.dart';
+import 'browser_screen.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/osd_indicator.dart';
 
@@ -78,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case _Category.subtitles:
         return _SubtitlesTab();
       case _Category.updates:
-        return _UpdatesTab();
+        return const _UpdatesTab();
       case _Category.keys:
         return const _KeysTab();
     }
@@ -233,13 +238,20 @@ class _GeneralTab extends StatelessWidget {
         const SizedBox(height: 26),
         const _Title('Clear Cache & Data'),
         const _BodyText(
-          'Wipe the browser cache, temporary downloaded .srt files, and the '
-          'video resume history. (Wired in Phase 5/6.)',
+          'Wipe the browser cache and cookies, the cached timeline '
+          'thumbnails, and the video resume history.',
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () => OsdController.instance
-              .show('Cache cleared', icon: Icons.delete_sweep_outlined),
+          onPressed: () async {
+            // Phase 6: destroy every live WebView2 (clears its cache and
+            // cookies on the way out), then drop the resume history.
+            await BrowserController.instance.closeBrowser();
+            ThumbnailService.instance.clearCache();
+            HistoryManager.instance.clear();
+            OsdController.instance
+                .show('Cache & data cleared', icon: Icons.delete_sweep_outlined);
+          },
           icon: const Icon(Icons.delete_sweep_outlined, size: 18),
           label: const Text('Clear Cache & Data'),
           style: OutlinedButton.styleFrom(
@@ -307,15 +319,38 @@ class _PlaybackTab extends StatelessWidget {
               children: <Widget>[
                 _SwitchRow(
                   label: 'Resume last playback position',
-                  subtitle: 'Auto-resume from where you left off (Phase 5).',
+                  subtitle: 'Silently continue from where you left off.',
                   value: AppPrefs.instance.resumeLastPosition,
                   onChanged: (bool v) => AppPrefs.instance.resumeLastPosition = v,
                 ),
                 _SwitchRow(
+                  label: 'Auto-queue the rest of the folder',
+                  subtitle:
+                      'Opening Episode 1 lines up the whole folder in order.',
+                  value: AppPrefs.instance.autoQueueFolder,
+                  onChanged: (bool v) => AppPrefs.instance.autoQueueFolder = v,
+                ),
+                _SwitchRow(
                   label: 'Exact seeking by default',
-                  subtitle: 'Precise millisecond seeks; off = keyframe seeking.',
+                  subtitle:
+                      'On: arrows seek exactly, Shift seeks by keyframe. '
+                      'Off: the IINA default (arrows = keyframe, Shift = exact).',
                   value: AppPrefs.instance.exactSeekByDefault,
                   onChanged: (bool v) => AppPrefs.instance.exactSeekByDefault = v,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      HistoryManager.instance.clear();
+                      OsdController.instance.show('Playback history cleared',
+                          icon: Icons.delete_outline_rounded);
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Clear playback history'),
+                    style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const _Title('Hardware decoding'),
@@ -339,7 +374,16 @@ class _PlaybackTab extends StatelessWidget {
                     DropdownMenuItem<String>(value: 'disabled', child: Text('Disabled (CPU)')),
                   ],
                   onChanged: (String? v) {
-                    if (v != null) AppPrefs.instance.hwdec = v;
+                    if (v == null) return;
+                    AppPrefs.instance.hwdec = v;
+                    // Phase 5 · Step 4 — push it into the live mpv instance.
+                    PlayerService.instance.applyHwdecPreference();
+                    OsdController.instance.show(
+                      v == 'auto'
+                          ? 'Hardware decoding: Auto (GPU)'
+                          : 'Hardware decoding: Disabled (CPU)',
+                      icon: Icons.memory_rounded,
+                    );
                   },
                 ),
               ],
@@ -393,7 +437,36 @@ class _SubtitlesTab extends StatelessWidget {
   }
 }
 
-class _UpdatesTab extends StatelessWidget {
+class _UpdatesTab extends StatefulWidget {
+  const _UpdatesTab();
+
+  @override
+  State<_UpdatesTab> createState() => _UpdatesTabState();
+}
+
+class _UpdatesTabState extends State<_UpdatesTab> {
+  bool _busy = false;
+  String? _status;
+
+  Future<void> _run(Future<UpdateResult> Function() task) async {
+    setState(() {
+      _busy = true;
+      _status = 'Checking…';
+    });
+    final UpdateResult result = await task();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _status = result.message;
+    });
+    OsdController.instance.show(
+      result.message,
+      icon: result.success
+          ? Icons.check_rounded
+          : Icons.error_outline_rounded,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return _ScrollBody(
@@ -401,12 +474,19 @@ class _UpdatesTab extends StatelessWidget {
         const _Title('Updates'),
         const _BodyText(
           'SALU relies on external binaries for stream parsing and the built-in '
-          'browser. Keep them fresh so videos don\'t break. (Wired in Phase 5.)',
+          "browser. Keep them fresh so videos don't break when a site changes.",
         ),
         const SizedBox(height: 14),
         OutlinedButton.icon(
-          onPressed: () => OsdController.instance
-              .show('yt-dlp up to date', icon: Icons.download_rounded),
+          onPressed: _busy
+              ? null
+              : () => _run(() async {
+                    final UpdateResult r =
+                        await UpdaterService.instance.updateYtDlp();
+                    // Re-point mpv at the (possibly new) binary.
+                    await PlayerService.instance.applyYtDlpPath();
+                    return r;
+                  }),
           icon: const Icon(Icons.download_rounded, size: 18),
           label: const Text('Check for yt-dlp updates'),
           style: OutlinedButton.styleFrom(
@@ -416,8 +496,9 @@ class _UpdatesTab extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
-          onPressed: () => OsdController.instance
-              .show('WebView2 up to date', icon: Icons.download_rounded),
+          onPressed: _busy
+              ? null
+              : () => _run(UpdaterService.instance.updateWebView2Loader),
           icon: const Icon(Icons.download_rounded, size: 18),
           label: const Text('Check for WebView2 updates'),
           style: OutlinedButton.styleFrom(
@@ -425,6 +506,14 @@ class _UpdatesTab extends StatelessWidget {
             side: const BorderSide(color: AppColors.divider),
           ),
         ),
+        if (_busy) ...<Widget>[
+          const SizedBox(height: 16),
+          const LinearProgressIndicator(minHeight: 2),
+        ],
+        if (_status != null) ...<Widget>[
+          const SizedBox(height: 14),
+          _BodyText(_status!),
+        ],
       ],
     );
   }
@@ -435,7 +524,8 @@ class _KeysTab extends StatelessWidget {
 
   static const List<(String, String)> bindings = <(String, String)>[
     ('Space', 'Play / Pause'),
-    ('← / →', 'Seek back / forward 5 s'),
+    ('← / →', 'Seek back / forward 5 s (keyframe)'),
+    ('Shift + ← / →', 'Seek back / forward 5 s (exact)'),
     ('↑ / ↓', 'Volume up / down'),
     ('M', 'Mute / unmute'),
     ('F', 'Fullscreen'),

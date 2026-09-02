@@ -87,28 +87,42 @@ class ControlButtons extends StatelessWidget {
     final PlayerService player = PlayerService.instance;
     return Row(
       children: <Widget>[
-        OscIconButton(
-          icon: Icons.skip_previous_rounded,
-          tooltip: 'Previous',
-          onPressed: () => player.previous(),
-        ),
-        OscIconButton(
-          icon: Icons.replay_10_rounded,
-          tooltip: 'Backward 10 s',
-          onPressed: () => _skip(player, -10),
-        ),
-        const SizedBox(width: 2),
-        _PlayPauseButton(onPressed: onPlayPauseFlash),
-        const SizedBox(width: 2),
-        OscIconButton(
-          icon: Icons.forward_10_rounded,
-          tooltip: 'Forward 10 s',
-          onPressed: () => _skip(player, 10),
-        ),
-        OscIconButton(
-          icon: Icons.skip_next_rounded,
-          tooltip: 'Next',
-          onPressed: () => player.next(),
+        // Phase 6 · Step 3: on a live stream the skip buttons disappear and
+        // Previous/Next become Channel Down / Channel Up.
+        ValueListenableBuilder<bool>(
+          valueListenable: player.isLiveStream,
+          builder: (BuildContext context, bool live, Widget? _) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                OscIconButton(
+                  icon: Icons.skip_previous_rounded,
+                  tooltip: live ? 'Channel down' : 'Previous',
+                  onPressed: () => player.previous(),
+                ),
+                if (!live)
+                  OscIconButton(
+                    icon: Icons.replay_10_rounded,
+                    tooltip: 'Backward 10 s',
+                    onPressed: () => _skip(player, -10),
+                  ),
+                const SizedBox(width: 2),
+                _PlayPauseButton(onPressed: onPlayPauseFlash),
+                const SizedBox(width: 2),
+                if (!live)
+                  OscIconButton(
+                    icon: Icons.forward_10_rounded,
+                    tooltip: 'Forward 10 s',
+                    onPressed: () => _skip(player, 10),
+                  ),
+                OscIconButton(
+                  icon: Icons.skip_next_rounded,
+                  tooltip: live ? 'Channel up' : 'Next',
+                  onPressed: () => player.next(),
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(width: 14),
         Container(width: 1, height: 22, color: AppColors.divider),
