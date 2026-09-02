@@ -73,7 +73,7 @@ class _VideoTabState extends State<VideoTab> {
         const SizedBox(height: 22),
         const _SectionLabel('Aspect ratio'),
         DropdownButtonFormField<String>(
-          value: _aspect,
+          initialValue: _aspect,
           dropdownColor: AppColors.surface,
           decoration: InputDecoration(
             enabledBorder: OutlineInputBorder(
@@ -186,7 +186,7 @@ class _ToggleRow extends StatelessWidget {
         style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary),
       ),
       value: value,
-      activeColor: AppColors.accent,
+      activeThumbColor: AppColors.accent,
       onChanged: onChanged,
     );
   }

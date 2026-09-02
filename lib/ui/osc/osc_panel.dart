@@ -67,8 +67,8 @@ class _OscPanelState extends State<OscPanel> {
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                       child: Container(
-                        color: AppColors.glass,
                         decoration: BoxDecoration(
+                          color: AppColors.glass,
                           border: Border.all(color: AppColors.divider),
                           borderRadius: _radiusFor(layout),
                         ),

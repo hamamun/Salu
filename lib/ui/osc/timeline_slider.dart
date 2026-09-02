@@ -343,7 +343,7 @@ class _TimelineSliderState extends State<TimelineSlider> {
   /// Small timestamp-only box directly above the cursor (audio files).
   Widget _buildAudioTimestamp(double width, Duration duration) {
     final double hoverX = width * _hoverFraction!;
-    final double previewWidth = 84.0;
+    const double previewWidth = 84.0;
     final double left =
         (hoverX - previewWidth / 2).clamp(0.0, width - previewWidth).toDouble();
     final Duration hoverTime =
