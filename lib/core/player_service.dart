@@ -12,6 +12,7 @@ import 'history_manager.dart';
 import 'hwdec_manager.dart';
 import 'media_utils.dart';
 import 'smart_queue_service.dart';
+import 'updater_service.dart';
 
 /// SALU's dedicated playback manager.
 ///
@@ -143,8 +144,14 @@ class PlayerService {
     unawaited(_setMpvProperty('volume-max', '200'));
 
     _subs.add(player.stream.playlist.listen(_onPlaylist));
-    _subs.add(player.stream.playing.listen((bool v) => playing.value = v));
-    _subs.add(player.stream.completed.listen((bool v) => completed.value = v));
+    _subs.add(player.stream.playing.listen((bool v) {
+      playing.value = v;
+      if (!v) _flushHistory(force: true);
+    }));
+    _subs.add(player.stream.completed.listen((bool v) {
+      completed.value = v;
+      if (v) _flushHistory(force: true);
+    }));
     _subs.add(player.stream.buffering.listen((bool v) => buffering.value = v));
     _subs.add(player.stream.position.listen((Duration v) {
       position.value = v;
@@ -272,8 +279,10 @@ class PlayerService {
   /// Auto-loads `movie.srt` sitting next to `movie.mp4` (Phase 5 · Step 1/3).
   void _attachSidecarSubtitle(String uri) {
     if (_isNetworkUri(uri)) return;
+    // mpv may report the item back as a `file:///…` URI — normalise first.
+    final String path = SmartQueueService.toLocalPath(uri);
     final String? sidecar =
-        SmartQueueService.findSidecar(uri, MediaUtils.subtitleExtensions);
+        SmartQueueService.findSidecar(path, MediaUtils.subtitleExtensions);
     if (sidecar == null) return;
     unawaited(loadExternalSubtitle(sidecar));
   }
@@ -567,6 +576,19 @@ class PlayerService {
       return await _native?.getProperty(name);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Points mpv's built-in `ytdl_hook` at the yt-dlp binary SALU manages, so
+  /// updating it from Settings → Updates actually affects stream parsing.
+  Future<void> applyYtDlpPath() async {
+    try {
+      final String path = await UpdaterService.instance.ytDlpPath();
+      if (!File(path).existsSync()) return;
+      await _setMpvProperty('script-opts', 'ytdl_hook-ytdl_path=$path');
+      debugPrint('[SALU] yt-dlp wired to mpv: $path');
+    } catch (error) {
+      debugPrint('[SALU] yt-dlp wiring failed: $error');
     }
   }
 

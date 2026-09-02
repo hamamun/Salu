@@ -25,8 +25,10 @@ Future<void> main(List<String> args) async {
   await HistoryManager.instance.load();
   await StreamManager.instance.load();
 
-  // Apply the stored hardware-decoding preference to the live engine.
+  // Apply the stored hardware-decoding preference to the live engine and
+  // point mpv at the yt-dlp binary SALU keeps updated.
   unawaited(PlayerService.instance.applyHwdecPreference());
+  unawaited(PlayerService.instance.applyYtDlpPath());
 
   // ── Phase 1 · Step 6: strict single instance + file argument routing. ─
   // If SALU is already running and the user double-clicks a media file,

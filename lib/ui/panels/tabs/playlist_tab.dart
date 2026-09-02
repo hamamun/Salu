@@ -61,7 +61,11 @@ class _PlaylistTabState extends State<PlaylistTab> {
             if (_showChapters || !iptv.isMassivePlaylist) {
               return const SizedBox.shrink();
             }
-            return _IptvToolbar(iptv: iptv);
+            return _IptvToolbar(
+              iptv: iptv,
+              onGroupingChanged: _resetGroupFilter,
+              onFilterSelected: _setGroupFilter,
+            );
           },
         ),
         Expanded(
@@ -398,14 +402,18 @@ class _Chapter {
 
 /// "Group By" filter + Clear Playlist controls shown for massive IPTV lists.
 class _IptvToolbar extends StatelessWidget {
-  const _IptvToolbar({required this.iptv});
+  const _IptvToolbar({
+    required this.iptv,
+    required this.onGroupingChanged,
+    required this.onFilterSelected,
+  });
 
   final NetworkPlayer iptv;
+  final VoidCallback onGroupingChanged;
+  final ValueChanged<String?> onFilterSelected;
 
   @override
   Widget build(BuildContext context) {
-    final _PlaylistTabState? state =
-        context.findAncestorStateOfType<_PlaylistTabState>();
     return Container(
       color: AppColors.surfaceHighlight.withAlpha(90),
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
@@ -425,7 +433,7 @@ class _IptvToolbar extends StatelessWidget {
                 onPressed: () {
                   iptv.clear();
                   PlayerService.instance.player.stop();
-                  state?._resetGroupFilter();
+                  onGroupingChanged();
                 },
                 icon: const Icon(Icons.playlist_remove_rounded, size: 17),
                 label: const Text('Clear'),
@@ -461,7 +469,7 @@ class _IptvToolbar extends StatelessWidget {
                   onChanged: (IptvGrouping? value) {
                     if (value == null) return;
                     iptv.grouping = value;
-                    state?._resetGroupFilter();
+                    onGroupingChanged();
                   },
                 ),
               ),
@@ -482,8 +490,8 @@ class _IptvToolbar extends StatelessWidget {
                       child: ActionChip(
                         label: Text(value,
                             style: const TextStyle(fontSize: 11.5)),
-                        onPressed: () => state?._setGroupFilter(
-                            value == 'All' ? null : value),
+                        onPressed: () =>
+                            onFilterSelected(value == 'All' ? null : value),
                       ),
                     ),
                 ],

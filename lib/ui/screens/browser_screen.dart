@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_windows/webview_windows.dart';
 
+import '../../core/stream_manager.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/osd_indicator.dart';
 
 /// One open browser tab, owning its own WebView2 controller.
 class BrowserTab {
@@ -18,29 +20,42 @@ class BrowserTab {
   bool _initialized = false;
   bool get initialized => _initialized;
 
+  bool _disposed = false;
+  Future<void>? _initFuture;
+
   final ValueNotifier<String?> error = ValueNotifier<String?>(null);
 
-  Future<void> initialize() async {
-    if (_initialized) return;
+  /// Safe to call repeatedly / concurrently — the work happens once.
+  Future<void> initialize() => _initFuture ??= _initialize();
+
+  Future<void> _initialize() async {
+    if (_initialized || _disposed) return;
     try {
       await controller.initialize();
-      controller.url.listen((String url) => currentUrl.value = url);
+      controller.url.listen((String url) {
+        if (!_disposed) currentUrl.value = url;
+      });
       controller.title.listen((String value) {
-        if (value.trim().isNotEmpty) title.value = value.trim();
+        if (!_disposed && value.trim().isNotEmpty) title.value = value.trim();
       });
       await controller.setBackgroundColor(AppColors.background);
       await controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.sameWindow);
-      await controller.loadUrl(homeUrl);
       _initialized = true;
+      await controller.loadUrl(homeUrl);
     } catch (err) {
-      error.value =
-          'WebView2 runtime unavailable.\nInstall the Microsoft Edge WebView2 Runtime, then reopen the browser.';
+      if (!_disposed) {
+        error.value =
+            'WebView2 runtime unavailable.\n'
+            'Install the Microsoft Edge WebView2 Runtime, then reopen the browser.';
+      }
       debugPrint('[SALU] webview init failed: $err');
     }
   }
 
   /// Phase 6 · Memory management: destroy the controller and flush its cache.
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
     try {
       if (_initialized) {
         await controller.clearCache();
@@ -143,7 +158,12 @@ class BrowserScreen extends StatelessWidget {
             children: <Widget>[
               _TabBar(browser: browser, onCloseBrowser: onCloseBrowser),
               const Divider(height: 1),
-              Expanded(child: _TabBody(tab: browser.activeTab!)),
+              Expanded(
+                child: _TabBody(
+                  key: ValueKey<BrowserTab>(browser.activeTab!),
+                  tab: browser.activeTab!,
+                ),
+              ),
             ],
           ),
         );
@@ -250,6 +270,25 @@ class _TabBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          _NavButton(
+            icon: Icons.bookmark_add_outlined,
+            tooltip: 'Bookmark this page',
+            onPressed: active == null
+                ? null
+                : () {
+                    final String? err = StreamManager.instance.addBookmark(
+                      active.title.value,
+                      active.currentUrl.value,
+                    );
+                    OsdController.instance.show(
+                      err ?? 'Bookmark saved',
+                      icon: err == null
+                          ? Icons.check_rounded
+                          : Icons.error_outline_rounded,
+                    );
+                  },
+          ),
+          const SizedBox(width: 4),
           TextButton.icon(
             onPressed: onCloseBrowser,
             icon: const Icon(Icons.close_fullscreen_rounded, size: 17),
@@ -287,7 +326,7 @@ class _NavButton extends StatelessWidget {
 }
 
 class _TabBody extends StatefulWidget {
-  const _TabBody({required this.tab});
+  const _TabBody({super.key, required this.tab});
 
   final BrowserTab tab;
 
@@ -299,10 +338,14 @@ class _TabBodyState extends State<_TabBody> {
   @override
   void initState() {
     super.initState();
-    if (!widget.tab.initialized) {
-      widget.tab.initialize().then((_) {
-        if (mounted) setState(() {});
-      });
+    widget.tab.initialize();
+  }
+
+  @override
+  void didUpdateWidget(_TabBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tab != widget.tab) {
+      widget.tab.initialize();
     }
   }
 
@@ -324,16 +367,22 @@ class _TabBodyState extends State<_TabBody> {
             ),
           );
         }
-        if (!widget.tab.controller.value.isInitialized) {
-          return const Center(
-            child: SizedBox(
-              width: 26,
-              height: 26,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        }
-        return Webview(widget.tab.controller);
+        // Rebuilds as soon as the platform view reports it is initialized.
+        return ValueListenableBuilder<WebviewValue>(
+          valueListenable: widget.tab.controller,
+          builder: (BuildContext context, WebviewValue value, Widget? _) {
+            if (!value.isInitialized) {
+              return const Center(
+                child: SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+            return Webview(widget.tab.controller);
+          },
+        );
       },
     );
   }

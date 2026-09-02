@@ -83,11 +83,22 @@ class SmartQueueService {
     return 0;
   }
 
+  /// Converts a `file:///C:/...` URI (which mpv/media_kit may hand back)
+  /// into a plain Windows path. Returns [uri] unchanged when it isn't one.
+  static String toLocalPath(String uri) {
+    if (!uri.toLowerCase().startsWith('file:')) return uri;
+    try {
+      return Uri.parse(uri).toFilePath(windows: Platform.isWindows);
+    } catch (_) {
+      return uri;
+    }
+  }
+
   /// Finds a sidecar file (subtitle, `.lrc`…) next to [mediaPath] with one of
   /// [extensions], e.g. `movie.mp4` → `movie.srt`.
   static String? findSidecar(String mediaPath, Set<String> extensions) {
     try {
-      final String base = p.withoutExtension(mediaPath);
+      final String base = p.withoutExtension(toLocalPath(mediaPath));
       for (final String ext in extensions) {
         final File candidate = File('$base$ext');
         if (candidate.existsSync()) return candidate.path;

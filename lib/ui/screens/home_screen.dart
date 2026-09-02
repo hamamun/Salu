@@ -144,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _onDropDone(DropDoneDetails details) async {
     setState(() => _dropHovering = false);
     final List<String> paths =
-        details.files.map((DropFile file) => file.path).toList();
+        details.files.map((DropItem file) => file.path).toList();
     final DropZone zone = _zoneForPosition(details.localPosition);
     final DropResult result =
         await DragDropHandler.handle(paths, zone: zone);
@@ -264,15 +264,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 3 · Center-screen play/pause flash.
                 const CenterPlayPause(),
 
-                // 4 · The floating OSC.
-                OscPanel(
-                  onPlayPauseFlash: _togglePlay,
-                  onTogglePanel: _togglePanel,
-                  onToggleHud: _toggleHud,
-                  onToggleLibrary: _toggleLibrary,
-                ),
+                // 4 · The floating OSC (hidden entirely in browser mode —
+                // the streaming site provides its own player controls).
+                if (!_browserOpen)
+                  OscPanel(
+                    onPlayPauseFlash: _togglePlay,
+                    onTogglePanel: _togglePanel,
+                    onToggleHud: _toggleHud,
+                    onToggleLibrary: _toggleLibrary,
+                  ),
 
-                // 5 · The invisible hover title bar, pinned to the top.
+                // 5 · The built-in browser, covering the player but staying
+                // beneath the title bar so window controls remain usable.
+                if (_browserOpen)
+                  Positioned.fill(
+                    top: CustomTitleBar.height,
+                    child: BrowserScreen(onCloseBrowser: _closeBrowser),
+                  ),
+
+                // 6 · The invisible hover title bar, pinned to the top.
                 Align(
                   alignment: Alignment.topCenter,
                   child: ListenableBuilder(
@@ -292,34 +302,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // 6 · Right Quick Settings panel.
+                // 7 · Right Quick Settings panel.
                 RightPanel(
                   visible: _rightPanelOpen,
                   onClose: () => _setPanelOpen(false),
                   onOpenSettings: _openSettings,
                 ),
 
-                // 7 · Left Library sidebar (streams + bookmarks).
+                // 8 · Left Library sidebar (streams + bookmarks).
                 LibraryPanel(
                   visible: _libraryOpen,
                   onClose: () => _setLibraryOpen(false),
                   onOpenBookmark: _openBookmark,
                 ),
 
-                // 8 · Media Inspector HUD.
+                // 9 · Media Inspector HUD.
                 const MediaHud(),
 
-                // 9 · OSD indicator (top-right).
+                // 10 · OSD indicator (top-right).
                 const OsdIndicator(),
 
-                // 10 · Drop highlight overlay.
+                // 11 · Drop highlight overlay.
                 _DropOverlay(visible: _dropHovering),
 
-                // 11 · The built-in browser covers everything while open.
-                if (_browserOpen)
-                  Positioned.fill(
-                    child: BrowserScreen(onCloseBrowser: _closeBrowser),
-                  ),
               ],
             ),
           ),

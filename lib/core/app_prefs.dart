@@ -86,6 +86,15 @@ class AppPrefs extends ChangeNotifier {
     _store?.setInt(key, value);
   }
 
+  /// Packs a [Color] into an ARGB int without the deprecated `Color.value`.
+  static int _argbOf(Color c) {
+    int channel(double v) => (v * 255.0).round() & 0xFF;
+    return (channel(c.a) << 24) |
+        (channel(c.r) << 16) |
+        (channel(c.g) << 8) |
+        channel(c.b);
+  }
+
   // ── User Interface ─────────────────────────────────────────────────────
 
   OscLayout _oscLayout = OscLayout.top;
@@ -102,7 +111,7 @@ class AppPrefs extends ChangeNotifier {
   set accentColor(Color value) {
     if (_accentColor == value) return;
     _accentColor = value;
-    _writeInt(_kAccent, value.value);
+    _writeInt(_kAccent, _argbOf(value));
     notifyListeners();
   }
 

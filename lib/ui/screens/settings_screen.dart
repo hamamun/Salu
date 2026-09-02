@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/app_prefs.dart';
 import '../../core/history_manager.dart';
 import '../../core/player_service.dart';
+import '../../core/thumbnail_service.dart';
 import '../../core/updater_service.dart';
+import 'browser_screen.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/osd_indicator.dart';
 
@@ -81,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case _Category.subtitles:
         return _SubtitlesTab();
       case _Category.updates:
-        return _UpdatesTab();
+        return const _UpdatesTab();
       case _Category.keys:
         return const _KeysTab();
     }
@@ -236,13 +238,20 @@ class _GeneralTab extends StatelessWidget {
         const SizedBox(height: 26),
         const _Title('Clear Cache & Data'),
         const _BodyText(
-          'Wipe the browser cache, temporary downloaded .srt files, and the '
-          'video resume history. (Wired in Phase 5/6.)',
+          'Wipe the browser cache and cookies, the cached timeline '
+          'thumbnails, and the video resume history.',
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () => OsdController.instance
-              .show('Cache cleared', icon: Icons.delete_sweep_outlined),
+          onPressed: () async {
+            // Phase 6: destroy every live WebView2 (clears its cache and
+            // cookies on the way out), then drop the resume history.
+            await BrowserController.instance.closeBrowser();
+            ThumbnailService.instance.clearCache();
+            HistoryManager.instance.clear();
+            OsdController.instance
+                .show('Cache & data cleared', icon: Icons.delete_sweep_outlined);
+          },
           icon: const Icon(Icons.delete_sweep_outlined, size: 18),
           label: const Text('Clear Cache & Data'),
           style: OutlinedButton.styleFrom(
@@ -429,6 +438,8 @@ class _SubtitlesTab extends StatelessWidget {
 }
 
 class _UpdatesTab extends StatefulWidget {
+  const _UpdatesTab();
+
   @override
   State<_UpdatesTab> createState() => _UpdatesTabState();
 }
@@ -469,7 +480,13 @@ class _UpdatesTabState extends State<_UpdatesTab> {
         OutlinedButton.icon(
           onPressed: _busy
               ? null
-              : () => _run(UpdaterService.instance.updateYtDlp),
+              : () => _run(() async {
+                    final UpdateResult r =
+                        await UpdaterService.instance.updateYtDlp();
+                    // Re-point mpv at the (possibly new) binary.
+                    await PlayerService.instance.applyYtDlpPath();
+                    return r;
+                  }),
           icon: const Icon(Icons.download_rounded, size: 18),
           label: const Text('Check for yt-dlp updates'),
           style: OutlinedButton.styleFrom(
