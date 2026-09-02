@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 
 /// Central knowledge of which file types SALU understands.
@@ -39,6 +41,32 @@ class MediaUtils {
 
   /// Display name for a media path — the file name without its extension.
   static String displayName(String path) => p.basenameWithoutExtension(path);
+
+  /// Strips the Windows extended-length prefix (`\\?\C:\…` or
+  /// `\\?\UNC\server\…`) that native drag-and-drop and some file dialogs
+  /// deliver. libmpv accepts such a path for the directly opened file but
+  /// fails with "Can not open external file" when it derives sidecar paths
+  /// from it (auto-loaded `.lrc` / `.srt` / cover art), so hand it plain
+  /// DOS paths whenever the result stays under the classic MAX_PATH limit.
+  static String normalizePath(String path) {
+    if (!Platform.isWindows) return path;
+    if (path.startsWith(r'\\?\UNC\')) {
+      // `\\?\UNC\server\share` → `\\server\share` (8-char prefix).
+      final String plain = '\\${path.substring(8)}';
+      return plain.length < 240 ? plain : path;
+    }
+    if (path.startsWith(r'\\?\')) {
+      final String plain = path.substring(4);
+      final bool isDrivePath = plain.length >= 3 &&
+          // A drive letter followed by `:\`.
+          plain.codeUnitAt(0) >= 65 &&
+          plain.codeUnitAt(0) <= 122 &&
+          plain[1] == ':' &&
+          plain[2] == r'\';
+      return (isDrivePath && plain.length < 240) ? plain : path;
+    }
+    return path;
+  }
 
   /// Formats a duration as `h:mm:ss` or `m:ss` depending on length.
   static String formatDuration(Duration d) {

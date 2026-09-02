@@ -42,6 +42,11 @@ class MdnsBroadcaster {
   /// Cached LAN IPv4 addresses used in the A records (refreshed on announce).
   List<InternetAddress> _addresses = const <InternetAddress>[];
 
+  /// Interfaces whose multicast join already failed (e.g. virtual adapters
+  /// reporting WSAEINVAL / errno 10022). Kept so the reannounce timer doesn't
+  /// re-log the same broken adapter every minute.
+  final Set<String> _failedJoins = <String>{};
+
   bool get isRunning => _socket != null;
 
   /// Human-readable service instance, e.g. `salu-pc._salu-remote._tcp.local`.
@@ -125,8 +130,15 @@ class MdnsBroadcaster {
         }
         try {
           socket.joinMulticast(InternetAddress(mDnsGroup), interface);
+          _failedJoins.remove(interface.name);
         } catch (error) {
-          debugPrint('[SALU/mdns] join failed on ${interface.name}: $error');
+          // Some adapters (VPNs, Hyper-V/WSL virtual switches) refuse the
+          // group join; discovery keeps working on the healthy ones. Only
+          // mention each failing interface once to keep the log readable.
+          if (_failedJoins.add(interface.name)) {
+            debugPrint(
+                '[SALU/mdns] multicast join failed on ${interface.name} (skipping it): $error');
+          }
         }
       }
     } catch (error) {

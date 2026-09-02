@@ -150,14 +150,14 @@ class _EngineCard extends StatelessWidget {
         border: Border.all(color: AppColors.divider),
       ),
       child: const Column(
-        children: const <Widget>[
-          const _EngineRow(
+        children: <Widget>[
+          _EngineRow(
             label: 'Media engine',
             valueBuilder: AppInfo.mpvEngineVersion,
             fallback: 'libmpv (media_kit)',
           ),
           const SizedBox(height: 8),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
               Text('Interface',

@@ -48,41 +48,49 @@ class RightPanel extends StatelessWidget {
                   filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                   child: Container(
                     color: AppColors.glass,
-                    child: DefaultTabController(
-                      length: 4,
-                      child: Column(
-                        children: <Widget>[
-                          _PanelHeader(
-                            onOpenSettings: onOpenSettings,
-                            onClose: onClose,
-                          ),
-                          const TabBar(
-                            labelColor: AppColors.accent,
-                            unselectedLabelColor: AppColors.textSecondary,
-                            indicatorColor: AppColors.accent,
-                            indicatorWeight: 2,
-                            labelStyle: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                    // A Material directly above the glass tint gives the
+                    // ListTiles / SwitchListTiles in the tabs a surface to
+                    // paint their ink on. Without it the splash renders on
+                    // a Material behind this opaque Container and Flutter
+                    // warns that it "may be invisible".
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: DefaultTabController(
+                        length: 4,
+                        child: Column(
+                          children: <Widget>[
+                            _PanelHeader(
+                              onOpenSettings: onOpenSettings,
+                              onClose: onClose,
                             ),
-                            tabs: <Tab>[
-                              Tab(text: 'Playlist'),
-                              Tab(text: 'Video'),
-                              Tab(text: 'Audio'),
-                              Tab(text: 'Subtitles'),
-                            ],
-                          ),
-                          const Expanded(
-                            child: TabBarView(
-                              children: <Widget>[
-                                PlaylistTab(),
-                                VideoTab(),
-                                AudioTab(),
-                                SubtitleTab(),
+                            const TabBar(
+                              labelColor: AppColors.accent,
+                              unselectedLabelColor: AppColors.textSecondary,
+                              indicatorColor: AppColors.accent,
+                              indicatorWeight: 2,
+                              labelStyle: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              tabs: <Tab>[
+                                Tab(text: 'Playlist'),
+                                Tab(text: 'Video'),
+                                Tab(text: 'Audio'),
+                                Tab(text: 'Subtitles'),
                               ],
                             ),
-                          ),
-                        ],
+                            const Expanded(
+                              child: TabBarView(
+                                children: <Widget>[
+                                  PlaylistTab(),
+                                  VideoTab(),
+                                  AudioTab(),
+                                  SubtitleTab(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

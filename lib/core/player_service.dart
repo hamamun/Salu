@@ -363,6 +363,7 @@ class PlayerService {
   /// natural episode order.
   Future<void> openPath(String path, {bool play = true, bool smartQueue = true}) async {
     _flushHistory(force: true);
+    path = MediaUtils.normalizePath(path);
 
     if (smartQueue &&
         AppPrefs.instance.autoQueueFolder &&
@@ -373,7 +374,7 @@ class PlayerService {
         final int index = SmartQueueService.indexOf(queue, path);
         await player.open(
           Playlist(
-            queue.map((String item) => Media(item)).toList(),
+            queue.map((String item) => Media(MediaUtils.normalizePath(item))).toList(),
             index: index,
           ),
           play: play,
@@ -389,7 +390,8 @@ class PlayerService {
   Future<void> openPaths(List<String> paths, {bool play = true}) async {
     if (paths.isEmpty) return;
     _flushHistory(force: true);
-    final Playlist p = Playlist(paths.map((String path) => Media(path)).toList());
+    final Playlist p = Playlist(
+        paths.map((String path) => Media(MediaUtils.normalizePath(path))).toList());
     await player.open(p, play: play);
   }
 
@@ -400,14 +402,15 @@ class PlayerService {
     _flushHistory(force: true);
     final int index = startIndex.clamp(0, paths.length - 1).toInt();
     await player.open(
-      Playlist(paths.map((String path) => Media(path)).toList(), index: index),
+      Playlist(paths.map((String path) => Media(MediaUtils.normalizePath(path))).toList(),
+          index: index),
       play: play,
     );
   }
 
   /// Attach an external subtitle file (.srt/.ass/…) to the current media.
   Future<void> loadExternalSubtitle(String path) async {
-    await player.setSubtitleTrack(SubtitleTrack.uri(path));
+    await player.setSubtitleTrack(SubtitleTrack.uri(MediaUtils.normalizePath(path)));
   }
 
   // ── Transport ─────────────────────────────────────────────────────────
@@ -457,11 +460,12 @@ class PlayerService {
 
   Future<void> jump(int index) => player.jump(index);
 
-  Future<void> addToPlaylist(String path) => player.add(Media(path));
+  Future<void> addToPlaylist(String path) =>
+      player.add(Media(MediaUtils.normalizePath(path)));
 
   Future<void> addAllToPlaylist(List<String> paths) async {
     for (final String path in paths) {
-      await player.add(Media(path));
+      await player.add(Media(MediaUtils.normalizePath(path)));
     }
   }
 

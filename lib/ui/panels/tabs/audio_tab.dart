@@ -226,16 +226,32 @@ class _PresetDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Dragging any band slider switches the curve to "Custom", which is not
+    // a member of either preset list. DropdownButton asserts that its value
+    // matches exactly one item, so a synthetic (non-selectable) entry keeps
+    // the manual curve valid — and the 100000×100000 ErrorWidget (and the
+    // RenderFlex overflow it causes inside this Row) never appears.
+    final bool valueIsPreset =
+        presets.any((EqualizerPreset p) => p.name == value);
     return DropdownButton<String>(
       value: value,
       dropdownColor: AppColors.surface,
       isDense: true,
       underline: const SizedBox.shrink(),
       style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
-      items: presets
-          .map((EqualizerPreset p) =>
-              DropdownMenuItem<String>(value: p.name, child: Text(p.name)))
-          .toList(),
+      items: <DropdownMenuItem<String>>[
+        for (final EqualizerPreset preset in presets)
+          DropdownMenuItem<String>(
+            value: preset.name,
+            child: Text(preset.name),
+          ),
+        if (!valueIsPreset)
+          DropdownMenuItem<String>(
+            value: value,
+            enabled: false,
+            child: Text(value),
+          ),
+      ],
       onChanged: (String? v) {
         if (v != null) onChanged(v);
       },
