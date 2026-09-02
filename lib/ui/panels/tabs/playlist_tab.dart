@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/media_utils.dart';
+import '../../../core/network_player.dart';
 import '../../../core/player_service.dart';
 import '../../../theme/app_theme.dart';
 
@@ -18,6 +19,9 @@ class PlaylistTab extends StatefulWidget {
 class _PlaylistTabState extends State<PlaylistTab> {
   final PlayerService _player = PlayerService.instance;
   bool _showChapters = false;
+
+  /// Active "Group By" value for IPTV playlists (null = show everything).
+  String? _groupFilter;
   List<_Chapter> _chapters = <_Chapter>[];
 
   @override
@@ -48,6 +52,18 @@ class _PlaylistTabState extends State<PlaylistTab> {
           ),
         ),
         const Divider(height: 1),
+        // Phase 6 · Step 3: massive IPTV playlists get a "Group By" filter
+        // and a Clear Playlist button.
+        ListenableBuilder(
+          listenable: NetworkPlayer.instance,
+          builder: (BuildContext context, Widget? _) {
+            final NetworkPlayer iptv = NetworkPlayer.instance;
+            if (_showChapters || !iptv.isMassivePlaylist) {
+              return const SizedBox.shrink();
+            }
+            return _IptvToolbar(iptv: iptv);
+          },
+        ),
         Expanded(
           child: _showChapters ? _buildChapters() : _buildQueue(),
         ),
@@ -59,7 +75,10 @@ class _PlaylistTabState extends State<PlaylistTab> {
 
   Widget _buildQueue() {
     return ListenableBuilder(
-      listenable: _player.playlist,
+      listenable: Listenable.merge(<Listenable>[
+        _player.playlist,
+        NetworkPlayer.instance,
+      ]),
       builder: (BuildContext context, Widget? child) {
         final Playlist? playlist = _player.playlist.value;
         final List<Media> medias = playlist?.medias ?? const <Media>[];
@@ -69,13 +88,39 @@ class _PlaylistTabState extends State<PlaylistTab> {
             message: 'Nothing queued yet\nDrop files or press + to add',
           );
         }
+
+        final NetworkPlayer iptv = NetworkPlayer.instance;
+        final String? filter = _groupFilter;
+
+        // Indices surviving the active "Group By" filter.
+        final List<int> indices = <int>[];
+        for (int i = 0; i < medias.length; i++) {
+          if (filter == null || iptv.grouping == IptvGrouping.none) {
+            indices.add(i);
+            continue;
+          }
+          if (i < iptv.channels.length &&
+              iptv.valueFor(iptv.channels[i]) == filter) {
+            indices.add(i);
+          }
+        }
+
+        if (indices.isEmpty) {
+          return const _EmptyState(
+            icon: Icons.filter_alt_off_outlined,
+            message: 'No channels in this group',
+          );
+        }
+
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          itemCount: medias.length,
-          itemBuilder: (BuildContext context, int index) {
+          itemCount: indices.length,
+          itemBuilder: (BuildContext context, int position) {
+            final int index = indices[position];
             final bool isCurrent = playlist!.index == index;
+            final String? channelTitle = iptv.titleAt(index);
             return _QueueTile(
-              title: MediaUtils.displayName(medias[index].uri),
+              title: channelTitle ?? MediaUtils.displayName(medias[index].uri),
               isCurrent: isCurrent,
               onTap: () => _player.jump(index),
             );
@@ -143,6 +188,14 @@ class _PlaylistTabState extends State<PlaylistTab> {
     }
     if (!mounted) return;
     setState(() => _chapters = chapters);
+  }
+
+  void _setGroupFilter(String? value) {
+    setState(() => _groupFilter = value);
+  }
+
+  void _resetGroupFilter() {
+    setState(() => _groupFilter = null);
   }
 
   Future<void> _addFiles() async {
@@ -341,4 +394,103 @@ class _Chapter {
 
   final String title;
   final Duration time;
+}
+
+/// "Group By" filter + Clear Playlist controls shown for massive IPTV lists.
+class _IptvToolbar extends StatelessWidget {
+  const _IptvToolbar({required this.iptv});
+
+  final NetworkPlayer iptv;
+
+  @override
+  Widget build(BuildContext context) {
+    final _PlaylistTabState? state =
+        context.findAncestorStateOfType<_PlaylistTabState>();
+    return Container(
+      color: AppColors.surfaceHighlight.withAlpha(90),
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  '${iptv.channels.length} channels',
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  iptv.clear();
+                  PlayerService.instance.player.stop();
+                  state?._resetGroupFilter();
+                },
+                icon: const Icon(Icons.playlist_remove_rounded, size: 17),
+                label: const Text('Clear'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  textStyle: const TextStyle(fontSize: 12.5),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: <Widget>[
+              const Text(
+                'Group by',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButton<IptvGrouping>(
+                  isExpanded: true,
+                  isDense: true,
+                  underline: const SizedBox.shrink(),
+                  value: iptv.grouping,
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AppColors.textPrimary),
+                  items: <DropdownMenuItem<IptvGrouping>>[
+                    for (final IptvGrouping g in IptvGrouping.values)
+                      DropdownMenuItem<IptvGrouping>(
+                        value: g,
+                        child: Text(g.label),
+                      ),
+                  ],
+                  onChanged: (IptvGrouping? value) {
+                    if (value == null) return;
+                    iptv.grouping = value;
+                    state?._resetGroupFilter();
+                  },
+                ),
+              ),
+            ],
+          ),
+          if (iptv.grouping != IptvGrouping.none)
+            SizedBox(
+              height: 34,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: <Widget>[
+                  for (final String value in <String>[
+                    'All',
+                    ...iptv.groupValues,
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ActionChip(
+                        label: Text(value,
+                            style: const TextStyle(fontSize: 11.5)),
+                        onPressed: () => state?._setGroupFilter(
+                            value == 'All' ? null : value),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

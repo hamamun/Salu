@@ -77,7 +77,19 @@ class _OscPanelState extends State<OscPanel> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            _TimelineRow(),
+                            // Phase 6 · Step 3: live streams have no known
+                            // duration, so the timeline is replaced by a
+                            // simple LIVE badge.
+                            ValueListenableBuilder<bool>(
+                              valueListenable:
+                                  PlayerService.instance.isLiveStream,
+                              builder: (BuildContext context, bool live,
+                                  Widget? _) {
+                                return live
+                                    ? const _LiveBadgeRow()
+                                    : _TimelineRow();
+                              },
+                            ),
                             const SizedBox(height: 2),
                             ControlButtons(
                               onPlayPauseFlash: widget.onPlayPauseFlash,
@@ -166,6 +178,53 @@ class _TimelineRow extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Replaces the timeline while a live stream (IPTV/HLS) is playing.
+class _LiveBadgeRow extends StatelessWidget {
+  const _LiveBadgeRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE81123),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'LIVE',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ValueListenableBuilder<String?>(
+              valueListenable: PlayerService.instance.currentTitle,
+              builder: (BuildContext context, String? title, Widget? _) {
+                return Text(
+                  title ?? 'Network stream',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

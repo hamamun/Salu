@@ -2,16 +2,20 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/drop_handler.dart';
+import '../../core/app_prefs.dart';
+import '../../core/drag_drop_handler.dart';
 import '../../core/player_service.dart';
+import '../../core/stream_manager.dart';
 import '../../theme/app_theme.dart';
 import '../managers/ui_visibility_manager.dart';
 import '../osc/osc_panel.dart';
+import '../panels/library_panel.dart';
 import '../panels/right_panel_container.dart';
 import '../widgets/center_play_pause.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/media_hud.dart';
 import '../widgets/osd_indicator.dart';
+import 'browser_screen.dart';
 import 'music_mode.dart';
 import 'settings_screen.dart';
 import 'video_screen.dart';
@@ -38,9 +42,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Whether the right Quick Settings panel is open.
   bool _rightPanelOpen = false;
 
+  /// Whether the left Library sidebar is open (Phase 6 · Step 1).
+  bool _libraryOpen = false;
+
+  /// Whether the built-in browser covers the player (Phase 6 · Step 4).
+  bool _browserOpen = false;
+
   @override
   void initState() {
     super.initState();
+    // Let the core layers flash OSD messages (resume, smart queue…).
+    _player.onOsdMessage = (String message) =>
+        OsdController.instance.show(message, icon: Icons.info_outline_rounded);
     // Play the file the app was launched with, if any.
     final String? initial = widget.initialFilePath;
     if (initial != null) {
@@ -59,10 +72,14 @@ class _HomeScreenState extends State<HomeScreen> {
         .flash(wasPlaying ? Icons.play_arrow_rounded : Icons.pause_rounded);
   }
 
-  void _seekBy(int seconds) {
-    _player.seekBy(Duration(seconds: seconds));
+  /// Phase 5 · Step 5 — keyframe seeking by default, exact while Shift is
+  /// held (or the reverse when the user flips the Settings toggle).
+  void _seekBy(int seconds, {bool shiftHeld = false}) {
+    _player.seekByWithMode(Duration(seconds: seconds), shiftHeld: shiftHeld);
+    final bool exact =
+        AppPrefs.instance.exactSeekByDefault ? !shiftHeld : shiftHeld;
     OsdController.instance.show(
-      '${seconds > 0 ? '+' : ''}$seconds s',
+      '${seconds > 0 ? '+' : ''}$seconds s${exact ? ' · exact' : ''}',
       icon: seconds > 0 ? Icons.forward_10_rounded : Icons.replay_10_rounded,
     );
   }
@@ -87,34 +104,87 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _toggleHud() => MediaHudController.instance.toggle();
 
-  void _toggleLibrary() {
-    OsdController.instance
-        .show('Library arrives in Phase 6', icon: Icons.video_library_outlined);
+  void _toggleLibrary() => _setLibraryOpen(!_libraryOpen);
+
+  void _setLibraryOpen(bool open) {
+    if (_libraryOpen == open) return;
+    setState(() => _libraryOpen = open);
+    if (open) {
+      UiVisibilityManager.instance.lockInteraction();
+    } else {
+      UiVisibilityManager.instance.unlockInteraction();
+    }
+  }
+
+  /// Opens a saved bookmark in the built-in browser, spawning a new tab if
+  /// the browser is already visible (Phase 6 · Step 4).
+  Future<void> _openBookmark(SavedBookmark bookmark) async {
+    _setLibraryOpen(false);
+    if (_player.playing.value) {
+      await _player.pause();
+    }
+    setState(() => _browserOpen = true);
+    await BrowserController.instance
+        .openUrl(bookmark.url, title: bookmark.name);
+  }
+
+  /// Returns to the player and frees every WebView2 controller.
+  Future<void> _closeBrowser() async {
+    setState(() => _browserOpen = false);
+    await BrowserController.instance.closeBrowser();
   }
 
   void _openSettings() => SettingsScreen.show(context);
 
-  // ── Drag & drop (Phase 2 · Step 5) ────────────────────────────────────
+  // ── Drag & drop (Phase 5 · Step 1) ────────────────────────────────────
 
+  /// Phase 5 · Step 1 — the drop zone depends on where the files landed:
+  /// over the open Playlist panel they are appended, anywhere else they
+  /// replace the queue and start playing.
   Future<void> _onDropDone(DropDoneDetails details) async {
     setState(() => _dropHovering = false);
     final List<String> paths =
         details.files.map((DropFile file) => file.path).toList();
-    await DropHandler.handleDroppedPaths(paths);
+    final DropZone zone = _zoneForPosition(details.localPosition);
+    final DropResult result =
+        await DragDropHandler.handle(paths, zone: zone);
+    if (result.handled && result.message.isNotEmpty) {
+      OsdController.instance
+          .show(result.message, icon: Icons.file_download_outlined);
+    }
+  }
+
+  /// The right Quick Settings panel is 340 px wide; a drop inside it while
+  /// the Playlist tab is showing counts as a playlist drop.
+  DropZone _zoneForPosition(Offset position) {
+    if (!_rightPanelOpen) return DropZone.mainScreen;
+    final double width = MediaQuery.of(context).size.width;
+    return position.dx >= width - 340
+        ? DropZone.playlistPanel
+        : DropZone.mainScreen;
   }
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
 
+  bool get _shiftHeld {
+    final Set<LogicalKeyboardKey> pressed =
+        HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight);
+  }
+
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // The browser owns the keyboard while it is open.
+    if (_browserOpen) return KeyEventResult.ignored;
     final LogicalKeyboardKey key = event.logicalKey;
 
     if (key == LogicalKeyboardKey.space) {
       _togglePlay();
     } else if (key == LogicalKeyboardKey.arrowLeft) {
-      _seekBy(-5);
+      _seekBy(-5, shiftHeld: _shiftHeld);
     } else if (key == LogicalKeyboardKey.arrowRight) {
-      _seekBy(5);
+      _seekBy(5, shiftHeld: _shiftHeld);
     } else if (key == LogicalKeyboardKey.arrowUp) {
       _adjustVolume(5);
     } else if (key == LogicalKeyboardKey.arrowDown) {
@@ -145,6 +215,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   KeyEventResult _handleEscape() {
+    if (_libraryOpen) {
+      _setLibraryOpen(false);
+      return KeyEventResult.handled;
+    }
     if (_rightPanelOpen) {
       _setPanelOpen(false);
       return KeyEventResult.handled;
@@ -225,14 +299,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   onOpenSettings: _openSettings,
                 ),
 
-                // 7 · Media Inspector HUD.
+                // 7 · Left Library sidebar (streams + bookmarks).
+                LibraryPanel(
+                  visible: _libraryOpen,
+                  onClose: () => _setLibraryOpen(false),
+                  onOpenBookmark: _openBookmark,
+                ),
+
+                // 8 · Media Inspector HUD.
                 const MediaHud(),
 
-                // 8 · OSD indicator (top-right).
+                // 9 · OSD indicator (top-right).
                 const OsdIndicator(),
 
-                // 9 · Drop highlight overlay.
+                // 10 · Drop highlight overlay.
                 _DropOverlay(visible: _dropHovering),
+
+                // 11 · The built-in browser covers everything while open.
+                if (_browserOpen)
+                  Positioned.fill(
+                    child: BrowserScreen(onCloseBrowser: _closeBrowser),
+                  ),
               ],
             ),
           ),

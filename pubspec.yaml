@@ -30,6 +30,18 @@ dependencies:
   # Native file dialogs for the Playlist "+ Add" and "Load Local Subtitle".
   file_selector: ^1.0.3
 
+  # ── Phase 5: Media Intelligence ─────────────────────────────────────────
+  # Lightweight persistence for prefs, playback history and the stream library.
+  shared_preferences: ^2.3.2
+  # Component updater (yt-dlp / WebView2 loader) + future API calls.
+  http: ^1.2.2
+  # Resolves the app's local data directory for downloaded binaries.
+  path_provider: ^2.1.4
+
+  # ── Phase 6: Web & Stream Manager ───────────────────────────────────────
+  # Built-in browser powered by the Windows WebView2 runtime.
+  webview_windows: ^0.4.0
+
   # Utilities.
   path: ^1.9.0
 
