@@ -83,7 +83,7 @@ class MdnsBroadcaster {
     try {
       socket.broadcastEnabled = true;
       socket.multicastLoopback = true;
-      socket.multicastTtl = 2; // Same Wi‑Fi segment only.
+      socket.multicastHops = 2; // Same Wi‑Fi segment only.
     } catch (_) {
       // Some drivers refuse these options — announcements still work.
     }
@@ -153,8 +153,9 @@ class MdnsBroadcaster {
     if (socket == null || event != RawSocketEvent.read) return;
 
     final Datagram? datagram = socket.receive();
-    if (datagram == null || datagram.length < 12) return;
+    if (datagram == null) return;
     final Uint8List data = datagram.data;
+    if (data.length < 12) return;
 
     // Only DNS queries (QR bit clear) with at least one question interest us.
     final int flags = (data[2] << 8) | data[3];

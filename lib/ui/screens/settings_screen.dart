@@ -145,13 +145,13 @@ class _NavRail extends StatelessWidget {
                   : () => onSelect(category),
             ),
           const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(16),
+          const Padding(
+            padding: EdgeInsets.all(16),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'SALU ${AppInfo.version}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ),
           ),

@@ -33,10 +33,10 @@ class AboutModal extends StatelessWidget {
           height: 620,
           child: Stack(
             children: <Widget>[
-              Positioned.fill(
+              const Positioned.fill(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(30, 26, 30, 26),
-                  child: const AboutSection(),
+                  padding: EdgeInsets.fromLTRB(30, 26, 30, 26),
+                  child: AboutSection(),
                 ),
               ),
               Positioned(
@@ -105,10 +105,10 @@ class AboutSection extends StatelessWidget {
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 12),
-        Text(
+        const Text(
           AppInfo.tagline,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 13, color: AppColors.textSecondary, height: 1.5),
         ),
         const SizedBox(height: 20),
@@ -149,9 +149,9 @@ class _EngineCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.divider),
       ),
-      child: Column(
-        children: <Widget>[
-          _EngineRow(
+      child: const Column(
+        children: const <Widget>[
+          const _EngineRow(
             label: 'Media engine',
             valueBuilder: AppInfo.mpvEngineVersion,
             fallback: 'libmpv (media_kit)',
