@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -42,7 +43,7 @@ typedef RemoteClientEvent = void Function(RemoteClient client);
 /// SALU's invisible local WebSocket server (Phase 8 · Step 1).
 ///
 /// Built on `shelf` + `shelf_web_socket`, bound to `0.0.0.0` so any device on
-/// the same Wi-Fi can reach it. The wire protocol is deliberately minimal:
+/// the same Wi‑Fi can reach it. The wire protocol is deliberately minimal:
 /// one JSON object per message, `{"action": …}` inbound and `{"type": …}`
 /// outbound. Non-WebSocket `GET /health` requests answer with a small JSON
 /// document so companion apps can probe SALU without a handshake.
@@ -72,13 +73,7 @@ class RemoteWebSocketServer {
   Future<void> start({String host = '0.0.0.0', int port = 8080}) async {
     if (_server != null) return;
 
-    final shelf.Handler upgrade = webSocketHandler(
-      (WebSocketChannel channel, String? subprotocol) =>
-          _onConnect(channel),
-      pingInterval: const Duration(seconds: 25),
-    );
-
-    final shelf.Handler handler = (shelf.Request request) {
+    FutureOr<shelf.Response> handler(shelf.Request request) {
       if (request.method == 'GET' && request.url.path == 'health') {
         return shelf.Response.ok(
           jsonEncode(<String, Object?>{
@@ -89,8 +84,15 @@ class RemoteWebSocketServer {
           headers: <String, String>{'Content-Type': 'application/json'},
         );
       }
+
+      final String address = _describePeer(request);
+      final shelf.Handler upgrade = webSocketHandler(
+        (WebSocketChannel channel, String? subprotocol) =>
+            _onConnect(channel, address),
+        pingInterval: const Duration(seconds: 25),
+      );
       return upgrade(request);
-    };
+    }
 
     _server = await shelf_io.serve(handler, host, port);
     debugPrint('[SALU/remote] WebSocket server listening on ws://$host:$port');
@@ -109,8 +111,8 @@ class RemoteWebSocketServer {
     }
   }
 
-  void _onConnect(WebSocketChannel channel) {
-    final RemoteClient client = RemoteClient._(channel, _describePeer(channel));
+  void _onConnect(WebSocketChannel channel, String address) {
+    final RemoteClient client = RemoteClient._(channel, address);
     _clients.add(client);
     onClientConnected?.call(client);
 
@@ -142,7 +144,7 @@ class RemoteWebSocketServer {
       return;
     }
     final Map<String, Object?>? reply =
-        onMessage?.call(client, Map<String, dynamic>.from(decoded as Map));
+        onMessage?.call(client, Map<String, dynamic>.from(decoded));
     if (reply != null) client.sendJson(reply);
   }
 
@@ -160,18 +162,15 @@ class RemoteWebSocketServer {
     }
   }
 
-  /// Best-effort peer description. `IOWebSocketChannel` exposes the raw
-  /// dart:io [WebSocket] as `socket` — a `dynamic` probe keeps this working
-  /// across every web_socket_channel version (falls back to a plain tag).
-  static String _describePeer(WebSocketChannel channel) {
-    try {
-      final Object? socket = (channel as dynamic).socket;
-      if (socket is WebSocket && socket.remoteAddress != null) {
-        return '${socket.remoteAddress.address}:${socket.remotePort}';
-      }
-    } catch (_) {
-      // No socket info available — not important, purely cosmetic.
+  /// Best-effort peer description from the underlying shelf_io request.
+  static String _describePeer(shelf.Request request) {
+    final HttpConnectionInfo? connectionInfo =
+        request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
+    final InternetAddress? remoteAddress = connectionInfo?.remoteAddress;
+    final int? remotePort = connectionInfo?.remotePort;
+    if (remoteAddress == null || remotePort == null) {
+      return 'lan-client';
     }
-    return 'lan-client';
+    return '${remoteAddress.address}:$remotePort';
   }
 }

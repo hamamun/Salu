@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -243,16 +242,20 @@ class SubtitlesApi {
 
       final Object? body = _tryJson(response.body);
       if (response.statusCode != 200) {
-        return _SearchPage(const <SubtitleResult>[],
-            _apiError(body, response.statusCode));
+        return _SearchPage(
+          const <SubtitleResult>[],
+          _apiError(body, response.statusCode),
+        );
       }
       if (body is! Map) {
-        return _SearchPage(const <SubtitleResult>[],
-            'OpenSubtitles returned an unexpected response.');
+        return const _SearchPage(
+          <SubtitleResult>[],
+          'OpenSubtitles returned an unexpected response.',
+        );
       }
-      final Object? data = (body as Map)['data'];
+      final Object? data = body['data'];
       if (data is! List) {
-        return _SearchPage(const <SubtitleResult>[], null);
+        return const _SearchPage(<SubtitleResult>[], null);
       }
       final List<SubtitleResult> results = <SubtitleResult>[];
       for (final Object? item in data) {
@@ -261,11 +264,15 @@ class SubtitlesApi {
       }
       return _SearchPage(results, null);
     } on TimeoutException {
-      return _SearchPage(const <SubtitleResult>[],
-          'The OpenSubtitles API timed out. Check your connection.');
+      return const _SearchPage(
+        <SubtitleResult>[],
+        'The OpenSubtitles API timed out. Check your connection.',
+      );
     } on SocketException {
-      return _SearchPage(const <SubtitleResult>[],
-          'Could not reach OpenSubtitles (offline?).');
+      return const _SearchPage(
+        <SubtitleResult>[],
+        'Could not reach OpenSubtitles (offline?).',
+      );
     } catch (error) {
       debugPrint('[SALU] subtitles search failed: $error');
       return _SearchPage(const <SubtitleResult>[], 'Search failed: $error');
@@ -326,7 +333,7 @@ class SubtitlesApi {
 
   static String _apiError(Object? body, int statusCode) {
     if (body is Map) {
-      final Object? messages = (body as Map)['messages'];
+      final Object? messages = body['messages'];
       if (messages is List && messages.isNotEmpty && messages.first is Map) {
         final Map<Object?, Object?> first = messages.first as Map;
         final Object? message = first['message'];
@@ -405,9 +412,8 @@ class SubtitlesApi {
         );
       }
 
-      final Map<Object?, Object?> json = body as Map;
-      final String link = json['link']! as String;
-      final String? token = json['token'] as String?;
+      final String link = body['link']! as String;
+      final String? token = body['token'] as String?;
 
       final http.Response file = await _client
           .get(
@@ -606,3 +612,4 @@ class _SearchPage {
   final List<SubtitleResult> results;
   final String? error;
 }
+
