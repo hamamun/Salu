@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show Listenable;
 import 'package:flutter/material.dart';
 
 import '../../core/player_service.dart';
@@ -71,7 +70,6 @@ class _PlayPauseButton extends StatelessWidget {
       builder: (BuildContext context, Widget? _) {
         return Tooltip(
           message: 'Play / Pause (Space)',
-          triggerMode: TooltipTriggerMode.hover,
           child: _IconControl(
             onTap: player.playOrPause,
             icon: player.isPlaying.value
@@ -101,7 +99,6 @@ class _MuteButton extends StatelessWidget {
         final bool silent = player.isMuted.value || player.volumeLevel.value < 1;
         return Tooltip(
           message: player.isMuted.value ? 'Unmute' : 'Mute',
-          triggerMode: TooltipTriggerMode.hover,
           child: _IconControl(
             onTap: player.toggleMute,
             icon: silent
@@ -223,7 +220,7 @@ class _VolumeBarState extends State<_VolumeBar> {
                       width: w,
                       child: Stack(
                         children: <Widget>[
-                          Positioned.fill(
+                          const Positioned.fill(
                             child: ColoredBox(color: AppColors.barTrack),
                           ),
                           if (frac > 0)
@@ -232,7 +229,7 @@ class _VolumeBarState extends State<_VolumeBar> {
                               bottom: 0,
                               left: 0,
                               width: w * frac,
-                              child: ColoredBox(color: AppColors.barFill),
+                              child: const ColoredBox(color: AppColors.barFill),
                             ),
                         ],
                       ),
