@@ -119,12 +119,13 @@ class _GeneralTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+    // The whole General tab is static, so build it once at compile time.
+    return const SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 22, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
+          Text(
             'Controls',
             style: TextStyle(
               fontSize: 15,
@@ -132,13 +133,13 @@ class _GeneralTab extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
+          SizedBox(height: 4),
+          Text(
             'Choose when the top bar hides itself.',
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 16),
-          const _TitleBarModePicker(),
+          SizedBox(height: 16),
+          _TitleBarModePicker(),
         ],
       ),
     );

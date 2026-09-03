@@ -36,8 +36,11 @@ class SettingsService {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       final String? raw = prefs.getString(_keyTitleBarMode);
       if (raw != null) {
+        // `asNameMap()` lives on the `EnumByName` extension over
+        // `Iterable<T extends Enum>`, so it has to be reached through
+        // `values` — the enum type itself has no such static member.
         titleBarMode.value =
-            TitleBarMode.asNameMap()[raw] ?? TitleBarMode.borderless;
+            TitleBarMode.values.asNameMap()[raw] ?? TitleBarMode.borderless;
       }
     } catch (_) {
       // Corrupt/missing prefs — fall back to the default, silently.

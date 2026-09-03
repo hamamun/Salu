@@ -33,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// stillness hides it again, even while idle with nothing playing.
   bool _chromeVisible = true;
   Timer? _hideTimer;
-  StreamSubscription<TitleBarMode>? _modeSub;
 
   /// Whether files are currently hovering over the window.
   bool _dropHovering = false;
@@ -44,7 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     // Follow title bar mode changes made from the settings window.
-    _modeSub = _settings.titleBarMode.listen((TitleBarMode _) => _wakeChrome());
+    // (`titleBarMode` is a [ValueNotifier], so it is listened to with
+    // addListener/removeListener — it is not a stream.)
+    _settings.titleBarMode.addListener(_onTitleBarModeChanged);
     _restartHideTimer();
 
     // Play the file the app was launched with, if any.
@@ -59,11 +60,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _hideTimer?.cancel();
-    _modeSub?.cancel();
+    _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
     super.dispose();
   }
 
   // ── Auto-hide logic (Phase 1 · Step 4) ────────────────────────────────
+
+  /// A new title bar mode was picked in the settings window — treat it as
+  /// activity so the bar stays up for another 3 seconds under the new mode.
+  void _onTitleBarModeChanged() => _wakeChrome();
 
   void _wakeChrome() {
     if (!_chromeVisible) setState(() => _chromeVisible = true);
@@ -95,10 +100,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openSettings() {
     _wakeChrome();
-    showDialog<void>(
+    // `showGeneralDialog` — unlike `showDialog` — accepts the transition
+    // knobs below, so SALU's own fade + scale can drive the dialog in.
+    showGeneralDialog<void>(
       context: context,
       barrierColor: const Color(0x99000000),
       barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       transitionDuration: const Duration(milliseconds: 220),
       transitionBuilder: (BuildContext context, Animation<double> animation,
           Animation<double> secondaryAnimation, Widget child) {
@@ -114,7 +122,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       },
-      builder: (BuildContext context) => const SettingsDialog(),
+      pageBuilder: (BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation) => const SettingsDialog(),
     );
   }
 
