@@ -262,76 +262,74 @@ class _HomeScreenState extends State<HomeScreen> {
       top: 0,
       left: 0,
       right: 0,
-      child: ValueListenableBuilder<bool>(
-        valueListenable: _player.hasMedia,
-        builder: (BuildContext context, bool hasMedia, Widget? _) {
-          return IgnorePointer(
-            ignoring: !chromeVisible,
-            child: Listener(
-              // Absorb taps on the chrome's empty areas so they never
-              // fall through to the video's play/pause layer. (Raw
-              // listener — no gesture arena, so the title bar's
-              // double-click-to-maximize still works.)
-              behavior: HitTestBehavior.opaque,
-              onPointerDown: (_) {},
-              child: AnimatedSlide(
-                offset: chromeVisible ? Offset.zero : const Offset(0, -1),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                child: AnimatedOpacity(
-                  opacity: chromeVisible ? 1 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  child: Container(
-                    height: _chromeBlockHeight,
-                    alignment: Alignment.topCenter,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: _scrimColors,
-                        stops: _scrimStops,
+      child: IgnorePointer(
+        ignoring: !chromeVisible,
+        child: Listener(
+          // Absorb taps on the chrome's empty areas so they never
+          // fall through to the video's play/pause layer. (Raw
+          // listener — no gesture arena, so the title bar's
+          // double-click-to-maximize still works.)
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (_) {},
+          child: AnimatedSlide(
+            offset: chromeVisible ? Offset.zero : const Offset(0, -1),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            child: AnimatedOpacity(
+              opacity: chromeVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              child: Container(
+                height: _chromeBlockHeight,
+                alignment: Alignment.topCenter,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: _scrimColors,
+                    stops: _scrimStops,
+                  ),
+                ),
+                child: MouseRegion(
+                  // While the pointer works inside the visible chrome
+                  // content, auto-hide is suspended (even without mouse
+                  // movement). The region hugs the content — it never
+                  // covers the block's invisible glass areas.
+                  onEnter: (_) => _onChromeEnter(),
+                  onExit: (_) => _onChromeExit(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      // The invisible-until-activity title bar
+                      // (immersive: paints no scrim and animates
+                      // nothing — this block owns both).
+                      ValueListenableBuilder<String?>(
+                        valueListenable: _player.currentTitle,
+                        builder: (BuildContext context, String? title,
+                            Widget? _) {
+                          return CustomTitleBar(
+                            visible: true,
+                            immersive: true,
+                            title: title,
+                            onSettings: _openSettings,
+                          );
+                        },
                       ),
-                    ),
-                    child: MouseRegion(
-                      // While the pointer works inside the visible chrome
-                      // content, auto-hide is suspended (even without mouse
-                      // movement). The region hugs the content — it never
-                      // covers the block's invisible glass areas.
-                      onEnter: (_) => _onChromeEnter(),
-                      onExit: (_) => _onChromeExit(),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          // The invisible-until-activity title bar
-                          // (immersive: paints no scrim and animates
-                          // nothing — this block owns both).
-                          ValueListenableBuilder<String?>(
-                            valueListenable: _player.currentTitle,
-                            builder: (BuildContext context, String? title,
-                                Widget? _) {
-                              return CustomTitleBar(
-                                visible: true,
-                                immersive: true,
-                                title: title,
-                                onSettings: _openSettings,
-                              );
-                            },
-                          ),
-                          // The controller container, attached directly
-                          // beneath the title bar — the two read as one
-                          // single window with no outline between them.
-                          if (hasMedia) const ControllerPanel(),
-                        ],
-                      ),
-                    ),
+                      // The controller container, attached directly
+                      // beneath the title bar — the two read as one
+                      // single window with no outline between them.
+                      // It stays visible even when no media is loaded;
+                      // only the parent chrome block's auto-hide logic
+                      // (configured in Settings) can hide it.
+                      const ControllerPanel(),
+                    ],
                   ),
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
