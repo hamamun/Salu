@@ -1,5 +1,5 @@
 # Phase 3: The  -Style UI & OSC (On-Screen Controller)
-**Status:** ⏳ Not Started
+**Status:** 🔄 In Progress — controller container + unified timeline implemented (top-anchored fused design, see bottom note)
 
 ## 🎯 Goal
 Transform the raw video player into a premium, interactive experience. By the end of this phase, SALU will feature a beautiful, floating "glass" control bar at the bottom, smooth center-screen animations, and intelligent auto-hiding logic based on mouse movement.
@@ -58,3 +58,27 @@ Transform the raw video player into a premium, interactive experience. By the en
     *   Alongside the Album Art, elegantly display the extracted **Metadata** (Track Title, Artist, Album Name, Year).
     *   The PiP (Picture-in-Picture) and Fullscreen toggle buttons on the OSC will be strictly disabled/grayed out.
 *   *(Note: The actual scrolling Lyrics View will be fully implemented in Phase 7, but the physical Music Mode layout that houses it is established here).*
+---
+
+## ✅ Implemented so far (Arena session — fused top chrome + unified timeline)
+
+> UI decision locked with the user: the controller container sits DIRECTLY under the auto-hide title bar and the two are drawn as ONE single window block — shared continuous gradient scrim, no border/outline between them, edge to edge, same show/hide animation. (Not a floating bottom OSC.)
+
+### Files
+- `lib/ui/screens/home_screen.dart` — fused chrome block (`_chromeBlockHeight = 148` = 40 title + 108 controller), slide/fade as one piece (300ms), `_scrimColors` gradient melts to transparent at the block's bottom edge; chrome content MouseRegion suspends auto-hide while interacting; `_AutoHideProgress` = thin 2px bottom hairline when chrome hides (**display only** — absorbs pointer events, no click/drag/hover/tooltip).
+- `lib/ui/osc/controller_panel.dart` — `ControllerPanel` (height 108): MediaTimeline + play/pause, mute, volume bar. Paints nothing itself (parent scrim supplies the background).
+- `lib/ui/osc/media_timeline.dart` — unified timeline, identical for video AND audio (user dropped thumbnail-frame preview by design).
+- `lib/core/player_service.dart` — added `position`, `duration`, `volumeLevel`, `isMuted` ValueNotifiers + smooth position glide ticker; `seekTo` (clamps, no pause), `seekBy`, `toggleMute`, `setVolumeUI`; `keep-open=yes`.
+- `lib/ui/widgets/custom_title_bar.dart` — gained `immersive` mode (no own gradient/animation; parent block drives both).
+- `lib/theme/app_theme.dart` — `barTrack`, `barFill`, `barThumb`, `barTick`, `chipBackground`, `threadFill`.
+
+### Timeline design (locked with user)
+- Paste-window style thick bar: gentle translucent fill over dark track; flat 2px playhead notch, **no glow anywhere**.
+- Time text INSIDE the bar, single color, `hh:mm:ss` always (zero-padded hours, tabular figures, no wiggle):
+  left = playback position · center = `-` remaining (hidden when narrow) · right = total media time.
+- Hover = faint auto-scaled tick ruler + small time chip below bar showing target time.
+- Click = precise jump · press+drag = scrub preview, seek on release · mouse wheel over bar = ±1s per notch.
+- Playback is never paused/disturbed by seeking (no frame-preview seeking exists anymore).
+
+### Not yet from Phase 3 plan
+Center play/pause animation (Step 5), OSD indicators (Step 6), media HUD + music mode (Step 7), more transport/track buttons (Step 4), configurable OSC position settings.

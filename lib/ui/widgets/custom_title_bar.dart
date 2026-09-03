@@ -16,12 +16,18 @@ import 'dot_grid_icon.dart';
 /// title in the center, and the caption row on the right — the 6-dot
 /// settings button followed by Windows caption buttons (Minimize /
 /// Maximize / Close) rendered with native Segoe Fluent glyphs.
+///
+/// When [immersive] is true the bar paints no gradient and performs no
+/// visibility animation of its own — the parent block (HomeScreen's fused
+/// top chrome) owns the shared background and show/hide motion, so the
+/// title bar and the controller below always move and fade as one piece.
 class CustomTitleBar extends StatefulWidget {
   const CustomTitleBar({
     super.key,
     required this.visible,
     this.title,
     this.onSettings,
+    this.immersive = false,
   });
 
   /// Whether the bar is currently shown (parent-driven global hover logic).
@@ -32,6 +38,10 @@ class CustomTitleBar extends StatefulWidget {
 
   /// Opens the settings window (the 6-dot button, left of Minimize).
   final VoidCallback? onSettings;
+
+  /// When true the bar renders plain content only: no gradient backdrop
+  /// and no slide/fade wrapper (the fused parent block drives both).
+  final bool immersive;
 
   /// Fixed height of the caption area.
   static const double height = 40;
@@ -77,6 +87,96 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    // The bar's own content — gradient scrim applied only when standalone.
+    final Widget content = Container(
+      height: CustomTitleBar.height,
+      decoration: widget.immersive
+          ? null
+          : const BoxDecoration(
+              // Soft scrim so the bar stays readable over bright video,
+              // while keeping the borderless edge-to-edge illusion.
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[Color(0xB3121212), Color(0x00121212)],
+              ),
+            ),
+      child: Stack(
+        children: <Widget>[
+          // Full-width drag area (double-click toggles maximize).
+          Positioned.fill(
+            child: DragToMoveArea(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onDoubleTap: _toggleMaximize,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+          // Centered media title.
+          Center(
+            child: IgnorePointer(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: (MediaQuery.of(context).size.width - 320)
+                      .clamp(0.0, double.infinity)
+                      .toDouble(),
+                ),
+                child: Text(
+                  widget.title ?? 'SALU',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Caption buttons — right aligned.
+          Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                // SALU settings — six dots in two lines (left of Minimize).
+                _CaptionButton(
+                  tooltip: 'Settings',
+                  child: const DotGridIcon(
+                    size: 18,
+                    color: AppColors.textPrimary,
+                  ),
+                  onPressed: () => widget.onSettings?.call(),
+                ),
+                _CaptionButton(
+                  glyph: '\uE921', // Minimize
+                  tooltip: 'Minimize',
+                  onPressed: () => windowManager.minimize(),
+                ),
+                _CaptionButton(
+                  glyph: _isMaximized ? '\uE923' : '\uE922',
+                  tooltip: _isMaximized ? 'Restore' : 'Maximize',
+                  onPressed: _toggleMaximize,
+                ),
+                _CaptionButton(
+                  glyph: '\uE8BB', // Close
+                  tooltip: 'Close',
+                  isClose: true,
+                  onPressed: () => windowManager.close(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (widget.immersive) return content;
+
     return AnimatedSlide(
       // The bar slides down from the top edge as it fades in (like
       // Windows' own auto-hiding caption bars); the off-screen part is
@@ -90,89 +190,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
         curve: Curves.easeOutCubic,
         child: IgnorePointer(
           ignoring: !widget.visible,
-          child: Container(
-            height: CustomTitleBar.height,
-            decoration: const BoxDecoration(
-              // Soft scrim so the bar stays readable over bright video,
-              // while keeping the borderless edge-to-edge illusion.
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[Color(0xB3121212), Color(0x00121212)],
-              ),
-            ),
-            child: Stack(
-              children: <Widget>[
-                // Full-width drag area (double-click toggles maximize).
-                Positioned.fill(
-                  child: DragToMoveArea(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onDoubleTap: _toggleMaximize,
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                ),
-                // Centered media title.
-                Center(
-                  child: IgnorePointer(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: (MediaQuery.of(context).size.width - 320)
-                            .clamp(0.0, double.infinity),
-                      ),
-                      child: Text(
-                        widget.title ?? 'SALU',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // Caption buttons — right aligned.
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      // SALU settings — six dots in two lines (left of Minimize).
-                      _CaptionButton(
-                        tooltip: 'Settings',
-                        child: const DotGridIcon(
-                          size: 18,
-                          color: AppColors.textPrimary,
-                        ),
-                        onPressed: () => widget.onSettings?.call(),
-                      ),
-                      _CaptionButton(
-                        glyph: '\uE921', // Minimize
-                        tooltip: 'Minimize',
-                        onPressed: () => windowManager.minimize(),
-                      ),
-                      _CaptionButton(
-                        glyph: _isMaximized ? '\uE923' : '\uE922',
-                        tooltip: _isMaximized ? 'Restore' : 'Maximize',
-                        onPressed: _toggleMaximize,
-                      ),
-                      _CaptionButton(
-                        glyph: '\uE8BB', // Close
-                        tooltip: 'Close',
-                        isClose: true,
-                        onPressed: () => windowManager.close(),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          child: content,
         ),
       ),
     );

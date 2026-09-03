@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart' show Listenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,12 +9,17 @@ import '../../core/drop_handler.dart';
 import '../../core/player_service.dart';
 import '../../core/settings_service.dart';
 import '../../theme/app_theme.dart';
+import '../osc/controller_panel.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/settings_dialog.dart';
 import 'video_screen.dart';
 
 /// SALU's primary (and only) screen — a borderless dark canvas hosting the
-/// edge-to-edge video, crowned by the invisible hover title bar.
+/// edge-to-edge video, crowned by the fused top chrome: the invisible hover
+/// title bar and the on-screen controller are drawn as ONE continuous glass
+/// block (single shared gradient, no borders, no seams, edge to edge) that
+/// shows and hides together. When it auto-hides, a thin, display-only
+/// progress hairline remains at the very bottom of the window.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialFilePath});
 
@@ -34,10 +40,40 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _chromeVisible = true;
   Timer? _hideTimer;
 
+  /// True while the pointer rests inside the top chrome block (title bar
+  /// or controller). While interacting with the controls the chrome never
+  /// auto-hides; the countdown starts when the pointer leaves it.
+  bool _chromeHovered = false;
+
   /// Whether files are currently hovering over the window.
   bool _dropHovering = false;
 
   static const Duration _autoHideDelay = Duration(seconds: 3);
+
+  /// Fixed height of the unified chrome block: 40px title bar + 108px
+  /// controller. Even before media loads the block keeps this size so the
+  /// scrim gradient never jumps.
+  static const double _chromeBlockHeight = 148;
+
+  /// One continuous scrim for the whole chrome block — strong at the very
+  /// top (caption buttons), melting away at the block's bottom edge so the
+  /// glass block merges into the video with no outline.
+  static const List<Color> _scrimColors = <Color>[
+    Color(0xF0121212),
+    Color(0xE0121212),
+    Color(0xC8121212),
+    Color(0xB4121212),
+    Color(0x99121212),
+    Color(0x00121212),
+  ];
+  static const List<double> _scrimStops = <double>[
+    0.0,
+    0.2027, // y ≈ 30px
+    0.5676, // y ≈ 84px
+    0.8243, // y ≈ 122px
+    0.9324, // y ≈ 138px
+    1.0,
+  ];
 
   @override
   void initState() {
@@ -64,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ── Auto-hide logic (Phase 1 · Step 4) ────────────────────────────────
+  // ── Auto-hide logic (Phase 1 · Step 4, extended for the controller) ───
 
   /// A new title bar mode was picked in the settings window — treat it as
   /// activity so the bar stays up for another 3 seconds under the new mode.
@@ -75,6 +111,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _restartHideTimer();
   }
 
+  /// The pointer entered the chrome block — keep it visible while the user
+  /// works the controls, no matter how still the mouse is.
+  void _onChromeEnter() {
+    if (!_chromeHovered) setState(() => _chromeHovered = true);
+    _wakeChrome();
+  }
+
+  /// The pointer left the chrome block — the countdown starts afresh.
+  void _onChromeExit() {
+    if (_chromeHovered) setState(() => _chromeHovered = false);
+    _wakeChrome();
+  }
+
   void _restartHideTimer() {
     _hideTimer?.cancel();
 
@@ -83,6 +132,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mode == TitleBarMode.locked) return;
 
     _hideTimer = Timer(_autoHideDelay, () {
+      // While the pointer is inside the chrome (using the controls) the
+      // block stays up; the countdown really starts on exit.
+      if (_chromeHovered) return;
+
       // Auto-hide decision after 3s without mouse movement or key presses,
       // per the selected mode (General → Controls in the settings window).
       final bool shouldHide = switch (mode) {
@@ -91,6 +144,9 @@ class _HomeScreenState extends State<HomeScreen> {
         TitleBarMode.locked => false,
       };
       if (mounted && shouldHide && _chromeVisible) {
+        // The chrome region may vanish under a parked pointer — reset the
+        // flag so a later exit event can't lock the chrome visible forever.
+        _chromeHovered = false;
         setState(() => _chromeVisible = false);
       }
     });
@@ -139,8 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await DropHandler.handleDroppedPaths(paths);
   }
 
-  // ── Minimal transport for Phase 2 testing ─────────────────────────────
-  // (The real center play/pause animation + OSC arrive in Phase 3.)
+  // ── Keyboard transport (Phase 2 testing set) ──────────────────────────
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     // Any key press counts as activity: reveal the chrome and restart the
@@ -156,8 +211,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return KeyEventResult.ignored;
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
+    final bool chromeVisible = _chromeVisible || _dropHovering;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Focus(
@@ -183,23 +242,159 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 2 · Drop highlight overlay.
                 _DropOverlay(visible: _dropHovering),
 
-                // 3 · The invisible hover title bar, pinned to the top.
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: ValueListenableBuilder<String?>(
-                    valueListenable: _player.currentTitle,
-                    builder:
-                        (BuildContext context, String? title, Widget? _) {
-                      return CustomTitleBar(
-                        visible: _chromeVisible || _dropHovering,
-                        title: title,
-                        onSettings: _openSettings,
-                      );
-                    },
-                  ),
-                ),
+                // 3 · The auto-hide hairline — appears at the very bottom
+                // when the chrome hides. Display only: not clickable, not
+                // draggable, no hover action, no tooltip.
+                _AutoHideProgress(visible: !chromeVisible),
+
+                // 4 · The unified top chrome — title bar + controller as a
+                // single fused glass block (one gradient, one animation).
+                _buildTopChrome(chromeVisible),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopChrome(bool chromeVisible) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _player.hasMedia,
+        builder: (BuildContext context, bool hasMedia, Widget? _) {
+          return IgnorePointer(
+            ignoring: !chromeVisible,
+            child: Listener(
+              // Absorb taps on the chrome's empty areas so they never
+              // fall through to the video's play/pause layer. (Raw
+              // listener — no gesture arena, so the title bar's
+              // double-click-to-maximize still works.)
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (_) {},
+              child: AnimatedSlide(
+                offset: chromeVisible ? Offset.zero : const Offset(0, -1),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                child: AnimatedOpacity(
+                  opacity: chromeVisible ? 1 : 0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: Container(
+                    height: _chromeBlockHeight,
+                    alignment: Alignment.topCenter,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: _scrimColors,
+                        stops: _scrimStops,
+                      ),
+                    ),
+                    child: MouseRegion(
+                      // While the pointer works inside the visible chrome
+                      // content, auto-hide is suspended (even without mouse
+                      // movement). The region hugs the content — it never
+                      // covers the block's invisible glass areas.
+                      onEnter: (_) => _onChromeEnter(),
+                      onExit: (_) => _onChromeExit(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          // The invisible-until-activity title bar
+                          // (immersive: paints no scrim and animates
+                          // nothing — this block owns both).
+                          ValueListenableBuilder<String?>(
+                            valueListenable: _player.currentTitle,
+                            builder: (BuildContext context, String? title,
+                                Widget? _) {
+                              return CustomTitleBar(
+                                visible: true,
+                                immersive: true,
+                                title: title,
+                                onSettings: _openSettings,
+                              );
+                            },
+                          ),
+                          // The controller container, attached directly
+                          // beneath the title bar — the two read as one
+                          // single window with no outline between them.
+                          if (hasMedia) const ControllerPanel(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The hairline progress bar shown at the window's bottom edge while the
+/// chrome is auto-hidden.
+///
+/// Purely informational: renders only the filled progress (edge to edge),
+/// never receives pointer events, and offers no hover/tooltip/click action.
+class _AutoHideProgress extends StatelessWidget {
+  const _AutoHideProgress({required this.visible});
+
+  final bool visible;
+
+  @override
+  Widget build(BuildContext context) {
+    final PlayerService player = PlayerService.instance;
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 2,
+      // Display only: absorb pointer events so the hairline can never be
+      // clicked, dragged or scrolled (no seek, no hover action, nothing).
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (_) {},
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 180),
+          child: ListenableBuilder(
+            listenable: Listenable.merge(<Listenable>[
+              player.position,
+              player.duration,
+            ]),
+            builder: (BuildContext context, Widget? _) {
+              final Duration dur = player.duration.value;
+              final double frac = dur > Duration.zero
+                  ? (player.position.value.inMilliseconds /
+                          dur.inMilliseconds)
+                      .clamp(0.0, 1.0)
+                      .toDouble()
+                  : 0.0;
+              return LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  final double w = constraints.maxWidth;
+                  return Stack(
+                    children: <Widget>[
+                      if (w > 0 && frac > 0)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: w * frac,
+                          child: const ColoredBox(color: AppColors.threadFill),
+                        ),
+                    ],
+                  );
+                },
+              );
+            },
           ),
         ),
       ),

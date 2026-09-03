@@ -45,10 +45,37 @@ class PlayerService {
   /// when the CPU is decoding, or `null` while unknown.
   final ValueNotifier<String?> activeHwdec = ValueNotifier<String?>(null);
 
+  /// Current playback position — the single source of truth for the
+  /// timeline. Updated from mpv events and glided between them by an
+  /// interpolation ticker while playing, so the bar always moves smoothly.
+  final ValueNotifier<Duration> position = ValueNotifier<Duration>(Duration.zero);
+
+  /// Total duration of the loaded media (`Duration.zero` while unknown).
+  final ValueNotifier<Duration> duration = ValueNotifier<Duration>(Duration.zero);
+
+  /// Volume level 0–100 (mpv's native range).
+  final ValueNotifier<double> volumeLevel = ValueNotifier<double>(100);
+
+  /// Mute state. Implemented locally (mute = volume 0 + flag) because
+  /// mpv's mute property is not exposed as a dedicated stream here.
+  final ValueNotifier<bool> isMuted = ValueNotifier<bool>(false);
+
   StreamSubscription<Playlist>? _playlistSub;
   StreamSubscription<String>? _errorSub;
   StreamSubscription<int?>? _widthSub;
   StreamSubscription<bool>? _playingSub;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<double>? _volumeSub;
+
+  // ── Smooth position interpolation ─────────────────────────────────────
+  // mpv reports `time-pos` in coarse events; while playing we bridge the
+  // gaps with a lightweight ticker so the fill advances every frame
+  // instead of stepping.
+  Timer? _ticker;
+  Duration _anchor = Duration.zero;
+  final Stopwatch _watch = Stopwatch();
+  double _volumeBeforeMute = 100;
 
   void _init() {
     player = Player(
@@ -83,6 +110,39 @@ class PlayerService {
     // Live "is playing" flag — false while paused or when nothing is loaded.
     _playingSub = player.stream.playing.listen((bool playing) {
       isPlaying.value = playing;
+      if (playing) {
+        // Re-anchor the glide: the stopwatch must not include the paused
+        // time, or the bar would leap forward on resume.
+        _watch
+          ..reset()
+          ..start();
+        _startTicker();
+      } else {
+        _stopTicker();
+      }
+    });
+
+    // Position events re-anchor the interpolation.
+    _positionSub = player.stream.position.listen((Duration p) {
+      if (p < Duration.zero) p = Duration.zero;
+      position.value = p;
+      _anchor = p;
+      _watch
+        ..reset()
+        ..start();
+    });
+
+    // Duration changes (new file, metadata resolved, live streams, …).
+    _durationSub = player.stream.duration.listen((Duration d) {
+      duration.value = d < Duration.zero ? Duration.zero : d;
+    });
+
+    // Volume (0–100). Muting drives the volume to 0, unmuting restores it.
+    _volumeSub = player.stream.volume.listen((double v) {
+      if (v < 0) v = 0;
+      if (v > 100) v = 100;
+      volumeLevel.value = v;
+      if (!isMuted.value && v > 0) _volumeBeforeMute = v;
     });
 
     // Once real frames arrive, ask mpv which hardware decoder kicked in.
@@ -95,6 +155,43 @@ class PlayerService {
     _errorSub = player.stream.error.listen((String message) {
       debugPrint('[SALU/mpv] error: $message');
     });
+
+    // mpv's default already keeps the file open after the last frame so
+    // the paused end-frame stays visible; make it explicit.
+    unawaited(_ensureKeepOpen());
+  }
+
+  // ── Position gliding ──────────────────────────────────────────────────
+
+  void _startTicker() {
+    _ticker ??= Timer.periodic(const Duration(milliseconds: 33), (_) {
+      // Advance the cached position by real wall-clock time since the
+      // last mpv event — smooth, and drifts back to mpv's truth on the
+      // next position event.
+      if (!isPlaying.value) return;
+      final Duration dur = duration.value;
+      if (dur <= Duration.zero) return;
+      Duration p = _anchor + _watch.elapsed;
+      if (p < Duration.zero) p = Duration.zero;
+      if (p > dur) p = dur;
+      if (p != position.value) position.value = p;
+    });
+  }
+
+  void _stopTicker() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+
+  Future<void> _ensureKeepOpen() async {
+    final PlatformPlayer? platform = player.platform;
+    if (platform is NativePlayer) {
+      try {
+        await platform.setProperty('keep-open', 'yes');
+      } catch (_) {
+        // Harmless if unavailable — mpv's default is usually `yes` anyway.
+      }
+    }
   }
 
   // ── Opening media ─────────────────────────────────────────────────────
@@ -125,7 +222,50 @@ class PlayerService {
 
   Future<void> pause() => player.pause();
 
-  Future<void> seek(Duration position) => player.seek(position);
+  /// Jump the timeline to an exact position.
+  ///
+  /// Clamps to the media bounds and reflects the target in the UI state
+  /// immediately (the authoritative mpv position event follows within
+  /// milliseconds). Seeking never pauses playback.
+  Future<void> seekTo(Duration target) async {
+    if (!hasMedia.value) return;
+    final Duration dur = duration.value;
+    Duration t = target;
+    if (t < Duration.zero) t = Duration.zero;
+    if (dur > Duration.zero && t > dur) t = dur;
+    position.value = t;
+    _anchor = t;
+    _watch
+      ..reset()
+      ..start();
+    await player.seek(t);
+  }
+
+  /// Seek forward/backward by a relative amount (mouse-wheel scrub).
+  Future<void> seekBy(Duration delta) => seekTo(position.value + delta);
+
+  // ── Volume ────────────────────────────────────────────────────────────
+
+  /// Mute toggle. Mute = remember the level, drop to 0; unmute restores.
+  Future<void> toggleMute() async {
+    if (isMuted.value) {
+      isMuted.value = false;
+      await player.setVolume(_volumeBeforeMute.clamp(0, 100).toDouble());
+    } else {
+      _volumeBeforeMute = volumeLevel.value > 0 ? volumeLevel.value : 100;
+      isMuted.value = true;
+      await player.setVolume(0);
+    }
+  }
+
+  /// Set volume from the UI (0–100). Dragging the volume bar unmutes.
+  Future<void> setVolumeUI(double volume) async {
+    final double v = volume.clamp(0, 100).toDouble();
+    if (v > 0 && isMuted.value) isMuted.value = false;
+    volumeLevel.value = v;
+    if (v > 0) _volumeBeforeMute = v;
+    await player.setVolume(v);
+  }
 
   Future<void> setVolume(double volume) => player.setVolume(volume);
 
@@ -158,10 +298,14 @@ class PlayerService {
 
   /// Release the native engine (called when the window closes).
   Future<void> dispose() async {
+    _stopTicker();
     await _playlistSub?.cancel();
     await _errorSub?.cancel();
     await _widthSub?.cancel();
     await _playingSub?.cancel();
+    await _positionSub?.cancel();
+    await _durationSub?.cancel();
+    await _volumeSub?.cancel();
     await player.dispose();
   }
 }

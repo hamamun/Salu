@@ -40,6 +40,28 @@ class AppColors {
 
   /// Subtle hover wash for the Minimize / Maximize window buttons.
   static const Color captionButtonHover = Color(0x1AFFFFFF);
+
+  // ── Timeline & volume bars (monochrome — same for video and audio) ────
+
+  /// Unfilled track base of the paste-window-style bars.
+  static const Color barTrack = Color(0xFF35353C);
+
+  /// Gentle translucent fill — light enough to read, soft enough to see
+  /// the time text sitting inside it.
+  static const Color barFill = Color(0x80FFFFFF);
+
+  /// Playhead notch (a flat 2px tick, no glow).
+  static const Color barThumb = Color(0xFFF2F2F2);
+
+  /// Faint aiming ticks shown while hovering the timeline.
+  static const Color barTick = Color(0x33FFFFFF);
+
+  /// Solid backdrop of the hover time chip (tooltip).
+  static const Color chipBackground = Color(0xF02C2C31);
+
+  /// Hairline progress shown at the very bottom of the window when the
+  /// chrome auto-hides (display only — never interactive).
+  static const Color threadFill = Color(0xD9EDEDED);
 }
 
 /// SALU global theme — strictly Segoe UI Variable, dark, minimal.
