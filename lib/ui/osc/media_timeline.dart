@@ -1,6 +1,3 @@
-import 'dart:ui' show FontFeature;
-
-import 'package:flutter/foundation.dart' show Listenable;
 import 'package:flutter/gestures.dart'
     show
         PointerCancelEvent,
@@ -52,7 +49,7 @@ class MediaTimeline extends StatefulWidget {
   static const double widgetHeight = 48;
 
   /// Visual height of the thick bar itself.
-  static const double barHeight = 26;
+  static const double barHeight = 23;
 
   @override
   State<MediaTimeline> createState() => _MediaTimelineState();
