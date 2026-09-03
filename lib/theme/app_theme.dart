@@ -29,11 +29,28 @@ class AppColors {
   /// Primary text/icons.
   static const Color textPrimary = Color(0xFFEDEDED);
 
+  /// Resting tone of interactive icon marks (~65% white). Hovering an icon
+  /// glides this to [textPrimary] — SALU's icons light up, they are never
+  /// boxed by a background shape (see follow.md · interaction recipe).
+  static const Color iconIdle = Color(0xFFA6A6A6);
+
   /// Secondary, de-emphasized text/icons.
   static const Color textSecondary = Color(0xFF9A9A9A);
 
   /// Hairline separators.
   static const Color divider = Color(0xFF3A3A3C);
+
+  /// Quiet hairline around floating glass surfaces (pill, modals).
+  static const Color surfaceOutline = Color(0xFF333336);
+
+  /// Status dot — the URL's last play attempt succeeded.
+  static const Color statusAlive = Color(0xFF57C777);
+
+  /// Status dot — the URL's last play attempt failed.
+  static const Color statusDead = Color(0xFFE05B5B);
+
+  /// Status dot — never tried / unknown.
+  static const Color statusUnknown = Color(0xFF5A5A5E);
 
   /// Windows-native red used when hovering the Close window button.
   static const Color closeButtonHover = Color(0xFFE81123);
