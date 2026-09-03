@@ -16,6 +16,7 @@ import '../widgets/salu_icon_button.dart';
 /// open → act → gone. SALU's shared motion (fade + 0.96→1.0 scale).
 Future<void> showOpenUrlDialog(BuildContext context) async {
   await UrlLibraryService.instance.load();
+  if (!context.mounted) return;
   ChromeLock.instance.acquire();
   try {
     await showGeneralDialog<void>(
@@ -182,7 +183,7 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
     if (oldDisplay < 0 || oldDisplay >= order.length) return;
     int target = newDisplay;
     if (target > oldDisplay) target -= 1;
-    target = target.clamp(0, order.length - 1);
+    target = target.clamp(0, order.length - 1).toInt();
     _library.move(order[oldDisplay], order[target]);
     setState(() => _cursor = -1);
   }

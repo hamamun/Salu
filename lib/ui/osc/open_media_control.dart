@@ -41,6 +41,11 @@ class _OpenMediaControlState extends State<OpenMediaControl>
   /// close so Space and the silent shortcuts keep working afterwards.
   FocusNode? _focusBefore;
 
+  /// Entries whose reverse fade is still playing (removed ~140 ms after
+  /// close). Tracked so dispose can tear them down instantly — otherwise
+  /// a pending removal could rebuild against a disposed controller.
+  final Set<OverlayEntry> _retiring = <OverlayEntry>{};
+
   late final AnimationController _anim = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 130),
@@ -51,6 +56,12 @@ class _OpenMediaControlState extends State<OpenMediaControl>
   @override
   void dispose() {
     _removePill(instant: true);
+    // Tear down any entry still playing its exit fade — it must not
+    // outlive the animation controller it is built on.
+    for (final OverlayEntry entry in _retiring) {
+      entry.remove();
+    }
+    _retiring.clear();
     _anim.dispose();
     super.dispose();
   }
@@ -95,7 +106,10 @@ class _OpenMediaControlState extends State<OpenMediaControl>
       return;
     }
     // Let the reverse fade play out before tearing the entry down.
-    Future<void>.delayed(const Duration(milliseconds: 140), pill.remove);
+    _retiring.add(pill);
+    Future<void>.delayed(const Duration(milliseconds: 140), () {
+      if (_retiring.remove(pill)) pill.remove();
+    });
   }
 
   Future<void> _runAction(_OpenAction action) async {

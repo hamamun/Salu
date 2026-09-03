@@ -61,6 +61,7 @@ class _SaluIconButtonState extends State<SaluIconButton> {
       curve: Curves.easeOut,
       child: TweenAnimationBuilder<Color?>(
         tween: ColorTween(
+          begin: AppColors.iconIdle,
           end: lit ? AppColors.textPrimary : AppColors.iconIdle,
         ),
         duration: const Duration(milliseconds: 120),

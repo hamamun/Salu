@@ -156,7 +156,7 @@ class UrlLibraryService {
   void insertAt(int index, SavedUrl entry) {
     final List<SavedUrl> list = List<SavedUrl>.of(entries.value);
     if (list.length >= maxEntries) return;
-    list.insert(index.clamp(0, list.length), entry);
+    list.insert(index.clamp(0, list.length).toInt(), entry);
     _set(list);
   }
 
@@ -182,7 +182,7 @@ class UrlLibraryService {
     final List<SavedUrl> list = List<SavedUrl>.of(entries.value);
     if (from < 0 || from >= list.length) return;
     final SavedUrl item = list.removeAt(from);
-    list.insert(to.clamp(0, list.length), item);
+    list.insert(to.clamp(0, list.length).toInt(), item);
     _set(list);
   }
 
