@@ -27,7 +27,7 @@ class DotGridIcon extends StatelessWidget {
       decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
 
-    return Container(
+    return SizedBox(
       width: size,
       height: size * 0.7,
       child: Column(
