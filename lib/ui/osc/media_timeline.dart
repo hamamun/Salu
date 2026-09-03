@@ -1,7 +1,16 @@
 import 'dart:ui' show FontFeature;
 
 import 'package:flutter/foundation.dart' show Listenable;
-import 'package:flutter/gestures.dart' show PointerScrollEvent;
+import 'package:flutter/gestures.dart'
+    show
+        PointerCancelEvent,
+        PointerDownEvent,
+        PointerExitEvent,
+        PointerHoverEvent,
+        PointerMoveEvent,
+        PointerScrollEvent,
+        PointerSignalEvent,
+        PointerUpEvent;
 import 'package:flutter/material.dart';
 
 import '../../core/player_service.dart';
@@ -17,7 +26,7 @@ String formatClock(Duration d) {
   final int h = d.inHours;
   final int m = d.inMinutes.remainder(60);
   final int s = d.inSeconds.remainder(60);
-  final String two(int v) => v.toString().padLeft(2, '0');
+  String two(int v) => v.toString().padLeft(2, '0');
   return '${two(h)}:${two(m)}:${two(s)}';
 }
 
@@ -261,7 +270,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
             child: Stack(
               children: <Widget>[
                 // Track.
-                Positioned.fill(
+                const Positioned.fill(
                   child: ColoredBox(color: AppColors.barTrack),
                 ),
                 // Paste-window style fill.
@@ -271,7 +280,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
                     bottom: 0,
                     left: 0,
                     width: boundaryX,
-                    child: ColoredBox(color: AppColors.barFill),
+                    child: const ColoredBox(color: AppColors.barFill),
                   ),
                 // Aiming ruler (hover / scrub) — faint vertical ticks.
                 if (showTicks && tickStep > Duration.zero)

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/foundation.dart' show Listenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
