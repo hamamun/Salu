@@ -7,6 +7,7 @@ import 'package:windows_single_instance/windows_single_instance.dart';
 
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
+import 'core/settings_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/home_screen.dart';
 
@@ -52,6 +53,9 @@ Future<void> main(List<String> args) async {
     await windowManager.show();
     await windowManager.focus();
   });
+
+  // ── Load persisted settings (title bar mode, …) before the first frame. ─
+  await SettingsService.instance.load();
 
   runApp(SaluApp(initialFilePath: extractMediaPathFromArgs(args)));
 }

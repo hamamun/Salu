@@ -36,6 +36,11 @@ class PlayerService {
   /// Whether any media has been loaded this session.
   final ValueNotifier<bool> hasMedia = ValueNotifier<bool>(false);
 
+  /// Whether media is actively playing right now (false while paused,
+  /// stopped, or when nothing is loaded). Drives the title bar's
+  /// "Pin (playback off)" mode.
+  final ValueNotifier<bool> isPlaying = ValueNotifier<bool>(false);
+
   /// The hardware decoder currently in use (e.g. `d3d11va`), `software`
   /// when the CPU is decoding, or `null` while unknown.
   final ValueNotifier<String?> activeHwdec = ValueNotifier<String?>(null);
@@ -43,6 +48,7 @@ class PlayerService {
   StreamSubscription<Playlist>? _playlistSub;
   StreamSubscription<String>? _errorSub;
   StreamSubscription<int?>? _widthSub;
+  StreamSubscription<bool>? _playingSub;
 
   void _init() {
     player = Player(
@@ -72,6 +78,11 @@ class PlayerService {
       currentTitle.value = title;
       hasMedia.value = true;
       unawaited(_setWindowTitle('$title — SALU'));
+    });
+
+    // Live "is playing" flag — false while paused or when nothing is loaded.
+    _playingSub = player.stream.playing.listen((bool playing) {
+      isPlaying.value = playing;
     });
 
     // Once real frames arrive, ask mpv which hardware decoder kicked in.
@@ -150,6 +161,7 @@ class PlayerService {
     await _playlistSub?.cancel();
     await _errorSub?.cancel();
     await _widthSub?.cancel();
+    await _playingSub?.cancel();
     await player.dispose();
   }
 }
