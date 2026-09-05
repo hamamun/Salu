@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -15,8 +16,14 @@ import 'open_url_dialog.dart';
 ///
 /// A thin custom "+" mark. Clicking it rotates the plus 45° into an "×"
 /// and blooms a small horizontal frosted-glass pill BELOW the button,
-/// floating over the video (an [OverlayEntry] — the container itself
-/// never moves or reflows). The pill holds three icon-only marks:
+/// floating over the video. The pill is rendered via
+/// [OverlayPortal.overlayChildLayoutBuilder] on the root overlay — the
+/// container itself never moves or reflows, and the pill tracks the
+/// button's on-screen position every layout pass without relying on
+/// [CompositedTransformFollower] (which cannot sit above widgets — like
+/// [Tooltip] — that build their own overlay children during layout; see
+/// follow.md and the Flutter 3.38 RenderFollowerLayer assertion). The
+/// pill holds three icon-only marks:
 ///
 ///     film frame → Open File…   (native Windows picker, multi-select)
 ///     stacked frames → Open Folder… (native picker, scan & queue)
@@ -34,34 +41,29 @@ class OpenMediaControl extends StatefulWidget {
 
 class _OpenMediaControlState extends State<OpenMediaControl>
     with SingleTickerProviderStateMixin {
-  final LayerLink _link = LayerLink();
-  OverlayEntry? _pill;
+  final OverlayPortalController _portal = OverlayPortalController();
 
   /// Whoever held keyboard focus before the pill opened — restored on
   /// close so Space and the silent shortcuts keep working afterwards.
   FocusNode? _focusBefore;
 
-  /// Entries whose reverse fade is still playing (removed ~140 ms after
-  /// close). Tracked so dispose can tear them down instantly — otherwise
-  /// a pending removal could rebuild against a disposed controller.
-  final Set<OverlayEntry> _retiring = <OverlayEntry>{};
+  /// Set while the pill is open (icon state, tooltip suppression). Goes
+  /// false the instant a close is requested — independently of the
+  /// overlay child, which lingers ~140 ms longer to play its exit fade.
+  bool _open = false;
+
+  /// Removes the overlay child once the reverse fade has finished.
+  Timer? _hideTimer;
 
   late final AnimationController _anim = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 130),
   );
 
-  bool get _open => _pill != null;
-
   @override
   void dispose() {
-    _removePill(instant: true);
-    // Tear down any entry still playing its exit fade — it must not
-    // outlive the animation controller it is built on.
-    for (final OverlayEntry entry in _retiring) {
-      entry.remove();
-    }
-    _retiring.clear();
+    _hideTimer?.cancel();
+    if (_open) ChromeLock.instance.release();
     _anim.dispose();
     super.dispose();
   }
@@ -72,43 +74,25 @@ class _OpenMediaControlState extends State<OpenMediaControl>
 
   void _openPill() {
     if (_open) return;
+    _hideTimer?.cancel();
     ChromeLock.instance.acquire();
     _focusBefore = FocusManager.instance.primaryFocus;
+    setState(() => _open = true);
     _anim.forward();
-    _pill = OverlayEntry(
-      builder: (BuildContext context) => _PillOverlay(
-        link: _link,
-        animation: _anim,
-        onDismiss: _closePill,
-        onAction: _runAction,
-      ),
-    );
-    Overlay.of(context, rootOverlay: true).insert(_pill!);
-    setState(() {});
+    _portal.show();
   }
 
   void _closePill() {
     if (!_open) return;
+    setState(() => _open = false);
     _anim.reverse();
-    _removePill();
+    ChromeLock.instance.release();
     _focusBefore?.requestFocus();
     _focusBefore = null;
-    setState(() {});
-  }
-
-  void _removePill({bool instant = false}) {
-    final OverlayEntry? pill = _pill;
-    if (pill == null) return;
-    _pill = null;
-    ChromeLock.instance.release();
-    if (instant) {
-      pill.remove();
-      return;
-    }
-    // Let the reverse fade play out before tearing the entry down.
-    _retiring.add(pill);
-    Future<void>.delayed(const Duration(milliseconds: 140), () {
-      if (_retiring.remove(pill)) pill.remove();
+    // Let the reverse fade play out before tearing the overlay child down.
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(milliseconds: 140), () {
+      if (mounted) _portal.hide();
     });
   }
 
@@ -128,8 +112,18 @@ class _OpenMediaControlState extends State<OpenMediaControl>
 
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _link,
+    return OverlayPortal.overlayChildLayoutBuilder(
+      controller: _portal,
+      overlayLocation: OverlayChildLocation.rootOverlay,
+      overlayChildBuilder: (BuildContext context, OverlayChildLayoutInfo info) {
+        return _PillOverlay(
+          childPaintTransform: info.childPaintTransform,
+          childSize: info.childSize,
+          animation: _anim,
+          onDismiss: _closePill,
+          onAction: _runAction,
+        );
+      },
       child: SaluIconButton(
         tooltip: _open ? null : 'Open media',
         size: 36,
@@ -151,21 +145,35 @@ enum _OpenAction { file, folder, url }
 
 /// The floating pill: a full-screen dismiss layer + the glass capsule
 /// anchored below the plus button.
+///
+/// Positioned with [childPaintTransform]/[childSize] — the values
+/// [OverlayPortal.overlayChildLayoutBuilder] hands us during layout —
+/// instead of [CompositedTransformFollower], whose paint transform is
+/// only known once compositing runs and therefore can't sit above a
+/// [Tooltip] (which builds its own overlay child during layout too).
 class _PillOverlay extends StatelessWidget {
   const _PillOverlay({
-    required this.link,
+    required this.childPaintTransform,
+    required this.childSize,
     required this.animation,
     required this.onDismiss,
     required this.onAction,
   });
 
-  final LayerLink link;
+  final Matrix4 childPaintTransform;
+  final Size childSize;
   final Animation<double> animation;
   final VoidCallback onDismiss;
   final ValueChanged<_OpenAction> onAction;
 
   @override
   Widget build(BuildContext context) {
+    // Mirrors RawAutocomplete's own guard: a zero determinant means the
+    // "+" button isn't currently visible/laid out (e.g. mid-transition),
+    // so there is nothing sane to anchor the pill to yet.
+    if (childPaintTransform.determinant() == 0.0) {
+      return const SizedBox.shrink();
+    }
     final CurvedAnimation curved = CurvedAnimation(
       parent: animation,
       curve: Curves.easeOutCubic,
@@ -194,17 +202,24 @@ class _PillOverlay extends StatelessWidget {
               onSecondaryTap: onDismiss,
             ),
           ),
-          CompositedTransformFollower(
-            link: link,
-            targetAnchor: Alignment.bottomLeft,
-            followerAnchor: Alignment.topLeft,
-            offset: const Offset(0, 6),
-            child: FadeTransition(
-              opacity: curved,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved),
+          // Re-anchors this subtree to the "+" button's on-screen box —
+          // (0, 0) here is the button's top-left corner — then drops the
+          // pill 6px below it, matching the old bottomLeft→topLeft
+          // CompositedTransformFollower anchoring.
+          Transform(
+            transform: childPaintTransform,
+            child: Padding(
+              padding: EdgeInsets.only(top: childSize.height + 6),
+              child: Align(
                 alignment: Alignment.topLeft,
-                child: _PillBody(onAction: onAction),
+                child: FadeTransition(
+                  opacity: curved,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved),
+                    alignment: Alignment.topLeft,
+                    child: _PillBody(onAction: onAction),
+                  ),
+                ),
               ),
             ),
           ),

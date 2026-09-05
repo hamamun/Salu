@@ -16,9 +16,9 @@ class OpenMediaService {
   OpenMediaService._();
 
   static final List<fs.XTypeGroup> _mediaTypeGroups = <fs.XTypeGroup>[
-    fs.XTypeGroup(
+    const fs.XTypeGroup(
       label: 'Media',
-      extensions: const <String>[
+      extensions: <String>[
         // Video.
         'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v',
         'mpg', 'mpeg', 'ts', 'm2ts', 'mts', 'vob', '3gp', 'ogv',
@@ -30,7 +30,7 @@ class OpenMediaService {
         'm3u', 'm3u8',
       ],
     ),
-    fs.XTypeGroup(label: 'All files'),
+    const fs.XTypeGroup(label: 'All files'),
   ];
 
   /// Open File… — native Windows explorer, multi-select. One file plays
