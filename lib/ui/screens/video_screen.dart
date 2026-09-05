@@ -10,6 +10,11 @@ import '../../theme/app_theme.dart';
 /// scaled with [BoxFit.contain] so the aspect ratio is never distorted, and
 /// letterbox bars use SALU's deep dark gray (never pure black UI, but the
 /// video stage itself sits on #121212 for a cinematic look).
+///
+/// The empty state (before the first media, and while STOPPED — the
+/// queue is parked and the canvas returns to the initial window) shows
+/// identity only: logo + wordmark, no instruction text (follow.md hard
+/// rule 1 — the UI explains itself by design).
 class VideoScreen extends StatelessWidget {
   const VideoScreen({super.key});
 
@@ -28,8 +33,8 @@ class VideoScreen extends StatelessWidget {
               controller: service.videoController,
               fit: BoxFit.contain,
               fill: AppColors.videoBackdrop,
-              // SALU builds its own  -style OSC in Phase 3 — the stock
-              // media_kit controls are disabled entirely.
+              // SALU builds its own OSC — the stock media_kit controls
+              // are disabled entirely.
               controls: NoVideoControls,
               subtitleViewConfiguration: const SubtitleViewConfiguration(
                 style: TextStyle(
@@ -43,7 +48,8 @@ class VideoScreen extends StatelessWidget {
                 ),
               ),
             ),
-            // Empty state — shown until the first media is loaded.
+            // Landing state — until the first media loads, and again
+            // while stopped (the parked queue's canvas).
             if (!hasMedia) const _EmptyState(),
           ],
         );
@@ -88,14 +94,6 @@ class _EmptyState extends StatelessWidget {
               fontWeight: FontWeight.w600,
               letterSpacing: 6,
               color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Drop a video or audio file anywhere to start playing',
-            style: TextStyle(
-              fontSize: 13.5,
-              color: AppColors.textSecondary,
             ),
           ),
         ],

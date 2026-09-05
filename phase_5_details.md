@@ -25,6 +25,17 @@ Make the player "smart." By the end of this phase, SALU will intuitively underst
     *   Trigger the OSD (from Phase 3) to briefly flash a clean message in the top-right: *"Resumed from [Time]"*.
     *   Add a toggle in the Global Settings (Phase 4): `[x] Resume last playback position`, allowing users to turn this memory off completely.
 
+> **Update (2026-09-05):** Step 3 is implemented — final design in
+> `outline_transport_osd_resume.md` §5. `lib/core/resume_service.dart`
+> (one JSON map, `5 s ≤ pos ≤ dur − 10 s` keep-rule, 1 000-entry cap,
+> throttled disk writes + flush on pause/stop/switch/close), silent
+> `Media(start:)` resume with no visible jump, the interactive **Resume
+> toast** (`[>] 12:34 [↻ Restart]` — top-center OSD deck slot, not a
+> corner message), and the Settings → General → **Resume** section
+> (All files · Video only · Audio only · Off) replacing the checkbox.
+> A second, in-session memory covers **Stop**: Stop parks the queue and
+> Play resumes at the exact position through the same toast.
+
 ### Step 4: Hardware Decoding Settings (`lib/core/hwdec_manager.dart`)
 *   **Logic (Mimicking  ):**   doesn't just silently fallback; it gives power users control. We will expose `hwdec` in the Global Settings.
     *   Options: `Auto` (Default - uses GPU), and `Disabled` (Forces CPU software decoding).

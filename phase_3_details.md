@@ -82,3 +82,16 @@ Transform the raw video player into a premium, interactive experience. By the en
 
 ### Not yet from Phase 3 plan
 Center play/pause animation (Step 5), OSD indicators (Step 6), media HUD + music mode (Step 7), more transport/track buttons (Step 4), configurable OSC position settings.
+
+> **Update (transport pass, 2026-09-05):** the transport cluster, OSD deck,
+> volume bar and resume memory described in
+> `outline_transport_osd_resume.md` are implemented (steps A–F there).
+> **Step 4's transport buttons** are done as SALU marks (not an icon pack):
+> `> □ |<< >>| << >>` + sound group in Row 2 (see follow.md §5 for the
+> locked layout). **Step 5 (center play/pause animation) is superseded and
+> will NOT be built** — the OSD deck's `>`/`II` card is the one feedback,
+> and the video's visual center stays untouched. **Step 6 (OSD
+> indicators) is superseded by the OSD deck** (one top-center slot at
+> 156 px; discrete transport actions flash it, bars never do; the Resume
+> toast is its one interactive card). Track/PiP/fullscreen/panel buttons
+> remain future work (the row's right edge is reserved for them).
