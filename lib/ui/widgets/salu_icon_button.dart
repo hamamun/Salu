@@ -14,6 +14,9 @@ import '../../theme/app_theme.dart';
 ///              springs back on release — no ripple, no flash
 ///   · active — (toggles) the mark stays full white with a faint static
 ///              glow; glow is reserved for active states, never hover
+///   · off    — ([enabled] false) the mark simply dims and stops
+///              answering the cursor; it is never boxed, greyed out with
+///              a shape, or hidden — and its tooltip still names it
 ///
 /// The child receives its color through an [IconTheme] override, so both
 /// stock [Icon]s and SALU's custom-painted marks (which read
@@ -26,6 +29,7 @@ class SaluIconButton extends StatefulWidget {
     this.tooltip,
     this.size = 34,
     this.active = false,
+    this.enabled = true,
   });
 
   /// The mark itself — an [Icon] or a custom-painted SALU mark.
@@ -42,6 +46,10 @@ class SaluIconButton extends StatefulWidget {
   /// Toggled-on state: full white + faint static glow.
   final bool active;
 
+  /// When false the mark dims, ignores hover/press and does not fire
+  /// [onTap]. Nothing is drawn around it — it just goes quiet.
+  final bool enabled;
+
   @override
   State<SaluIconButton> createState() => _SaluIconButtonState();
 }
@@ -52,8 +60,13 @@ class _SaluIconButtonState extends State<SaluIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    final bool lit = _hovered || widget.active;
-    final double scale = _pressed ? 0.90 : (_hovered ? 1.06 : 1.0);
+    final bool on = widget.enabled;
+    final bool lit = on && (_hovered || widget.active);
+    final double scale =
+        !on ? 1.0 : (_pressed ? 0.90 : (_hovered ? 1.06 : 1.0));
+    // Disabled marks rest lower than iconIdle — dimmed, never boxed out.
+    final Color rest =
+        on ? AppColors.iconIdle : AppColors.iconIdle.withAlpha(95);
 
     Widget mark = AnimatedScale(
       scale: scale,
@@ -61,12 +74,12 @@ class _SaluIconButtonState extends State<SaluIconButton> {
       curve: Curves.easeOut,
       child: TweenAnimationBuilder<Color?>(
         tween: ColorTween(
-          begin: AppColors.iconIdle,
-          end: lit ? AppColors.textPrimary : AppColors.iconIdle,
+          begin: rest,
+          end: lit ? AppColors.textPrimary : rest,
         ),
         duration: const Duration(milliseconds: 120),
         builder: (BuildContext context, Color? color, Widget? _) {
-          final Color c = color ?? AppColors.iconIdle;
+          final Color c = color ?? rest;
           return IconTheme.merge(
             data: IconThemeData(color: c),
             child: widget.child,
@@ -76,7 +89,7 @@ class _SaluIconButtonState extends State<SaluIconButton> {
     );
 
     // Faint static glow — active state only (follow.md rule).
-    if (widget.active) {
+    if (widget.active && on) {
       mark = DecoratedBox(
         decoration: const BoxDecoration(
           shape: BoxShape.circle,
@@ -93,17 +106,19 @@ class _SaluIconButtonState extends State<SaluIconButton> {
     }
 
     Widget result = MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
+      onEnter: (_) {
+        if (on) setState(() => _hovered = true);
+      },
       onExit: (_) => setState(() {
         _hovered = false;
         _pressed = false;
       }),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
+        onTapDown: on ? (_) => setState(() => _pressed = true) : null,
         onTapCancel: () => setState(() => _pressed = false),
         onTapUp: (_) => setState(() => _pressed = false),
-        onTap: widget.onTap,
+        onTap: on ? widget.onTap : null,
         child: SizedBox(
           width: widget.size,
           height: widget.size,

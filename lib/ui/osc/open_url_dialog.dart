@@ -9,6 +9,7 @@ import '../../core/ui_lock.dart';
 import '../../core/url_library_service.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/salu_icon_button.dart';
+import '../widgets/salu_marks.dart';
 
 /// Opens SALU's Open-URL modal (see follow.md · §4, Level 2).
 ///
@@ -50,13 +51,15 @@ Future<void> showOpenUrlDialog(BuildContext context) async {
 /// The modal body.
 ///
 /// Anatomy (top to bottom):
-///   · one input — paste a URL; Play plays it, Play & Save also keeps it
+///   · one input — paste a URL; the two actions live as marks at the
+///     input's right edge: ▶ Play (solid) and ▶+tag Play & Save
 ///   · the saved list (max 7): ≡ drag-handle · ● status dot · name, and
-///     on hover only: hide / edit / delete actions fading in at the right
+///     on hover only: edit / delete actions fading in at the right
 ///   · a transient Undo toast after a delete (no confirmation dialogs)
 ///
 /// Silent keyboard flow: Enter plays (input or highlighted row),
-/// Esc closes, ↑/↓ walk the list. Nothing of this is written in the UI.
+/// Ctrl+Enter plays & saves the input, Esc closes, ↑/↓ walk the list.
+/// Nothing of this is written in the UI.
 class OpenUrlDialog extends StatefulWidget {
   const OpenUrlDialog({super.key});
 
@@ -123,27 +126,26 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
     }
   }
 
-  // ── Display order: visible rows first, hidden rows sink below ───────
+  // ── The list ────────────────────────────────────────────────────────
+  //
+  // One order only — the user's own drag order. (The hide/eye action was
+  // removed by owner decision, so rows no longer sink to the bottom and
+  // display index == service index everywhere below.)
 
   List<SavedUrl> get _all => _library.entries.value;
-
-  /// Display list as indices into the service list.
-  List<int> get _displayIndices {
-    final List<SavedUrl> all = _all;
-    final List<int> visible = <int>[];
-    final List<int> hidden = <int>[];
-    for (int i = 0; i < all.length; i++) {
-      (all[i].hidden ? hidden : visible).add(i);
-    }
-    return <int>[...visible, ...hidden];
-  }
 
   // ── Actions ──────────────────────────────────────────────────────────
 
   bool get _inputPlayable =>
       UrlLibraryService.looksLikeUrl(_input.text.trim());
 
+  /// Guards against a double close: Enter can reach us both through the
+  /// field's `onSubmitted` and through the dialog's key handler.
+  bool _closing = false;
+
   void _play(String url) {
+    if (_closing) return;
+    _closing = true;
     Navigator.of(context).pop();
     unawaited(OpenMediaService.playUrl(url));
   }
@@ -178,13 +180,12 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
     setState(() => _lastRemoved = null);
   }
 
-  // `newDisplay` already accounts for the removal of the dragged item at
-  // `oldDisplay` (onReorderItem semantics — no manual index shift needed).
-  void _onReorder(int oldDisplay, int newDisplay) {
-    final List<int> order = _displayIndices;
-    if (oldDisplay < 0 || oldDisplay >= order.length) return;
-    final int target = newDisplay.clamp(0, order.length - 1).toInt();
-    _library.move(order[oldDisplay], order[target]);
+  // `newIndex` already accounts for the removal of the dragged item at
+  // `oldIndex` (onReorderItem semantics — no manual index shift needed).
+  void _onReorder(int oldIndex, int newIndex) {
+    final int count = _all.length;
+    if (oldIndex < 0 || oldIndex >= count) return;
+    _library.move(oldIndex, newIndex.clamp(0, count - 1).toInt());
     setState(() => _cursor = -1);
   }
 
@@ -195,7 +196,7 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
       return KeyEventResult.ignored;
     }
     if (_editing >= 0) return KeyEventResult.ignored;
-    final int count = _displayIndices.length;
+    final int count = _all.length;
     if (event.logicalKey == LogicalKeyboardKey.arrowDown && count > 0) {
       setState(() => _cursor = math.min(_cursor + 1, count - 1));
       if (_cursor >= 0) _listFocus.requestFocus();
@@ -206,9 +207,16 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
       if (_cursor < 0) _inputFocus.requestFocus();
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.enter && _cursor >= 0) {
-      final List<int> order = _displayIndices;
-      if (_cursor < order.length) _play(_all[order[_cursor]].url);
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      // Silent shortcut (never printed): Ctrl+Enter = play & save.
+      if (_cursor < 0) {
+        if (HardwareKeyboard.instance.isControlPressed) {
+          _playInput(save: true);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+      if (_cursor < _all.length) _play(_all[_cursor].url);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -266,66 +274,73 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
     );
   }
 
-  // ── The single input + Play / Play & Save ───────────────────────────
+  // ── The single input, with Play / Play & Save as marks inside it ────
 
   Widget _buildInputRow() {
     final bool playable = _inputPlayable;
     final bool canSave = playable && !_library.isFull;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          TextField(
-            controller: _input,
-            focusNode: _inputFocus,
-            onChanged: (_) => setState(() {}),
-            onSubmitted: (_) => _playInput(),
-            onTap: () => setState(() => _cursor = -1),
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textPrimary,
-            ),
-            cursorColor: AppColors.textPrimary,
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: 'Paste a URL to play',
-              hintStyle: const TextStyle(color: AppColors.textSecondary),
-              filled: true,
-              fillColor: AppColors.surface,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.surfaceOutline),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFF4A4A4E)),
-              ),
+      child: TextField(
+        controller: _input,
+        focusNode: _inputFocus,
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _playInput(
+            save: HardwareKeyboard.instance.isControlPressed),
+        onTap: () => setState(() => _cursor = -1),
+        style: const TextStyle(
+          fontSize: 14,
+          color: AppColors.textPrimary,
+        ),
+        cursorColor: AppColors.textPrimary,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Paste a URL to play',
+          hintStyle: const TextStyle(color: AppColors.textSecondary),
+          filled: true,
+          fillColor: AppColors.surface,
+          contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 12),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.surfaceOutline),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFF4A4A4E)),
+          ),
+          // The two actions ride at the field's right edge — no text
+          // buttons, no extra row (follow.md · hard rules 1 and 6).
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 0,
+            minHeight: 0,
+          ),
+          suffixIcon: Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                SaluIconButton(
+                  size: 32,
+                  // 7/7: Save dims; plain Play always works.
+                  tooltip: playable && _library.isFull
+                      ? 'List full'
+                      : 'Play & Save',
+                  enabled: canSave,
+                  onTap: () => _playInput(save: true),
+                  child: const PlaySaveMark(size: 19),
+                ),
+                SaluIconButton(
+                  size: 32,
+                  tooltip: 'Play',
+                  enabled: playable,
+                  onTap: _playInput,
+                  child: const PlayMark(size: 17),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              _ActionButton(
-                label: 'Play & Save',
-                enabled: canSave,
-                // 7/7: Save dims; plain Play always works.
-                tooltip: playable && _library.isFull ? 'List full' : null,
-                onTap: () => _playInput(save: true),
-              ),
-              const SizedBox(width: 10),
-              _ActionButton(
-                label: 'Play',
-                emphasized: true,
-                enabled: playable,
-                onTap: _playInput,
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -333,38 +348,33 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
   // ── Saved list ───────────────────────────────────────────────────────
 
   Widget _buildList() {
-    final List<int> order = _displayIndices;
+    final List<SavedUrl> all = _all;
     return ReorderableListView.builder(
       shrinkWrap: true,
       buildDefaultDragHandles: false,
       padding: const EdgeInsets.symmetric(vertical: 6),
-      itemCount: order.length,
+      itemCount: all.length,
       onReorderItem: _onReorder,
       proxyDecorator:
           (Widget child, int index, Animation<double> animation) {
         return Material(color: Colors.transparent, child: child);
       },
-      itemBuilder: (BuildContext context, int displayIndex) {
-        final int serviceIndex = order[displayIndex];
-        final SavedUrl entry = _all[serviceIndex];
+      itemBuilder: (BuildContext context, int index) {
+        final SavedUrl entry = all[index];
         return _UrlRow(
           key: ValueKey<String>('url_${entry.url}'),
           entry: entry,
-          displayIndex: displayIndex,
-          highlighted: _cursor == displayIndex,
-          editing: _editing == serviceIndex,
+          index: index,
+          highlighted: _cursor == index,
+          editing: _editing == index,
           onPlay: () => _play(entry.url),
-          onToggleHidden: () {
-            _library.toggleHidden(serviceIndex);
-            setState(() => _cursor = -1);
-          },
-          onEdit: () => setState(() => _editing = serviceIndex),
+          onEdit: () => setState(() => _editing = index),
           onEditDone: (String name, String url) {
-            _library.update(serviceIndex, name: name, url: url);
+            _library.update(index, name: name, url: url);
             setState(() => _editing = -1);
           },
           onEditCancel: () => setState(() => _editing = -1),
-          onDelete: () => _delete(serviceIndex),
+          onDelete: () => _delete(index),
         );
       },
     );
@@ -415,11 +425,10 @@ class _UrlRow extends StatefulWidget {
   const _UrlRow({
     super.key,
     required this.entry,
-    required this.displayIndex,
+    required this.index,
     required this.highlighted,
     required this.editing,
     required this.onPlay,
-    required this.onToggleHidden,
     required this.onEdit,
     required this.onEditDone,
     required this.onEditCancel,
@@ -427,11 +436,10 @@ class _UrlRow extends StatefulWidget {
   });
 
   final SavedUrl entry;
-  final int displayIndex;
+  final int index;
   final bool highlighted;
   final bool editing;
   final VoidCallback onPlay;
-  final VoidCallback onToggleHidden;
   final VoidCallback onEdit;
   final void Function(String name, String url) onEditDone;
   final VoidCallback onEditCancel;
@@ -460,7 +468,6 @@ class _UrlRowState extends State<_UrlRow> {
       );
     }
 
-    final bool asleep = widget.entry.hidden;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -478,92 +485,71 @@ class _UrlRowState extends State<_UrlRow> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Opacity(
-            // Hidden rows sink to the bottom, visually asleep (40%) —
-            // still clickable.
-            opacity: asleep ? 0.4 : 1.0,
-            child: Row(
-              children: <Widget>[
-                // ≡ drag handle — the only way to reorder.
-                ReorderableDragStartListener(
-                  index: widget.displayIndex,
-                  child: const MouseRegion(
-                    cursor: SystemMouseCursors.grab,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6),
-                      child: Icon(
-                        Icons.drag_indicator,
-                        size: 16,
-                        color: AppColors.textSecondary,
+          child: Row(
+            children: <Widget>[
+              // ≡ drag handle — the only way to reorder.
+              ReorderableDragStartListener(
+                index: widget.index,
+                child: const MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: IconTheme(
+                      data: IconThemeData(color: AppColors.textSecondary),
+                      child: GripMark(size: 15),
+                    ),
+                  ),
+                ),
+              ),
+              // ● status dot — last play attempt (green/red/gray).
+              Container(
+                width: 7,
+                height: 7,
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _dotColor,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  widget.entry.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              // Hover-only actions: edit · delete. (The hide/eye action
+              // was removed by owner decision — drag-reorder already
+              // covers parking a rarely used stream at the bottom.)
+              AnimatedOpacity(
+                opacity: _hovered ? 1 : 0,
+                duration: const Duration(milliseconds: 120),
+                child: IgnorePointer(
+                  ignoring: !_hovered,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      SaluIconButton(
+                        size: 28,
+                        tooltip: 'Edit',
+                        onTap: widget.onEdit,
+                        child: const PencilMark(size: 16),
                       ),
-                    ),
+                      SaluIconButton(
+                        size: 28,
+                        tooltip: 'Delete',
+                        onTap: widget.onDelete,
+                        child: const TrashMark(size: 16),
+                      ),
+                    ],
                   ),
                 ),
-                // ● status dot — last play attempt (green/red/gray).
-                Container(
-                  width: 7,
-                  height: 7,
-                  margin: const EdgeInsets.only(right: 10),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _dotColor,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    widget.entry.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                // Hover-only actions: hide · edit · delete.
-                AnimatedOpacity(
-                  opacity: _hovered ? 1 : 0,
-                  duration: const Duration(milliseconds: 120),
-                  child: IgnorePointer(
-                    ignoring: !_hovered,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        SaluIconButton(
-                          size: 28,
-                          tooltip: asleep ? 'Show' : 'Hide',
-                          onTap: widget.onToggleHidden,
-                          child: Icon(
-                            asleep
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                            size: 16,
-                          ),
-                        ),
-                        SaluIconButton(
-                          size: 28,
-                          tooltip: 'Edit',
-                          onTap: widget.onEdit,
-                          child: const Icon(
-                            Icons.edit_outlined,
-                            size: 16,
-                          ),
-                        ),
-                        SaluIconButton(
-                          size: 28,
-                          tooltip: 'Delete',
-                          onTap: widget.onDelete,
-                          child: const Icon(
-                            Icons.delete_outline,
-                            size: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -679,101 +665,11 @@ class _InlineEditorState extends State<_InlineEditor> {
               size: 30,
               tooltip: 'Done',
               onTap: _commit,
-              child: const Icon(Icons.check, size: 17),
+              child: const TickMark(size: 17),
             ),
           ],
         ),
       ),
     );
-  }
-}
-
-// ── Flat text action button (Play / Play & Save) ─────────────────────────
-
-class _ActionButton extends StatefulWidget {
-  const _ActionButton({
-    required this.label,
-    required this.onTap,
-    required this.enabled,
-    this.emphasized = false,
-    this.tooltip,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final bool enabled;
-  final bool emphasized;
-  final String? tooltip;
-
-  @override
-  State<_ActionButton> createState() => _ActionButtonState();
-}
-
-class _ActionButtonState extends State<_ActionButton> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bool on = widget.enabled;
-    final Color text = !on
-        ? AppColors.textSecondary.withAlpha(115) // Dimmed, never blocked-looking.
-        : (_hovered ? AppColors.textPrimary : AppColors.iconIdle);
-    final Color fill = widget.emphasized
-        ? (on
-            ? (_hovered ? AppColors.surfaceHighlight : AppColors.surface)
-            : AppColors.surface.withAlpha(128))
-        : Colors.transparent;
-
-    Widget button = MouseRegion(
-      cursor: on ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: on ? (_) => setState(() => _pressed = true) : null,
-        onTapCancel: () => setState(() => _pressed = false),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTap: on ? widget.onTap : null,
-        child: AnimatedScale(
-          scale: _pressed ? 0.95 : 1.0,
-          duration: const Duration(milliseconds: 120),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(9),
-              border: widget.emphasized
-                  ? Border.all(color: AppColors.surfaceOutline)
-                  : null,
-            ),
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight:
-                    widget.emphasized ? FontWeight.w600 : FontWeight.w500,
-                color: text,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final String? tooltip = widget.tooltip;
-    if (tooltip != null) {
-      button = Tooltip(
-        message: tooltip,
-        waitDuration: const Duration(milliseconds: 600),
-        child: button,
-      );
-    }
-    return button;
   }
 }
