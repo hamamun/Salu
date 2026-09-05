@@ -28,26 +28,28 @@ class VideoScreen extends StatelessWidget {
         return Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            // The mpv canvas — always mounted so the engine stays warm.
-            Video(
-              controller: service.videoController,
-              fit: BoxFit.contain,
-              fill: AppColors.videoBackdrop,
-              // SALU builds its own OSC — the stock media_kit controls
-              // are disabled entirely.
-              controls: NoVideoControls,
-              subtitleViewConfiguration: const SubtitleViewConfiguration(
-                style: TextStyle(
-                  fontFamily: AppTheme.fontFamily,
-                  fontFamilyFallback: AppTheme.fontFamilyFallback,
-                  fontSize: 38,
-                  color: Colors.white,
-                  shadows: <Shadow>[
-                    Shadow(blurRadius: 8, color: Colors.black87),
-                  ],
+            // The mpv canvas — mounted only when media is active so
+            // ANGLE/D3D11 surfaces aren't created eagerly at startup.
+            if (hasMedia)
+              Video(
+                controller: service.videoController,
+                fit: BoxFit.contain,
+                fill: AppColors.videoBackdrop,
+                // SALU builds its own OSC — the stock media_kit controls
+                // are disabled entirely.
+                controls: NoVideoControls,
+                subtitleViewConfiguration: const SubtitleViewConfiguration(
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontFamily,
+                    fontFamilyFallback: AppTheme.fontFamilyFallback,
+                    fontSize: 38,
+                    color: Colors.white,
+                    shadows: <Shadow>[
+                      Shadow(blurRadius: 8, color: Colors.black87),
+                    ],
+                  ),
                 ),
               ),
-            ),
             // Landing state — until the first media loads, and again
             // while stopped (the parked queue's canvas).
             if (!hasMedia) const _EmptyState(),

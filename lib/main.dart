@@ -59,7 +59,7 @@ Future<void> main(List<String> args) async {
   // ── Close hook: flush the resume memory before the window dies. ──────
   // `setPreventClose(true)` routes the × button and Alt+F4 through
   // [_CloseGuard.onWindowClose] — one final position save, a disk flush,
-  // engine release, then the real destroy. Covers every close path.
+  // then an immediate process exit. Covers every close path.
   await windowManager.setPreventClose(true);
   windowManager.addListener(_CloseGuard());
 
@@ -71,14 +71,12 @@ Future<void> main(List<String> args) async {
 }
 
 /// Intercepts the window close: flush the resume store so the last
-/// watched second is remembered, then close for real.
+/// watched second is remembered, then kill the process immediately.
 ///
-/// We `pause()` the player before destroying the window to instantly
-/// halt the hardware decode pipeline. Without this, Flutter's widget
-/// tree teardown (which destroys the `Video` widget) blocks on active
-/// D3D11/ANGLE resource release, producing the OS "busy" cursor. The
-/// full engine teardown (`player.dispose()`) is fired but unawaited,
-/// letting the OS reclaim memory when the process exits.
+/// We bypass Flutter's graceful widget teardown entirely. After the
+/// position is flushed to disk there is no need to dispose the video
+/// surface or the mpv engine — the OS reclaims everything when the
+/// process dies.
 class _CloseGuard with WindowListener {
   @override
   void onWindowClose() async {
@@ -91,10 +89,13 @@ class _CloseGuard with WindowListener {
         player.duration.value,
       );
     }
-    await ResumeService.instance.flush();
-    await player.pause();
-    unawaited(player.dispose());
-    await windowManager.destroy();
+    try {
+      await ResumeService.instance.flush().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
+    exit(0);
   }
 }
 
