@@ -643,7 +643,9 @@ class PlayerService {
     }
   }
 
-  /// Release the native engine (called when the window closes).
+  /// Release the native engine. Not on the close path — `_CloseGuard`
+  /// exits the process directly and the OS reclaims the engine — kept
+  /// for programmatic shutdown (tests, embedded use).
   Future<void> dispose() async {
     _stopTicker();
     await _playlistSub?.cancel();
