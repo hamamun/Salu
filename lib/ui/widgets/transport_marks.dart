@@ -284,7 +284,7 @@ class _RestartPainter extends CustomPainter {
     );
 
     // Arrowhead at the arc's end (angle π/4), pointing along the sweep.
-    final double endAngle = start + sweep;
+    const double endAngle = start + sweep;
     final Offset tip = Offset(
       c.dx + r * math.cos(endAngle),
       c.dy + r * math.sin(endAngle),

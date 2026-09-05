@@ -35,27 +35,27 @@ class ControllerPanel extends StatelessWidget {
     return Container(
       height: height,
       padding: _padding,
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           // Row 1 · the timeline (bar + floating hover chip in its box).
-          const MediaTimeline(),
+          MediaTimeline(),
           // Row 2 · the control row (fixed height, never pushed).
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           SizedBox(
             height: 36,
             child: Stack(
               alignment: Alignment.center,
               children: <Widget>[
                 // Left zone · the Open Media control (plus → pill).
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
                   child: OpenMediaControl(),
                 ),
                 // Center zone · the transport cluster + sound group.
                 // The row's right edge stays free for the future
                 // tracks / PiP / fullscreen / panel toggles.
-                const Center(child: TransportCluster()),
+                Center(child: TransportCluster()),
               ],
             ),
           ),

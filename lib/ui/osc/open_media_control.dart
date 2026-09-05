@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/open_media_service.dart';
 import '../../core/ui_lock.dart';
-import '../../theme/app_theme.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
