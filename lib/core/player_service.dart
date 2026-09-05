@@ -56,7 +56,16 @@ class PlayerService {
   late final Player player;
 
   /// Bridges raw engine frames onto the Flutter widget tree.
-  late final VideoController videoController;
+  /// Created lazily (on first access) so ANGLE/D3D11 surfaces aren't
+  /// initialized eagerly at startup when no video is loaded.
+  VideoController? _videoController;
+
+  VideoController get videoController => _videoController ??= VideoController(
+        player,
+        configuration: const VideoControllerConfiguration(
+          enableHardwareAcceleration: true,
+        ),
+      );
 
   // ── Lightweight UI-facing state ───────────────────────────────────────
 
@@ -147,14 +156,6 @@ class PlayerService {
         logLevel: MPVLogLevel.warn,
         // Give mpv a generous demuxer cache for smooth local playback.
         bufferSize: 64 * 1024 * 1024,
-      ),
-    );
-
-    // Hardware decoding ON by default — the GPU does the heavy lifting.
-    videoController = VideoController(
-      player,
-      configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true,
       ),
     );
 
