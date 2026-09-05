@@ -10,15 +10,15 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 |-------|-------------|--------|
 | 1 | Foundation & Window Framework | ✅ Completed |
 | 2 | Core Media Engine | ✅ Completed |
-| 3 |  -Style UI & OSC | ⏳ Not started |
+| 3 |  -Style UI & OSC | 🔄 In progress — controller + transport + OSD deck done (see `outline_transport_osd_resume.md`) |
 | 4 | Slide-Out Panels & Menus | ⏳ Not started |
-| 5 | Media Intelligence | ⏳ Not started |
+| 5 | Media Intelligence | 🔄 In progress — resume memory done |
 | 6 | Web & Stream Manager | ⏳ Not started |
 | 7 | Advanced Player Tools & Search Logic | ⏳ Not started |
 | 8 | Android Remote Server | ⏳ Not started |
 | 9 | Branding & About Section | ⏳ Not started |
 
-## What works right now (Phase 1 + 2)
+## What works right now (Phase 1 + 2 + transport pass)
 
 - **Borderless window** — the native Windows title bar is gone; SALU draws its own invisible chrome that fades in when the mouse moves and fades out after 3 seconds of stillness.
 - **Custom caption buttons** — Minimize / Maximize / Close rendered with native Segoe Fluent glyphs, with the classic red close-hover. Drag anywhere on the top strip to move the window; double-click it to maximize/restore.
@@ -27,7 +27,22 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 - **Edge-to-edge video** — aspect-ratio-correct scaling behind the invisible title bar.
 - **Drag & drop** — drop a video/audio file to play it instantly, drop multiple files to queue them, drop a **folder** to queue its media, drop an `.srt`/`.ass` onto a playing video to load subtitles.
 - **Single instance** — only one SALU window can ever exist. Double-clicking a media file while SALU is open routes the file into the running window instantly.
-- **Basic transport for testing** — click the video or press <kbd>Space</kbd> to play/pause (the full  -style OSC arrives in Phase 3).
+- **Transport cluster** — the full control row, drawn as SALU's own thin
+  marks: Play/Pause · Stop · Previous/Next · Seek backward/forward (hold to
+  climb `5 s → 10 s → 15 s…`) · Mute + volume bar (value inside the bar,
+  wheel ±5 %). Grouping reads from pitch alone — no boxes, ever.
+- **Stop parks the queue** (Stop ≠ Start Over) — the engine releases the
+  item, the canvas returns to the logo window, the queue stays loaded and
+  Play resumes at the exact position.
+- **OSD deck** — one top-center slot: transport flashes (`>> +15s
+  01:12:34`), volume/mute cards, and the interactive Resume toast
+  (`[>] 12:34 [↻ Restart]`). Transport keys drive the deck without waking
+  the chrome.
+- **Resume memory** — files pick up where you stopped (per-kind modes in
+  Settings → General → Resume), resumed silently with no visible jump;
+  closing after a Stop still remembers.
+- **Silent keyboard set** — Space, ←→ (ramp seek), ↑↓, M, S, PageUp/PageDown;
+  none of it is ever printed in the UI.
 
 ## Requirements
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
@@ -30,6 +32,7 @@ class SaluIconButton extends StatefulWidget {
     this.size = 34,
     this.active = false,
     this.enabled = true,
+    this.onHoldRepeat,
   });
 
   /// The mark itself — an [Icon] or a custom-painted SALU mark.
@@ -50,6 +53,16 @@ class SaluIconButton extends StatefulWidget {
   /// [onTap]. Nothing is drawn around it — it just goes quiet.
   final bool enabled;
 
+  /// Press-and-hold mode (the seek marks): when set, the button fires
+  /// [onHoldRepeat] the instant the pointer goes down, then keeps firing
+  /// every [holdRepeatInterval] while held — a physical held button. The
+  /// 0.90× press-scale stays down for the whole hold. Takes the place of
+  /// [onTap] for this button (pass a no-op there).
+  final VoidCallback? onHoldRepeat;
+
+  /// Repeat cadence while held.
+  static const Duration holdRepeatInterval = Duration(milliseconds: 300);
+
   @override
   State<SaluIconButton> createState() => _SaluIconButtonState();
 }
@@ -57,6 +70,27 @@ class SaluIconButton extends StatefulWidget {
 class _SaluIconButtonState extends State<SaluIconButton> {
   bool _hovered = false;
   bool _pressed = false;
+  Timer? _holdTimer;
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startHold() {
+    _stopHold();
+    widget.onHoldRepeat?.call();
+    _holdTimer = Timer.periodic(
+      SaluIconButton.holdRepeatInterval,
+      (_) => widget.onHoldRepeat?.call(),
+    );
+  }
+
+  void _stopHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,19 +146,44 @@ class _SaluIconButtonState extends State<SaluIconButton> {
       onExit: (_) => setState(() {
         _hovered = false;
         _pressed = false;
+        _stopHold();
       }),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: on ? (_) => setState(() => _pressed = true) : null,
-        onTapCancel: () => setState(() => _pressed = false),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTap: on ? widget.onTap : null,
-        child: SizedBox(
-          width: widget.size,
-          height: widget.size,
-          child: Center(child: mark),
-        ),
-      ),
+      child: widget.onHoldRepeat != null
+          ? Listener(
+              // Hold-repeat mode (seek marks): fire on pointer-down, then
+              // every 300 ms while held. Raw pointer events, no arena.
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (_) {
+                if (!on) return;
+                setState(() => _pressed = true);
+                _startHold();
+              },
+              onPointerUp: (_) {
+                _stopHold();
+                if (_pressed) setState(() => _pressed = false);
+              },
+              onPointerCancel: (_) {
+                _stopHold();
+                if (_pressed) setState(() => _pressed = false);
+              },
+              child: SizedBox(
+                width: widget.size,
+                height: widget.size,
+                child: Center(child: mark),
+              ),
+            )
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: on ? (_) => setState(() => _pressed = true) : null,
+              onTapCancel: () => setState(() => _pressed = false),
+              onTapUp: (_) => setState(() => _pressed = false),
+              onTap: on ? widget.onTap : null,
+              child: SizedBox(
+                width: widget.size,
+                height: widget.size,
+                child: Center(child: mark),
+              ),
+            ),
     );
 
     final String? tooltip = widget.tooltip;

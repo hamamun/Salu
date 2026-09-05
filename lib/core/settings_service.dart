@@ -14,6 +14,22 @@ enum TitleBarMode {
   locked,
 }
 
+/// Which files continue from where you stopped (Settings → General →
+/// Resume). Gates both saving and resuming, per file kind.
+enum ResumeMode {
+  /// Video and audio pick up where they stopped.
+  all,
+
+  /// Video resumes; audio starts from the beginning.
+  videoOnly,
+
+  /// Audio resumes; video starts from the beginning.
+  audioOnly,
+
+  /// Everything starts from the beginning.
+  off,
+}
+
 /// SALU's persisted settings, backed by `shared_preferences`.
 ///
 /// UI-facing state lives in [ValueNotifier]s so widgets can react instantly;
@@ -25,10 +41,15 @@ class SettingsService {
   static final SettingsService instance = SettingsService._internal();
 
   static const String _keyTitleBarMode = 'title_bar_mode';
+  static const String _keyResumeMode = 'resume_mode';
 
   /// How the title bar handles itself while idle (see [TitleBarMode]).
   final ValueNotifier<TitleBarMode> titleBarMode =
       ValueNotifier<TitleBarMode>(TitleBarMode.borderless);
+
+  /// Which files continue from where you stopped (see [ResumeMode]).
+  final ValueNotifier<ResumeMode> resumeMode =
+      ValueNotifier<ResumeMode>(ResumeMode.all);
 
   /// Reads persisted settings (called once, before the first frame).
   Future<void> load() async {
@@ -42,9 +63,15 @@ class SettingsService {
         titleBarMode.value =
             TitleBarMode.values.asNameMap()[raw] ?? TitleBarMode.borderless;
       }
+      final String? rawResume = prefs.getString(_keyResumeMode);
+      if (rawResume != null) {
+        resumeMode.value =
+            ResumeMode.values.asNameMap()[rawResume] ?? ResumeMode.all;
+      }
     } catch (_) {
-      // Corrupt/missing prefs — fall back to the default, silently.
+      // Corrupt/missing prefs — fall back to the defaults, silently.
       titleBarMode.value = TitleBarMode.borderless;
+      resumeMode.value = ResumeMode.all;
     }
   }
 
@@ -54,6 +81,19 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyTitleBarMode, mode.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Applies a new resume mode instantly and persists it. Switching to
+  /// [ResumeMode.off] stops saving *and* resuming but never wipes stored
+  /// positions — switching back restores the memory.
+  Future<void> setResumeMode(ResumeMode mode) async {
+    resumeMode.value = mode;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyResumeMode, mode.name);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }

@@ -10,22 +10,14 @@ import 'package:flutter/gestures.dart'
         PointerUpEvent;
 import 'package:flutter/material.dart';
 
+import '../../core/clock_format.dart';
 import '../../core/player_service.dart';
+import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
+import 'hover_chip.dart';
 
-/// Metrics shared by the timeline (private to this library).
-const double _timelineChipWidth = 96;
-const double _timelineChipHeight = 20;
-
-/// Formats a [Duration] as `hh:mm:ss` (zero-padded hours so every label
-/// keeps the same width — no wiggling while the numbers tick).
-String formatClock(Duration d) {
-  final int h = d.inHours;
-  final int m = d.inMinutes.remainder(60);
-  final int s = d.inSeconds.remainder(60);
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${two(h)}:${two(m)}:${two(s)}';
-}
+/// Formats live in `lib/core/clock_format.dart` (formatClock here,
+/// formatClockCompact in the Resume toast).
 
 /// SALU's unified timeline — identical for video and audio.
 ///
@@ -82,6 +74,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
     _merged = Listenable.merge(<Listenable>[
       _player.position,
       _player.duration,
+      _player.transportState,
     ]);
   }
 
@@ -89,7 +82,11 @@ class _MediaTimelineState extends State<MediaTimeline> {
 
   Duration get _duration => _player.duration.value;
 
-  bool get _usable => _duration > Duration.zero;
+  /// The bar is live only while the engine actually holds an item —
+  /// while STOPPED it is inert and reads zeros (the parked queue has no
+  /// timeline), and while idle there is simply nothing to show.
+  bool get _usable =>
+      _duration > Duration.zero && _player.hasMedia.value;
 
   // ── Seek helpers ──────────────────────────────────────────────────────
 
@@ -101,6 +98,9 @@ class _MediaTimelineState extends State<MediaTimeline> {
 
   void _commitFrac(double frac) {
     if (!_usable) return;
+    // A timeline click is another transport action — it resets both
+    // seek ramps (the outline's ramp rule).
+    TransportActions.instance.resetSeekRamps();
     _player.seekTo(_targetForFrac(frac));
   }
 
@@ -152,7 +152,9 @@ class _MediaTimelineState extends State<MediaTimeline> {
   void _onWheel(double dy) {
     if (!_usable) return;
     // Wheel down (positive) scrubs forward, wheel up backward — 1 second
-    // per notch. seekTo clamps at the media bounds.
+    // per notch. seekTo clamps at the media bounds. Like every seek
+    // from outside the ramp, this resets the ramp sequences.
+    TransportActions.instance.resetSeekRamps();
     _player.seekBy(dy > 0 ? const Duration(seconds: 1) : const Duration(seconds: -1));
   }
 
@@ -233,13 +235,14 @@ class _MediaTimelineState extends State<MediaTimeline> {
     final Duration tickStep = usable ? _tickStep(w) : Duration.zero;
 
     // Tooltip chip — target time under the cursor / thumb.
+    const double chipWidth = 96; // HoverChip's timeline width
     final double? chipFrac = _pressFrac ?? _hoverFrac;
     final bool showChip = usable && chipFrac != null;
     final double clampedChipFrac = chipFrac?.clamp(0.0, 1.0).toDouble() ?? 0;
-    final double chipLeft = w <= _timelineChipWidth
+    final double chipLeft = w <= chipWidth
         ? 0
-        : (clampedChipFrac * w - _timelineChipWidth / 2)
-            .clamp(0.0, w - _timelineChipWidth)
+        : (clampedChipFrac * w - chipWidth / 2)
+            .clamp(0.0, w - chipWidth)
             .toDouble();
 
     const TextStyle labelStyle = TextStyle(
@@ -340,32 +343,15 @@ class _MediaTimelineState extends State<MediaTimeline> {
           ),
         ),
         // ── Hover / scrub time chip (below the bar) ───────────────────
+        // The timeline's chip and the volume bar's chip are ONE widget
+        // (HoverChip) — chip = value under the cursor; the bar's in-bar
+        // labels = current value.
         if (showChip)
           Positioned(
             top: MediaTimeline.barHeight + 2,
             left: chipLeft,
-            width: _timelineChipWidth,
-            height: _timelineChipHeight,
-            child: IgnorePointer(
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.chipBackground,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  formatClock(_targetForFrac(clampedChipFrac)),
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.3,
-                    fontFeatures: <FontFeature>[
-                      FontFeature.tabularFigures(),
-                    ],
-                  ),
-                ),
-              ),
+            child: HoverChip(
+              label: formatClock(_targetForFrac(clampedChipFrac)),
             ),
           ),
       ],

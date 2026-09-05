@@ -20,10 +20,11 @@ import 'package:flutter/material.dart';
 ///   · tick           — Done (inline edit)  [TickMark]
 ///   · three rules    — Drag handle         [GripMark]
 
-/// Shared stroke weight so the whole family reads as one hand.
-double _strokeFor(double size) => (size * 0.085).clamp(1.4, 2.2).toDouble();
+/// Shared stroke weight so the whole family reads as one hand (public so
+/// the transport marks share it — see transport_marks.dart).
+double markStrokeFor(double size) => (size * 0.085).clamp(1.4, 2.2).toDouble();
 
-Color _inkOf(BuildContext context) =>
+Color markInk(BuildContext context) =>
     IconTheme.of(context).color ?? Colors.white;
 
 /// The Open mark: a thin plus. The parent rotates it 45° into an × while
@@ -37,7 +38,7 @@ class PlusMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _PlusPainter(_inkOf(context), _strokeFor(size)),
+      painter: _PlusPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -76,7 +77,7 @@ class FilmFrameMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _FilmFramePainter(_inkOf(context), _strokeFor(size)),
+      painter: _FilmFramePainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -133,7 +134,7 @@ class StackedFramesMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _StackedFramesPainter(_inkOf(context), _strokeFor(size)),
+      painter: _StackedFramesPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -194,7 +195,7 @@ class LinkMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _LinkPainter(_inkOf(context), _strokeFor(size)),
+      painter: _LinkPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -263,7 +264,7 @@ class PlayMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _PlayPainter(_inkOf(context), _strokeFor(size)),
+      painter: _PlayPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -317,7 +318,7 @@ class PlaySaveMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _PlaySavePainter(_inkOf(context), _strokeFor(size)),
+      painter: _PlaySavePainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -372,7 +373,7 @@ class PencilMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _PencilPainter(_inkOf(context), _strokeFor(size)),
+      painter: _PencilPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -435,7 +436,7 @@ class TrashMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _TrashPainter(_inkOf(context), _strokeFor(size)),
+      painter: _TrashPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -498,7 +499,7 @@ class TickMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _TickPainter(_inkOf(context), _strokeFor(size)),
+      painter: _TickPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }
@@ -541,7 +542,7 @@ class GripMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _GripPainter(_inkOf(context), _strokeFor(size)),
+      painter: _GripPainter(markInk(context), markStrokeFor(size)),
     );
   }
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/open_media_service.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/glass_capsule.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 import 'open_url_dialog.dart';
@@ -236,44 +236,36 @@ class _PillBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(21),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          height: 42,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: AppColors.glass,
-            borderRadius: BorderRadius.circular(21),
-            border: Border.all(color: AppColors.surfaceOutline),
+    // The shared glass material (the OSD deck renders the same surface —
+    // see GlassCapsule).
+    return GlassCapsule(
+      radius: 21,
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SaluIconButton(
+            tooltip: 'Open file',
+            size: 36,
+            onTap: () => onAction(_OpenAction.file),
+            child: const FilmFrameMark(size: 20),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              SaluIconButton(
-                tooltip: 'Open file',
-                size: 36,
-                onTap: () => onAction(_OpenAction.file),
-                child: const FilmFrameMark(size: 20),
-              ),
-              const SizedBox(width: 2),
-              SaluIconButton(
-                tooltip: 'Open folder',
-                size: 36,
-                onTap: () => onAction(_OpenAction.folder),
-                child: const StackedFramesMark(size: 20),
-              ),
-              const SizedBox(width: 2),
-              SaluIconButton(
-                tooltip: 'Open URL',
-                size: 36,
-                onTap: () => onAction(_OpenAction.url),
-                child: const LinkMark(size: 20),
-              ),
-            ],
+          const SizedBox(width: 2),
+          SaluIconButton(
+            tooltip: 'Open folder',
+            size: 36,
+            onTap: () => onAction(_OpenAction.folder),
+            child: const StackedFramesMark(size: 20),
           ),
-        ),
+          const SizedBox(width: 2),
+          SaluIconButton(
+            tooltip: 'Open URL',
+            size: 36,
+            onTap: () => onAction(_OpenAction.url),
+            child: const LinkMark(size: 20),
+          ),
+        ],
       ),
     );
   }

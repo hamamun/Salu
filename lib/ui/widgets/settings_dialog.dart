@@ -140,6 +140,22 @@ class _GeneralTab extends StatelessWidget {
           ),
           SizedBox(height: 16),
           _TitleBarModePicker(),
+          SizedBox(height: 28),
+          Text(
+            'Resume',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Which files continue from where you stopped.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _ResumeModePicker(),
         ],
       ),
     );
@@ -182,9 +198,75 @@ class _TitleBarModePicker extends StatelessWidget {
             for (final _ModeOption option in _options)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: _ModeOptionTile(
-                  option: option,
+                child: _OptionTile(
+                  icon: option.icon,
+                  label: option.label,
+                  helper: option.helper,
+                  isDefault: option.isDefault,
                   selected: mode == option.mode,
+                  onTap: () => SettingsService.instance
+                      .setTitleBarMode(option.mode),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The "Resume" section — which files continue from where you stopped.
+/// Switching to Off stops saving AND resuming but never wipes stored
+/// positions (switching back restores the memory).
+class _ResumeModePicker extends StatelessWidget {
+  const _ResumeModePicker();
+
+  static const List<_ResumeOption> _options = <_ResumeOption>[
+    _ResumeOption(
+      mode: ResumeMode.all,
+      icon: Icons.all_inclusive_outlined,
+      label: 'All files',
+      helper: 'Video and audio pick up where they stopped.',
+      isDefault: true,
+    ),
+    _ResumeOption(
+      mode: ResumeMode.videoOnly,
+      icon: Icons.movie_outlined,
+      label: 'Video only',
+      helper: 'Video resumes; audio starts from the beginning.',
+    ),
+    _ResumeOption(
+      mode: ResumeMode.audioOnly,
+      icon: Icons.audiotrack_outlined,
+      label: 'Audio only',
+      helper: 'Audio resumes; video starts from the beginning.',
+    ),
+    _ResumeOption(
+      mode: ResumeMode.off,
+      icon: Icons.block_outlined,
+      label: 'Off',
+      helper: 'Everything starts from the beginning.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ResumeMode>(
+      valueListenable: SettingsService.instance.resumeMode,
+      builder: (BuildContext context, ResumeMode mode, Widget? _) {
+        return Column(
+          children: <Widget>[
+            for (final _ResumeOption option in _options)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionTile(
+                  icon: option.icon,
+                  label: option.label,
+                  helper: option.helper,
+                  isDefault: option.isDefault,
+                  selected: mode == option.mode,
+                  onTap: () => SettingsService.instance
+                      .setResumeMode(option.mode),
                 ),
               ),
           ],
@@ -210,25 +292,52 @@ class _ModeOption {
   final bool isDefault;
 }
 
-/// A single mode row: icon chip + label (+ "Recommended" pill) + helper
-/// line + radio dot. Clicking applies the mode instantly.
-class _ModeOptionTile extends StatefulWidget {
-  const _ModeOptionTile({required this.option, required this.selected});
+class _ResumeOption {
+  const _ResumeOption({
+    required this.mode,
+    required this.icon,
+    required this.label,
+    required this.helper,
+    this.isDefault = false,
+  });
 
-  final _ModeOption option;
-  final bool selected;
-
-  @override
-  State<_ModeOptionTile> createState() => _ModeOptionTileState();
+  final ResumeMode mode;
+  final IconData icon;
+  final String label;
+  final String helper;
+  final bool isDefault;
 }
 
-class _ModeOptionTileState extends State<_ModeOptionTile> {
+/// A single option row, shared by every picker: icon chip + label
+/// (+ "Recommended" pill) + helper line + radio dot. Clicking applies
+/// instantly.
+class _OptionTile extends StatefulWidget {
+  const _OptionTile({
+    required this.icon,
+    required this.label,
+    required this.helper,
+    required this.selected,
+    required this.onTap,
+    this.isDefault = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String helper;
+  final bool isDefault;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_OptionTile> createState() => _OptionTileState();
+}
+
+class _OptionTileState extends State<_OptionTile> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final bool selected = widget.selected;
-    final _ModeOption option = widget.option;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -236,7 +345,7 @@ class _ModeOptionTileState extends State<_ModeOptionTile> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => SettingsService.instance.setTitleBarMode(option.mode),
+        onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOutCubic,
@@ -265,7 +374,7 @@ class _ModeOptionTileState extends State<_ModeOptionTile> {
                 ),
                 alignment: Alignment.center,
                 child: Icon(
-                  option.icon,
+                  widget.icon,
                   size: 20,
                   color: selected ? AppColors.accent : AppColors.textSecondary,
                 ),
@@ -279,7 +388,7 @@ class _ModeOptionTileState extends State<_ModeOptionTile> {
                       children: <Widget>[
                         Flexible(
                           child: Text(
-                            option.label,
+                            widget.label,
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -287,7 +396,7 @@ class _ModeOptionTileState extends State<_ModeOptionTile> {
                             ),
                           ),
                         ),
-                        if (option.isDefault) ...<Widget>[
+                        if (widget.isDefault) ...<Widget>[
                           const SizedBox(width: 8),
                           const _RecommendedPill(),
                         ],
@@ -295,7 +404,7 @@ class _ModeOptionTileState extends State<_ModeOptionTile> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      option.helper,
+                      widget.helper,
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: AppColors.textSecondary,

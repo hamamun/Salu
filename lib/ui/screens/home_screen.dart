@@ -8,10 +8,13 @@ import '../../core/drop_handler.dart';
 import '../../core/open_media_service.dart';
 import '../../core/player_service.dart';
 import '../../core/settings_service.dart';
+import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
-import '../osc/controller_panel.dart';
+import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
 import '../osc/open_url_dialog.dart';
+import '../osd/osd_controller.dart';
+import '../osd/osd_deck.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/settings_dialog.dart';
 import 'video_screen.dart';
@@ -21,7 +24,11 @@ import 'video_screen.dart';
 /// title bar and the on-screen controller are drawn as ONE continuous glass
 /// block (single shared gradient, no borders, no seams, edge to edge) that
 /// shows and hides together. When it auto-hides, a thin, display-only
-/// progress hairline remains at the very bottom of the window.
+/// progress hairline remains at the very bottom of the window (hidden
+/// entirely while STOPPED — a parked queue has no progress to draw).
+///
+/// Layers, back to front: video canvas → drop overlay → progress hairline
+/// → top chrome → resume-toast click-outside listener → OSD deck.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialFilePath});
 
@@ -35,10 +42,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final PlayerService _player = PlayerService.instance;
   final SettingsService _settings = SettingsService.instance;
+  final OsdController _osd = OsdController.instance;
 
   /// Unified global activity state: moving the mouse anywhere over the
-  /// window — or pressing any key — reveals the chrome; 3 seconds of
-  /// stillness hides it again, even while idle with nothing playing.
+  /// window — or pressing a non-transport key — reveals the chrome;
+  /// 3 seconds of stillness hides it again, even while idle with nothing
+  /// playing. Transport keys are the exception: they drive the OSD deck
+  /// only and never wake the chrome (that is the deck's whole point).
   bool _chromeVisible = true;
   Timer? _hideTimer;
 
@@ -53,9 +63,10 @@ class _HomeScreenState extends State<HomeScreen> {
   static const Duration _autoHideDelay = Duration(seconds: 3);
 
   /// Fixed height of the unified chrome block: 40px title bar + 108px
-  /// controller. Even before media loads the block keeps this size so the
-  /// scrim gradient never jumps.
-  static const double _chromeBlockHeight = 148;
+  /// controller (`kChromeBlockHeight`, public — the OSD deck anchors to
+  /// it so the two can never drift). Even before media loads the block
+  /// keeps this size so the scrim gradient never jumps.
+  static const double _chromeBlockHeight = kChromeBlockHeight;
 
   /// One continuous scrim for the whole chrome block — strong at the very
   /// top (caption buttons), melting away at the block's bottom edge so the
@@ -81,13 +92,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     // Follow title bar mode changes made from the settings window.
-    // (`titleBarMode` is a [ValueNotifier], so it is listened to with
-    // addListener/removeListener — it is not a stream.)
     _settings.titleBarMode.addListener(_onTitleBarModeChanged);
     // While transient UI (open pill, URL modal) is up, the chrome must
     // not auto-hide beneath it; when the last lock releases, restart the
     // countdown fresh.
     ChromeLock.instance.listenable.addListener(_onChromeLockChanged);
+    // Pin-mode rule: when playback stops or pauses, the pinned chrome
+    // must come up (a keypress must never kill a pinned chrome).
+    _player.transportState.addListener(_onTransportStateChanged);
     _restartHideTimer();
 
     // Play the file the app was launched with, if any.
@@ -104,10 +116,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _hideTimer?.cancel();
     _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
     ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
+    _player.transportState.removeListener(_onTransportStateChanged);
     super.dispose();
   }
 
-  // ── Auto-hide logic (Phase 1 · Step 4, extended for the controller) ───
+  // ── Auto-hide logic ───────────────────────────────────────────────────
 
   /// A new title bar mode was picked in the settings window — treat it as
   /// activity so the bar stays up for another 3 seconds under the new mode.
@@ -116,6 +129,15 @@ class _HomeScreenState extends State<HomeScreen> {
   /// A transient UI lock was acquired or released — wake the chrome and
   /// let the timer logic re-evaluate (it refuses to hide while locked).
   void _onChromeLockChanged() => _wakeChrome();
+
+  /// Transport-state transitions: in "Pin (playback off)" mode, leaving
+  /// `playing` (pause AND stop) must pin the chrome up.
+  void _onTransportStateChanged() {
+    if (_settings.titleBarMode.value == TitleBarMode.pinWhenPlaybackOff &&
+        _player.transportState.value != TransportState.playing) {
+      _wakeChrome();
+    }
+  }
 
   void _wakeChrome() {
     if (!_chromeVisible) setState(() => _chromeVisible = true);
@@ -167,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ── Settings window ─────────────────────────────────────────────────────
+  // ── Settings window ────────────────────────────────────────────────────
 
   void _openSettings() {
     _wakeChrome();
@@ -198,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Drag & drop (Phase 2 · Step 5) ────────────────────────────────────
+  // ── Drag & drop ────────────────────────────────────────────────────────
 
   Future<void> _onDropDone(DropDoneDetails details) async {
     setState(() => _dropHovering = false);
@@ -210,33 +232,87 @@ class _HomeScreenState extends State<HomeScreen> {
     await DropHandler.handleDroppedPaths(paths);
   }
 
-  // ── Keyboard transport (Phase 2 testing set) ──────────────────────────
+  // ── Keyboard (silent set — never printed anywhere; follow.md rule 2) ──
+  //
+  // Transport keys (Space, arrows, PgUp/PgDn, M, S) drive the OSD deck
+  // ONLY — they never wake the chrome. Esc only dismisses the Resume
+  // toast. Everything else is activity: the chrome reveals and the
+  // 3-second countdown restarts, so keyboard-only usage can't get locked
+  // out of the window controls.
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    // Any key press counts as activity: reveal the chrome and restart the
-    // 3-second countdown, so keyboard-only usage can't get locked out of
-    // the window controls.
-    _wakeChrome();
+    final bool down = event is KeyDownEvent;
+    final bool repeat = event is KeyRepeatEvent;
+    if (!down && !repeat) return KeyEventResult.ignored;
 
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final LogicalKeyboardKey key = event.logicalKey;
 
-    if (event.logicalKey == LogicalKeyboardKey.space) {
-      _player.playOrPause();
+    // Esc — dismisses the Resume toast (the only thing Esc owns here).
+    // With no toast up it is just another key: activity → chrome wakes.
+    if (key == LogicalKeyboardKey.escape) {
+      if (_osd.isResumeToast) {
+        _osd.dismiss();
+        return KeyEventResult.handled;
+      }
+      _wakeChrome();
+      return KeyEventResult.ignored;
+    }
+
+    // ── Transport keys: OSD only, no chrome wake ─────────────────────
+    if (key == LogicalKeyboardKey.space) {
+      TransportActions.instance.playOrPause();
       return KeyEventResult.handled;
     }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      TransportActions.instance.seekBackward();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      TransportActions.instance.seekForward();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      TransportActions.instance.volumeUp();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      TransportActions.instance.volumeDown();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyM) {
+      TransportActions.instance.toggleMute();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyS) {
+      TransportActions.instance.stop();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.pageUp) {
+      TransportActions.instance.previous();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.pageDown) {
+      TransportActions.instance.next();
+      return KeyEventResult.handled;
+    }
+
+    // ── Everything else: activity → reveal the chrome ────────────────
+    _wakeChrome();
+
+    if (!down) return KeyEventResult.ignored; // repeats never re-open UI
 
     // Silent open-media shortcuts (never printed anywhere in the UI —
     // follow.md hard rule 2).
     final bool ctrl = HardwareKeyboard.instance.isControlPressed;
-    if (ctrl && event.logicalKey == LogicalKeyboardKey.keyO) {
+    if (ctrl && key == LogicalKeyboardKey.keyO) {
       OpenMediaService.openFiles();
       return KeyEventResult.handled;
     }
-    if (ctrl && event.logicalKey == LogicalKeyboardKey.keyF) {
+    if (ctrl && key == LogicalKeyboardKey.keyF) {
       OpenMediaService.openFolder();
       return KeyEventResult.handled;
     }
-    if (ctrl && event.logicalKey == LogicalKeyboardKey.keyU) {
+    if (ctrl && key == LogicalKeyboardKey.keyU) {
       showOpenUrlDialog(context);
       return KeyEventResult.handled;
     }
@@ -264,10 +340,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: <Widget>[
-                // 1 · The video canvas, stretching edge-to-edge.
+                // 1 · The video canvas, stretching edge-to-edge. A tap
+                //     goes through the transport facade: pause while
+                //     playing, play while paused, RESUME while stopped.
                 GestureDetector(
                   behavior: HitTestBehavior.translucent,
-                  onTap: _player.playOrPause,
+                  onTap: TransportActions.instance.playOrPause,
                   child: const VideoScreen(),
                 ),
 
@@ -275,13 +353,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 _DropOverlay(visible: _dropHovering),
 
                 // 3 · The auto-hide hairline — appears at the very bottom
-                // when the chrome hides. Display only: not clickable, not
-                // draggable, no hover action, no tooltip.
-                _AutoHideProgress(visible: !chromeVisible),
+                //     when the chrome hides, and disappears entirely
+                //     while STOPPED or idle (a parked queue — or no
+                //     queue at all — has no progress to draw).
+                _AutoHideProgress(chromeHidden: !chromeVisible),
 
                 // 4 · The unified top chrome — title bar + controller as a
-                // single fused glass block (one gradient, one animation).
+                //     single fused glass block (one gradient, one motion).
                 _buildTopChrome(chromeVisible),
+
+                // 5 · Resume-toast click-outside: dismiss ONLY — never
+                //     triggers Restart, never swallows the click (the
+                //     translucent listener lets everything beneath keep
+                //     working). Sits under the deck, so a click on the
+                //     toast itself never lands here.
+                ValueListenableBuilder<OsdCard?>(
+                  valueListenable: _osd.current,
+                  builder: (BuildContext context, OsdCard? card, Widget? _) {
+                    if (card is! OsdResumeCard) return const SizedBox.shrink();
+                    return Positioned.fill(
+                      child: Listener(
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: (_) => _osd.dismiss(),
+                      ),
+                    );
+                  },
+                ),
+
+                // 6 · The OSD deck — top center, anchored below the
+                //     chrome block, never waking the chrome.
+                const OsdDeck(),
               ],
             ),
           ),
@@ -336,7 +437,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: <Widget>[
                       // The invisible-until-activity title bar
                       // (immersive: paints no scrim and animates
-                      // nothing — this block owns both).
+                      // nothing — this block owns both). While STOPPED
+                      // the title reads SALU (currentTitle is null) —
+                      // the parked item's name returns on Play.
                       ValueListenableBuilder<String?>(
                         valueListenable: _player.currentTitle,
                         builder: (BuildContext context, String? title,
@@ -369,14 +472,16 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 /// The hairline progress bar shown at the window's bottom edge while the
-/// chrome is auto-hidden.
+/// chrome is auto-hidden. Hidden entirely while STOPPED (and while idle)
+/// — a parked queue has no progress to draw.
 ///
 /// Purely informational: renders only the filled progress (edge to edge),
 /// never receives pointer events, and offers no hover/tooltip/click action.
 class _AutoHideProgress extends StatelessWidget {
-  const _AutoHideProgress({required this.visible});
+  const _AutoHideProgress({required this.chromeHidden});
 
-  final bool visible;
+  /// Whether the chrome is currently hidden (the hairline's slot).
+  final bool chromeHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -398,6 +503,7 @@ class _AutoHideProgress extends StatelessWidget {
             listenable: Listenable.merge(<Listenable>[
               player.position,
               player.duration,
+              player.transportState,
             ]),
             builder: (BuildContext context, Widget? _) {
               final Duration dur = player.duration.value;
@@ -429,6 +535,20 @@ class _AutoHideProgress extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Live only while an item actually plays or pauses — stopped/idle
+  /// hides it even if the chrome is hidden.
+  bool get visible {
+    if (!chromeHidden) return false;
+    switch (PlayerService.instance.transportState.value) {
+      case TransportState.playing:
+      case TransportState.paused:
+        return true;
+      case TransportState.idle:
+      case TransportState.stopped:
+        return false;
+    }
   }
 }
 
