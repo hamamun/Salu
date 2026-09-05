@@ -16,18 +16,22 @@ import 'ui/screens/home_screen.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Phase 2 · Step 2: boot the mpv C++ engine before any UI draws. ────
-  MediaKit.ensureInitialized();
-
   // ── Phase 1 · Step 6: strict single instance + file argument routing. ─
   // If SALU is already running and the user double-clicks a media file,
   // Windows launches a second process; its arguments are intercepted here,
   // forwarded to the live window, and the duplicate process exits.
+  //
+  // The check runs BEFORE the mpv engine boots: a duplicate process only
+  // forwards its path, so it must never pay for a libmpv startup.
   if (Platform.isWindows) {
     await WindowsSingleInstance.ensureSingleInstance(
       args,
       'salu_media_player_instance',
       onSecondWindow: (List<String> secondArgs) async {
+        // The pipe can deliver a path while this process is still
+        // booting — make sure the window handle is known before
+        // showing/focusing.
+        await windowManager.ensureInitialized();
         await windowManager.show();
         await windowManager.focus();
         final String? path = extractMediaPathFromArgs(secondArgs);
@@ -37,6 +41,10 @@ Future<void> main(List<String> args) async {
       },
     );
   }
+
+  // ── Phase 2 · Step 2: boot the mpv C++ engine before any UI draws. ────
+  // (First instance only — a duplicate already exited above.)
+  MediaKit.ensureInitialized();
 
   // ── Phase 1 · Step 2: borderless, centered, dark window. ─────────────
   await windowManager.ensureInitialized();
@@ -77,17 +85,26 @@ Future<void> main(List<String> args) async {
 /// position is flushed to disk there is no need to dispose the video
 /// surface or the mpv engine — the OS reclaims everything when the
 /// process dies.
+///
+/// Every bookkeeping step is guarded: the close is intercepted
+/// (`setPreventClose`), so if [exit] is ever skipped the window would
+/// be left open with no way to close it. `exit(0)` must be reached no
+/// matter what.
 class _CloseGuard with WindowListener {
   @override
   void onWindowClose() async {
-    final PlayerService player = PlayerService.instance;
-    final String? path = player.currentPath.value;
-    if (path != null && player.duration.value > Duration.zero) {
-      ResumeService.instance.update(
-        path,
-        player.position.value,
-        player.duration.value,
-      );
+    try {
+      final PlayerService player = PlayerService.instance;
+      final String? path = player.currentPath.value;
+      if (path != null && player.duration.value > Duration.zero) {
+        ResumeService.instance.update(
+          path,
+          player.position.value,
+          player.duration.value,
+        );
+      }
+    } catch (_) {
+      // Resume bookkeeping must never block the close.
     }
     try {
       await ResumeService.instance.flush().timeout(
