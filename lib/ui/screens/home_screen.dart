@@ -5,10 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/drop_handler.dart';
+import '../../core/open_media_service.dart';
 import '../../core/player_service.dart';
 import '../../core/settings_service.dart';
+import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart';
+import '../osc/open_url_dialog.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/settings_dialog.dart';
 import 'video_screen.dart';
@@ -81,6 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // (`titleBarMode` is a [ValueNotifier], so it is listened to with
     // addListener/removeListener — it is not a stream.)
     _settings.titleBarMode.addListener(_onTitleBarModeChanged);
+    // While transient UI (open pill, URL modal) is up, the chrome must
+    // not auto-hide beneath it; when the last lock releases, restart the
+    // countdown fresh.
+    ChromeLock.instance.listenable.addListener(_onChromeLockChanged);
     _restartHideTimer();
 
     // Play the file the app was launched with, if any.
@@ -96,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _hideTimer?.cancel();
     _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
+    ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
     super.dispose();
   }
 
@@ -104,6 +112,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// A new title bar mode was picked in the settings window — treat it as
   /// activity so the bar stays up for another 3 seconds under the new mode.
   void _onTitleBarModeChanged() => _wakeChrome();
+
+  /// A transient UI lock was acquired or released — wake the chrome and
+  /// let the timer logic re-evaluate (it refuses to hide while locked).
+  void _onChromeLockChanged() => _wakeChrome();
 
   void _wakeChrome() {
     if (!_chromeVisible) setState(() => _chromeVisible = true);
@@ -134,6 +146,10 @@ class _HomeScreenState extends State<HomeScreen> {
       // While the pointer is inside the chrome (using the controls) the
       // block stays up; the countdown really starts on exit.
       if (_chromeHovered) return;
+
+      // Transient UI (open pill, URL modal) is showing — never hide the
+      // chrome beneath it. The lock's release listener restarts the timer.
+      if (ChromeLock.instance.isLocked) return;
 
       // Auto-hide decision after 3s without mouse movement or key presses,
       // per the selected mode (General → Controls in the settings window).
@@ -202,9 +218,26 @@ class _HomeScreenState extends State<HomeScreen> {
     // the window controls.
     _wakeChrome();
 
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.space) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.space) {
       _player.playOrPause();
+      return KeyEventResult.handled;
+    }
+
+    // Silent open-media shortcuts (never printed anywhere in the UI —
+    // follow.md hard rule 2).
+    final bool ctrl = HardwareKeyboard.instance.isControlPressed;
+    if (ctrl && event.logicalKey == LogicalKeyboardKey.keyO) {
+      OpenMediaService.openFiles();
+      return KeyEventResult.handled;
+    }
+    if (ctrl && event.logicalKey == LogicalKeyboardKey.keyF) {
+      OpenMediaService.openFolder();
+      return KeyEventResult.handled;
+    }
+    if (ctrl && event.logicalKey == LogicalKeyboardKey.keyU) {
+      showOpenUrlDialog(context);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

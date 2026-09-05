@@ -40,7 +40,7 @@ class DropHandler {
     final List<String> mediaPaths = <String>[];
     for (final String path in paths) {
       if (FileSystemEntity.isDirectorySync(path)) {
-        mediaPaths.addAll(_scanFolderForMedia(path));
+        mediaPaths.addAll(scanFolderForMedia(path));
       } else if (MediaUtils.isMedia(path) || MediaUtils.isPlaylist(path)) {
         mediaPaths.add(path);
       }
@@ -63,8 +63,9 @@ class DropHandler {
   }
 
   /// Shallow-scans a folder for playable media, alphabetically sorted.
+  /// Shared by drag-and-drop and the Open Folder… picker.
   /// (Natural episode-order sorting arrives with Phase 5's smart queue.)
-  static List<String> _scanFolderForMedia(String folderPath) {
+  static List<String> scanFolderForMedia(String folderPath) {
     try {
       final List<String> found = Directory(folderPath)
           .listSync()

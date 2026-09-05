@@ -26,6 +26,12 @@ dependencies:
   # (APIs verified compatible across 0.4.x–0.8.x.)
   desktop_drop: ">=0.4.4 <0.9.0"
 
+  # ── Open Media control ───────────────────────────────────────────────────
+  # Native Windows explorer dialogs (Open File… / Open Folder…). The
+  # flutter.dev-maintained picker — its Windows backend is pure C++, so it
+  # adds no Dart-side win32 version constraints.
+  file_selector: ^1.0.3
+
   # ── Settings & persistence ──────────────────────────────────────────────
   # Lightweight key-value storage for settings (title bar mode, …).
   shared_preferences: ^2.3.0

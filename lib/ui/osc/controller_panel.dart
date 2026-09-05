@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/player_service.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/salu_icon_button.dart';
 import 'media_timeline.dart';
+import 'open_media_control.dart';
 
 /// SALU's on-screen controller container.
 ///
@@ -11,9 +13,11 @@ import 'media_timeline.dart';
 /// own — the fused parent block (HomeScreen's top chrome) supplies one
 /// continuous scrim behind both, edge to edge.
 ///
-/// Layout, top to bottom:
-///   · the unified media timeline (identical for video and audio)
-///   · the control cluster — play/pause, mute and the volume bar
+/// Layout, top to bottom (follow.md · §5 — rows never shift):
+///   · Row 1 — the unified media timeline (identical for video and audio)
+///   · Row 2 — the control row. Its one finalized item is the Open Media
+///     control at the very left; the existing play/pause + mute + volume
+///     stay centered until each is redesigned in its own step.
 ///
 /// The row below the timeline keeps a fixed height: hover popups from the
 /// timeline float OVER it, nothing is ever pushed or shifted.
@@ -36,18 +40,30 @@ class ControllerPanel extends StatelessWidget {
         children: <Widget>[
           // Row 1 · the timeline (bar + floating hover chip in its box).
           const MediaTimeline(),
-          // Row 2 · transport cluster (fixed height, never pushed).
+          // Row 2 · the control row (fixed height, never pushed).
           const SizedBox(height: 8),
           SizedBox(
             height: 36,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Stack(
+              alignment: Alignment.center,
               children: <Widget>[
-                _PlayPauseButton(player: player),
-                const SizedBox(width: 26),
-                _MuteButton(player: player),
-                const SizedBox(width: 6),
-                const _VolumeBar(width: 120),
+                // Left zone · the Open Media control (plus → pill).
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: OpenMediaControl(),
+                ),
+                // Center zone · transport (interim — each control gets
+                // its own design step later).
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    _PlayPauseButton(player: player),
+                    const SizedBox(width: 26),
+                    _MuteButton(player: player),
+                    const SizedBox(width: 6),
+                    const _VolumeBar(width: 120),
+                  ],
+                ),
               ],
             ),
           ),
@@ -57,7 +73,7 @@ class ControllerPanel extends StatelessWidget {
   }
 }
 
-/// Play / pause toggle.
+/// Play / pause toggle (SALU icon recipe — lights up, never boxed).
 class _PlayPauseButton extends StatelessWidget {
   const _PlayPauseButton({required this.player});
 
@@ -68,13 +84,14 @@ class _PlayPauseButton extends StatelessWidget {
     return ListenableBuilder(
       listenable: player.isPlaying,
       builder: (BuildContext context, Widget? _) {
-        return Tooltip(
-          message: 'Play / Pause (Space)',
-          child: _IconControl(
-            onTap: player.playOrPause,
-            icon: player.isPlaying.value
+        return SaluIconButton(
+          tooltip: 'Play / Pause',
+          onTap: player.playOrPause,
+          child: Icon(
+            player.isPlaying.value
                 ? Icons.pause_rounded
                 : Icons.play_arrow_rounded,
+            size: 21,
           ),
         );
       },
@@ -97,59 +114,19 @@ class _MuteButton extends StatelessWidget {
       ]),
       builder: (BuildContext context, Widget? _) {
         final bool silent = player.isMuted.value || player.volumeLevel.value < 1;
-        return Tooltip(
-          message: player.isMuted.value ? 'Unmute' : 'Mute',
-          child: _IconControl(
-            onTap: player.toggleMute,
-            icon: silent
+        return SaluIconButton(
+          tooltip: player.isMuted.value ? 'Unmute' : 'Mute',
+          onTap: player.toggleMute,
+          child: Icon(
+            silent
                 ? Icons.volume_off_rounded
                 : (player.volumeLevel.value < 50
                     ? Icons.volume_down_rounded
                     : Icons.volume_up_rounded),
+            size: 21,
           ),
         );
       },
-    );
-  }
-}
-
-/// A single round-hover icon button (monochrome, splash-free).
-class _IconControl extends StatefulWidget {
-  const _IconControl({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  State<_IconControl> createState() => _IconControlState();
-}
-
-class _IconControlState extends State<_IconControl> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.captionButtonHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            widget.icon,
-            size: 21,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ),
     );
   }
 }
