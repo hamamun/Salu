@@ -9,34 +9,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum UrlHealth { unknown, alive, dead }
 
 /// One saved stream URL.
+///
+/// There is no "hidden" flag: the row-hide (eye) action was removed by
+/// owner decision — with at most seven entries, drag-reorder already
+/// covers "push the one I rarely use to the bottom". Legacy `hidden`
+/// keys left in `shared_preferences` are simply ignored on load.
 @immutable
 class SavedUrl {
   const SavedUrl({
     required this.name,
     required this.url,
-    this.hidden = false,
     this.health = UrlHealth.unknown,
   });
 
   final String name;
   final String url;
 
-  /// Hidden rows sink to the bottom of the list at low opacity —
-  /// visually asleep, still clickable.
-  final bool hidden;
-
   final UrlHealth health;
 
   SavedUrl copyWith({
     String? name,
     String? url,
-    bool? hidden,
     UrlHealth? health,
   }) {
     return SavedUrl(
       name: name ?? this.name,
       url: url ?? this.url,
-      hidden: hidden ?? this.hidden,
       health: health ?? this.health,
     );
   }
@@ -44,7 +42,6 @@ class SavedUrl {
   Map<String, Object?> toJson() => <String, Object?>{
         'name': name,
         'url': url,
-        'hidden': hidden,
         'health': health.name,
       };
 
@@ -53,12 +50,10 @@ class SavedUrl {
     final Object? url = raw['url'];
     if (url is! String || url.isEmpty) return null;
     final Object? name = raw['name'];
-    final Object? hidden = raw['hidden'];
     final Object? health = raw['health'];
     return SavedUrl(
       name: (name is String && name.isNotEmpty) ? name : url,
       url: url,
-      hidden: hidden is bool && hidden,
       health: health is String
           ? (UrlHealth.values.asNameMap()[health] ?? UrlHealth.unknown)
           : UrlHealth.unknown,
@@ -69,8 +64,8 @@ class SavedUrl {
 /// SALU's saved stream URLs — at most [maxEntries], persisted instantly to
 /// `shared_preferences` as one JSON list (follow.md: no databases).
 ///
-/// The service is pure data: ordering, hiding, health flags. All visual
-/// rules (hover actions, undo toast, dimming Save at 7/7) live in the UI.
+/// The service is pure data: ordering and health flags. All visual rules
+/// (hover actions, undo toast, dimming Save at 7/7) live in the UI.
 class UrlLibraryService {
   UrlLibraryService._internal();
 
@@ -183,13 +178,6 @@ class UrlLibraryService {
     if (from < 0 || from >= list.length) return;
     final SavedUrl item = list.removeAt(from);
     list.insert(to.clamp(0, list.length).toInt(), item);
-    _set(list);
-  }
-
-  void toggleHidden(int index) {
-    final List<SavedUrl> list = List<SavedUrl>.of(entries.value);
-    if (index < 0 || index >= list.length) return;
-    list[index] = list[index].copyWith(hidden: !list[index].hidden);
     _set(list);
   }
 

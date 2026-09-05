@@ -25,10 +25,16 @@
    resize or reflow the container.
 6. **Custom SALU icon family, not stock icons, for signature controls.**
    Thin, monochrome, geometric marks drawn in the same stroke language as
-   the existing dot-grid settings mark (`DotGridIcon`). Current family:
+   the existing dot-grid settings mark (`DotGridIcon`). Current family
+   (`lib/ui/widgets/salu_marks.dart`):
    - six dots = Settings
    - thin **+** = Open media (rotates 45° to **×** while its menu is open)
    - film frame = Open File · stacked frames = Open Folder · link = Open URL
+   - solid triangle = Play · triangle + tag = Play & Save
+   - pencil = Edit · bin = Delete · tick = Done · three rules (≡) = drag handle
+   **No text buttons for actions.** An action is a mark plus a hover-delay
+   tooltip; emphasis is carried by the mark itself (solid = primary,
+   hollow = secondary), never by a filled button behind it.
 7. **Colors/typography:** deep dark grays (#121212/#1E1E1E, never pure
    black), Segoe UI Variable only, monochrome icons. All colors come from
    `AppColors` in `lib/theme/app_theme.dart`.
@@ -94,27 +100,29 @@ Tooltips on hover-delay only. No text rows, no shortcut labels.
 (Recent-items area: later phase, silent, no labels.)
 
 **Level 2 — the Open URL modal (glass, centered):**
-- ONE input on top. Two actions: **Play** and **Play & Save**. Paste → play
-  immediately; saving is optional. Never block playing.
+- ONE input on top. Its two actions ride **inside the field's right edge**
+  as marks — ▶ solid = **Play**, ▶ + tag = **Play & Save** (tooltips only,
+  no labels, no button row). Paste → play immediately; saving is optional.
+  Never block playing.
 - **Clipboard auto-fill:** on open, if the clipboard holds a URL-looking
   string (`http…`, `.m3u`, `.m3u8`), pre-fill it, fully selected — Enter
   plays instantly.
 - **Saved list, max 7.** Row anatomy: `≡ drag-handle · ● status dot · name`,
-  and on hover only: 👁 hide · ✎ edit · 🗑 delete (fade in on the right).
+  and on hover only: ✎ edit · 🗑 delete (fade in on the right).
 - Click a row = plays it. No "select then load".
 - **Status dots:** green = last play attempt succeeded, red = last attempt
   failed, gray = never tried / unknown.
-- **Hide:** hidden rows fall to the bottom at 40 % opacity. Still clickable.
 - **Edit is inline** — the row itself becomes name + URL fields. No second
   dialog.
 - **Delete:** instant + 5-second Undo toast inside the modal.
 - **Reorder:** drag by the handle (no up/down arrow buttons).
-- **7/7 full:** "Play & Save" dims (tooltip states list is full); plain
+- **7/7 full:** the Play & Save mark dims (tooltip: "List full"); plain
   Play always works.
-- **Keyboard:** Enter = play input/selected row · Esc = close · ↑↓ = walk
-  the list. Nothing about this is written in the UI.
-- Persistence: `shared_preferences`, JSON list (name, url, hidden, status),
-  via `UrlLibraryService` (`lib/core/url_library_service.dart`).
+- **Keyboard:** Enter = play input/selected row · Ctrl+Enter = play & save
+  the input · Esc = close · ↑↓ = walk the list. Nothing about this is
+  written in the UI.
+- Persistence: `shared_preferences`, JSON list (name, url, status), via
+  `UrlLibraryService` (`lib/core/url_library_service.dart`).
 
 **Chrome interplay:** while the pill or the modal is open, the top chrome
 must not auto-hide.
@@ -137,5 +145,10 @@ must not auto-hide.
 - **Web/browser (webview2), bookmarks (15), and the Stream Library panel
   are POSTPONED** — they are not mpv work and will be designed separately.
   The Open control deals only with: file, folder, direct URL (+ saved 7).
+- **The row hide (eye) action is REMOVED and must not come back.** With a
+  seven-item list, drag-reorder already covers "push the one I rarely use
+  to the bottom"; a crossed-out eye that leaves the row fully visible
+  promises something it does not do. Rows have exactly two hover actions:
+  edit and delete.
 - No hardware media key support. Single instance only. Windows 10/11.
 - Storage is `shared_preferences` only — no databases.
