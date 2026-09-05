@@ -178,12 +178,12 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
     setState(() => _lastRemoved = null);
   }
 
+  // `newDisplay` already accounts for the removal of the dragged item at
+  // `oldDisplay` (onReorderItem semantics — no manual index shift needed).
   void _onReorder(int oldDisplay, int newDisplay) {
     final List<int> order = _displayIndices;
     if (oldDisplay < 0 || oldDisplay >= order.length) return;
-    int target = newDisplay;
-    if (target > oldDisplay) target -= 1;
-    target = target.clamp(0, order.length - 1).toInt();
+    final int target = newDisplay.clamp(0, order.length - 1).toInt();
     _library.move(order[oldDisplay], order[target]);
     setState(() => _cursor = -1);
   }
@@ -339,7 +339,7 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
       buildDefaultDragHandles: false,
       padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: order.length,
-      onReorder: _onReorder,
+      onReorderItem: _onReorder,
       proxyDecorator:
           (Widget child, int index, Animation<double> animation) {
         return Material(color: Colors.transparent, child: child);
