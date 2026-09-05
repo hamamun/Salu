@@ -601,6 +601,20 @@ class PlayerService {
 
   Future<void> setVolume(double volume) => player.setVolume(volume);
 
+  /// Load an external subtitle file (SRT/ASS/etc.) onto the current media.
+  Future<void> loadExternalSubtitle(String path) async {
+    String normalized = path.replaceAll('\\', '/');
+    final String uri = path.contains('://')
+        ? path
+        : Uri.file(normalized).toString();
+    await player.setSubtitleTrack(
+      SubtitleTrack.uri(
+        uri,
+        title: MediaUtils.displayName(path),
+      ),
+    );
+  }
+
   // ── Hardware acceleration check (Phase 2 requirement) ────────────────
 
   /// Queries mpv for the decoder that is actually active right now.

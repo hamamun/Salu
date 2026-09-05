@@ -2,7 +2,6 @@ import 'package:flutter/gestures.dart'
     show
         PointerCancelEvent,
         PointerDownEvent,
-        PointerExitEvent,
         PointerHoverEvent,
         PointerMoveEvent,
         PointerScrollEvent,
