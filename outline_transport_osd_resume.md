@@ -17,7 +17,7 @@
 | Chrome block | 40 px title bar + 108 px controller = **148 px**, fused scrim, slide/fade 300 ms, auto-hide 3 s | `home_screen.dart` (`_chromeBlockHeight`, private) |
 | Controller rows | Row 1 timeline (48 px box, 23 px bar) · 8 px · Row 2 control row (36 px) | `controller_panel.dart` |
 | Row 2 content | left `OpenMediaControl` · center stock `Icons.play_arrow/pause`, stock speaker icons, 120×6 px volume bar with no label | `controller_panel.dart` |
-| Player API | `playOrPause / play / pause / seekTo / seekBy / toggleMute / setVolumeUI`; notifiers `position duration volumeLevel isMuted isPlaying hasMedia currentTitle` — **no stop, no next/previous, no playlist index, no current path** | `player_service.dart` |
+| Player API | `playOrPause / play / pause / seekTo / seekBy / toggleMute / setVolumeUI`; notifiers `position duration volumeLevel isMuted isPlaying hasMedia currentTitle` — **no stop state, no next/previous, no SALU-owned queue (mpv holds the playlist), no current path** | `player_service.dart` |
 | Settings | one setting: `titleBarMode` (radio tiles in General → "Controls") | `settings_service.dart`, `settings_dialog.dart` |
 | Icon family | plus, film frame, stacked frames, link, solid triangle (URL modal), triangle+tag, pencil, bin, tick, grip | `salu_marks.dart` |
 | Icon recipe | `SaluIconButton` (gray→white glide, 1.06 hover, 0.90 press, `enabled:false` dims) | `salu_icon_button.dart` |
@@ -88,10 +88,12 @@ URL modal keeps its triangle pair. `follow.md` §1.6 gets both listed.
   **26 px** before the sound group, 6 px between speaker and bar.
 - `>` ↔ `II` swap with the shared motion (fade + 0.96→1.0, 130 ms) — no
   morphing gimmick.
-- Disabled states use `SaluIconButton(enabled:false)` (dims, never boxes):
-  everything but `+` and the sound group dims while `hasMedia == false`;
-  `>>|` dims when there is no next item (single file = always dim: honest).
-  `|<<` never dims (it can always restart the current item).
+- Disabled states use `SaluIconButton(enabled:false)` (dims, never boxes)
+  and follow the **enable matrix** under "Stop — the third state" below:
+  with no queue only `+` and the sound group are live; while **stopped**,
+  Stop and both Seeks dim but Prev / Next / Play stay on; `>>|` dims
+  whenever there is no next item (single file = always dim: honest);
+  `|<<` never dims while a queue exists (it can always restart the item).
 - Row height stays 36; nothing shifts (hard rule 5).
 
 **▸ confirm 2 — Stop placement.** Right end of the cluster with the wider
@@ -111,25 +113,102 @@ directly (bars have their own live readout — no deck for them).
 
 | Action | Player behavior | OSD card (see §4) |
 |---|---|---|
-| Play / Pause | `playOrPause()` | `>` or `II` |
-| Stop | **unload**: save resume position → `player.stop()` → `hasMedia=false`, `currentTitle=null`, position/duration → 0, window title "SALU" → empty state shows | none (the screen change is the feedback) |
-| Previous | position > 3 s → `seekTo(0)` (restart item); else `player.previous()` | `\|<<` + item title (or `00:00:00` on restart) |
-| Next | `player.next()` (only when a next item exists) | `>>\|` + item title |
+| Play / Pause | playing ⇄ paused: `playOrPause()` · **stopped → Play resumes the current item from the stop memory** (see "Stop — the third state") | `>` or `II` · after Stop: the Resume toast instead (§5) |
+| Stop | **third state (locked)** — the engine releases the item, the queue stays loaded, SALU remembers the exact position; canvas → initial SALU window | none (the canvas change is the feedback) |
+| Previous | one rule in every state: position (stop memory when stopped) > 3 s, or first item → plays *this* item from `0:00`; else plays the previous item | `\|<<` + item title (or `00:00:00` on restart) |
+| Next | plays the next item — dimmed when there is none; identical in every state | `>>\|` + item title |
 | Seek ± | **seek ramp** (locked — see below): `+5 s`, then `+10 s`, `+15 s`, `+20 s`… while the clicks keep coming; a gap resets to `+5 s`; press-and-hold keeps the sequence firing; `<<` is the exact mirror | `<<` / `>>` + the step just applied + new time — `>>  +15s  01:12:34` |
 | Volume ± | `setVolumeUI(level ± 5)` (unmutes) | speaker + bar + `%` |
 | Mute | `toggleMute()` | speaker-slash + empty bar + `0%` / restored level |
 
+### Stop — the third state (locked: **Stop ≠ Start Over**)
+
+Transport has three states, not two: **playing · paused · stopped**
+(plus *idle* = nothing loaded at all). Stop is neither "pause" nor
+"start over" — it is a parked queue.
+
+**Stop does:**
+- **Not** clear the queue. Every item stays loaded, the index stays put.
+- Release the item in the engine and clear the canvas → the **initial SALU
+  window** (logo + wordmark); title bar reads `SALU`, window title `SALU`.
+- Reset the timeline to `00:00:00 / 00:00:00`, empty fill, inert. The
+  bottom progress hairline disappears (and does not come back while the
+  chrome is hidden — there is no progress to draw).
+- Remember the exact last position internally (`stopMemory`: path,
+  position, duration) *and* flush it to the resume store on disk, so a
+  close after a Stop still remembers.
+- Keep **Prev / Next / Play** enabled (the queue is still there). **Stop
+  and Seek dim** until you play again. **Mute + volume stay enabled.**
+
+**Play again after Stop:**
+- Starts from the **last played position**, not `0:00`.
+- Shows the short-lived **Resume toast** (§5): play mark · the time you
+  resumed at (`12:34`) · the **Restart** action → `0:00` and plays from
+  the beginning.
+- Same threshold as the disk memory: a stop memory under `5 s`, or inside
+  the last `10 s` of the file, or on a live stream (no duration) → Play
+  simply starts the item from the beginning with the plain `>` card, no
+  toast. One rule for both memories (§5).
+- The in-session stop memory is part of the Stop *state* — it applies
+  regardless of the Settings → Resume mode. The mode governs what is
+  remembered **across** sessions (disk), nothing else.
+
+**Prev / Next while stopped** behave exactly as they do while playing,
+one rule in every state: `|<<` → if position (here: the stop memory)
+> 3 s or this is the first item → plays *this* item from `0:00`, else
+plays the previous item; `>>|` → plays the next item (dimmed when there is
+none). An item entered this way follows the normal open path — if the disk
+remembers it, it resumes with the toast.
+
+**Enable matrix** (the cluster reads one `TransportState` notifier):
+
+| control | idle (no queue) | stopped | paused | playing |
+|---|---|---|---|---|
+| `+` open | on | on | on | on |
+| `\|<<` previous | off | on | on | on |
+| `<<` seek back | off | **off** | on | on |
+| `>` / `II` | off | on (`>`) | on (`>`) | on (`II`) |
+| `>>` seek forward | off | **off** | on | on |
+| `>>\|` next | off | has next | has next | has next |
+| `□` stop | off | **off** | on | on |
+| speaker + volume bar | on | on | on | on |
+| timeline | inert | inert, zeros | live | live |
+| bottom hairline | — | hidden | when chrome hidden | when chrome hidden |
+| video-canvas tap | — | play (resume) | play | pause |
+| `Space` / `S` / `←→` / `PgUp PgDn` | — | play / — / — / prev next | all | all |
+| Resume toast on Play | — | yes (stop memory) | — | — |
+
+**Architecture consequence — SALU owns the queue.** media_kit's
+`Player.stop()` clears the engine's own playlist, so a queue that survives
+Stop has to live above the engine: new `lib/core/queue_service.dart`
+(`paths`, `index`, `hasNext`, `hasPrevious`) is the source of truth for
+the UI; `PlayerService` still hands mpv the full playlist while playing
+(so mpv's native auto-advance and gapless audio stay), mirrors mpv's
+index into the queue while an item is loaded, and after a Stop re-opens
+the queue at the target index (`Playlist(medias, index:)` with the
+current item's `Media(start:)` carrying the stop memory). This is the
+same queue the Phase 4 playlist panel and Phase 5 smart queuing will read.
+
 `PlayerService` additions: `stop()`, `next()`, `previous()`,
-`stepVolume()`, `currentPath` (from the playlist stream), `playlistIndex`,
-`playlistCount`, `hasNext`; `isPlaying` unchanged.
+`playFromStop()`, `stepVolume()`, `currentPath`, `transportState`
+(`idle · stopped · paused · playing`), `stopMemory`; `hasMedia` now means
+"the engine holds an item" (false after Stop — that is what shows the
+landing screen), the new `QueueService` answers "is anything loaded".
 
 Pitfall to verify on device: `Player.stop()` in media_kit 1.2.6 resets its
 state object — if the volume stream re-emits `100` after stop, re-apply
-`volumeLevel` right after. The stale last frame behind the empty state is
-already covered (the `_EmptyState` container is opaque).
+`volumeLevel` right after. The stale last frame is already covered (the
+`_EmptyState` container is opaque).
 
-**▸ confirm 4 — Stop = full unload back to the SALU landing screen**
-(recommended; a "soft stop" is just `|<<` + pause).
+Housekeeping that comes with it: the landing screen still carries the
+Phase-2 line *"Drop a video or audio file anywhere to start playing"*,
+which breaks `follow.md` hard rule 1 (no instruction text). Since Stop now
+lands people there routinely, Step B trims it to logo + wordmark.
+
+**▸ confirm 4 — title bar while stopped reads `SALU`** (the literal
+"initial window"). Alternative: keep the parked item's name in the title
+bar so you can see what Play will resume. *(rec: `SALU` — the toast names
+the moment, the title returns the instant you press Play.)*
 
 ### Seek behavior (locked)
 
@@ -173,11 +252,11 @@ cannot be silently "simplified" to a fixed step later.
 
 | Key | Action |
 |---|---|
-| Space | play / pause |
+| Space | play / pause — while stopped: play (resumes from the stop memory) |
 | ← / → | seek back / forward — the seek ramp above (`5 s, 10 s, 15 s…`; hold the key to keep climbing) |
 | ↑ / ↓ | volume +5 / −5 |
 | M | mute toggle |
-| S | stop |
+| S | stop (no-op while stopped or idle) |
 | Page Up / Page Down | previous / next item |
 | Esc | dismiss the Resume toast |
 | Ctrl+O / Ctrl+F / Ctrl+U | (existing) open file / folder / URL |
@@ -187,8 +266,8 @@ reveals the chrome; with the deck in place, transport keys show *only* the
 OSD (that is the whole point of the "controller hidden" slot). All other
 keys keep waking the chrome. One consequence handled: in **Pin (playback
 off)** mode, pausing from the keyboard must still pin the chrome — so
-`HomeScreen` listens to `isPlaying` and wakes the chrome when playback
-stops in that mode.
+`HomeScreen` listens to `transportState` and wakes the chrome whenever it
+leaves `playing` (pause *and* stop) in that mode.
 
 ---
 
@@ -276,7 +355,8 @@ no collision possible; the video's visual center is never touched.
 
 Rules:
 - One slot — the latest card replaces whatever is up (a transport action
-  while the Resume toast shows dismisses the toast; you've started watching).
+  while the Resume toast shows dismisses the toast; you've started watching
+  — except Stop, which dismisses it *and* parks the item where it was).
 - Discrete actions (buttons, keys, video tap) flash the deck; **bars never
   do** (timeline & volume bar already show their live chip).
 - The deck **never wakes the chrome** and never takes focus.
@@ -295,6 +375,17 @@ Files: `lib/ui/osd/osd_controller.dart` (singleton `ValueNotifier<OsdCard?>`
 
 ## 5. Resume memory (remember position)
 
+Two memories, one rule, one toast:
+
+| memory | lives | filled by | consumed by | governed by |
+|---|---|---|---|---|
+| **Stop memory** | in session (`PlayerService.stopMemory`) | `□` Stop | Play / Space / canvas tap while stopped | nothing — part of the Stop state |
+| **Disk memory** | `shared_preferences` | every play (throttled) + pause / stop / switch / close | `openPath / openPaths` on any later open | Settings → Resume mode (§6) |
+
+Both use the same keep-threshold (`5 s ≤ position ≤ duration − 10 s`, local
+files only) and both surface through the same Resume toast — the user never
+sees two systems, just "SALU picks up where I stopped".
+
 ### Engine — `lib/core/resume_service.dart`
 - Storage: `shared_preferences`, one JSON map under `resume_positions`:
   `{"<absolute path>": [posMs, durMs, updatedEpochMs]}`. Local files only
@@ -309,15 +400,17 @@ Files: `lib/ui/osd/osd_controller.dart` (singleton `ValueNotifier<OsdCard?>`
   `|<<`, timeline) followed by a close also starts over, with no special
   cases.
 - **Write cadence**: memory updated on every position tick; disk write
-  throttled to every 5 s while playing, and immediately on pause, stop,
-  item switch, and window close. Window close: `setPreventClose(true)` +
+  throttled to every 5 s while playing, and immediately on pause, **Stop**
+  (the stop memory is mirrored to disk the moment it is taken), item
+  switch, and window close. Window close: `setPreventClose(true)` +
   `onWindowClose → flush → destroy()` (covers the × button and Alt+F4).
   Files shorter than 30 s are never remembered.
 - **Gating by mode** (§6): the mode gates *both* saving and resuming, per
   file kind, decided by `MediaUtils.isVideo / isAudio` on the path.
 
 ### Resuming without a visible jump
-`PlayerService.openPath / openPaths` build `Media(path, start: saved)` —
+`PlayerService.openPath / openPaths` — and `playFromStop()` — build
+`Media(path, start: saved)` —
 media_kit's per-item `start` hands mpv the offset before the first frame,
 so there is no seek flash. The service remembers which items were given a
 `start`; when the playlist stream lands on one of them, the Resume toast
@@ -336,9 +429,11 @@ container, seek once on the first `duration > 0` event for that item.
   compact for the toast: `12:34`, `1:02:34` (no zero-padded hours — nothing
   ticks here, so no wiggle to guard against). Small `formatClockCompact`
   next to `formatClock`, both moved to `lib/core/clock_format.dart`.
-- Right: `↻` mark + the word **Restart** — one hover target, quiet gray at
-  rest, mark and word light to white together (no scale on the word, no box
-  behind anything). Click → `seekTo(0)` + `play()` + toast gone.
+- Right: `↻` mark + the word **Restart** — the start-over action — one
+  hover target, quiet gray at rest, mark and word light to white together
+  (no scale on the word, no box behind anything). Click → `seekTo(0)` +
+  `play()` + toast gone. Identical whether the resume came from a Stop or
+  from disk.
 - Auto-dismiss after 4 s · **click anywhere outside dismisses without
   swallowing the click** (a translucent listener behind the toast, so a
   click on the controller still does its job) · Esc dismisses.
@@ -391,11 +486,11 @@ neighbor.
 | # | Step | Touches | Done when |
 |---|---|---|---|
 | **A** | Transport marks | new `transport_marks.dart`; `salu_marks.dart` (public helpers) | analyzer clean; marks render at 20 px in a scratch row you eyeball once, then the row is deleted |
-| **B** | Control row + actions + keys | `player_service.dart` (+stop/next/previous/currentPath/playlist notifiers), new `transport_actions.dart` (incl. `SeekRamp`), new `transport_cluster.dart`, `salu_icon_button.dart` (`onHoldRepeat`), `controller_panel.dart`, `home_screen.dart` (keys, video tap → facade, `isPlaying` pin rule) | all six marks work with mouse and keys; seek ramp: tap = 5 s, fast clicks / hold climb 5→10→15…, a pause resets, `<<` mirrors; disabled dimming correct; Stop returns to the landing screen; volume survives Stop |
+| **B** | Control row + actions + keys + the three-state transport | new `queue_service.dart`, `player_service.dart` (`transportState`, `stopMemory`, stop / next / previous / playFromStop, `currentPath`), new `transport_actions.dart` (incl. `SeekRamp`), new `transport_cluster.dart`, `salu_icon_button.dart` (`onHoldRepeat`), `controller_panel.dart`, `media_timeline.dart` (inert zeros while stopped), `video_screen.dart` (landing screen loses its instruction line), `home_screen.dart` (keys, canvas tap → facade, hairline hidden while stopped, `transportState` pin rule) | all six marks work with mouse and keys; seek ramp: tap = 5 s, fast clicks / hold climb 5→10→15…, a pause resets, `<<` mirrors; enable matrix correct in all four states; Stop shows the landing screen with the queue intact; Play after Stop resumes at the exact position (toast arrives in F); Prev / Next work while stopped; volume survives Stop |
 | **C** | Volume bar | new `volume_bar.dart`, new `hover_chip.dart`, `media_timeline.dart` (uses `HoverChip`), `controller_panel.dart` | number rides the fill edge; `0%` sits left when muted; chip on hover/drag; wheel ±5 % |
 | **D** | OSD deck | new `osd_controller.dart`, `osd_deck.dart`, `glass_capsule.dart` (Open pill switched to it), `home_screen.dart` (`kChromeBlockHeight`, deck layer, transport keys stop waking chrome), `transport_actions.dart` (emits cards) | deck pops down under a visible controller and appears at 156 px when hidden, same motion; repeats don't jitter; chrome never wakes from the deck |
 | **E** | Resume engine + setting | new `resume_service.dart`, new `clock_format.dart`, `settings_service.dart` (`resumeMode`), `player_service.dart` (`Media(start:)`, tracking, flush hooks), `main.dart` (load + close hook), `settings_dialog.dart` (Resume section, `_OptionTile<T>`) | silent resume works for file / folder / drop / playlist advance; the four modes gate correctly; finished files start over; close flushes |
-| **F** | Resume toast | `osd_controller.dart` / `osd_deck.dart` (interactive card), `transport_actions.dart` (Restart), `home_screen.dart` (Esc, click-outside layer) | toast shows the resumed time; Restart goes to 0:00 and plays; 4 s / click-outside / Esc all dismiss; toast survives a chrome auto-hide in place |
+| **F** | Resume toast | `osd_controller.dart` / `osd_deck.dart` (interactive card), `transport_actions.dart` (Restart), `home_screen.dart` (Esc, click-outside layer) | toast shows the resumed time after a Stop → Play *and* after a fresh open of a remembered file; Restart goes to 0:00 and plays; 4 s / click-outside / Esc all dismiss; toast survives a chrome auto-hide in place |
 | **G** | Docs | `follow.md` (§1.6 mark line + Restart exception, new OSD-slot and volume-bar rules, §5 container outline), `phase_3_details.md` (Steps 4/5/6), `phase_5_details.md` (Step 3 → mode picker), `README.md` status | contract matches the code |
 
 Order is by dependency: **A → B → C → D → E → F → G**. B is the largest;
@@ -409,7 +504,11 @@ and B2 (row widgets).
   PageUp-Down; open a folder and confirm `>>|` enables; tap `>>` once
   (5 s), click it five times fast (5+10+15+20+25 = 75 s total), wait a
   second and tap again (back to 5 s), hold it for 2 s (climbs while held),
-  hold → for 2 s (same); `<<` mirrors each of those. C: hover, drag,
+  hold → for 2 s (same); `<<` mirrors each of those. Stop: open a folder,
+  play the 2nd file to ~1:00, press `□` → landing screen, timeline zeros,
+  no hairline, `□ << >>` dim, `|<< > >>|` live; `>>|` → 3rd file plays;
+  `|<<` twice → back to the 2nd from `0:00`; play to 1:00, `□`, `>` →
+  resumes at ~1:00; `□` then close SALU, reopen the 2nd file → resumes. C: hover, drag,
   wheel, mute. D: press → with the mouse still → deck appears at 156 px
   with the chrome hidden; move the mouse → chrome reveals above it.
   E: watch 1 min, close with ×, reopen → resumes; set Off → starts over.
@@ -422,7 +521,7 @@ and B2 (row widgets).
 1. Transport Play = chevron; Open-URL modal keeps its triangle pair. *(rec: yes)*
 2. Stop sits at the right end of the cluster. *(rec: yes)*
 3. Sound group stays attached to the center cluster. *(rec: yes)*
-4. Stop = full unload to the landing screen. *(rec: yes)*
+4. Title bar reads `SALU` while stopped (not the parked item's name). *(rec: yes)*
 5. Transport keys drive the OSD only and don't wake the chrome. *(rec: yes)*
 6. Center play/pause animation superseded by the deck. *(rec: yes)*
 7. "Restart" joins "Undo" as a toast-only word-action. *(rec: yes)*
@@ -431,4 +530,8 @@ and B2 (row widgets).
 10. Resume tiles use stock outline icons like the Controls tiles. *(rec: yes)*
 
 Locked by owner (no longer open): **volume bar is horizontal**; **seek
-ramp** `5 s → 10 s → 15 s…`, gap resets, hold keeps climbing, back mirrors.
+ramp** `5 s → 10 s → 15 s…`, gap resets, hold keeps climbing, back mirrors;
+**Stop ≠ Start Over** — Stop parks the queue (canvas → initial window,
+timeline zeros, hairline gone, Stop + Seek dim, Prev / Next / Play / sound
+live), Play resumes at the exact position with the Resume toast, and its
+Restart action is the only way Stop ever becomes "start over".
