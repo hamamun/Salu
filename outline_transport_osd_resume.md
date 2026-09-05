@@ -115,7 +115,7 @@ directly (bars have their own live readout — no deck for them).
 | Stop | **unload**: save resume position → `player.stop()` → `hasMedia=false`, `currentTitle=null`, position/duration → 0, window title "SALU" → empty state shows | none (the screen change is the feedback) |
 | Previous | position > 3 s → `seekTo(0)` (restart item); else `player.previous()` | `\|<<` + item title (or `00:00:00` on restart) |
 | Next | `player.next()` (only when a next item exists) | `>>\|` + item title |
-| Seek ± | `seekBy(∓10 s)` | `<<` / `>>` + new time |
+| Seek ± | **seek ramp** (locked — see below): `+5 s`, then `+10 s`, `+15 s`, `+20 s`… while the clicks keep coming; a gap resets to `+5 s`; press-and-hold keeps the sequence firing; `<<` is the exact mirror | `<<` / `>>` + the step just applied + new time — `>>  +15s  01:12:34` |
 | Volume ± | `setVolumeUI(level ± 5)` (unmutes) | speaker + bar + `%` |
 | Mute | `toggleMute()` | speaker-slash + empty bar + `0%` / restored level |
 
@@ -129,15 +129,52 @@ state object — if the volume stream re-emits `100` after stop, re-apply
 already covered (the `_EmptyState` container is opaque).
 
 **▸ confirm 4 — Stop = full unload back to the SALU landing screen**
-(recommended; a "soft stop" is just `|<<` + pause). **▸ confirm 5 — seek
-step 10 s** for both the buttons and the arrow keys (one number, one OSD).
+(recommended; a "soft stop" is just `|<<` + pause).
+
+### Seek behavior (locked)
+
+One tiny state machine — `SeekRamp` in `transport_actions.dart` — shared by
+the two buttons, the two arrow keys and (later) anything else that seeks by
+a step. Forward and backward are two independent instances, so `>>` then
+`<<` never continue each other's ramp.
+
+- **Quick tap:** `+5 s`.
+- **Rapid continuous clicks:** `+5 s`, then `+10 s`, `+15 s`, `+20 s`, … —
+  step `n` = `n × 5 s`, no ceiling (`seekTo` already clamps at the media
+  bounds).
+- **Gap between clicks = reset to `+5 s`.** "Gap" = more than **400 ms**
+  since the previous fire (`SeekRamp.gap`, one constant to tune on device).
+- **Press-and-hold:** the same escalating sequence keeps firing while held —
+  first fire on pointer-down (instant response), then a repeat every
+  **300 ms** (`SeekRamp.repeat`, shorter than the gap so a hold can never
+  reset itself). Each repeat is the next step in the sequence, i.e. holding
+  runs `+5 s, +10 s, +15 s, +20 s…` exactly like fast clicking.
+- **Seek back is a perfect mirror:** `−5 s, −10 s, −15 s…`, same gap, same
+  repeat.
+- Keyboard: ← / → go through the same instances; Windows key auto-repeat
+  supplies the "hold" (each repeat event = next step; the gap reset applies
+  unchanged on release).
+
+Interaction consequences, so no surprises later:
+- The buttons need press-and-hold, which `SaluIconButton` (tap-only) does
+  not offer. It gains an optional `onHoldRepeat` (raw pointer down/up, a
+  `Timer.periodic` while held); the 0.90 press-scale stays down for the
+  whole hold — a physical held button. Nothing else about the recipe
+  changes.
+- The OSD card for a seek always shows the **step just applied** next to
+  the new time, so escalation is visible: `>>  +15s  01:12:34`.
+- The ramp resets on every *other* transport action (play/pause, stop,
+  prev/next, a timeline click), not only on time gaps.
+
+`follow.md` will carry the seek ramp verbatim (§5 container outline) so it
+cannot be silently "simplified" to a fixed step later.
 
 ### Silent keyboard set (never printed anywhere — hard rule 2)
 
 | Key | Action |
 |---|---|
 | Space | play / pause |
-| ← / → | seek −10 s / +10 s |
+| ← / → | seek back / forward — the seek ramp above (`5 s, 10 s, 15 s…`; hold the key to keep climbing) |
 | ↑ / ↓ | volume +5 / −5 |
 | M | mute toggle |
 | S | stop |
@@ -145,7 +182,7 @@ step 10 s** for both the buttons and the arrow keys (one number, one OSD).
 | Esc | dismiss the Resume toast |
 | Ctrl+O / Ctrl+F / Ctrl+U | (existing) open file / folder / URL |
 
-**▸ confirm 6 — transport keys no longer wake the chrome.** Today every key
+**▸ confirm 5 — transport keys no longer wake the chrome.** Today every key
 reveals the chrome; with the deck in place, transport keys show *only* the
 OSD (that is the whole point of the "controller hidden" slot). All other
 keys keep waking the chrome. One consequence handled: in **Pin (playback
@@ -160,9 +197,13 @@ stops in that mode.
 Extracted to `lib/ui/osc/volume_bar.dart`; same widget is reused read-only
 inside the OSD volume card so the two can never drift apart.
 
-- **One thin bar, timeline family**: 140 × **14 px** (16 px on hover — the
-  bar "breathes" inside its fixed 34 px hit box, so nothing around it moves),
-  radius 4, `barTrack` / `barFill`, same translucent fill as the timeline.
+- **One thin horizontal bar, timeline family** (locked: horizontal, never
+  vertical — it lies in the control row exactly like the timeline lies in
+  Row 1, and the fill grows left → right): **140 wide × 14 px tall** (16 px
+  on hover — the bar "breathes" inside its fixed 34 px hit box, so nothing
+  around it moves), radius 4, `barTrack` / `barFill`, same translucent fill
+  as the timeline. The read-only copy inside the OSD volume card is the same
+  horizontal bar at 120 × 14.
 - **No `0` / `100` endpoints.** The current value sits *inside* the bar:
   `62%`, 10 px, tabular figures, single tone, faint shadow — the timeline's
   label style scaled down.
@@ -178,7 +219,9 @@ inside the OSD volume card so the two can never drift apart.
   cursor*; in-bar number = *current* value (they coincide while dragging).
   The chip floats below the bar, over the video; it never reflows the row.
 - Mouse wheel over the bar: ±5 % per notch (mirrors the timeline's ±1 s).
-- Dragging up from silence unmutes (existing behavior, kept).
+  Drag is horizontal only — pointer x maps to the level; y is ignored.
+- Dragging the level rightward out of silence unmutes (existing behavior,
+  kept).
 - Speaker mark to its left is the Mute control from §1 (arcs track level).
 
 ---
@@ -245,7 +288,7 @@ Files: `lib/ui/osd/osd_controller.dart` (singleton `ValueNotifier<OsdCard?>`
 + `show(card)` / `dismiss()`, sealed `OsdCard` classes, TTL timers) and
 `lib/ui/osd/osd_deck.dart` (the widget).
 
-**▸ confirm 7** — Phase 3's separate "center play/pause animation"
+**▸ confirm 6** — Phase 3's separate "center play/pause animation"
 (Step 5) is superseded by the deck's `>` / `II` card. I'd not build it.
 
 ---
@@ -302,14 +345,14 @@ container, seek once on the first `duration > 0` event for that item.
 - It does not lock the chrome: if the chrome auto-hides during the 4 s, the
   toast simply becomes the top-center deck — the same slot by design.
 
-**▸ confirm 8 — the word "Restart" joins "Undo" as a toast word-action.**
+**▸ confirm 7 — the word "Restart" joins "Undo" as a toast word-action.**
 `follow.md` §1.6 says "no text buttons for actions", yet the URL modal's
 delete toast already carries the word **Undo** — toasts are the one place
 a bare mark would be ambiguous. Restart follows the same pattern (mark +
 word, no box, lights instead of highlights), and `follow.md` gets the rule
 written down: *toast actions may carry one word; controls never do.*
-**▸ confirm 9** — compact time in the toast (`12:34`) vs. the timeline's
-`00:12:34`. **▸ confirm 10** — click-outside does not swallow the click.
+**▸ confirm 8** — compact time in the toast (`12:34`) vs. the timeline's
+`00:12:34`. **▸ confirm 9** — click-outside does not swallow the click.
 
 ---
 
@@ -336,7 +379,7 @@ generalized to `_OptionTile<T>` so both pickers share one widget.
 - Switching to Off stops saving *and* resuming but does not wipe stored
   positions (switching back restores your memory).
 
-**▸ confirm 11** — tile icons: stock outline icons like the neighboring
+**▸ confirm 10** — tile icons: stock outline icons like the neighboring
 Controls tiles (`Icons.movie_outlined`, `audiotrack_outlined`, …) for
 consistency inside the settings window, or SALU marks. I'd match the
 neighbor.
@@ -348,7 +391,7 @@ neighbor.
 | # | Step | Touches | Done when |
 |---|---|---|---|
 | **A** | Transport marks | new `transport_marks.dart`; `salu_marks.dart` (public helpers) | analyzer clean; marks render at 20 px in a scratch row you eyeball once, then the row is deleted |
-| **B** | Control row + actions + keys | `player_service.dart` (+stop/next/previous/currentPath/playlist notifiers), new `transport_actions.dart`, new `transport_cluster.dart`, `controller_panel.dart`, `home_screen.dart` (keys, video tap → facade, `isPlaying` pin rule) | all six marks work with mouse and keys; disabled dimming correct; Stop returns to the landing screen; volume survives Stop |
+| **B** | Control row + actions + keys | `player_service.dart` (+stop/next/previous/currentPath/playlist notifiers), new `transport_actions.dart` (incl. `SeekRamp`), new `transport_cluster.dart`, `salu_icon_button.dart` (`onHoldRepeat`), `controller_panel.dart`, `home_screen.dart` (keys, video tap → facade, `isPlaying` pin rule) | all six marks work with mouse and keys; seek ramp: tap = 5 s, fast clicks / hold climb 5→10→15…, a pause resets, `<<` mirrors; disabled dimming correct; Stop returns to the landing screen; volume survives Stop |
 | **C** | Volume bar | new `volume_bar.dart`, new `hover_chip.dart`, `media_timeline.dart` (uses `HoverChip`), `controller_panel.dart` | number rides the fill edge; `0%` sits left when muted; chip on hover/drag; wheel ±5 % |
 | **D** | OSD deck | new `osd_controller.dart`, `osd_deck.dart`, `glass_capsule.dart` (Open pill switched to it), `home_screen.dart` (`kChromeBlockHeight`, deck layer, transport keys stop waking chrome), `transport_actions.dart` (emits cards) | deck pops down under a visible controller and appears at 156 px when hidden, same motion; repeats don't jitter; chrome never wakes from the deck |
 | **E** | Resume engine + setting | new `resume_service.dart`, new `clock_format.dart`, `settings_service.dart` (`resumeMode`), `player_service.dart` (`Media(start:)`, tracking, flush hooks), `main.dart` (load + close hook), `settings_dialog.dart` (Resume section, `_OptionTile<T>`) | silent resume works for file / folder / drop / playlist advance; the four modes gate correctly; finished files start over; close flushes |
@@ -363,7 +406,10 @@ and B2 (row widgets).
 - `flutter analyze` → 0 issues (lints: `prefer_single_quotes`,
   `directives_ordering`).
 - A: nothing visible changes. B: click each mark; Space / arrows / M / S /
-  PageUp-Down; open a folder and confirm `>>|` enables. C: hover, drag,
+  PageUp-Down; open a folder and confirm `>>|` enables; tap `>>` once
+  (5 s), click it five times fast (5+10+15+20+25 = 75 s total), wait a
+  second and tap again (back to 5 s), hold it for 2 s (climbs while held),
+  hold → for 2 s (same); `<<` mirrors each of those. C: hover, drag,
   wheel, mute. D: press → with the mouse still → deck appears at 156 px
   with the chrome hidden; move the mouse → chrome reveals above it.
   E: watch 1 min, close with ×, reopen → resumes; set Off → starts over.
@@ -377,10 +423,12 @@ and B2 (row widgets).
 2. Stop sits at the right end of the cluster. *(rec: yes)*
 3. Sound group stays attached to the center cluster. *(rec: yes)*
 4. Stop = full unload to the landing screen. *(rec: yes)*
-5. Seek step 10 s for buttons and arrow keys. *(rec: yes)*
-6. Transport keys drive the OSD only and don't wake the chrome. *(rec: yes)*
-7. Center play/pause animation superseded by the deck. *(rec: yes)*
-8. "Restart" word recorded as the one approved word-action. *(rec: yes)*
-9. Toast time compact (`12:34`). *(rec: yes)*
-10. Toast click-outside doesn't swallow the click. *(rec: yes)*
-11. Resume tiles use stock outline icons like the Controls tiles. *(rec: yes)*
+5. Transport keys drive the OSD only and don't wake the chrome. *(rec: yes)*
+6. Center play/pause animation superseded by the deck. *(rec: yes)*
+7. "Restart" joins "Undo" as a toast-only word-action. *(rec: yes)*
+8. Toast time compact (`12:34`). *(rec: yes)*
+9. Toast click-outside doesn't swallow the click. *(rec: yes)*
+10. Resume tiles use stock outline icons like the Controls tiles. *(rec: yes)*
+
+Locked by owner (no longer open): **volume bar is horizontal**; **seek
+ramp** `5 s → 10 s → 15 s…`, gap resets, hold keeps climbing, back mirrors.
