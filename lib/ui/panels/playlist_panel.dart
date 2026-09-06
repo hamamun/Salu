@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter/services.dart';
 
 import '../../core/channel_service.dart';
@@ -504,7 +504,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                 // state itself survives (§4.4/C3).
                 active: shuffle && repeat != RepeatMode.one,
                 onTap: store.toggleShuffle,
-                child: ShuffleMark(size: 18),
+                child: const ShuffleMark(size: 18),
               ),
             ],
             const SizedBox(width: 14),
@@ -774,7 +774,8 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
       }
     }
     if (head == null) return const SizedBox.shrink();
-    final double bodyBottom = top + head.height + members * _rowH;
+    final _HeadRow openHead = head!;
+    final double bodyBottom = top + openHead.height + members * _rowH;
     final double offset = _scrollOffset;
     if (top >= offset || bodyBottom <= offset) {
       return const SizedBox.shrink();
@@ -783,14 +784,14 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
       top: 0,
       left: 0,
       right: 5,
-      height: head.height,
+      height: openHead.height,
       child: GlassCapsule(
         radius: 0,
-        height: head.height,
+        height: openHead.height,
         padding: EdgeInsets.zero,
         child: _GroupHead(
-          head: head,
-          onTap: () => _toggleHead(head),
+          head: openHead,
+          onTap: () => _toggleHead(openHead),
         ),
       ),
     );
@@ -1058,19 +1059,18 @@ class _FieldClearState extends State<_FieldClear> {
           width: 18,
           height: 18,
           child: Center(
-            child: AnimatedScale(
-              scale: _hovered ? 1.06 : 1.0,
-              duration: const Duration(milliseconds: 120),
-              child: CustomPaint(
-                size: const Size.square(12),
-                painter: _CrossPainter(
-                  _hovered
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
-                  markStrokeFor(12),
+              child: AnimatedScale(
+                scale: _hovered ? 1.06 : 1.0,
+                duration: const Duration(milliseconds: 120),
+                child: IconTheme.merge(
+                  data: IconThemeData(
+                    color: _hovered
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                  ),
+                  child: const CrossMark(size: 12),
                 ),
               ),
-            ),
           ),
         ),
       ),

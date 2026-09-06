@@ -28,7 +28,8 @@ class PlaylistChildShell {
   /// arguments mark it as the playlist window.
   static Future<void> run() async {
     WidgetsFlutterBinding.ensureInitialized();
-    final WindowController self = WindowController.fromCurrentEngine();
+    final WindowController self =
+        await WindowController.fromCurrentEngine();
 
     final MirrorPlaylistStore store = MirrorPlaylistStore(
       sendIntent: (Map<String, Object?> intent) {

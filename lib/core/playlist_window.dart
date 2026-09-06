@@ -43,7 +43,7 @@ class PlaylistWindow {
 
   /// Live listeners fanning service changes into deltas; detached on
   /// dock so a closed window never costs a rebuild.
-  final List<VoidCallback Function()> _detach = <VoidCallback Function()>[];
+  final List<VoidCallback> _detach = <VoidCallback>[];
 
   /// Polls for the child window's disappearance (its engine ended).
   Timer? _goneWatch;
@@ -224,7 +224,7 @@ class PlaylistWindow {
   }
 
   void _detachBridge() {
-    for (final VoidCallback Function() f in _detach) {
+    for (final VoidCallback f in _detach) {
       f();
     }
     _detach.clear();

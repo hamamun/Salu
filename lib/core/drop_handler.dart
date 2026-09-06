@@ -63,7 +63,7 @@ class DropHandler {
     if (append) {
       await service.appendToQueue(
         <QueueItem>[
-          for (final String p in mediaPaths) QueueItem.forPath(p),
+          for (final String p in mediaPaths) QueueItem(p),
         ],
       );
       debugPrint(

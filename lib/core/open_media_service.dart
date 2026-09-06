@@ -50,7 +50,7 @@ class OpenMediaService {
     if (paths.isEmpty) return;
     final PlayerService player = PlayerService.instance;
     await player.appendToQueue(
-      <QueueItem>[for (final String p in paths) QueueItem.forPath(p)],
+      <QueueItem>[for (final String p in paths) QueueItem(p)],
     );
   }
 
@@ -63,7 +63,7 @@ class OpenMediaService {
     if (media.isEmpty) return;
     final PlayerService player = PlayerService.instance;
     await player.appendToQueue(
-      <QueueItem>[for (final String p in media) QueueItem.forPath(p)],
+      <QueueItem>[for (final String p in media) QueueItem(p)],
     );
     debugPrint('[SALU] appended ${media.length} file(s) from folder');
   }

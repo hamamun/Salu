@@ -44,13 +44,10 @@ Map<String, String> queueItemToMap(QueueItem item) => <String, String>{
     };
 
 QueueItem queueItemFromMap(Map<Object?, Object?> m) {
-  String? s(Object? k) {
-    final Object? v = m[k];
-    return v == null ? null : v.toString();
-  }
+  String? s(Object? k) => m[k]?.toString();
 
   return QueueItem(
-    url: s('u') ?? '',
+    s('u') ?? '',
     name: s('n'),
     group: s('g'),
     language: s('l'),

@@ -583,7 +583,7 @@ class PlayerService {
       if (media.isNotEmpty) {
         await appendToQueue(
           <QueueItem>[
-            for (final String p in media) QueueItem.forPath(p),
+            for (final String p in media) QueueItem(p),
           ],
         );
       }
