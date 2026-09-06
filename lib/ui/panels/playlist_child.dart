@@ -32,13 +32,13 @@ class PlaylistChildShell {
         await WindowController.fromCurrentEngine();
 
     final MirrorPlaylistStore store = MirrorPlaylistStore(
-      sendIntent: (Map<String, Object?> intent) {
+      sendIntent: (Map<String, Object?> intent) async {
         try {
-          unawaited(
-            _bridge.invokeMethod<void>(kMsgIntent, intent),
-          );
+          await _bridge.invokeMethod<void>(kMsgIntent, intent);
         } catch (_) {}
       },
+      onDockRequested: _destroyForDock,
+      onCloseRequested: _destroyForClose,
     );
 
     _bridge.setMethodCallHandler((call) async {
@@ -54,12 +54,13 @@ class PlaylistChildShell {
       return null;
     });
 
-    // Main-window control calls (close = dock back, focus, pulse).
+    // Main-window control calls (close = a host-requested dock-back;
+    // focus and pulse only affect the loose surface).
     final ValueNotifier<int> pulse = ValueNotifier<int>(0);
     self.setWindowMethodHandler((call) async {
       switch (call.method) {
         case 'close':
-          await windowManager.close();
+          await _destroyForDock();
           break;
         case 'focus':
           await windowManager.focus();
@@ -87,6 +88,58 @@ class PlaylistChildShell {
   static const WindowMethodChannel _bridge =
       WindowMethodChannel(kPlaylistBridgeChannel);
 
+  static bool _closingForDock = false;
+
+  /// The host already decided to reopen the docked slot. Destroy the
+  /// child locally too, because a cross-window close invoke can be lost
+  /// while the plugin is tearing engines down.
+  static Future<void> _destroyForDock() async {
+    _closingForDock = true;
+    await _persistCurrentBounds();
+    await _destroyNativeWindow();
+  }
+
+  static Future<void> _destroyForClose() async {
+    _closingForDock = false;
+    await _persistCurrentBounds();
+    await _destroyNativeWindow();
+  }
+
+  static Future<void> _persistCurrentBounds() async {
+    try {
+      final Offset pos = await windowManager.getPosition();
+      final Size size = await windowManager.getSize();
+      await saveBounds(
+        Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height),
+      );
+    } catch (_) {}
+  }
+
+  /// Native caption/Alt+F4 close: this hides the playlist only. Playback
+  /// and the queue stay in the main process exactly as they were; the
+  /// next chrome playlist click opens the docked panel again.
+  static Future<void> notifyClosedByUser() async {
+    try {
+      await _bridge
+          .invokeMethod<void>(
+            kMsgIntent,
+            <String, Object?>{'t': PlaylistIntent.closePanel.name},
+          )
+          .timeout(const Duration(milliseconds: 800), onTimeout: () {});
+    } catch (_) {}
+  }
+
+  static Future<void> _destroyNativeWindow() async {
+    try {
+      await windowManager.destroy();
+    } catch (_) {
+      try {
+        await windowManager.setPreventClose(false);
+        await windowManager.close();
+      } catch (_) {}
+    }
+  }
+
   static Future<void> _configureWindow() async {
     try {
       await windowManager.ensureInitialized();
@@ -107,6 +160,7 @@ class PlaylistChildShell {
       );
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
       await windowManager.setHasShadow(true);
+      await windowManager.setPreventClose(true);
     } catch (e) {
       debugPrint('[SALU] playlist window setup (best-effort): $e');
     }
@@ -200,6 +254,7 @@ class PlaylistChildWindow extends StatefulWidget {
 class _PlaylistChildWindowState extends State<PlaylistChildWindow>
     with WindowListener {
   Timer? _boundsWrite;
+  bool _handlingWindowClose = false;
 
   @override
   void initState() {
@@ -220,21 +275,25 @@ class _PlaylistChildWindowState extends State<PlaylistChildWindow>
   @override
   void onWindowResized() => _scheduleBoundsWrite();
 
+  @override
+  void onWindowClose() async {
+    if (_handlingWindowClose) return;
+    _handlingWindowClose = true;
+    _boundsWrite?.cancel();
+    await _persistBounds();
+    if (!PlaylistChildShell._closingForDock) {
+      await PlaylistChildShell.notifyClosedByUser();
+    }
+    await PlaylistChildShell._destroyNativeWindow();
+  }
+
   void _scheduleBoundsWrite() {
     _boundsWrite?.cancel();
     _boundsWrite =
         Timer(const Duration(milliseconds: 600), _persistBounds);
   }
 
-  Future<void> _persistBounds() async {
-    try {
-      final Offset pos = await windowManager.getPosition();
-      final Size size = await windowManager.getSize();
-      await PlaylistChildShell.saveBounds(
-        Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height),
-      );
-    } catch (_) {}
-  }
+  Future<void> _persistBounds() => PlaylistChildShell._persistCurrentBounds();
 
   /// Esc (panel closed-ladder end rung in its own window) and Ctrl+L dock
   /// the window back — never die, never leave an orphan.

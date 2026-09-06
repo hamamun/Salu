@@ -111,6 +111,10 @@ abstract class PlaylistStore extends ChangeNotifier {
   /// Slot 5: undock ↔ dock back (moves the panel, never copies it).
   void toggleDock();
 
+  /// Close the playlist VIEW only. In the loose window this destroys the
+  /// child window; playback and the queue continue untouched.
+  void closeView();
+
   /// The toast action: restore the last removable/reorder/clear.
   void undo();
 }
@@ -254,6 +258,9 @@ class LivePlaylistStore extends PlaylistStore {
       PlaylistWindow.instance.undock();
     }
   }
+
+  @override
+  void closeView() => PanelService.instance.closePlaylist();
 
   @override
   void undo() => QueueUndoService.instance.undo();

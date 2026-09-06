@@ -274,7 +274,8 @@ class M3uLoader {
       final String line = rawLine.trim();
       if (line.isEmpty) continue;
       if (line.startsWith('#')) {
-        if (line.startsWith('#EXTINF:')) {
+        final String tag = line.toUpperCase();
+        if (tag.startsWith('#EXTINF:')) {
           final int splitAt = _firstCommaOutsideQuotes(line.substring(8));
           if (splitAt >= 0) {
             pendingAttrsBlock = line.substring(8, splitAt);
@@ -284,12 +285,26 @@ class M3uLoader {
             pendingAttrsBlock = line.substring(8);
             pendingName = null;
           }
-        } else if (line.startsWith('#EXTGRP:')) {
+        } else if (tag.startsWith('#EXTGRP:')) {
           // Legacy group marker → maps onto `group-title` unless the
-          // EXTINF itself carries one.
+          // EXTINF itself carries one. EXTGRP usually appears BETWEEN
+          // EXTINF and the URL, so append it to the pending EXTINF attrs
+          // instead of requiring the attr block to be absent.
           final String g = line.substring(8).trim();
-          if (g.isNotEmpty && pendingAttrsBlock == null) {
-            pendingAttrsBlock = 'group-title="${g.replaceAll('"', '')}"';
+          if (g.isNotEmpty &&
+              !_hasAttribute(pendingAttrsBlock, 'group-title')) {
+            final String safe = g
+                .replaceAll('"', '')
+                .replaceAll("'", '')
+                .trim();
+            if (safe.isNotEmpty) {
+              pendingAttrsBlock = <String>[
+                if (pendingAttrsBlock != null &&
+                    pendingAttrsBlock!.trim().isNotEmpty)
+                  pendingAttrsBlock!.trim(),
+                'group-title="$safe"',
+              ].join(' ');
+            }
           }
         }
         continue;
@@ -303,27 +318,56 @@ class M3uLoader {
       (v == null || v.trim().isEmpty) ? null : v.trim();
 
   /// The attribute block ends at the first comma OUTSIDE quotes — quoted
-  /// values are allowed to carry commas.
+  /// values are allowed to carry commas. Providers use both quote types.
   static int _firstCommaOutsideQuotes(String s) {
-    bool quoted = false;
+    String? quote;
+    bool maybeQuotedValue = false;
     for (int i = 0; i < s.length; i++) {
       final String c = s[i];
-      if (c == '"') {
-        quoted = !quoted;
-      } else if (c == ',' && !quoted) {
-        return i;
+      if (quote != null) {
+        if (c == quote) quote = null;
+        continue;
       }
+      if (c == '=') {
+        maybeQuotedValue = true;
+        continue;
+      }
+      if (maybeQuotedValue && c.trim().isEmpty) continue;
+      if (maybeQuotedValue && (c == '"' || c == "'")) {
+        quote = c;
+        maybeQuotedValue = false;
+        continue;
+      }
+      maybeQuotedValue = false;
+      if (c == ',') return i;
     }
     return -1;
   }
 
-  static final RegExp _attrRe =
-      RegExp(r'([a-zA-Z0-9\-\_]+)="([^"]*)"');
+  static bool _hasAttribute(String? block, String name) {
+    if (block == null || block.trim().isEmpty) return false;
+    final String want = name.toLowerCase();
+    for (final RegExpMatch m in _attrRe.allMatches(block)) {
+      if (m.group(1)?.toLowerCase() != want) continue;
+      final String value = m.group(2) ?? m.group(3) ?? m.group(4) ?? '';
+      if (value.trim().isNotEmpty) return true;
+    }
+    return false;
+  }
+
+  // Attribute values in IPTV lists are not as clean as the spec examples:
+  // double quoted, single quoted and bare values all appear in the wild,
+  // and provider key casing is inconsistent. Normalize keys to lowercase
+  // so group-title/tvg-language/tvg-country are actually seen.
+  static final RegExp _attrRe = RegExp(
+    r'''([a-zA-Z0-9\-_]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))''',
+  );
 
   static Map<String, String> _parseAttributes(String block) {
     final Map<String, String> out = <String, String>{};
     for (final RegExpMatch m in _attrRe.allMatches(block)) {
-      out[m.group(1)!] = m.group(2)!;
+      out[m.group(1)!.toLowerCase()] =
+          m.group(2) ?? m.group(3) ?? m.group(4) ?? '';
     }
     return out;
   }

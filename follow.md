@@ -69,8 +69,11 @@
    subtitles, playlist) = slide-out panels. A panel may DETACH into the
    third class — the **loose window** (the undocked playlist): borderless
    glass, draggable by its own strip, above SALU only (never system
-   always-on-top), closing = docking back, never modal, never a second
-   panel — one surface, one view. Never mix the three.
+   always-on-top). Dock back closes the loose window and reopens the docked
+   panel; closing the loose window itself or its header ✕ hides the playlist
+   view only (playback/queue continue, next chrome playlist click opens the
+   docked panel). Never modal, never a second panel — one surface, one view.
+   Never mix the three.
 
 ---
 

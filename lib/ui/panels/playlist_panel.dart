@@ -441,7 +441,8 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                   onPanStart: (_) => widget.onDragStart?.call(),
                   child: const SizedBox(height: 3),
                 ),
-              if (store.items.value.isNotEmpty) _buildHeader(),
+              if (store.items.value.isNotEmpty || widget.inOwnWindow)
+                _buildHeader(),
               Expanded(child: _buildBody()),
             ],
           ),
@@ -463,9 +464,10 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
     );
   }
 
-  // ── Header (§4): five slots, 6/14 px pitches, the field grows ────────
+  // ── Header (§4): five docked slots; loose window adds Close ──────────
 
   Widget _buildHeader() {
+    final bool hasItems = store.items.value.isNotEmpty;
     final bool channel = store.isChannelList;
     final RepeatMode repeat = store.repeatMode.value;
     final bool shuffle = store.shuffleOn.value;
@@ -490,6 +492,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                   RepeatMode.one => 'Repeat one',
                 },
                 active: repeat != RepeatMode.off,
+                enabled: hasItems,
                 onTap: store.cycleRepeat,
                 child: RepeatMark(
                   size: 18,
@@ -504,6 +507,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                 // Repeat one suspends shuffle VISUALLY (quiet ink) — the
                 // state itself survives (§4.4/C3).
                 active: shuffle && repeat != RepeatMode.one,
+                enabled: hasItems,
                 onTap: store.toggleShuffle,
                 child: const ShuffleMark(size: 18),
               ),
@@ -514,6 +518,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
             SaluIconButton(
               size: 30,
               tooltip: 'Clear playlist',
+              enabled: hasItems,
               onTap: store.clearPlaylist,
               child: const TrashMark(size: 15),
             ),
@@ -526,6 +531,15 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                   ? const DockMark(size: 17)
                   : const UndockMark(size: 17),
             ),
+            if (widget.inOwnWindow) ...<Widget>[
+              const SizedBox(width: 6),
+              SaluIconButton(
+                size: 30,
+                tooltip: 'Close',
+                onTap: store.closeView,
+                child: const CrossMark(size: 14),
+              ),
+            ],
           ],
         ),
       ),
@@ -875,7 +889,10 @@ class _GroupByButton extends StatefulWidget {
 
 class _GroupByButtonState extends State<_GroupByButton> {
   final OverlayPortalController _portal = OverlayPortalController();
-  final LayerLink _link = LayerLink();
+
+  // Exact enough for edge clamping; the capsule's content is fixed-size.
+  static const double _pillWidth = 142;
+  static const double _pillHeight = 40;
 
   static const Map<GroupModeKind, GroupMode> _modes =
       <GroupModeKind, GroupMode>{
@@ -906,59 +923,80 @@ class _GroupByButtonState extends State<_GroupByButton> {
   Widget build(BuildContext context) {
     final bool searching = widget.store.filter.value.trim().isNotEmpty;
     final bool open = _portal.isShowing;
-    return CompositedTransformTarget(
-      link: _link,
-      child: OverlayPortal(
-        controller: _portal,
-        overlayChildBuilder: (BuildContext context) {
-          // The pill follows popup precedent: Esc closes and a click
-          // outside closes — the translucent listener lets that click
-          // pass through to whatever sits beneath (never swallowed).
-          return Stack(
-            children: <Widget>[
-              Positioned.fill(
-                child: Listener(
-                  behavior: HitTestBehavior.translucent,
-                  onPointerDown: (_) {
+    return OverlayPortal.overlayChildLayoutBuilder(
+      controller: _portal,
+      overlayLocation: OverlayChildLocation.rootOverlay,
+      overlayChildBuilder: (
+        BuildContext context,
+        OverlayChildLayoutInfo info,
+      ) {
+        // Do not put a CompositedTransformFollower in an OverlayPortal
+        // overlay: Flutter's Tooltip uses its own OverlayPortal and the
+        // nested follower makes the paint transform unavailable during
+        // layout. The layout builder gives us the button's overlay-space
+        // transform directly, so the tooltip-bearing mode buttons remain
+        // safe and clickable.
+        if (info.childPaintTransform.determinant() == 0.0) {
+          return const SizedBox.shrink();
+        }
+        final Offset target = MatrixUtils.transformPoint(
+          info.childPaintTransform,
+          Offset.zero,
+        );
+        final double maxLeft = info.overlaySize.width - _pillWidth;
+        final double maxTop = info.overlaySize.height - _pillHeight;
+        final double left = (target.dx - 2)
+            .clamp(0.0, maxLeft < 0 ? 0.0 : maxLeft)
+            .toDouble();
+        final double top = (target.dy + info.childSize.height + 6)
+            .clamp(0.0, maxTop < 0 ? 0.0 : maxTop)
+            .toDouble();
+
+        // The pill follows popup precedent: Esc closes and a click
+        // outside closes — the translucent listener lets that click
+        // pass through to whatever sits beneath (never swallowed).
+        return Stack(
+          children: <Widget>[
+            Positioned.fill(
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) {
+                  if (_portal.isShowing) _hide();
+                },
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              child: Focus(
+                autofocus: true,
+                onKeyEvent: (FocusNode node, KeyEvent event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape) {
                     if (_portal.isShowing) _hide();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: _GroupByPill(
+                  store: widget.store,
+                  onPick: (GroupMode mode) {
+                    widget.store.setGroupMode(mode);
+                    _hide();
                   },
+                  onDismiss: _hide,
                 ),
               ),
-              CompositedTransformFollower(
-                link: _link,
-                targetAnchor: Alignment.bottomLeft,
-                followerAnchor: Alignment.topLeft,
-                offset: const Offset(-2, 6),
-                child: Focus(
-                  autofocus: true,
-                  onKeyEvent: (FocusNode node, KeyEvent event) {
-                    if (event is KeyDownEvent &&
-                        event.logicalKey == LogicalKeyboardKey.escape) {
-                      if (_portal.isShowing) _hide();
-                      return KeyEventResult.handled;
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: _GroupByPill(
-                    store: widget.store,
-                    onPick: (GroupMode mode) {
-                      widget.store.setGroupMode(mode);
-                      _hide();
-                    },
-                    onDismiss: _hide,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-        child: SaluIconButton(
-          size: 30,
-          tooltip: 'Group by',
-          active: open,
-          onTap: _toggle,
-          child: GroupByMark(size: 18, quiet: searching && !open),
-        ),
+            ),
+          ],
+        );
+      },
+      child: SaluIconButton(
+        size: 30,
+        tooltip: 'Group by',
+        active: open,
+        onTap: _toggle,
+        child: GroupByMark(size: 18, quiet: searching && !open),
       ),
     );
   }
