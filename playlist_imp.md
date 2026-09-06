@@ -527,6 +527,41 @@ Locked behaviours:
   permanently top-most window over other applications is hostile.
 - While undocked, the video, the chrome and the control row are unchanged.
 
+**4.8a The child engine's window contract (learned the hard way, 2026-09-06).**
+The loose window is a SECOND engine, and SALU's plugins are registered per engine.
+Three rules follow, and all three are load-bearing:
+
+- `windows/runner/flutter_window.cpp` MUST hand every child engine the plugin set:
+  `DesktopMultiWindowSetWindowCreatedCallback([](void *c) { RegisterPlugins(
+  reinterpret_cast<flutter::FlutterViewController *>(c)->engine()); });`
+  Without it the child has **no `window_manager` at all** — every call there dies
+  with `MissingPluginException` — so the loose window cannot go frameless, size
+  itself, remember its bounds, hold the close, drag, or destroy itself. If the
+  undocked window ever looks native-sized (800×600, real title bar) or refuses to
+  close, THAT line is the first thing to check, not the Dart.
+- Closing a window is `windowManager.close()` (SC_CLOSE) after
+  `setPreventClose(false)`. **`destroy()` on Windows is `PostQuitMessage(0)`** — it
+  quits a message loop, it never closes the HWND — so it is a last resort, never
+  the first call.
+- **No native bar, ever, in either engine.** The loose window uses the player's
+  own chrome contract — `titleBarStyle: TitleBarStyle.hidden` +
+  `windowButtonVisibility: false` (window_manager eats WM_NCCALCSIZE, so the
+  caption strip and its buttons belong to the Flutter view; the panel's header is
+  the drag area and the only ✕). `_configureWindow()` guards each step separately
+  and answers whether the bar is actually gone; that answer rides to the host with
+  `ready`, and a `false` triggers §13a's abort gate at runtime — the window is
+  hidden, never shown, and the docked slot keeps the playlist. A half-configured
+  window hanging off a borderless player is a dropped feature, not a detail.
+
+**And the host verifies, it does not hope.** `desktop_multi_window` 0.3.x gives the
+main window only `window_show` / `window_hide`: no native destroy. So `dock()`
+keeps the controller until `WindowController.getAll()` confirms the child is gone
+(that registry entry dies with the engine, and `onWindowsChanged` is what reports
+it), retries a bounded number of times, and finally HIDES the window — a zombie
+nobody sees is survivable, an orphan floating over the player after a redock is
+not. The docked slot's state flips first and unconditionally: the player must never
+be held hostage by a window it does not own.
+
 **Build order inside this feature:** the docked panel first (steps 1–12), then
 undock (step 13) — same feature, same branch, shipped together.
 
@@ -557,6 +592,36 @@ void append(List<String> items);   // dedupe not required this phase
 void removeAt(int i);              // keeps `index` honest, see below
 void move(int from, int to);
 ```
+
+**One gesture = one block, ordered as the folder shows it (owner, 2026-09-06).**
+Windows does not hand the shell's multi-select (Open dialog or a drag) over in
+the order the user is looking at: the array **starts at the item that was
+grabbed or clicked first and wraps** — select ten files, drag them by the
+sixth, and the app receives `6,7,8,9,10,1,2,3,4,5`. A queue built from that
+verbatim "starts from the middle of the folder", so the array is never trusted.
+Every local batch is sorted by `MediaUtils.naturalPathCompare` at the boundary
+(`OpenMediaService.openFiles`, `DropHandler.scanFolderForMedia`,
+`DropHandler.handleDroppedPaths`): folder first, then the name, both natural
+so digit runs count as numbers (`ep2` before `ep10`). A fresh batch then plays
+from row 0 — the top file.
+
+* This does **not** touch the append verb: blocks still join at the end, in the
+  order the gestures arrived, and only the inside of a block is ordered.
+* A curated order is still possible — after the fact, with the row grip
+  (`move`), which is what the panel is for.
+
+**The queue holds ONE spelling of a path (owner, 2026-09-06).** The same file
+arrives as `C:\media\a.mp4` (picker, shell drop), as `file:///C:/media/a.mp4`
+(mpv's report) and, after an Undo, as whichever was stored. Resume memory,
+`stopMemory` and the "is this the row that was playing?" checks are all STRING
+comparisons, so `QueueService` canonicalizes every entry on the way in
+(`setQueue` / `append` / `insertAt` → `MediaUtils.canonicalPath`) and
+`ResumeService` canonicalizes its own keys on both sides. A queue url is
+therefore always comparable with `currentPath`, and a file remembered under one
+spelling is found under any other. Streams are returned untouched by
+`canonicalPath` — a URL's spelling is a key of its own (favourites, the URL
+library) and must never be rewritten. Call sites pass raw paths; **nobody
+pre-normalizes**.
 
 **`removeAt` — the owner's rule (2026-09-06), and it replaces the earlier
 "playback keeps running" idea.**
@@ -771,6 +836,10 @@ it is specified in §10 and is its own build phase, starting with the parser
    not restart.
 8. Drop 3 files on the panel → appended, current item untouched. Drop the same
    3 on the canvas → the queue is replaced (existing behaviour, unchanged).
+8b. Select 8 files in a folder and start the drag from the 6th (or Ctrl-pick
+   them out of order), drop / Open File… them → the queue reads 1…8 and the
+   first thing that plays is file **1**, not file 6 (§5, one gesture = one
+   block). Same for Open Folder… with names like `ep2`/`ep10`: natural order.
 9. Esc closes the panel; Ctrl+L toggles it; neither appears anywhere in the UI.
 10. With the panel open, the chrome auto-hides after 3 s and the panel stays;
     moving the mouse brings the chrome back with the mark still glowing.
@@ -859,6 +928,7 @@ it is specified in §10 and is its own build phase, starting with the parser
 | 20 | Header visibility | only while the queue is non-empty | **owner**, 2026-09-06 |
 | 21 | Search field | magnifier inside-left · **count inside-right** · ✕ inside-right while there is text · no placeholder · **filters the view only** | **owner**, 2026-09-06 |
 | 21b | Footer | **none** — the panel is header + rows; no append button (files arrive via the Open control or a drop) | **owner**, 2026-09-06 |
+| 21c | Local batch order | the shell's array is never trusted: a drop/dialog batch is re-sorted into the folder's own order (natural, case-insensitive) and plays from that top row; blocks still only ever append | **owner** (bug: 8 files started at 6/7), §5 |
 | 22 | Repeat glyph | the family's loop arc · bead at its centre = repeat one · quiet ink = off · never a numeral | default, §4.4 |
 | 23 | Focus | the search field is the only focusable thing in the panel; Esc precedence per §4.5 | default, §4.5 |
 | 24 | Clear playlist | **absolute** — playback stops, queue empties, SALU returns to its initial state; 5 s Undo restores the queue *and* the position; resume memory and the saved seven untouched | **owner**, 2026-09-06 |

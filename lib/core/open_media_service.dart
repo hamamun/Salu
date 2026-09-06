@@ -36,8 +36,13 @@ class OpenMediaService {
 
   /// Open File… — native Windows explorer, multi-select. Per
   /// playlist_imp.md §7.10/5.b OPEN IS THE APPEND VERB: picks join the
-  /// end of the queue (the list is always the order of arrival; there is
-  /// no "insert"). While idle the append simply starts the queue.
+  /// end of the queue (there is no "insert"). While idle the append
+  /// simply starts the queue.
+  ///
+  /// The dialog hands back the picks in SELECTION order, which on Windows
+  /// starts at whatever row was clicked first and wraps — so the batch is
+  /// sorted into the folder's own order before it is queued (§5). One
+  /// gesture is one block; blocks never re-sort each other.
   static Future<void> openFiles() async {
     final List<fs.XFile> files =
         await fs.openFiles(acceptedTypeGroups: _mediaTypeGroups);
@@ -48,6 +53,7 @@ class OpenMediaService {
             MediaUtils.isMedia(p) || MediaUtils.isPlaylist(p))
         .toList();
     if (paths.isEmpty) return;
+    MediaUtils.sortNatural(paths);
     final PlayerService player = PlayerService.instance;
     await player.appendToQueue(
       <QueueItem>[for (final String p in paths) QueueItem(p)],

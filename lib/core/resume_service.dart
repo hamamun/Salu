@@ -59,7 +59,14 @@ class ResumeService {
             final int pos = _toInt(value[0]);
             final int dur = _toInt(value[1]);
             final int stamp = value.length >= 3 ? _toInt(value[2]) : 0;
-            _entries[path] = <int>[pos, dur, stamp];
+            final String key = _key(path);
+            // Keys written before the spelling was enforced can arrive
+            // twice, once per spelling. Keep the newer visit.
+            final List<int>? held = _entries[key];
+            final int heldStamp =
+                held == null || held.length < 3 ? 0 : _toInt(held[2]);
+            if (held != null && heldStamp > stamp) return;
+            _entries[key] = <int>[pos, dur, stamp];
           }
         });
       }
@@ -96,19 +103,27 @@ class ResumeService {
     return true;
   }
 
+  /// The store's OWN spelling. A caller may know the file as the raw
+  /// `C:\media\a.mp4` the picker handed over or the
+  /// `file:///C:/media/a.mp4` mpv reports; both land on the same key, so
+  /// an entry can never be written under one spelling and looked up under
+  /// another. (`MediaUtils.canonicalPath` leaves stream URLs alone.)
+  static String _key(String path) => MediaUtils.canonicalPath(path);
+
   // ── Reading ────────────────────────────────────────────────────────────
 
   /// The remembered position for [path], or `null` when nothing usable
   /// is stored (never stored, pruned, outside the keep-window, or gated
   /// off by the current Resume mode).
   Duration? savedPositionFor(String path) {
-    if (!remembersKind(path)) return null;
-    final List<int>? entry = _entries[path];
+    final String key = _key(path);
+    if (!remembersKind(key)) return null;
+    final List<int>? entry = _entries[key];
     if (entry == null || entry.length < 2) return null;
     final Duration pos = Duration(milliseconds: entry[0]);
     final Duration dur = Duration(milliseconds: entry[1]);
-    if (!shouldKeep(path, pos, dur)) {
-      _entries.remove(path);
+    if (!shouldKeep(key, pos, dur)) {
+      _entries.remove(key);
       return null;
     }
     return pos;
@@ -120,26 +135,27 @@ class ResumeService {
   /// to one every 5 s while playing; call [flush] for an immediate write
   /// (pause, Stop, item switch, window close).
   void update(String path, Duration pos, Duration dur) {
-    if (path.isEmpty || path.contains('://')) return;
-    if (!remembersKind(path)) return;
-    if (!shouldKeep(path, pos, dur)) {
+    final String key = _key(path);
+    if (key.isEmpty || key.contains('://')) return;
+    if (!remembersKind(key)) return;
+    if (!shouldKeep(key, pos, dur)) {
       // Outside the keep-window (near start, near end, too short):
       // remove — finished files start over next time.
-      if (_entries.containsKey(path)) {
-        _entries.remove(path);
+      if (_entries.containsKey(key)) {
+        _entries.remove(key);
         _maybeWriteDisk(force: true);
       }
       return;
     }
     final int now = DateTime.now().millisecondsSinceEpoch;
-    _entries[path] = <int>[pos.inMilliseconds, dur.inMilliseconds, now];
+    _entries[key] = <int>[pos.inMilliseconds, dur.inMilliseconds, now];
     _maybeWriteDisk();
   }
 
   /// Drops any stored position for [path] (e.g. the current item is
   /// being restarted — a finished file must not resurrect old state).
   void remove(String path) {
-    if (_entries.remove(path) != null) {
+    if (_entries.remove(_key(path)) != null) {
       _maybeWriteDisk(force: true);
     }
   }

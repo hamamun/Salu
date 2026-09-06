@@ -12,9 +12,11 @@ import 'queue_service.dart';
 ///  • Drop video/audio file(s) → play instantly (extras are queued).
 ///  • Drop a `.srt`/`.ass` file → attach as subtitle to the current media.
 ///  • Drop a folder → scan it for media, queue everything, play the first.
+///  • Drop on the open panel → append; the batch arrives in the folder's
+///    own order (§5), never in the order Windows happened to hand it over.
 ///
-/// The full  -grade intelligence (playlist-panel-aware drops, natural
-/// episode sorting, smart queuing) lands in Phase 5 on top of this.
+/// The rest of the promised intelligence (smarter queuing) lands on top of
+/// this later.
 class DropHandler {
   DropHandler._();
 
@@ -58,6 +60,14 @@ class DropHandler {
       return subtitles.isNotEmpty ? 'Subtitle loaded' : null;
     }
 
+    // 2b. One gesture = one block, in the order the folder shows it.
+    // Windows hands the drop list starting at the file that was grabbed
+    // and wraps the rest behind it, so the raw array is not the order the
+    // user selected in — sorting here is what makes "play from the top"
+    // mean the top file. (Reordering after the fact stays the panel's ≡
+    // grip's job; blocks from separate gestures still only ever append.)
+    MediaUtils.sortNatural(mediaPaths);
+
     // 3. Panel drop = append to the END of the queue (M3h); while idle
     // the append simply starts the queue from the top.
     if (append) {
@@ -84,9 +94,9 @@ class DropHandler {
         : 'Queued ${mediaPaths.length} files';
   }
 
-  /// Shallow-scans a folder for playable media, alphabetically sorted.
-  /// Shared by drag-and-drop and the Open Folder… picker.
-  /// (Natural episode-order sorting arrives with Phase 5's smart queue.)
+  /// Shallow-scans a folder for playable media, in the folder's own
+  /// display order (natural, case-insensitive — `episode 2` before
+  /// `episode 10`). Shared by drag-and-drop and the Open Folder… picker.
   static List<String> scanFolderForMedia(String folderPath) {
     try {
       final List<String> found = Directory(folderPath)
@@ -94,9 +104,8 @@ class DropHandler {
           .whereType<File>()
           .map((File f) => f.path)
           .where(MediaUtils.isMedia)
-          .toList()
-        ..sort((String a, String b) =>
-            a.toLowerCase().compareTo(b.toLowerCase()));
+          .toList();
+      MediaUtils.sortNatural(found);
       return found;
     } catch (error) {
       debugPrint('[SALU] folder scan failed: $error');

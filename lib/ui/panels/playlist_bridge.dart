@@ -127,9 +127,11 @@ class MirrorPlaylistStore extends PlaylistStore {
   });
 
   /// Injected by the child-shell setup — forwards an intent map over the
-  /// bridge and completes when the host has accepted it (or when the
-  /// send has failed and been swallowed by the shell).
-  final Future<void> Function(Map<String, Object?> intent) sendIntent;
+  /// bridge and completes with whether the HOST acknowledged it. Ordinary
+  /// intents ignore that answer (state re-syncs on the next change); the two
+  /// teardown intents below do not, because nothing re-syncs after this
+  /// window stops existing.
+  final Future<bool> Function(Map<String, Object?> intent) sendIntent;
 
   /// Child-window safety net: after the Dock intent leaves this engine,
   /// the child also tears down its own native window. The host still owns
@@ -276,7 +278,9 @@ class MirrorPlaylistStore extends PlaylistStore {
 
   // ── Intents out ──
 
-  Future<void> _send(
+  /// One intent out. The bool is the host's acknowledgement (the shell
+  /// answers false when the channel refused or the host never replied).
+  Future<bool> _send(
     PlaylistIntent intent, [
     Map<String, Object?> args = const {},
   ]) {
@@ -287,7 +291,9 @@ class MirrorPlaylistStore extends PlaylistStore {
     PlaylistIntent intent, [
     Map<String, Object?> args = const {},
   ]) {
-    unawaited(_send(intent, args));
+    // Ordinary intents ignore the acknowledgement — a lost one is repaired by
+    // the next snapshot/delta — so the answer is dropped, not left floating.
+    unawaited(_send(intent, args).then((bool _) {}));
   }
 
   @override
@@ -340,11 +346,23 @@ class MirrorPlaylistStore extends PlaylistStore {
         'u': user,
       });
 
-  Future<void> _sendBeforeWindowTeardown(PlaylistIntent intent) {
-    return _send(intent).timeout(
-      const Duration(milliseconds: 800),
-      onTimeout: () {},
-    );
+  /// The two intents that must not be lost: `dock` is what reopens the
+  /// docked slot and `closePanel` is what hides the view, and after the
+  /// teardown below there is no window left to re-send either. So: wait for
+  /// the host's answer, retry once if it did not arrive, and only then let
+  /// the caller destroy this window.
+  Future<void> _sendBeforeWindowTeardown(PlaylistIntent intent) async {
+    for (int attempt = 0; attempt < 2; attempt++) {
+      bool delivered = false;
+      try {
+        delivered =
+            await _send(intent).timeout(const Duration(milliseconds: 500));
+      } catch (_) {
+        delivered = false; // timed out, or the channel refused
+      }
+      if (delivered) return;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
   }
 
   @override
