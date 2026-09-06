@@ -163,7 +163,7 @@ class PlaylistWindow {
   /// Installs the shared bridge channel + the decode routes: the child's
   /// 'ready' handshake and every intent it raises.
   void _ensureBridge() {
-    _bridge ??= WindowMethodChannel(kPlaylistBridgeChannel);
+    _bridge ??= const WindowMethodChannel(kPlaylistBridgeChannel);
     _bridge!.setMethodCallHandler((call) async {
       switch (call.method) {
         case kMsgReady:

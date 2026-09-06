@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide RepeatMode;
@@ -81,7 +80,9 @@ class PlaylistDock extends StatefulWidget {
   final bool undocked;
 
   /// Jumps the rows so the playing row is on screen (§5 auto-scroll).
-  static final GlobalKey<_PlaylistPanelState> panelKey =
+  /// Private: `_PlaylistPanelState` is library-private, so the key must
+  /// stay out of the public API too.
+  static final GlobalKey<_PlaylistPanelState> _panelKey =
       GlobalKey<_PlaylistPanelState>();
 
   @override
@@ -100,7 +101,7 @@ class _PlaylistDockState extends State<PlaylistDock> {
     if (widget.open && !oldWidget.open) {
       _store.setFilter('');
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        PlaylistDock.panelKey.currentState?.revealPlaying(animate: false);
+        PlaylistDock._panelKey.currentState?.revealPlaying(animate: false);
       });
     }
   }
@@ -129,7 +130,7 @@ class _PlaylistDockState extends State<PlaylistDock> {
               curve: visible ? Curves.easeOutCubic : Curves.easeInCubic,
               child: ClipRect(
                 child: PlaylistPanel(
-                  key: PlaylistDock.panelKey,
+                  key: PlaylistDock._panelKey,
                   store: _store,
                   inOwnWindow: false,
                 ),
@@ -657,7 +658,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                   padding: EdgeInsets.zero,
                   itemCount: _rows.length,
                   buildDefaultDragHandles: false,
-                  onReorder: _onReorder,
+                  onReorderItem: _onReorderItem,
                   itemBuilder: _buildRowAt,
                 )
               : ListView.builder(
@@ -698,9 +699,10 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
     );
   }
 
-  void _onReorder(int oldIndex, int newIndex) {
-    // Local mode without a filter: visible index == queue index.
-    if (newIndex > oldIndex) newIndex -= 1;
+  void _onReorderItem(int oldIndex, int newIndex) {
+    // Local mode without a filter: visible index == queue index. Unlike
+    // the deprecated onReorder, onReorderItem already adjusts newIndex
+    // for the item removed at oldIndex — no manual decrement here.
     store.moveRow(oldIndex, newIndex);
   }
 
@@ -774,7 +776,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
       }
     }
     if (head == null) return const SizedBox.shrink();
-    final _HeadRow openHead = head!;
+    final _HeadRow openHead = head;
     final double bodyBottom = top + openHead.height + members * _rowH;
     final double offset = _scrollOffset;
     if (top >= offset || bodyBottom <= offset) {
