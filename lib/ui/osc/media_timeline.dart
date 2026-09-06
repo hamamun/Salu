@@ -241,22 +241,26 @@ class _MediaTimelineState extends State<MediaTimeline> {
             : null);
 
     // The boundary shown on the bar: the scrub preview while pressing or
-    // dragging, the real playback position otherwise.
-    final double boundaryFrac = _pressFrac ??
+    // dragging, the real playback position otherwise. `_pressFrac` is a
+    // field, and fields never promote on null checks — snapshot it in a
+    // local so the guard narrows it, and so boundary, readout and chip
+    // all read the same value within this frame.
+    final double? pressFrac = _pressFrac;
+    final double boundaryFrac = pressFrac ??
         (usable ? _clamp01(pos.inMilliseconds / durMs) : 0);
     final double boundaryX = boundaryFrac * w;
 
     // Time readouts.
     final Duration shown =
-        _pressFrac != null && usable ? _targetForFrac(_pressFrac) : pos;
+        pressFrac != null && usable ? _targetForFrac(pressFrac) : pos;
     final Duration remaining =
         dur - shown > Duration.zero ? dur - shown : Duration.zero;
-    final bool showTicks = usable && (_hoverFrac != null || _pressFrac != null);
+    final bool showTicks = usable && (_hoverFrac != null || pressFrac != null);
     final Duration tickStep = usable ? _tickStep(w) : Duration.zero;
 
     // Tooltip chip — target time under the cursor / thumb.
     const double chipWidth = 96; // HoverChip's timeline width
-    final double? chipFrac = _pressFrac ?? _hoverFrac;
+    final double? chipFrac = pressFrac ?? _hoverFrac;
     final bool showChip = usable && chipFrac != null;
     final double clampedChipFrac = chipFrac?.clamp(0.0, 1.0).toDouble() ?? 0;
     final double chipLeft = w <= chipWidth
@@ -301,7 +305,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
                 // never both; a stall or pause stops the drift.
                 if (sweepLayer != null)
                   Positioned.fill(
-                    child: IgnorePointer(child: sweepLayer!),
+                    child: IgnorePointer(child: sweepLayer),
                   ),
                 // Paste-window style fill.
                 if (boundaryX > 0)

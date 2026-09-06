@@ -84,7 +84,7 @@ class PlaylistChildShell {
     });
   }
 
-  static final WindowMethodChannel _bridge =
+  static const WindowMethodChannel _bridge =
       WindowMethodChannel(kPlaylistBridgeChannel);
 
   static Future<void> _configureWindow() async {
