@@ -376,7 +376,7 @@ Row anatomy, 38 px tall, radius 9:
 - If the filter (§4.5) has hidden the playing row, the reveal does nothing —
   there is nothing to reveal, and the filter must not be overridden.
 
-**4.4 Header row — five marks, no words** *(owner's change of plan, 2026-09-06)*
+**4.4 Header row — five docked marks, no words** *(owner's change of plan, 2026-09-06)*
 
 The four-tab strip (Playlist · Video · Audio · Subtitles) is **removed** from
 this panel. It is a playlist panel and nothing else. Where the Video / Audio /
@@ -384,9 +384,11 @@ Subtitle views live now is an open Phase 4 question — the control row's right
 edge is still reserved for them (§1, decision 1), and they must not come back
 as tabs on top of the queue.
 
-The header appears **only when the queue is non-empty** (owner's rule), so none
-of the five ever needs a dimmed state for "nothing to act on". Left to right,
-in a 322 px panel with 8/10 px padding and a hairline underneath:
+The docked header appears **only when the queue is non-empty** (owner's rule),
+so none of the five docked controls needs a dimmed state for "nothing to act
+on". The loose window keeps its header even after a clear, so Dock and Close
+remain reachable; queue verbs simply dim there. Left to right, in a 322 px panel
+with 8/10 px padding and a hairline underneath:
 
 | # | Control | Mark | States & tooltip |
 |---|---|---|---|
@@ -396,7 +398,10 @@ in a 322 px panel with 8/10 px padding and a hairline underneath:
 | 4 | **Clear playlist** | `TrashMark` | **absolute**: playback stops, the queue empties, SALU returns to its initial state (the logo canvas). Instant, no confirmation, 5 s **Undo** toast (rule 3) — see §5 |
 | 5 | **Undock / Dock back** | one slot, two marks: a window with an arrow leaving it / the same window with the arrow returning | swaps with the state (the plus→× precedent), tooltips "Undock" / "Dock back" |
 
-Space math: four 30 px marks + gaps ≈ 128 px, leaving ~174 px for the field —
+Loose window only: a final **Close** ✕ after Dock hides the playlist view while
+leaving playback and the queue untouched.
+
+Docked space math: four 30 px marks + gaps ≈ 128 px, leaving ~174 px for the field —
 and the field now has to hold the magnifier (~20 px), the count (~28 px) and the
 ✕ (~20 px) as well, so typed text gets ~100 px. Tight but workable, and removing
 the footer is what keeps it that way. **Escape hatch if it ever feels cramped:**
@@ -511,9 +516,10 @@ Locked behaviours:
   One queue, one truth. Same for Ctrl+L.
 - The header's mark swaps to **dock back**; clicking it returns the window to
   the slot at y = 148 and disposes the child window.
-- Closing the loose window with its own caption ✕ = **dock back**, never
-  "delete the playlist".
-- Its drag area is the header, so the five marks keep working while it is loose.
+- Closing the loose window with its own caption/header ✕ = **hide the playlist
+  view**, never clear the playlist and never stop playback; the next chrome
+  playlist click opens the docked panel again.
+- Its drag area is the header, so the header marks keep working while it is loose.
 - Repeat / shuffle / filter state lives in the **player** process; the loose
   window mirrors it, so docking back restores exactly what was on screen.
 - *(default)* **Above SALU, not above every other app.** The child stays on top
@@ -729,8 +735,9 @@ controls"). What Undo restores:
 13. **Undock / dock — in scope, built last** (§4.8). 13a is the frameless-child
     window **spike and abort gate**; then the `desktop_multi_window` dependency,
     the child's glass shell, the `PlaylistBridge` snapshot-out / intent-in seam,
-    drag by the header, raise-on-summon, dock-back, and closing = docking. If
-    13a fails, undock is dropped and steps 1–12 still ship.
+    drag by the header, raise-on-summon, dock-back, and loose-window close =
+    hide playlist view. If 13a fails, undock is dropped and steps 1–12 still
+    ship.
 
 **Out of scope here:** the Video / Audio / Subtitle views — **the four-tab strip
 is removed from this panel** (§4.4) and, per the owner (2026-09-06), those three
@@ -779,9 +786,10 @@ it is specified in §10 and is its own build phase, starting with the parser
     shift, and the timeline's readouts stay where they were.
 15. Click the mark mid-slide → the panel reverses from where it is, it does not
     restart or jump.
-16. The header appears **only** once something is queued; with an empty queue the
-    panel is the ghost mark and nothing else — no header, no footer — and the
-    canvas is back to its initial state.
+16. The docked header appears **only** once something is queued; with an empty
+    docked queue the panel is the ghost mark and nothing else — no header, no
+    footer — and the canvas is back to its initial state. The loose window keeps
+    Dock/Close reachable if a clear empties it.
 17. Repeat cycles off → all → one per click: quiet arc → full arc → arc + centre
     bead, glow on anything but off, tooltip naming the new state each time.
 18. Repeat **one** with shuffle on → the shuffle mark drops to quiet ink and loses
@@ -818,8 +826,9 @@ it is specified in §10 and is its own build phase, starting with the parser
 30. Undock → the playlist becomes its own **borderless glass** window at the same
     322 px width, draggable by its header, the docked slot goes empty, and the
     header mark becomes dock-back. While it is loose, the control-row mark and
-    Ctrl+L **raise** it rather than opening a second docked panel, and its own ✕
-    docks it back — it never deletes the playlist.
+    Ctrl+L **raise** it rather than opening a second docked panel. Its own ✕
+    hides the playlist view only — it never deletes the playlist or stops
+    playback, and the next chrome playlist click opens the docked panel.
 31. No ripples, no splashes, no filled box or pill behind any icon, no instruction
     text, no placeholder string, no shortcut labels, no confirmation dialog,
     **no footer, and no tab strip anywhere in the panel**.
@@ -846,7 +855,7 @@ it is specified in §10 and is its own build phase, starting with the parser
 | 16 | Video | **overlaid, never docked** — no rescale on open/close | default, §4.1 |
 | 17 | Tooltip | "Playlist" / "Hide playlist", following the Mute/Unmute precedent | default, §3 |
 | 18 | Reveal | opening scrolls to the playing row with no animation | default, §4.3 |
-| 19 | Header row | repeat · shuffle · search · clear playlist · undock, left to right, marks only | **owner**, 2026-09-06 |
+| 19 | Header row | docked: repeat · shuffle · search · clear playlist · undock, left to right, marks only; loose adds Close ✕ | **owner**, 2026-09-06 |
 | 20 | Header visibility | only while the queue is non-empty | **owner**, 2026-09-06 |
 | 21 | Search field | magnifier inside-left · **count inside-right** · ✕ inside-right while there is text · no placeholder · **filters the view only** | **owner**, 2026-09-06 |
 | 21b | Footer | **none** — the panel is header + rows; no append button (files arrive via the Open control or a drop) | **owner**, 2026-09-06 |
@@ -858,7 +867,7 @@ it is specified in §10 and is its own build phase, starting with the parser
 | 24d | Shuffle & the view | shuffle never reorders the visible list; playback order only | **owner**, 2026-09-06 |
 | 24e | Repeat × shuffle | the decision table of §5; repeat-one **suspends** shuffle (quiet ink, no glow) and the setting survives | default, §5 |
 | 24f | Prev/Next during shuffle | follow the play-order history (what was heard), not the list | default, §5 |
-| 25 | Undock | its own draggable borderless glass window, same 322 px, header = drag area; the mark raises it while loose; closing = dock back | **owner**, 2026-09-06 |
+| 25 | Undock | its own draggable borderless glass window, same 322 px, header = drag area; the mark raises it while loose; dock mark docks back; loose-window close/header ✕ hides the playlist view | **owner**, 2026-09-06 |
 | 25b | Undock scope | **in scope for this build** (owner: "if it is possible it has to be fully implemented while making the playlist"), built as step 13 behind a frameless-window spike that is the abort gate | **owner** + default, §4.8 |
 | 25c | Undock plumbing | `desktop_multi_window` on stable (Flutter ships no public multi-window API), all traffic through one `PlaylistBridge` seam so it can be deleted when the framework API lands, and reused by Phase 8 | default, §4.8 |
 | 26 | Undock stacking | above SALU only, never system-wide always-on-top | default, §4.8 |

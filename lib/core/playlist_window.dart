@@ -20,7 +20,9 @@ import 'queue_undo.dart';
 ///
 /// While the window is loose the docked slot stays empty and the control
 /// row's mark (and Ctrl+L) SUMMON AND RAISE it instead of opening a second
-/// docked panel — one queue, one truth.
+/// docked panel — one queue, one truth. Closing the loose window hides the
+/// playlist view only; playback continues and the next chrome playlist click
+/// reopens the docked panel.
 class PlaylistWindow {
   PlaylistWindow._();
 
@@ -78,19 +80,17 @@ class PlaylistWindow {
     }
   }
 
-  /// Dock back: close the loose window; the docked slot reopens with the
-  /// mirrored state. Closing the window's own caption ✕ routes here too —
-  /// closing = docking, never "delete the playlist".
+  /// Dock back: close the loose window and reopen the docked slot with
+  /// the mirrored state. The child also destroys itself after sending the
+  /// Dock intent, so a dropped host-side close cannot leave an orphan.
   Future<void> dock() async {
     final WindowController? child = _child;
-    if (child == null) return;
-    PanelService.instance.playlistUndocked.value = false;
-    PanelService.instance.playlistOpen.value = true;
-    _goneWatch?.cancel();
-    _goneWatch = null;
-    _detachBridge();
-    _child = null;
-    childReady.value = false;
+    if (child == null) {
+      PanelService.instance.playlistUndocked.value = false;
+      PanelService.instance.playlistOpen.value = true;
+      return;
+    }
+    _finishLooseWindow(openDocked: true);
     try {
       await child.invokeMethod<void>('close');
     } catch (e) {
@@ -156,6 +156,16 @@ class PlaylistWindow {
     } catch (_) {
       return null;
     }
+  }
+
+  void _finishLooseWindow({required bool openDocked}) {
+    _goneWatch?.cancel();
+    _goneWatch = null;
+    _detachBridge();
+    _child = null;
+    childReady.value = false;
+    PanelService.instance.playlistUndocked.value = false;
+    PanelService.instance.playlistOpen.value = openDocked;
   }
 
   // ── Bridge publishing ────────────────────────────────────────────────
@@ -321,21 +331,24 @@ class PlaylistWindow {
       case 'dock':
         unawaited(dock());
         break;
+      case 'closePanel':
+        _finishLooseWindow(openDocked: false);
+        break;
       default:
         break;
     }
   }
 
-  /// The child window is gone (its engine ended) — reconcile state.
+  /// The child window is gone (its engine ended) — reconcile state. An
+  /// external/native close hides the playlist view rather than reopening
+  /// the dock; an explicit Dock click has already run [dock()].
   void onChildGone() {
-    _goneWatch?.cancel();
-    _goneWatch = null;
-    _detachBridge();
-    _child = null;
-    childReady.value = false;
     if (PanelService.instance.playlistUndocked.value) {
-      PanelService.instance.playlistUndocked.value = false;
-      PanelService.instance.playlistOpen.value = true;
+      _finishLooseWindow(openDocked: false);
+    } else {
+      _finishLooseWindow(
+        openDocked: PanelService.instance.playlistOpen.value,
+      );
     }
   }
 }

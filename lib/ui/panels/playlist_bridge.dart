@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/channel_service.dart';
@@ -111,17 +113,33 @@ enum PlaylistIntent {
   setOpenGroup,
   undo,
   dock,
+  closePanel,
 }
 
 /// The child window's view of the playlist: every read is an OWNED
 /// notifier fed by bridge deltas; every action becomes an intent. The
 /// same [PlaylistStore] surface, zero UI changes.
 class MirrorPlaylistStore extends PlaylistStore {
-  MirrorPlaylistStore({required this.sendIntent});
+  MirrorPlaylistStore({
+    required this.sendIntent,
+    this.onDockRequested,
+    this.onCloseRequested,
+  });
 
   /// Injected by the child-shell setup — forwards an intent map over the
-  /// bridge (after the drop, set to no-op).
-  final void Function(Map<String, Object?> intent) sendIntent;
+  /// bridge and completes when the host has accepted it (or when the
+  /// send has failed and been swallowed by the shell).
+  final Future<void> Function(Map<String, Object?> intent) sendIntent;
+
+  /// Child-window safety net: after the Dock intent leaves this engine,
+  /// the child also tears down its own native window. The host still owns
+  /// the state transition; this prevents an orphan if the host-side close
+  /// invoke is dropped by the windowing plugin.
+  final Future<void> Function()? onDockRequested;
+
+  /// Child-window close button safety net. The host owns the state flip;
+  /// the child tears down its native surface once that intent has left.
+  final Future<void> Function()? onCloseRequested;
 
   final ValueNotifier<List<QueueItem>> _items =
       ValueNotifier<List<QueueItem>>(const <QueueItem>[]);
@@ -258,56 +276,97 @@ class MirrorPlaylistStore extends PlaylistStore {
 
   // ── Intents out ──
 
-  void _send(PlaylistIntent intent, [Map<String, Object?> args = const {}]) {
-    sendIntent(<String, Object?>{'t': intent.name, ...args});
+  Future<void> _send(
+    PlaylistIntent intent, [
+    Map<String, Object?> args = const {},
+  ]) {
+    return sendIntent(<String, Object?>{'t': intent.name, ...args});
+  }
+
+  void _sendLater(
+    PlaylistIntent intent, [
+    Map<String, Object?> args = const {},
+  ]) {
+    unawaited(_send(intent, args));
   }
 
   @override
   void playRow(int queueIndex) =>
-      _send(PlaylistIntent.playRow, <String, Object?>{'i': queueIndex});
+      _sendLater(PlaylistIntent.playRow, <String, Object?>{'i': queueIndex});
 
   @override
   void removeRow(int queueIndex) =>
-      _send(PlaylistIntent.removeRow, <String, Object?>{'i': queueIndex});
+      _sendLater(PlaylistIntent.removeRow, <String, Object?>{'i': queueIndex});
 
   @override
   void moveRow(int from, int to) =>
-      _send(PlaylistIntent.moveRow, <String, Object?>{'f': from, 't': to});
+      _sendLater(PlaylistIntent.moveRow, <String, Object?>{'f': from, 't': to});
 
   @override
-  void cycleRepeat() => _send(PlaylistIntent.cycleRepeat);
+  void cycleRepeat() => _sendLater(PlaylistIntent.cycleRepeat);
 
   @override
-  void toggleShuffle() => _send(PlaylistIntent.toggleShuffle);
+  void toggleShuffle() => _sendLater(PlaylistIntent.toggleShuffle);
 
   @override
   void setGroupMode(GroupMode mode) =>
-      _send(PlaylistIntent.setGroupMode, <String, Object?>{'m': mode.index});
+      _sendLater(
+        PlaylistIntent.setGroupMode,
+        <String, Object?>{'m': mode.index},
+      );
 
   @override
-  void toggleFavouritesOnly() => _send(PlaylistIntent.toggleFavouritesOnly);
+  void toggleFavouritesOnly() =>
+      _sendLater(PlaylistIntent.toggleFavouritesOnly);
 
   @override
   void toggleFavourite(int queueIndex) =>
-      _send(PlaylistIntent.toggleFavourite, <String, Object?>{'i': queueIndex});
+      _sendLater(
+        PlaylistIntent.toggleFavourite,
+        <String, Object?>{'i': queueIndex},
+      );
 
   @override
-  void clearPlaylist() => _send(PlaylistIntent.clearPlaylist);
+  void clearPlaylist() => _sendLater(PlaylistIntent.clearPlaylist);
 
   @override
   void setFilter(String text) =>
-      _send(PlaylistIntent.setFilter, <String, Object?>{'f': text});
+      _sendLater(PlaylistIntent.setFilter, <String, Object?>{'f': text});
 
   @override
   void setOpenGroup(String? group, {required bool user}) =>
-      _send(PlaylistIntent.setOpenGroup, <String, Object?>{
+      _sendLater(PlaylistIntent.setOpenGroup, <String, Object?>{
         'g': group,
         'u': user,
       });
 
-  @override
-  void toggleDock() => _send(PlaylistIntent.dock);
+  Future<void> _sendBeforeWindowTeardown(PlaylistIntent intent) {
+    return _send(intent).timeout(
+      const Duration(milliseconds: 800),
+      onTimeout: () {},
+    );
+  }
 
   @override
-  void undo() => _send(PlaylistIntent.undo);
+  void toggleDock() {
+    unawaited(
+      _sendBeforeWindowTeardown(PlaylistIntent.dock).whenComplete(() async {
+        await onDockRequested?.call();
+      }),
+    );
+  }
+
+  @override
+  void closeView() {
+    unawaited(
+      _sendBeforeWindowTeardown(PlaylistIntent.closePanel).whenComplete(
+        () async {
+          await onCloseRequested?.call();
+        },
+      ),
+    );
+  }
+
+  @override
+  void undo() => _sendLater(PlaylistIntent.undo);
 }
