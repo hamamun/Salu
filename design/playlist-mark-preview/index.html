@@ -235,6 +235,18 @@
         <button data-v="C" aria-pressed="false">C · own group right of +</button>
       </div>
     </div>
+    <div class="pick"><span>Source</span>
+      <div class="segs" id="seg-source">
+        <button data-v="local" aria-pressed="true">local files</button>
+        <button data-v="m3u" aria-pressed="false">m3u url · 24 channels</button>
+      </div>
+    </div>
+    <div class="pick"><span>m3u tags</span>
+      <div class="segs" id="seg-tags">
+        <button data-v="full" aria-pressed="true">group-title + language + country</button>
+        <button data-v="thin" aria-pressed="false">group-title only</button>
+      </div>
+    </div>
     <div class="pick"><span>Queue state</span>
       <div class="segs" id="seg-queue">
         <button data-v="0" aria-pressed="false">empty</button>
@@ -298,12 +310,13 @@
       <div class="panel below" id="panel">
         <div class="phead" id="phead"></div>
         <div class="prows" id="prows"></div>
+        <div class="gpill" id="gpill"></div>
       </div>
       <div class="idle" id="idle"><div class="wm">SALU</div></div>
 
       <div class="chrome">
         <div class="titlebar">
-          <div class="t">Episode 07 — The Long Way Round.mkv</div>
+          <div class="t" id="tbTitle">Episode 07 — The Long Way Round.mkv</div>
           <div class="caps" id="caps"></div>
         </div>
         <div class="controller">
@@ -448,7 +461,39 @@ const F = {
   cross:  () => `<path d="M28 28L72 72M72 28L28 72"/>`,   // the × the plus already becomes
   undock: () => `<rect x="10" y="28" width="60" height="50" rx="10"/><path d="M56 44L86 14M74 14H86V26"/>`,
   dock:   () => `<rect x="10" y="28" width="60" height="50" rx="10"/><path d="M86 14L58 42M58 30V42H70"/>`,
+
+  // ── the m3u header marks (group-by pill + favourite bookmark) ──
+  gFlat: () => [28, 50, 72].map(y =>
+      `<circle cx="17" cy="${y}" r="5" fill="currentColor" stroke="none"/><path d="M30 ${y}H86"/>`).join(''),
+  gCat:  () => `<path d="M20 26H64"/><path d="M26 40H20V78H26"/>` +
+               q(`<path d="M34 52H80M34 70H72"/>`),
+  gLang: () => `<rect x="12" y="16" width="76" height="48" rx="14"/><path d="M36 64V82L56 64"/>` +
+               q(`<path d="M26 34H62M26 48H74"/>`),
+  gFlag: () => `<path d="M24 12V88"/><path d="M24 20H76L62 34L76 48H24"/>`,
+  bookmark: (filled) => `<path d="M26 12H74V86L50 68L26 86Z"${filled ? ' fill="currentColor"' : ''}/>`,
 };
+
+/* ── the m3u model: 24 channels with the tags a real IPTV list carries ── */
+const M3U = (() => {
+  const groups = [
+    ['News',   ['BBC News HD', 'Sky News', 'CNN International', 'France 24', 'Al Jazeera English', 'NHK World']],
+    ['Sports', ['BT Sport 1', 'ESPN HD', 'beIN Sports 1', 'Sky Sports F1', 'Eurosport 1', 'Star Sports 1']],
+    ['Movies', ['TCM HD', 'Sky Cinema Premiere', 'AMC HD', 'Paramount Network', 'Sony Movies', 'Action Movies']],
+    ['Kids',   ['Cartoon Network', 'Nickelodeon', 'Disney Junior', 'CBeebies', 'Boomerang', 'Nick Jr']],
+  ];
+  const langs = ['English', 'English', 'French', 'Spanish', 'English', 'Japanese'];
+  const ctry  = ['United Kingdom', 'United Kingdom', 'United States', 'France', 'Qatar', 'Japan'];
+  const out = []; let n = 101;
+  groups.forEach(([g, list], gi) => list.forEach((nm, i) => out.push({
+    name: nm, group: g, lang: langs[(gi + i) % langs.length],
+    country: ctry[(gi * 2 + i) % ctry.length], chno: n++,
+  })));
+  return out;
+})();
+const groupKey = (ch, mode) => mode === 'category' ? ch.group
+  : mode === 'language' ? ch.lang : mode === 'country' ? ch.country : '';
+const GROUP_MODES = [['flat', 'gFlat', 'Flat'], ['category', 'gCat', 'Category'],
+                     ['language', 'gLang', 'Language'], ['country', 'gFlag', 'Country']];
 
 /* ── playlist candidates ───────────────────────────────────── */
 /* st = {now: index of the playing row (-1 when the queue is empty), count} */
@@ -565,7 +610,10 @@ const CAND = {
 const S0 = { place: 'A', mark: 'rail', queue: 1, panelTop: 'below', panelOpen: false, pillOpen: false, guides: false,
              ticks: 3, bead: 'top', mirror: true, spine: 'left', dock: false,
              repeat: 'off', shuffle: false, undocked: false, search: '',
-             win: { x: 0, y: 0 }, placed: false, firstOpen: true };
+             win: { x: 0, y: 0 }, placed: false, firstOpen: true,
+             source: 'local', group: 'category', groupPill: false, openGroup: null,
+             favFilter: false, favs: new Set(['BBC News HD', 'Sky Sports F1', 'TCM HD']),
+             m3uLoaded: true, mnow: 6, revealKey: null, thinTags: false };
 const ITEMS = [
   ['Episode 01 — Cold Open.mkv','23:41'], ['Episode 02 — Salt and Iron.mkv','24:02'],
   ['Episode 03 — The Ferryman.mkv','22:58'], ['Episode 04 — Nightglass.mkv','24:44'],
@@ -579,7 +627,9 @@ const ITEMS = [
 /* The queue state every mark reads: `now` = playing index (-1 = empty),
    `count` = queue length. Same shape for the row, the panel and the gallery. */
 S0.items = ITEMS.slice();            // the working queue (remove / clear mutate it)
-const stNow = () => ({ now: S0.queue === 0 ? -1 : S0.queue - 1, count: S0.items.length });
+const stNow = () => S0.source === 'm3u'
+  ? { now: (S0.m3uLoaded && S0.mnow >= 0) ? S0.mnow : -1, count: M3U.length }
+  : { now: S0.queue === 0 ? -1 : S0.queue - 1, count: S0.items.length };
 const stEmpty = () => ({ now: -1, count: 0 });
 
 function seg(id, key, after) {
@@ -672,22 +722,98 @@ function renderRow() {
 /* ══════════════════════════════════════════════════════════════
    render — panel, caps, guides
    ══════════════════════════════════════════════════════════════ */
-function headerMarkup() {
-  const rep = S0.repeat;
-  const repMark = rep === 'one' ? F.loopOne() : F.loop();
-  const repCls  = rep === 'off' ? 'mute' : 'on';
-  const repTip  = rep === 'off' ? 'Repeat off' : rep === 'all' ? 'Repeat all' : 'Repeat one';
+function searchMarkup() {
   return `
-    <div class="salu-btn ${repCls}" id="hRepeat" title="${repTip}">${svg(repMark, 18)}</div>
-    <div class="salu-btn ${S0.shuffle ? 'on' : ''}" id="hShuffle" title="Shuffle">${svg(F.shuffle(), 18)}</div>
     <div class="psearch ${S0.search ? 'has' : ''}" id="hSearchWrap">
       <span class="mag">${svg(F.search(), 13, 11)}</span>
       <input id="hSearch" value="${S0.search.replace(/"/g, '&quot;')}" spellcheck="false" aria-label="filter">
-      <span class="cnt" id="hCount">${S0.items.length}</span>
+      <span class="cnt" id="hCount">0</span>
       <div class="salu-btn clr" id="hClear" title="Clear">${svg(F.cross(), 11, 12)}</div>
-    </div>
-    <div class="salu-btn" id="hWipe" title="Clear playlist">${svg(F.trash(), 18)}</div>
-    <div class="salu-btn" id="hDock" title="${S0.undocked ? 'Dock back' : 'Undock'}">${svg(S0.undocked ? F.dock() : F.undock(), 18)}</div>`;
+    </div>`;
+}
+
+/* One header, five slots. Slots 1–2 swap with the source; 3–5 never do:
+   local  → repeat · shuffle   · search · clear · undock
+   m3u    → group · favourite · search · clear · undock                     */
+function headerMarkup() {
+  let one, two;
+  if (S0.source === 'm3u') {
+    const gm = GROUP_MODES.find(m => m[0] === S0.group);
+    // A filter suspends grouping — and the mark says so with the same quiet
+    // ink shuffle borrows under repeat-one. One grammar for "not in effect".
+    const suspended = S0.group !== 'flat' && (S0.search.trim() !== '' || S0.favFilter);
+    one = `<div class="salu-btn ${S0.groupPill ? 'on' : (suspended ? 'mute' : '')}" id="hGroup"
+            title="Group by · ${gm[2]}">${svg(F[gm[1]](), 18)}</div>`;
+    two = `<div class="salu-btn ${S0.favFilter ? 'on' : ''}" id="hFav" title="Favourites only">
+            ${svg(F.bookmark(S0.favFilter), 18)}</div>`;
+  } else {
+    const rep = S0.repeat;
+    one = `<div class="salu-btn ${rep === 'off' ? 'mute' : 'on'}" id="hRepeat"
+            title="${rep === 'off' ? 'Repeat off' : rep === 'all' ? 'Repeat all' : 'Repeat one'}">
+            ${svg(rep === 'one' ? F.loopOne() : F.loop(), 18)}</div>`;
+    two = `<div class="salu-btn ${S0.shuffle ? 'on' : ''}" id="hShuffle" title="Shuffle">
+            ${svg(F.shuffle(), 18)}</div>`;
+  }
+  return one + two + searchMarkup()
+    + `<div class="salu-btn" id="hWipe" title="Clear playlist">${svg(F.trash(), 18)}</div>`
+    + `<div class="salu-btn" id="hDock" title="${S0.undocked ? 'Dock back' : 'Undock'}">
+        ${svg(S0.undocked ? F.dock() : F.undock(), 18)}</div>`;
+}
+
+function m3uRow(ch, i, now) {
+  const fav = S0.favs.has(ch.name);
+  return `
+    <div class="prow ${i === now ? 'now' : ''}" data-m="${i}">
+      ${i === now ? `<span style="color:#EDEDED;display:grid;place-items:center">${svg(F.play(), 12, 11)}</span>`
+                  : `<span style="width:12px"></span>`}
+      <span class="nm">${ch.name}</span>
+      <span class="dur">${ch.chno}</span>
+      <div class="salu-btn fav ${fav ? 'on' : ''}" data-fav="${i}" title="${fav ? 'Remove favourite' : 'Favourite'}">${svg(F.bookmark(fav), 15)}</div>
+    </div>`;
+}
+
+/* Flat · or an accordion where exactly one group is open, and the group that
+   holds the playing channel is the one that opens. */
+function renderM3URows() {
+  const rows = document.getElementById('prows'), st = stNow();
+  if (!S0.m3uLoaded) {
+    rows.innerHTML = `<div class="pempty">${svg(CAND[S0.mark].draw(stEmpty()), 46, strokeUnits(46))}</div>`;
+    return 0;
+  }
+  const term = S0.search.trim().toLowerCase();
+  const filtering = term !== '' || S0.favFilter;
+  let list = M3U.map((ch, i) => [ch, i]);
+  if (S0.favFilter) list = list.filter(([ch]) => S0.favs.has(ch.name));
+  if (term) list = list.filter(([ch]) =>
+    ch.name.toLowerCase().includes(term) || ch.group.toLowerCase().includes(term));
+
+  if (!list.length) {                       // no match: the mark, no words
+    rows.innerHTML = `<div class="pempty">${svg(S0.favFilter && !term ? F.bookmark(false) : F.search(), 40, strokeUnits(40))}</div>`;
+    return 0;
+  }
+  // Filtering answers "where is X", grouping answers "browse" — so a filter
+  // shows matches flat and grouping is suspended (its mark goes quiet).
+  if (S0.group === 'flat' || filtering) {
+    rows.innerHTML = list.map(([ch, i]) => m3uRow(ch, i, st.now)).join('');
+    return list.length;
+  }
+
+  const keys = [...new Set(M3U.map(ch => groupKey(ch, S0.group)))].sort();
+  const nowCh = st.now >= 0 ? M3U[st.now] : null;
+  if (S0.openGroup === null || (S0.openGroup !== '' && !keys.includes(S0.openGroup))) {
+    S0.openGroup = nowCh ? groupKey(nowCh, S0.group) : keys[0];
+  }
+  let html = '';
+  keys.forEach(k => {
+    const members = M3U.map((ch, i) => [ch, i]).filter(([ch]) => groupKey(ch, S0.group) === k);
+    const open = S0.openGroup === k;
+    html += `<div class="ghead ${open ? 'open' : ''}" data-g="${k}">
+        <span class="chev">${svg(F.play(), 11, 12)}</span>
+        <span class="gn">${k}</span><span class="gc">${members.length}</span></div>`;
+    if (open) html += members.map(([ch, i]) => m3uRow(ch, i, st.now)).join('');
+  });
+  rows.innerHTML = html;
+  return list.length;
 }
 
 function rowHtml(it, i, now) {
@@ -705,6 +831,7 @@ function rowHtml(it, i, now) {
 /* The list, filtered by the header field. Filtering changes the VIEW only —
    the queue itself is never reordered or trimmed by a search. */
 function renderRows() {
+  if (S0.source === 'm3u') return renderM3URows();
   const rows = document.getElementById('prows');
   const st = stNow();
   const term = S0.search.trim().toLowerCase();
@@ -743,7 +870,31 @@ function toast(msg, undo) {
 
 function syncQueueSegs() {
   const el = document.getElementById('seg-queue');
-  [...el.children].forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.v === S0.queue)));
+  const cur = S0.source === 'm3u'
+    ? (!S0.m3uLoaded ? 0 : (S0.mnow === 0 ? 1 : (S0.mnow >= 12 ? 12 : -1)))
+    : S0.queue;
+  [...el.children].forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.v === cur)));
+}
+
+function nothingLoaded() {
+  return S0.source === 'm3u' ? !S0.m3uLoaded : S0.items.length === 0;
+}
+
+function renderGroupPill() {
+  const el = document.getElementById('gpill');
+  const show = S0.source === 'm3u' && S0.groupPill && S0.panelOpen && S0.m3uLoaded;
+  el.className = 'gpill' + (show ? ' show' : '');
+  el.innerHTML = GROUP_MODES.map(([k, mk, label]) => {
+    // A mode the playlist carries no tags for is dimmed, not hidden — the
+    // honest answer to "most m3u files only have group-title".
+    const dead = S0.thinTags && (k === 'language' || k === 'country');
+    return `<div class="salu-btn ${S0.group === k ? 'on' : ''} ${dead ? 'off' : ''}"
+              data-gm="${k}" title="Group by ${label}">${svg(F[mk](), 19)}</div>`;
+  }).join('');
+  el.querySelectorAll('[data-gm]').forEach(b => b.onclick = () => {
+    if (b.classList.contains('off')) return;
+    S0.group = b.dataset.gm; S0.groupPill = false; S0.openGroup = null; render();
+  });
 }
 
 function renderPanel() {
@@ -763,28 +914,40 @@ function renderPanel() {
     p.style.top = S0.win.y + 'px';
   } else { p.style.left = ''; p.style.top = ''; }
 
-  // The header exists only once something is queued (owner's rule).
-  document.getElementById('phead').innerHTML = S0.queue === 0 ? '' : headerMarkup();
-  document.getElementById('phead').style.display = S0.queue === 0 ? 'none' : 'flex';
+  // The header exists only once something is loaded (owner's rule).
+  const empty = nothingLoaded();
+  document.getElementById('phead').innerHTML = empty ? '' : headerMarkup();
+  document.getElementById('phead').style.display = empty ? 'none' : 'flex';
 
   const shown = renderRows();
   setCount(shown);
+  renderGroupPill();
 
-  // Empty queue = SALU's initial state: the logo canvas, no header, no rows.
-  document.getElementById('idle').classList.toggle('show', S0.items.length === 0);
+  // Nothing loaded = SALU's initial state: the logo canvas, no header, no rows.
+  document.getElementById('idle').classList.toggle('show', empty);
+
+  // The title bar names what is playing — a channel in m3u mode, a file locally.
+  const st = stNow();
+  document.getElementById('tbTitle').textContent = st.now < 0 ? 'SALU'
+    : S0.source === 'm3u' ? M3U[st.now].name
+    : (S0.items[st.now] ? S0.items[st.now][0].replace(/\.\w+$/, '') : 'SALU');
 
   wirePanel();
-  revealNow(S0.firstOpen);
+
+  // Reveal ONLY when the playing item (or the grouping) actually changed —
+  // never on a re-render caused by a manual collapse or a hover.
+  const key = S0.source === 'm3u' ? `m${st.now}|${S0.group}` : `l${S0.queue}`;
+  if (S0.firstOpen) { revealNow(true); S0.revealKey = key; }
+  else if (key !== S0.revealKey) { revealNow(false); S0.revealKey = key; }
   S0.firstOpen = false;
 }
 
-/* The count lives inside the field: the total, or matched / total while
-   filtering. Numerals are data, not instruction text (rule 1) — same
-   precedent as the volume bar's in-bar 62 %. */
+/* The count lives INSIDE the search field (owner's rule): `total`, or
+   `matched / total` while a filter is narrowing. */
 function setCount(shown) {
   const el = document.getElementById('hCount');
   if (!el) return;
-  const total = S0.items.length;
+  const total = S0.source === 'm3u' ? M3U.length : S0.items.length;
   el.textContent = (shown === undefined || shown === total) ? String(total) : shown + ' / ' + total;
 }
 
@@ -796,16 +959,16 @@ function wirePanel() {
     render();
   });
   on('hShuffle', () => { S0.shuffle = !S0.shuffle; render(); });
+  on('hGroup',  () => { S0.groupPill = !S0.groupPill; render(); });
+  on('hFav',    () => { S0.favFilter = !S0.favFilter; render(); });
 
   const inp = document.getElementById('hSearch');
   if (inp) {
-    // Only the rows re-render while typing — the field keeps focus and caret.
     inp.oninput = e => {
       S0.search = e.target.value;
-      // Only the rows + the field's own furniture re-render — never the header,
-      // or the field would lose focus and the caret on every keystroke.
       document.getElementById('hSearchWrap').classList.toggle('has', S0.search.length > 0);
       setCount(renderRows());
+      wireRows();
       revealNow(false);
     };
     inp.onkeydown = e => {
@@ -818,6 +981,16 @@ function wirePanel() {
   on('hClear', () => { S0.search = ''; render(); const f = document.getElementById('hSearch'); if (f) f.focus(); });
 
   on('hWipe', () => {                                  // rule 3: instant, no dialog, 5 s Undo
+    if (S0.source === 'm3u') {
+      const snap = { loaded: S0.m3uLoaded, now: S0.mnow, search: S0.search };
+      S0.m3uLoaded = false; S0.mnow = -1; S0.search = ''; S0.favFilter = false;
+      syncQueueSegs(); render();
+      toast('Playlist cleared', () => {
+        S0.m3uLoaded = snap.loaded; S0.mnow = snap.now; S0.search = snap.search;
+        S0.openGroup = null; syncQueueSegs(); render();
+      });
+      return;
+    }
     const snap = { items: S0.items.slice(), queue: S0.queue };
     S0.items = []; S0.queue = 0; S0.search = '';       // ABSOLUTE: playback stops,
     syncQueueSegs(); render();                         // SALU returns to its initial state
@@ -828,29 +1001,14 @@ function wirePanel() {
 
   on('hDock', () => { S0.undocked = !S0.undocked; S0.placed = false; render(); });
 
-  document.querySelectorAll('.prow').forEach(r => {
-    r.onclick = e => {
-      if (e.target.closest('.act')) {                  // per-row remove + Undo
-        const i = +r.dataset.i;
-        const snap = { items: S0.items.slice(), queue: S0.queue };
-        const nowIdx = S0.queue === 0 ? -1 : S0.queue - 1;
-        S0.items.splice(i, 1);
-        if (nowIdx === i) {                            // deleted the PLAYING item
-          if (S0.items.length === 0) S0.queue = 0;     //   only one track → initial state
-          else if (i < S0.items.length) S0.queue = i + 1;   //   next takes its place
-          else S0.queue = i;                           //   no next → previous
-        } else if (nowIdx > i) {
-          S0.queue = nowIdx;                           // the playing row slid up one
-        }
-        syncQueueSegs(); render();
-        toast('Removed from playlist', () => {
-          S0.items = snap.items; S0.queue = snap.queue; syncQueueSegs(); render();
-        });
-        return;
-      }
-      S0.queue = +r.dataset.i + 1; syncQueueSegs(); S0.firstOpen = false; render();
-    };
-  });
+  wireRows();
+
+  // Clicking anywhere else in the panel closes the group pill.
+  document.getElementById('panel').onclick = e => {
+    if (S0.groupPill && !e.target.closest('#gpill') && !e.target.closest('#hGroup')) {
+      S0.groupPill = false; renderGroupPill();
+    }
+  };
 
   // Dragging the undocked window by its header.
   const p = document.getElementById('panel');
@@ -871,29 +1029,52 @@ function wirePanel() {
   }
 }
 
-function renderCaps() {
-  document.getElementById('caps').innerHTML =
-      `<div class="capbtn" title="Settings">${svg(F.dots(), 16, 0)}</div>
-       <div class="capbtn" title="Minimize"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M1 6h10" stroke="currentColor" stroke-width="1"/></svg></div>
-       <div class="capbtn" title="Maximize"><svg width="11" height="11" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></div>
-       <div class="capbtn close" title="Close"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1"/></svg></div>`;
-}
+function wireRows() {
+  // ── m3u rows: no drag, no delete — only the bookmark ──────────────────
+  document.querySelectorAll('.prow[data-m]').forEach(r => {
+    r.onclick = e => {
+      const fav = e.target.closest('[data-fav]');
+      if (fav) {
+        const ch = M3U[+fav.dataset.fav];
+        S0.favs.has(ch.name) ? S0.favs.delete(ch.name) : S0.favs.add(ch.name);
+        render();
+        return;
+      }
+      S0.mnow = +r.dataset.m; S0.openGroup = null;     // a new channel re-opens its group
+      syncQueueSegs(); render();
+    };
+  });
+  document.querySelectorAll('.ghead').forEach(g => {
+    g.onclick = () => {                                // accordion: one open group
+      S0.openGroup = S0.openGroup === g.dataset.g ? '' : g.dataset.g;
+      render();
+    };
+  });
 
-function renderGuides() {
-  const g = document.getElementById('guides');
-  g.classList.toggle('show', S0.guides);
-  const stage = document.getElementById('stage'), sr = stage.getBoundingClientRect();
-  const right = sr.width - 18 - 36;               // playlist slot, placement A
-  g.innerHTML = S0.guides ? `
-    <div class="g" style="left:0;right:0;top:0;height:148px"></div>
-    <div class="gl" style="left:8px;top:150px">chrome block 148 px — the panel must start here</div>
-    <div class="g" style="left:${right}px;top:112px;width:36px;height:36px"></div>
-    <div class="gl" style="left:${right - 150}px;top:118px">18 px from the window edge</div>
-    <div class="g" style="left:18px;top:112px;width:36px;height:36px"></div>
-    <div class="gl" style="left:60px;top:118px">Open + — the pill blooms below, 6 px</div>
-    <div class="g" style="right:0;top:${S0.panelTop === 'below' ? 148 : 0}px;bottom:0;width:322px"></div>
-    <div class="gl" style="right:330px;top:${S0.panelTop === 'below' ? 160 : 12}px">panel 322 px, slides from the right edge</div>
-  ` : '';
+  // ── local rows: drag handle, hover bin, the owner's auto-pick rule ─────
+  document.querySelectorAll('.prow[data-i]').forEach(r => {
+    r.onclick = e => {
+      if (e.target.closest('.act')) {
+        const i = +r.dataset.i;
+        const snap = { items: S0.items.slice(), queue: S0.queue };
+        const nowIdx = S0.queue === 0 ? -1 : S0.queue - 1;
+        S0.items.splice(i, 1);
+        if (nowIdx === i) {                            // deleted the PLAYING item
+          if (S0.items.length === 0) S0.queue = 0;     //   only one track → initial state
+          else if (i < S0.items.length) S0.queue = i + 1;   //   next takes its place
+          else S0.queue = i;                           //   no next → previous
+        } else if (nowIdx > i) {
+          S0.queue = nowIdx;                           // the playing row slid up one
+        }
+        syncQueueSegs(); render();
+        toast('Removed from playlist', () => {
+          S0.items = snap.items; S0.queue = snap.queue; syncQueueSegs(); render();
+        });
+        return;
+      }
+      S0.queue = +r.dataset.i + 1; syncQueueSegs(); render();
+    };
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1035,21 +1216,42 @@ function render() {
       : '');
 }
 seg('seg-place', 'place', v => S0.place = v);
+function labelQueueSegs() {
+  const [empty, a, b] = document.getElementById('seg-queue').children;
+  const m = S0.source === 'm3u';
+  a.textContent = m ? 'ch 1 of 24' : 'now = 1 of 14';
+  b.textContent = m ? 'ch 18 of 24' : 'now = 12 of 14';
+}
 document.getElementById('seg-queue').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-  S0.queue = +b.dataset.v;
-  S0.items = S0.queue === 0 ? [] : ITEMS.slice();      // reseed the working queue
-  S0.search = ''; S0.firstOpen = true; render();
+  const v = +b.dataset.v;
+  if (S0.source === 'm3u') {
+    S0.m3uLoaded = v !== 0;
+    S0.mnow = v === 0 ? -1 : (v === 1 ? 0 : 17);       // 18th channel → a real scroll
+  } else {
+    S0.queue = v;
+    S0.items = v === 0 ? [] : ITEMS.slice();           // reseed the working queue
+  }
+  S0.search = ''; S0.openGroup = null; S0.firstOpen = true; S0.revealKey = null; render();
 });
 seg('seg-panel', 'panelTop', v => S0.panelTop = v);
 seg('seg-guides', 'guides', v => S0.guides = v === 'on');
 seg('seg-dock',  'dock',   v => S0.dock = v === 'dock');
+seg('seg-tags',  'thinTags', v => S0.thinTags = v === 'thin');
+document.getElementById('seg-source').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  S0.source = b.dataset.v; S0.search = ''; S0.groupPill = false;
+  S0.openGroup = null; S0.firstOpen = true; S0.revealKey = null;
+  if (S0.source === 'm3u') { S0.m3uLoaded = true; S0.mnow = 6; }
+  labelQueueSegs(); render();
+});
 seg('seg-ticks',  'ticks',  v => S0.ticks = +v);
 seg('seg-bead',   'bead',   v => S0.bead = v);
 seg('seg-mirror', 'mirror', v => S0.mirror = v === 'on');
 seg('seg-spine',  'spine',  v => S0.spine = v);
-renderCollide(); renderRec(); render();
+renderCollide(); renderRec(); labelQueueSegs(); render();
 window.addEventListener('resize', () => { renderRow(); renderGuides(); });
 document.getElementById('stage').addEventListener('click', e => {
   if (!e.target.closest('#pill') && !e.target.closest('#plusBtn') && S0.pillOpen) { S0.pillOpen = false; render(); }
