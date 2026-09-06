@@ -36,7 +36,7 @@
   .stage-shell{position:relative;margin-top:14px;border:1px solid var(--outline);border-radius:14px;
                overflow:hidden;background:#0E0E10}
   .stage{position:relative;width:100%;height:520px;overflow:hidden}
-  .video{position:absolute;inset:0;
+  .video{position:absolute;inset:0;transition:margin-right .22s cubic-bezier(.215,.61,.355,1);
          background:
            radial-gradient(120% 90% at 50% 42%, #2A2C31 0%, #191A1D 46%, #0E0E10 100%),
            repeating-linear-gradient(115deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px);}
@@ -203,6 +203,12 @@
       <div class="segs" id="seg-panel">
         <button data-v="below" aria-pressed="true">below chrome (148)</button>
         <button data-v="full" aria-pressed="false">full height — the trap</button>
+      </div>
+    </div>
+    <div class="pick"><span>Panel opens</span>
+      <div class="segs" id="seg-dock">
+        <button data-v="over" aria-pressed="true">over the video</button>
+        <button data-v="dock" aria-pressed="false">docks the video</button>
       </div>
     </div>
     <div class="pick"><span>Guides</span>
@@ -490,7 +496,7 @@ const CAND = {
    state
    ══════════════════════════════════════════════════════════════ */
 const S0 = { place: 'A', mark: 'rail', queue: 1, panelTop: 'below', panelOpen: false, pillOpen: false, guides: false,
-             ticks: 3, bead: 'top', mirror: true, spine: 'left' };
+             ticks: 3, bead: 'top', mirror: true, spine: 'left', dock: false };
 const ITEMS = [
   ['Episode 05 — First Light.mkv',       '24:10'],
   ['Episode 06 — Cold Harbour.mkv',      '23:58'],
@@ -759,14 +765,28 @@ function renderRailLab() {
 function renderRec(){ document.getElementById('recList').innerHTML = REC.map(x=>`<li>${x}</li>`).join(''); }
 
 /* ══════════════════════════════════════════════════════════════ */
+function renderVideo() {
+  // Docking rescales the picture; the chrome block can never follow (rule 5),
+  // so the video ends up narrower than the timeline sitting above it.
+  document.querySelector('.video').style.marginRight =
+    (S0.dock && S0.panelOpen) ? '322px' : '0';
+}
+
 function render() {
-  renderRow(); renderPanel(); renderCaps(); renderGuides(); renderGallery(); renderRailLab();
-  document.getElementById('verdict').innerHTML = VERDICT[S0.place];
+  renderRow(); renderPanel(); renderCaps(); renderGuides(); renderGallery(); renderRailLab(); renderVideo();
+  document.getElementById('verdict').innerHTML = VERDICT[S0.place]
+    + (S0.dock
+      ? `<br><b>Docking the video:</b> the picture rescales on every open and every close — a visible jump
+         mid-scene — and the chrome block cannot follow it (hard rule 5: the container never shifts), so the
+         322 px of video you lose is <i>not</i> matched by the timeline above. SALU's glass already makes an
+         overlaid panel translucent; that is why "over the video" is the locked answer.`
+      : '');
 }
 seg('seg-place', 'place', v => S0.place = v);
 seg('seg-queue', 'queue', v => S0.queue = +v);
 seg('seg-panel', 'panelTop', v => S0.panelTop = v);
 seg('seg-guides', 'guides', v => S0.guides = v === 'on');
+seg('seg-dock',  'dock',   v => S0.dock = v === 'dock');
 seg('seg-ticks',  'ticks',  v => S0.ticks = +v);
 seg('seg-bead',   'bead',   v => S0.bead = v);
 seg('seg-mirror', 'mirror', v => S0.mirror = v === 'on');

@@ -197,7 +197,9 @@ the panel can never disagree.
 
 ```dart
 SaluIconButton(
-  tooltip: 'Playlist',                 // names the control, never teaches (rule 1)
+  // Names the control, never teaches (rule 1). Follows state exactly like
+  // the sound mark's `'Unmute' / 'Mute'`:
+  tooltip: PanelService.instance.playlistOpen.value ? 'Hide playlist' : 'Playlist',
   size: 36,
   active: PanelService.instance.playlistOpen.value,
   enabled: true,                       // ALWAYS — see 3.1
@@ -230,6 +232,32 @@ one notifier, exactly as `QueueService` does for the queue.
 
 ## 4. The panel — `lib/ui/panels/playlist_panel.dart`
 
+**4.0 The click — choreography, frame by frame**
+
+One `AnimationController` (220 ms) driving `forward()` / `reverse()`, exactly as
+`open_media_control.dart` does, so a mid-flight toggle **reverses** instead of
+restarting. The control is a toggle, never a launcher: clicking it while the
+panel is open closes it.
+
+| t | What happens |
+|---|---|
+| **0 ms** · pointer down | The mark sinks to **0.90×** instantly. No ripple, no splash, no shape behind it (rule 4, `NoSplash` stays global). |
+| **~100 ms** · pointer up | The mark springs back to 1.0× over 120 ms ease-out, **and in the same frame**: `playlistOpen = true` → `active:` flips, so the color glides to `textPrimary` and the **faint static glow** appears (the row's only glow — §1.2 R3 makes it load-bearing). |
+| **same frame** | The panel enters: `translateX(322 → 0)` **plus** opacity `0 → 1`, **220 ms**, `Curves.easeOutCubic`. Slide + fade, **no scale** — `0.96 → 1.0` belongs to point-anchored popups; an edge-anchored panel already "grows from its anchor direction" (§3) by sliding. |
+| **same frame** | **Nothing moves that must not move**: the video keeps its size and scale, the chrome block does not shift, the timeline stays Row 1 (rule 5). The panel is glass *over* the picture — see 4.1. |
+| **~220 ms** · settled | Rows are laid out and the list is scrolled so the playing row is on screen (4.3). **No OSD card flashes** — the deck is transport/volume only. |
+| **never** | The click does not start playback, does not touch the queue, does not take focus, does not acquire `ChromeLock`, does not open a modal. |
+| **+3 s** | The chrome auto-hides as usual (§4.6) and the panel stays, anchored at y = 148, hanging over the video where the chrome was. |
+
+**Closing** (mark again · Esc · Ctrl+L) runs the reverse: `translateX(0 → 322)` +
+fade out, 220 ms `Curves.easeInCubic` (the pill's `reverseCurve`), glow off via
+the same 120 ms color glide back to `iconIdle`. The panel stops hit-testing the
+instant it starts closing (`IgnorePointer`), so a closing sheet can never eat a
+click meant for the video.
+
+**If the `+` pill is open**, the first click anywhere — including on this mark —
+only closes the pill (§1.2 R2). The second click opens the panel. Intended.
+
 **4.1 Geometry & material**
 
 - `Positioned(top: kChromeBlockHeight, right: 0, bottom: 0, width: 322)`
@@ -242,6 +270,14 @@ one notifier, exactly as `QueueService` does for the queue.
 - It **never** touches the container: the timeline and the control row stay
   exactly where they are (hard rule 5), and because it starts at y = 148 it
   cannot cover the timeline's right-hand readout at any window width.
+- **The panel overlays the video; it does not dock it.** The picture keeps its
+  size and aspect scaling while the panel is open — glass (blur 18 over
+  `AppColors.glass`) already lets the covered image glow through. Docking
+  instead (shrinking the video by 322 px) was rejected: it rescales the picture
+  on every open *and* every close, mid-scene, and the chrome block cannot follow
+  it (rule 5), so the video would end up narrower than the timeline sitting
+  directly above it. The study demonstrates both — "Panel opens → docks the
+  video".
 
 **4.2 Z-order (bottom → top)**
 
@@ -269,6 +305,12 @@ Row anatomy, 38 px tall, radius 9:
 - Hover wash `rgba(255,255,255,.055)`; the 🗑 (`TrashMark`, 16 px) fades in on
   the right, on hover only — the URL rows' exact pattern.
 - Click anywhere on a row = play that index. No "select then load".
+- **Opening reveals the playing row.** On entrance, scroll with **no animation**
+  (a `jumpTo` / `ensureVisible` before the first frame) so the row is already in
+  place when the panel settles — the slide is the only motion. While the panel
+  stays open and the index changes (auto-advance, Next), scroll to the new row
+  over 220 ms **only if it is off-screen**. With a 40-item folder queue this is
+  the difference between a useful panel and a scroll hunt.
 
 **4.4 Footer — one mark, no words**
 
@@ -422,7 +464,17 @@ tab bar contradicts rule 6 and must not be built as written.
     moving the mouse brings the chrome back with the mark still glowing.
 11. Open the `+` pill while the panel is open → both coexist; the first click on
     a panel row closes the pill instead of acting (R2, intended).
-12. No ripples, no splashes, no filled box or pill behind any icon, no
+12. Press the mark → it sinks to 0.90× with nothing drawn behind it; release →
+    it springs back and the glow appears in the same frame the panel starts
+    moving. Tooltip reads "Playlist" closed, "Hide playlist" open.
+13. Open with a 40-item queue → the playing row is already on screen when the
+    panel settles (no visible scroll); let it auto-advance off-screen → the list
+    scrolls to the new row in 220 ms.
+14. While the panel is open the picture does **not** rescale, the chrome does not
+    shift, and the timeline's readouts stay where they were.
+15. Click the mark mid-slide → the panel reverses from where it is, it does not
+    restart or jump.
+16. No ripples, no splashes, no filled box or pill behind any icon, no
     instruction text, no shortcut labels, no confirmation dialog.
 
 ---
@@ -445,8 +497,15 @@ tab bar contradicts rule 6 and must not be built as written.
 | 12 | Rows | click = play · hover 🗑 + Undo · `≡` drag reorder | default, §4.3 |
 | 13 | Empty state | the mark itself at 30 % ink, no words | default, §4.5 |
 | 14 | Tab strip | deferred; marks not words when it arrives | default, §7 |
+| 15 | Open choreography | press 0.90× → spring back + glow + slide/fade 220 ms easeOutCubic, one controller, mid-flight reverses | default, §4.0 |
+| 16 | Video | **overlaid, never docked** — no rescale on open/close | default, §4.1 |
+| 17 | Tooltip | "Playlist" / "Hide playlist", following the Mute/Unmute precedent | default, §3 |
+| 18 | Reveal | opening scrolls to the playing row with no animation | default, §4.3 |
 
 Rejected on the way (recorded so they are not re-proposed silently): Queue Rail
 and its hinged/mirrored variants, Bead Queue, Panel Hinge (rect + divider —
 one hollow rounded rect away from `□` Stop), right-edge placement (options A
-and C), "bead = something is queued", and full-height panels.
+and C), "bead = something is queued", full-height panels, **docking the video**
+(rescales the picture on every toggle and the chrome cannot follow), and any
+scale-on-enter motion for the panel (edge-anchored surfaces slide, they do not
+grow).
