@@ -25,6 +25,11 @@ dependencies:
   # Drag & drop of local media files onto the window.
   # (APIs verified compatible across 0.4.x–0.8.x.)
   desktop_drop: ">=0.4.4 <0.9.0"
+  # The undocked playlist window (playlist_imp.md §7 step 13): the 0.3.x
+  # engine-rewrite API — WindowController.create/fromCurrentEngine +
+  # WindowMethodChannel. Runs alongside the main engine; every child
+  # engine re-enters main() (gated there on `salu-playlist-window`).
+  desktop_multi_window: ^0.3.1
 
   # ── Open Media control ───────────────────────────────────────────────────
   # Native Windows explorer dialogs (Open File… / Open Folder…). The
