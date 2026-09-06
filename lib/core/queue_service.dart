@@ -94,13 +94,16 @@ class QueueService {
 
   /// Replaces the whole queue and points [index] at the start item.
   void setQueue(List<QueueItem> list, int startIndex) {
-    items.value = List<QueueItem>.unmodifiable(list);
+    items.value = List<QueueItem>.unmodifiable(
+      list.map(_canonical).toList(growable: false),
+    );
     index.value = list.isEmpty ? -1 : startIndex.clamp(0, list.length - 1);
     // A fresh open starts a fresh shuffle pass and clears the heard-log.
     resetShufflePass(current: index.value < 0 ? null : index.value);
   }
 
-  /// Convenience for local sources: raw paths/URLs in the same order.
+  /// Convenience for local sources: raw paths/URLs in the same order (the
+  /// paths arrive raw — [_canonical] is what makes them queue-shaped).
   void setPaths(List<String> list, int startIndex) {
     setQueue(
       list.map((String p) => QueueItem(p)).toList(growable: false),
@@ -108,13 +111,36 @@ class QueueService {
     );
   }
 
+  /// THE SPELLING INVARIANT (playlist_imp.md §5): every entry that joins the
+  /// queue passes through here, so `url` is always the canonical form. The
+  /// queue's url is the string handed to mpv, the key the resume store is
+  /// written under, and the value `stopMemory`/Undo compare against — three
+  /// systems that can only agree if the queue owns one spelling. Streams
+  /// come back untouched, so channel entries and the favourite keys built
+  /// from them are unaffected.
+  static QueueItem _canonical(QueueItem item) {
+    final String url = MediaUtils.canonicalPath(item.url);
+    if (url == item.url) return item; // the common case: no new object
+    return QueueItem(
+      url,
+      name: item.name,
+      group: item.group,
+      language: item.language,
+      country: item.country,
+      chno: item.chno,
+      tvgId: item.tvgId,
+      searchKey: item.searchKey,
+    );
+  }
+
   /// Appends entries (the panel drop-target — playlist_imp.md §5; dedupe
   /// is not required this phase).
   void append(List<QueueItem> newItems) {
     if (newItems.isEmpty) return;
-    items.value = List<QueueItem>.unmodifiable(
-      <QueueItem>[...items.value, ...newItems],
-    );
+    items.value = List<QueueItem>.unmodifiable(<QueueItem>[
+      ...items.value,
+      ...newItems.map(_canonical),
+    ]);
     if (index.value < 0) index.value = 0;
     // Structural change: the shuffle pass resets (§5).
     resetShufflePass(current: index.value < 0 ? null : index.value);
@@ -156,7 +182,7 @@ class QueueService {
   void insertAt(int i, QueueItem item) {
     final List<QueueItem> list = List<QueueItem>.of(items.value);
     final int at = i.clamp(0, list.length).toInt();
-    list.insert(at, item);
+    list.insert(at, _canonical(item));
     items.value = List<QueueItem>.unmodifiable(list);
     if (at <= index.value) index.value = index.value + 1;
     resetShufflePass(current: index.value < 0 ? null : index.value);
@@ -203,8 +229,8 @@ class QueueService {
   // A shuffle pass = every item played once, in random order. [_pass] holds
   // the not-yet-played indexes; [_history] is the stack of visited indexes
   // ("what you heard") that makes Previous honest while shuffle is on.
-  // Adding, removing, moving or clearing items resets the pass; the
-  // visible list order never changes.
+  // Adding, removing or clearing items resets the pass; a drag-reorder
+  // remaps it instead (same pass, new indexes) — see [_remapShuffle].
 
   final Set<int> _pass = <int>{};
   final List<int> _history = <int>[];

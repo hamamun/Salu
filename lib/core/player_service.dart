@@ -186,6 +186,14 @@ class PlayerService {
   /// the optimistic `playing` state from flickering to `paused`.
   bool _openingWithPlay = false;
 
+  /// The USER's pause intent, kept across item switches. `completed`
+  /// arrives with `playing` already false (mpv flips both at eof), so the
+  /// engine's state cannot answer "was the viewer paused?" — this latch
+  /// can, and it is written only by the transport the user touches.
+  /// The auto-advance obeys it: a paused player advances PAUSED, exactly
+  /// as full holdings do, instead of being yanked into playback (§5).
+  bool _userPaused = false;
+
   // ── Engine holdings & channel-mode bookkeeping ────────────────────────
 
   /// What mpv currently holds: one media (shuffle / repeat one / channel
@@ -405,26 +413,17 @@ class PlayerService {
 
   // ── Path normalization ────────────────────────────────────────────────
 
-  /// Canonical map key for resume/queue bookkeeping: forward slashes,
-  /// no `file://` scheme, no leading `/` before a drive letter.
-  static String normalizePathKey(String p) {
-    String s = p.replaceAll('\\\\', '/');
-    const String scheme = 'file://';
-    if (s.startsWith('$scheme/')) {
-      s = s.substring(scheme.length + 1);
-    } else if (s.startsWith(scheme)) {
-      s = s.substring(scheme.length);
-    }
-    // "/C:/x/y.mkv" (URI residue) → "C:/x/y.mkv".
-    if (s.length >= 3 &&
-        s.startsWith('/') &&
-        s.codeUnitAt(1) >= 0x41 &&
-        s.codeUnitAt(1) <= 0x7A &&
-        s.codeUnitAt(2) == 0x3A) {
-      s = s.substring(1);
-    }
-    return s;
-  }
+  /// Canonical map key for resume/queue bookkeeping — the rules live in
+  /// [MediaUtils.canonicalPath], which the queue and the memory manager
+  /// share. Kept as a forwarding name so every call site here reads as
+  /// "the queue's key", not "some path helper".
+  ///
+  /// It used to have its own copy of the rules — one that only folded
+  /// DOUBLED backslashes, so a picked path (`C:\media\a.mp4`) came back
+  /// unchanged and never matched the forward-slash spelling the engine
+  /// reported. That is why local files opened from the picker or a drop
+  /// remembered nothing.
+  static String normalizePathKey(String p) => MediaUtils.canonicalPath(p);
 
   // ── Transport state ───────────────────────────────────────────────────
 
@@ -557,6 +556,9 @@ class PlayerService {
   // ── Opening media ─────────────────────────────────────────────────────
 
   /// Open a single local file or network URL and start playing.
+  ///
+  /// Paths go in as the shell spelled them — [QueueService] owns the
+  /// canonical form (§5), so no call site pre-normalizes anymore.
   Future<void> openPath(String path, {bool play = true}) async {
     // m3u is NEVER handed to mpv: SALU fetches & parses it itself and
     // the list becomes a channel queue (playlist_imp.md §10.1 / M2).
@@ -564,7 +566,7 @@ class PlayerService {
       await M3uLoader.instance.open(path);
       return;
     }
-    QueueService.instance.setPaths(<String>[normalizePathKey(path)], 0);
+    QueueService.instance.setPaths(<String>[path], 0);
     await _openQueueAt(0, play: play);
   }
 
@@ -589,10 +591,7 @@ class PlayerService {
       }
       return;
     }
-    QueueService.instance.setPaths(
-      paths.map(normalizePathKey).toList(growable: false),
-      0,
-    );
+    QueueService.instance.setPaths(paths, 0);
     await _openQueueAt(0, play: play);
   }
 
@@ -646,6 +645,7 @@ class PlayerService {
 
     stopMemory.value = null; // opening anything consumes a stop memory
     _openingWithPlay = play;
+    _userPaused = !play;
     hasMedia.value = true;
     _producedSignal = false;
     _refreshTransportState();
@@ -921,35 +921,24 @@ class PlayerService {
       // end frame; nothing else to do — a fresh Play replays the item.
       return;
     }
-    unawaited(_openQueueAt(target));
+    // The advance inherits the viewer's state, it never overrides it:
+    // paused at the end of an item → the next one loads PAUSED, exactly
+    // like full holdings, where mpv pauses across the file change.
+    unawaited(_openQueueAt(target, play: !_userPaused));
   }
 
   /// The item ended: which index now? `-1` = park the queue.
   int _completionTarget() {
     final QueueService queue = QueueService.instance;
     final int current = queue.index.value;
-    final int count = queue.items.value.length;
 
     // Repeat one wins over shuffle — one control answers, and shuffle's
     // setting survives untouched.
     if (repeatMode.value == RepeatMode.one) return current;
 
-    if (shuffleOn.value) {
-      // The next unplayed item of the pass.
-      if (queue.unplayedInPass.isNotEmpty) {
-        final List<int> pass = queue.unplayedInPass.toList();
-        return pass[_rng.nextInt(pass.length)];
-      }
-      // The pass is exhausted: repeat all starts a NEW pass (whose first
-      // item is not the one that just ended); repeat off parks.
-      if (repeatMode.value == RepeatMode.all && count > 1) {
-        final List<int> fresh = List<int>.generate(count, (int i) => i)
-          ..remove(current);
-        queue.resetShufflePass();
-        return fresh[_rng.nextInt(fresh.length)];
-      }
-      return -1;
-    }
+    // Shuffle (and repeat one is off): the very same pick `>>|` makes, so
+    // the automatic step and the manual one can never drift apart.
+    if (shuffleOn.value) return shuffleNextTarget();
     return -1;
   }
 
@@ -981,16 +970,29 @@ class PlayerService {
     //    wrap to index 0 — that would risk a silent loop.
     final int next = queue.index.value + 1;
     if (next >= queue.items.value.length) return;
-    unawaited(_openQueueAt(next));
+    unawaited(_openQueueAt(next, play: !_userPaused));
   }
 
   // ── Basic transport ───────────────────────────────────────────────────
 
-  Future<void> playOrPause() => player.playOrPause();
+  /// Play / Pause. The user's own toggle is the only thing that moves the
+  /// pause latch the auto-advance obeys (see [_userPaused]).
+  Future<void> playOrPause() {
+    // Read the surface the user acted on, not the engine: while an open is
+    // still confirming, `isPlaying` lags and the mark already reads "playing".
+    _userPaused = transportState.value == TransportState.playing;
+    return player.playOrPause();
+  }
 
-  Future<void> play() => player.play();
+  Future<void> play() {
+    _userPaused = false;
+    return player.play();
+  }
 
-  Future<void> pause() => player.pause();
+  Future<void> pause() {
+    _userPaused = true;
+    return player.pause();
+  }
 
   /// **Stop — the third state.** Parks the queue: the engine releases
   /// the item (canvas → the initial SALU window), the queue stays
@@ -1039,6 +1041,9 @@ class PlayerService {
     _pendingResume.clear();
     _expectedStartAfterLoad.clear();
     _openingWithPlay = false;
+    // Stop is not a pause: Play-again resumes, it does not sit paused on the
+    // parked item. The latch starts clean for that decision.
+    _userPaused = false;
     transportState.value = TransportState.stopped;
     unawaited(_setWindowTitle('SALU'));
 
@@ -1159,6 +1164,10 @@ class PlayerService {
   /// The shuffled `>>|` target: an unplayed item of the current pass;
   /// at pass end with repeat all, a new pass (its first pick is never
   /// the item currently sounding); `-1` = there is no next.
+  ///
+  /// `stream.completed` asks THIS function too (via [_completionTarget]),
+  /// so the manual step and the automatic one draw from the same pick —
+  /// the two can never drift apart.
   int shuffleNextTarget() {
     final QueueService queue = QueueService.instance;
     final int count = queue.items.value.length;
@@ -1233,9 +1242,11 @@ class PlayerService {
 
   /// Load an external subtitle file (SRT/ASS/etc.) onto the current media.
   Future<void> loadExternalSubtitle(String path) async {
-    String normalized = path.replaceAll('\\\\', '/');
-    final String uri = path.contains('://')
-        ? path
+    // Same canonical spelling as the queue (it used to fold only DOUBLED
+    // backslashes, which a picked path never has).
+    final String normalized = MediaUtils.canonicalPath(path);
+    final String uri = normalized.contains('://')
+        ? normalized
         : Uri.file(normalized).toString();
     await player.setSubtitleTrack(
       SubtitleTrack.uri(
