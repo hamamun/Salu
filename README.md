@@ -11,9 +11,9 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 | 1 | Foundation & Window Framework | ✅ Completed |
 | 2 | Core Media Engine | ✅ Completed |
 | 3 |  -Style UI & OSC | 🔄 In progress — controller + transport + OSD deck done (see `outline_transport_osd_resume.md`) |
-| 4 | Slide-Out Panels & Menus | ⏳ Not started |
-| 5 | Media Intelligence | 🔄 In progress — resume memory done |
-| 6 | Web & Stream Manager | ⏳ Not started |
+| 4 | Slide-Out Panels & Menus | 🔄 In progress — **playlist panel + undock done** (see `playlist_imp.md`); Video/Audio/Subtitle views re-planned separately later |
+| 5 | Media Intelligence | 🔄 In progress — resume memory done; **m3u/IPTV channel mode done** (parser, grouping, favourites, failure-skip — `playlist_imp.md` §10) |
+| 6 | Web & Stream Manager | 🔄 In progress — m3u channel lists (fetch, parse, group, favourite) done; EPG/visual mapping next |
 | 7 | Advanced Player Tools & Search Logic | ⏳ Not started |
 | 8 | Android Remote Server | ⏳ Not started |
 | 9 | Branding & About Section | ⏳ Not started |
@@ -35,9 +35,25 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
   item, the canvas returns to the logo window, the queue stays loaded and
   Play resumes at the exact position.
 - **OSD deck** — one top-center slot: transport flashes (`>> +15s
-  01:12:34`), volume/mute cards, and the interactive Resume toast
-  (`[>] 12:34 [↻ Restart]`). Transport keys drive the deck without waking
-  the chrome.
+  01:12:34`), volume/mute cards, the interactive Resume toast
+  (`[>] 12:34 [↻ Restart]`) and the 5-second Undo toasts of the playlist
+  (`label [Undo]`). Transport keys drive the deck without waking the
+  chrome.
+- **Playlist panel** — the `NowRowMark` (three ragged rules + chevron)
+  next to Open; a 322 px glass sheet slides in over the video (canvas
+  never rescales). Rows: `≡` drag-reorder · chevron · name · duration
+  (current only) · hover 🗑 with 5 s Undo. Header: repeat off/all/one ·
+  shuffle · search (count + ✕ inside the field) · clear playlist (Undo
+  restores AND resumes) · undock (own borderless window, Ctrl+L/mark
+  raise it, ✕ docks back). SALU's own thin scrollbar; the queue never
+  hands its shuffle to mpv — repeat one / shuffle / channel lists make
+  the engine hold ONE media while SALU picks the next.
+- **m3u / IPTV channel mode** — SALU fetches and parses the m3u itself
+  (mpv never sees the list URL); progressive parse off the UI thread,
+  group-by (flat · category · language · country) with an accordion and
+  a sticky head, per-HOST favourites, dead-channel skip with a 3-strike
+  cascade guard, inert timeline with a live "receiving" shimmer, and
+  zapping that holds one media in the engine per channel.
 - **Resume memory** — files pick up where you stopped (per-kind modes in
   Settings → General → Resume), resumed silently with no visible jump;
   closing after a Stop still remembers.

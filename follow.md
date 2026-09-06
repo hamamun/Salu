@@ -33,6 +33,23 @@
    - solid triangle = Play · triangle + tag = Play & Save (the Open-URL
      modal keeps this pair; transport uses the chevron line below)
    - pencil = Edit · bin = Delete · tick = Done · three rules (≡) = drag handle
+   - **playlist line** (since the playlist phase): three RAGGED rules +
+     optional chevron = the playlist / the now-row — one mark that never
+     lies (`NowRowMark`): closed panel = three rules, open panel = rules
+     + chevron on the playing RULE — the chevron ALWAYS points at the
+     straight row of the playing item, in the control, in every row and
+     in the header of a collapsed group. The ghost (no chevron at 30 %
+     ink) is the empty state.
+   - **repeat** = circular arc arrow; quiet arc = off · full arc + glow =
+     all · arc + centre bead = one. **shuffle** = two crossing arrows with
+     heads (playback order only — the list always shows the true queue
+     order). Suspended states (shuffle under repeat one, group-by during
+     search) drop to quiet ink; the setting survives.
+   - magnifier = search (inside the field; the field's count and its own
+     ✕ live inside it too) · square-with-arrow-out = undock ·
+     arrow-into-square = dock back · bookmark outline / filled = favourite
+     (channel mode) · bracket-and-rows = group by (one stable mark — the
+     four mode glyphs ride its pill: flat · category · language · country)
    - **transport line** (`>`): single chevron = Play · two bars = Pause ·
      hollow square = Stop · bar + double chevron = skip item (Previous /
      Next) · double chevron only = skip time (Seek back / forward) ·
@@ -46,9 +63,14 @@
 7. **Colors/typography:** deep dark grays (#121212/#1E1E1E, never pure
    black), Segoe UI Variable only, monochrome icons. All colors come from
    `AppColors` in `lib/theme/app_theme.dart`.
-8. **Modal vs panel:** focus tasks (e.g. the Open-URL window) = centered
-   glass modal, dimmed barrier, open→act→gone. Live tasks used *while*
-   watching (EQ, subtitles, playlist) = slide-out panels. Never mix.
+8. **Modal vs panel vs loose window (three surface classes):** focus
+   tasks (e.g. the Open-URL window) = centered glass modal, dimmed
+   barrier, open→act→gone. Live tasks used *while* watching (EQ,
+   subtitles, playlist) = slide-out panels. A panel may DETACH into the
+   third class — the **loose window** (the undocked playlist): borderless
+   glass, draggable by its own strip, above SALU only (never system
+   always-on-top), closing = docking back, never modal, never a second
+   panel — one surface, one view. Never mix the three.
 
 ---
 

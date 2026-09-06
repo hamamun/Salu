@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'media_utils.dart';
 import 'player_service.dart';
+import 'queue_service.dart';
 
 /// Basic drag-and-drop routing (Phase 2 · Step 5).
 ///
@@ -20,7 +21,14 @@ class DropHandler {
   /// Handles a list of dropped file-system paths. Returns a short
   /// human-readable summary of what happened (used by the drop overlay),
   /// or `null` if nothing usable was dropped.
-  static Future<String?> handleDroppedPaths(List<String> paths) async {
+  ///
+  /// [append] is the playlist panel's verb (playlist_imp.md §7 step 11):
+  /// drops INSIDE the panel append to the end of the queue; drops on the
+  /// canvas replace (the existing verb). There is no "drop to insert".
+  static Future<String?> handleDroppedPaths(
+    List<String> paths, {
+    bool append = false,
+  }) async {
     if (paths.isEmpty) return null;
     final PlayerService service = PlayerService.instance;
 
@@ -50,7 +58,21 @@ class DropHandler {
       return subtitles.isNotEmpty ? 'Subtitle loaded' : null;
     }
 
-    // 3. Play: single file plays directly, multiple files become a queue.
+    // 3. Panel drop = append to the END of the queue (M3h); while idle
+    // the append simply starts the queue from the top.
+    if (append) {
+      await service.appendToQueue(
+        <QueueItem>[
+          for (final String p in mediaPaths) QueueItem.forPath(p),
+        ],
+      );
+      debugPrint(
+          '[SALU] appended ${mediaPaths.length} media file(s) via panel drop');
+      return 'Queued ${mediaPaths.length} files';
+    }
+
+    // 3b. Canvas drop = replace: single file plays directly, multiple
+    // files become a queue.
     if (mediaPaths.length == 1) {
       await service.openPath(mediaPaths.first);
     } else {

@@ -1,20 +1,41 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/favourites_service.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
 import 'core/resume_service.dart';
 import 'core/settings_service.dart';
+import 'core/channel_service.dart';
 import 'theme/app_theme.dart';
+import 'ui/panels/playlist_child.dart';
 import 'ui/screens/home_screen.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Child-engine routing (playlist_imp.md §7 step 13) — MUST run
+  // before the single-instance handshake: every desktop_multi_window
+  // child engine enters this same main() in-process, and the child must
+  // never be treated as a second app launch (it would exit immediately).
+  bool isPlaylistWindow = false;
+  try {
+    final WindowController current = WindowController.fromCurrentEngine();
+    isPlaylistWindow =
+        current.arguments.contains('salu-playlist-window');
+  } catch (_) {
+    // Main engine on a platform without the multi-window channel.
+  }
+  if (isPlaylistWindow) {
+    await PlaylistChildShell.run();
+    return;
+  }
 
   // ── Phase 1 · Step 6: strict single instance + file argument routing. ─
   // If SALU is already running and the user double-clicks a media file,
@@ -74,6 +95,10 @@ Future<void> main(List<String> args) async {
   // ── Load persisted settings + resume memory before the first frame. ──
   await SettingsService.instance.load();
   await ResumeService.instance.load();
+  // Playlist phase: per-host memories for channel lists (grouping mode)
+  // and favourites (§10).
+  await ChannelService.instance.load();
+  await FavouritesService.instance.load();
 
   runApp(SaluApp(initialFilePath: extractMediaPathFromArgs(args)));
 }

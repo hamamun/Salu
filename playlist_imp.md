@@ -1,6 +1,11 @@
 # Playlist control & slide-out panel — implementation brief
 
-> **Status:** DECIDED, **NOT IMPLEMENTED** (2026-09-06).
+> **Status:** **FINAL & IMPLEMENTED** (2026-09-06) — phases A (§§1–9,
+> steps 1–13) and B (§10, M-1…M-11) are both in. Bridge transport used is
+> `desktop_multi_window` 0.3.1's `WindowController` + `WindowMethodChannel`
+> pattern; the `PlaylistBridge` message shape (snapshot-out/delta-out/
+> intent-in) is the seam Phase 8's Android remote will reuse over a
+> WebSocket.
 >
 > **New session? Read this box, then §10 in full.** The document covers two
 > phases that ship in order:
@@ -866,7 +871,7 @@ it is specified in §10 and is its own build phase, starting with the parser
 
 ## 10. m3u mode — the IPTV playlist (owner's brief, 2026-09-06)
 
-> **Status:** DECIDED, **NOT IMPLEMENTED**. This section replaces the earlier
+> **Status:** **IMPLEMENTED** (2026-09-06). This section replaces the earlier
 > "out of scope: IPTV grouping … the owner takes that next". Everything in
 > §§1–9 still governs; this section states only what **changes when the loaded
 > playlist is an m3u URL**. Entries marked *(default)* may be vetoed.

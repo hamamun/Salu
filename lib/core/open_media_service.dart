@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'drop_handler.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
+import 'queue_service.dart';
 import 'url_library_service.dart';
 
 /// The three actions behind SALU's Open control (pill: file · folder · url).
@@ -33,8 +34,10 @@ class OpenMediaService {
     const fs.XTypeGroup(label: 'All files'),
   ];
 
-  /// Open File… — native Windows explorer, multi-select. One file plays
-  /// directly; several become a queue starting at the first.
+  /// Open File… — native Windows explorer, multi-select. Per
+  /// playlist_imp.md §7.10/5.b OPEN IS THE APPEND VERB: picks join the
+  /// end of the queue (the list is always the order of arrival; there is
+  /// no "insert"). While idle the append simply starts the queue.
   static Future<void> openFiles() async {
     final List<fs.XFile> files =
         await fs.openFiles(acceptedTypeGroups: _mediaTypeGroups);
@@ -46,27 +49,23 @@ class OpenMediaService {
         .toList();
     if (paths.isEmpty) return;
     final PlayerService player = PlayerService.instance;
-    if (paths.length == 1) {
-      await player.openPath(paths.first);
-    } else {
-      await player.openPaths(paths);
-    }
+    await player.appendToQueue(
+      <QueueItem>[for (final String p in paths) QueueItem.forPath(p)],
+    );
   }
 
-  /// Open Folder… — native folder picker; scans the folder for media,
-  /// queues everything alphabetically and plays the first item.
+  /// Open Folder… — native folder picker; scans the folder for media
+  /// and appends everything alphabetically (open = append, 5.b).
   static Future<void> openFolder() async {
     final String? dir = await fs.getDirectoryPath();
     if (dir == null || dir.isEmpty) return;
     final List<String> media = DropHandler.scanFolderForMedia(dir);
     if (media.isEmpty) return;
     final PlayerService player = PlayerService.instance;
-    if (media.length == 1) {
-      await player.openPath(media.first);
-    } else {
-      await player.openPaths(media);
-    }
-    debugPrint('[SALU] opened ${media.length} file(s) from folder');
+    await player.appendToQueue(
+      <QueueItem>[for (final String p in media) QueueItem.forPath(p)],
+    );
+    debugPrint('[SALU] appended ${media.length} file(s) from folder');
   }
 
   /// Plays a network URL and quietly records the outcome in the URL

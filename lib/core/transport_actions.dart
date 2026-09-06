@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import '../ui/osd/osd_controller.dart';
 import 'clock_format.dart';
-import 'media_utils.dart';
 import 'player_service.dart';
 import 'queue_service.dart';
 
@@ -122,31 +121,34 @@ class TransportActions {
     }
   }
 
-  /// Previous item — one rule in every state. The card names the item
-  /// (or `00:00:00` on a same-item restart). Titles are read from the
-  /// queue, not the engine's title stream — the card must be right the
-  /// instant the action fires.
+  /// Previous item. The card names the item landed on (or `00:00:00` on
+  /// a same-item restart) — read from the queue AFTER the action lands,
+  /// so the shuffled "what you heard" step names the truth (§5/§10.8b).
   void previous() {
-    if (!queue.hasQueue) return;
+    if (!player.prevAvailable) return;
     resetSeekRamps();
     osd.dismissResumeToast();
     final bool restart = _previousRestartsThisItem();
-    final int from = queue.index.value;
     _run(player.previous().then((_) {
-      final List<String> paths = queue.paths.value;
-      final int to = restart ? from : from - 1;
+      final List<QueueItem> items = queue.items.value;
+      final int to = queue.index.value;
       final String text = restart
           ? '00:00:00'
-          : (to >= 0 && to < paths.length
-              ? MediaUtils.displayName(paths[to])
-              : '00:00:00');
+          : (to >= 0 && to < items.length ? items[to].title : '00:00:00');
       osd.show(OsdTransportCard(mark: OsdMark.previous, text: text));
     }));
   }
 
   /// The Previous rule: position (stop memory while stopped) > 3 s, or
-  /// first item → THIS item restarts from `0:00`.
+  /// first item → THIS item restarts from `0:00`. Never on channel lists
+  /// (M36: a live stream has no position to restart from) and never a
+  /// "heard before" shuffle step (that rule answers in list order).
   bool _previousRestartsThisItem() {
+    if (queue.isChannelList) return false;
+    if (player.shuffleOn.value &&
+        player.repeatMode.value != RepeatMode.one) {
+      return false;
+    }
     final TransportState state = player.transportState.value;
     final Duration pos =
         (state == TransportState.stopped && player.stopMemory.value != null)
@@ -157,15 +159,15 @@ class TransportActions {
 
   /// Next item — dimmed in the UI when there is none.
   void next() {
-    if (!queue.hasNext) return;
+    if (!player.nextAvailable) return;
     resetSeekRamps();
     osd.dismissResumeToast();
-    final int to = queue.index.value + 1;
-    final List<String> paths = queue.paths.value;
     _run(player.next().then((_) {
+      final List<QueueItem> items = queue.items.value;
+      final int to = queue.index.value;
       osd.show(OsdTransportCard(
         mark: OsdMark.next,
-        text: to < paths.length ? MediaUtils.displayName(paths[to]) : null,
+        text: to >= 0 && to < items.length ? items[to].title : null,
       ));
     }));
   }
@@ -187,6 +189,8 @@ class TransportActions {
   }
 
   bool get _seekable {
+    // A live channel has no position — seeks are silent (§10.8a/M32).
+    if (player.liveContent.value) return false;
     switch (player.transportState.value) {
       case TransportState.playing:
       case TransportState.paused:

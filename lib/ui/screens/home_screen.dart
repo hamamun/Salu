@@ -6,15 +6,18 @@ import 'package:flutter/services.dart';
 
 import '../../core/drop_handler.dart';
 import '../../core/open_media_service.dart';
+import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
+import '../osc/live_shimmer.dart';
 import '../osc/open_url_dialog.dart';
 import '../osd/osd_controller.dart';
 import '../osd/osd_deck.dart';
+import '../panels/playlist_panel.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/settings_dialog.dart';
 import 'video_screen.dart';
@@ -229,7 +232,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _wakeChrome();
     final List<String> paths =
         details.files.map((file) => file.path).toList();
-    await DropHandler.handleDroppedPaths(paths);
+    // Drops inside the open panel append; drops on the canvas replace
+    // (playlist_imp.md §7.11: no "drop to insert"). The hit-test covers
+    // the empty-state panel too.
+    final Size size = MediaQuery.of(context).size;
+    final Offset at = details.localPosition;
+    final bool overPanel = PanelService.instance.playlistOpen.value &&
+        !PanelService.instance.playlistUndocked.value &&
+        at.dx >= size.width - kPlaylistPanelWidth &&
+        at.dy >= kChromeBlockHeight;
+    await DropHandler.handleDroppedPaths(paths, append: overPanel);
   }
 
   // ── Keyboard (silent set — never printed anywhere; follow.md rule 2) ──
@@ -247,11 +259,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final LogicalKeyboardKey key = event.logicalKey;
 
-    // Esc — dismisses the Resume toast (the only thing Esc owns here).
-    // With no toast up it is just another key: activity → chrome wakes.
+    // Esc — dismisses the Resume toast; then closes the playlist panel
+    // (the panel ladder: the field's own Esc clears/releases focus
+    // inside the field and never reaches this handler — playlist_imp.md
+    // §7.11/rule E). With nothing to dismiss it is just another key:
+    // activity → chrome wakes.
     if (key == LogicalKeyboardKey.escape) {
       if (_osd.isResumeToast) {
         _osd.dismiss();
+        return KeyEventResult.handled;
+      }
+      if (PanelService.instance.playlistOpen.value &&
+          !PanelService.instance.playlistUndocked.value) {
+        PanelService.instance.closePlaylist();
         return KeyEventResult.handled;
       }
       _wakeChrome();
@@ -304,6 +324,13 @@ class _HomeScreenState extends State<HomeScreen> {
     // Silent open-media shortcuts (never printed anywhere in the UI —
     // follow.md hard rule 2).
     final bool ctrl = HardwareKeyboard.instance.isControlPressed;
+    // Ctrl+L toggles the playlist (playlist_imp.md §7.11): docked it
+    // opens/closes the panel; undocked it RAISES the loose window —
+    // keyboard-first, never a pointer hunt.
+    if (ctrl && key == LogicalKeyboardKey.keyL) {
+      PanelService.instance.togglePlaylist();
+      return KeyEventResult.handled;
+    }
     if (ctrl && key == LogicalKeyboardKey.keyO) {
       OpenMediaService.openFiles();
       return KeyEventResult.handled;
@@ -357,6 +384,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 //     while STOPPED or idle (a parked queue — or no
                 //     queue at all — has no progress to draw).
                 _AutoHideProgress(chromeHidden: !chromeVisible),
+
+                // 3b · The playlist panel — a fixed glass sheet over the
+                //     video, BELOW the chrome (z: video → panel → chrome
+                //     → OSD). Toggle-driven, never steals focus, never
+                //     joins the auto-hide.
+                ListenableBuilder(
+                  listenable: Listenable.merge(<Listenable>[
+                    PanelService.instance.playlistOpen,
+                    PanelService.instance.playlistUndocked,
+                  ]),
+                  builder: (BuildContext context, Widget? _) {
+                    return PlaylistDock(
+                      open: PanelService.instance.playlistOpen.value,
+                      undocked: PanelService.instance.playlistUndocked.value,
+                    );
+                  },
+                ),
 
                 // 4 · The unified top chrome — title bar + controller as a
                 //     single fused glass block (one gradient, one motion).
@@ -504,6 +548,10 @@ class _AutoHideProgress extends StatelessWidget {
               player.position,
               player.duration,
               player.transportState,
+              player.liveContent,
+              player.receiving,
+              player.isPlaying,
+              player.playlistLoading,
             ]),
             builder: (BuildContext context, Widget? _) {
               final Duration dur = player.duration.value;
@@ -513,6 +561,25 @@ class _AutoHideProgress extends StatelessWidget {
                       .clamp(0.0, 1.0)
                       .toDouble()
                   : 0.0;
+
+              // LIVE handoff (§10.8c / M31): the hairline carries the
+              // same shimmer while the chrome hides — one signal, one
+              // surface, never both. Packaging gets the brighter sweep
+              // (M31b); a stall or pause stops the drift.
+              final bool live = player.liveContent.value &&
+                  player.hasMedia.value;
+              if (live || player.playlistLoading.value) {
+                final bool receiving = live && player.receiving.value;
+                final bool packaging = !receiving &&
+                    (player.playlistLoading.value ||
+                        (live && player.livePackaging));
+                return receiving
+                    ? const LiveSweep(bright: false, brightness: 0.22)
+                    : (packaging
+                        ? const LiveSweep(bright: true, brightness: 0.55)
+                        : const SizedBox.shrink());
+              }
+
               return LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints constraints) {
                   final double w = constraints.maxWidth;

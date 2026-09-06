@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../core/clock_format.dart';
 import '../../core/player_service.dart';
+import '../../core/queue_undo.dart';
 import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
 import '../osc/volume_bar.dart';
 import '../widgets/glass_capsule.dart';
+import '../widgets/salu_marks.dart';
 import '../widgets/transport_marks.dart';
 import 'osd_controller.dart';
 
@@ -131,7 +133,41 @@ class _OsdDeckState extends State<OsdDeck>
       OsdTransportCard c => _TransientCard(child: _transportBody(c)),
       OsdVolumeCard c => _TransientCard(child: _volumeBody(c)),
       OsdResumeCard c => _ResumeToast(card: c),
+      OsdUndoCard c => _UndoToast(card: c),
+      OsdLoadingCard c => _TransientCard(child: _loadingBody(c)),
     };
+  }
+
+  /// "Loading playlist · n…" — a STOCK FRAMES mark plus a live count;
+  /// numerals are data, so the counter can tick without words.
+  Widget _loadingBody(OsdLoadingCard card) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconTheme.merge(
+          data: const IconThemeData(color: AppColors.iconIdle, size: 18),
+          child: const StackedFramesMark(size: 16),
+        ),
+        const SizedBox(width: 12),
+        ValueListenableBuilder<int>(
+          valueListenable: card.count,
+          builder: (BuildContext context, int count, Widget? _) {
+            return Text(
+              'Loading playlist · $count',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.3,
+                fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
   Widget _transportBody(OsdTransportCard card) {
@@ -296,6 +332,79 @@ class _ResumeToastState extends State<_ResumeToast> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The interactive Undo toast (playlist_imp.md §5): the removed item's
+/// name — or the cleared row count — and the one-word Undo action, in the
+/// Resume toast's exact card shape. 5 s auto-dismiss; click triggers the
+/// restore, never a confirmation dialog (follow.md rule 3).
+class _UndoToast extends StatefulWidget {
+  const _UndoToast({required this.card});
+
+  final OsdUndoCard card;
+
+  @override
+  State<_UndoToast> createState() => _UndoToastState();
+}
+
+class _UndoToastState extends State<_UndoToast> {
+  bool _undoHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color tone =
+        _undoHovered ? AppColors.textPrimary : AppColors.iconIdle;
+    final String? label = widget.card.label;
+    return GlassCapsule(
+      radius: 10,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (label != null && label.isNotEmpty) ...<Widget>[
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+            const SizedBox(width: 18),
+          ],
+          // Undo — one hover target, the single allowed word on an action.
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _undoHovered = true),
+            onExit: (_) => setState(() => _undoHovered = false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => QueueUndoService.instance.undo(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  'Undo',
+                  style: TextStyle(
+                    color: tone,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ),

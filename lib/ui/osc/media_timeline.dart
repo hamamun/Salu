@@ -15,6 +15,7 @@ import '../../core/player_service.dart';
 import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
 import 'hover_chip.dart';
+import 'live_shimmer.dart';
 
 /// Formats live in `lib/core/clock_format.dart` (formatClock here,
 /// formatClockCompact in the Resume toast).
@@ -75,6 +76,10 @@ class _MediaTimelineState extends State<MediaTimeline> {
       _player.position,
       _player.duration,
       _player.transportState,
+      _player.liveContent,
+      _player.receiving,
+      _player.isPlaying,
+      _player.playlistLoading,
     ]);
   }
 
@@ -220,6 +225,21 @@ class _MediaTimelineState extends State<MediaTimeline> {
     final Duration dur = usable ? _duration : Duration.zero;
     final int durMs = dur.inMilliseconds;
 
+    // The live shimmer mode (timeline stays empty and inert while live —
+    // `_usable` is false at duration 0, and sweeps only ever render when
+    // the engine holds a stream). Packaging = nothing has arrived yet
+    // (or the playlist itself is still on the wire); a stall AFTER the
+    // first signal stops the drift (M30).
+    final bool live = _player.liveContent.value && _player.hasMedia.value;
+    final bool receiving = live && _player.receiving.value;
+    final bool packaging = !receiving &&
+        (_player.playlistLoading.value || (live && _player.livePackaging));
+    final Widget? sweepLayer = receiving
+        ? const LiveSweep(bright: false, brightness: 0.22)
+        : (packaging
+            ? const LiveSweep(bright: true, brightness: 0.30)
+            : null);
+
     // The boundary shown on the bar: the scrub preview while pressing or
     // dragging, the real playback position otherwise.
     final double boundaryFrac = _pressFrac ??
@@ -273,6 +293,16 @@ class _MediaTimelineState extends State<MediaTimeline> {
                 const Positioned.fill(
                   child: ColoredBox(color: AppColors.barTrack),
                 ),
+                // LIVE shimmer (§10.8a–c): a live stream has no position,
+                // so the timeline stays full-size but EMPTY — the fact of
+                // reception is what animates. Packaging (live, playing,
+                // nothing arriving yet — or the m3u parse) gets the
+                // brighter hairline sweep; receiving gets the quiet one;
+                // never both; a stall or pause stops the drift.
+                if (sweepLayer != null)
+                  Positioned.fill(
+                    child: IgnorePointer(child: sweepLayer!),
+                  ),
                 // Paste-window style fill.
                 if (boundaryX > 0)
                   Positioned(
@@ -311,33 +341,36 @@ class _MediaTimelineState extends State<MediaTimeline> {
                       ),
                     ),
                   ),
-                // Time readouts — inside the bar, all one tone.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(
-                        children: <Widget>[
-                          Text(
-                            usable ? formatClock(shown) : '00:00:00',
-                            style: labelStyle,
-                          ),
-                          const Spacer(),
-                          if (w > 560)
+                // Time readouts — inside the bar, all one tone. LIVE
+                // carries NO readouts at all (m3u checklist 18: present,
+                // full size, empty, inert — the shimmer animates alone).
+                if (!live)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: <Widget>[
                             Text(
-                              usable ? '-${formatClock(remaining)}' : '',
+                              usable ? formatClock(shown) : '00:00:00',
                               style: labelStyle,
                             ),
-                          const Spacer(),
-                          Text(
-                            usable ? formatClock(dur) : '00:00:00',
-                            style: labelStyle,
-                          ),
-                        ],
+                            const Spacer(),
+                            if (w > 560)
+                              Text(
+                                usable ? '-${formatClock(remaining)}' : '',
+                                style: labelStyle,
+                              ),
+                            const Spacer(),
+                            Text(
+                              usable ? formatClock(dur) : '00:00:00',
+                              style: labelStyle,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

@@ -44,13 +44,18 @@ class TransportCluster extends StatelessWidget {
       listenable: Listenable.merge(<Listenable>[
         player.transportState,
         player.isPlaying,
-        queue.paths,
+        player.liveContent,
+        player.repeatMode,
+        player.shuffleOn,
+        queue.items,
         queue.index,
       ]),
       builder: (BuildContext context, Widget? _) {
         final TransportState state = player.transportState.value;
         final bool engineLive = state == TransportState.playing ||
             state == TransportState.paused;
+        // A live channel has no position in it: seeks dim (M32).
+        final bool seekable = engineLive && !player.liveContent.value;
 
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -73,9 +78,10 @@ class TransportCluster extends StatelessWidget {
             // ── Group 2 · items: previous + next ───────────────────────
             SaluIconButton(
               tooltip: 'Previous',
-              // `|<<` never dims while a queue exists — it can always
-              // restart the item.
-              enabled: queue.hasQueue,
+              // `|<<` never dims while a local queue exists — it can
+              // always restart the item; channel lists dim with a single
+              // channel (M34).
+              enabled: player.prevAvailable,
               onTap: TransportActions.instance.previous,
               child: const PreviousMark(),
             ),
@@ -83,8 +89,8 @@ class TransportCluster extends StatelessWidget {
             SaluIconButton(
               tooltip: 'Next',
               // Dimmed when there is no next item (single file = always
-              // dim: honest).
-              enabled: queue.hasNext,
+              // dim: honest). Folded over every repeat/shuffle mode.
+              enabled: player.nextAvailable,
               onTap: TransportActions.instance.next,
               child: const NextMark(),
             ),
@@ -94,8 +100,9 @@ class TransportCluster extends StatelessWidget {
             // ── Group 3 · time: seek backward + forward ────────────────
             SaluIconButton(
               tooltip: 'Seek backward',
-              // Seeks dim while stopped (nothing to seek into) and idle.
-              enabled: engineLive,
+              // Seeks dim while stopped (nothing to seek into), while
+              // idle, and on a live channel (§10.8a).
+              enabled: seekable,
               onTap: () {}, // hold-repeat drives the ramp
               onHoldRepeat: TransportActions.instance.seekBackward,
               child: const SeekBackMark(),
@@ -103,7 +110,7 @@ class TransportCluster extends StatelessWidget {
             const SizedBox(width: _inGroup),
             SaluIconButton(
               tooltip: 'Seek forward',
-              enabled: engineLive,
+              enabled: seekable,
               onTap: () {}, // hold-repeat drives the ramp
               onHoldRepeat: TransportActions.instance.seekForward,
               child: const SeekForwardMark(),

@@ -47,6 +47,27 @@ class OsdResumeCard extends OsdCard {
   final Duration position;
 }
 
+/// The interactive Undo toast (playlist_imp.md §5 — delete / reorder /
+/// clear execute instantly and offer a 5 s Undo, never a confirmation).
+/// [label] is DATA (the removed item's name, the row count on clear),
+/// never instruction text; the action carries the one allowed word.
+class OsdUndoCard extends OsdCard {
+  const OsdUndoCard({this.label}) : super(ttl: const Duration(seconds: 5));
+
+  final String? label;
+}
+
+/// The transient "Loading playlist · n…" indicator while a channel list
+/// parses (§10.1/M13): a live counter of DATA, never instruction. The
+/// card is sticky while loading (the loader dismisses THIS exact card on
+/// completion — never another one).
+class OsdLoadingCard extends OsdCard {
+  OsdLoadingCard() : super(ttl: const Duration(minutes: 5));
+
+  /// Rows parsed so far.
+  final ValueNotifier<int> count = ValueNotifier<int>(0);
+}
+
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {
   OsdController._internal();
@@ -62,6 +83,9 @@ class OsdController {
 
   /// Whether the interactive Resume toast is up.
   bool get isResumeToast => current.value is OsdResumeCard;
+
+  /// Whether the interactive Undo toast is up.
+  bool get isUndoToast => current.value is OsdUndoCard;
 
   /// Shows [card], replacing whatever is up; its TTL restarts on every
   /// repeat (a new show is a fresh card).
@@ -79,6 +103,12 @@ class OsdController {
     _ttl?.cancel();
     _ttl = null;
     if (current.value != null) current.value = null;
+  }
+
+  /// Empties the slot ONLY when [card] is the card currently up — the
+  /// m3u loader's completion must never swallow a newer card.
+  void dismissCard(OsdCard card) {
+    if (identical(current.value, card)) dismiss();
   }
 
   /// A transport action while the Resume toast shows dismisses the
