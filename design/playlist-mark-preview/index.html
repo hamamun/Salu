@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU · playlist control — placement &amp; mark study</title>
+<style>
+  :root{
+    --bg:#121212; --surface:#252526; --glass:rgba(30,30,30,.80);
+    --outline:#333336; --divider:#3A3A3C;
+    --ink-idle:#A6A6A6; --ink-lit:#EDEDED;
+    --track:#35353C; --fill:rgba(255,255,255,.50); --thumb:#F2F2F2;
+    --font:'Segoe UI Variable Display','Segoe UI Variable Text','Segoe UI Variable','Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink-lit);font-family:var(--font)}
+  body{padding:28px 24px 80px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:19px;font-weight:600;letter-spacing:.2px;margin:0 0 6px}
+  .sub{font-size:12.5px;line-height:1.65;color:var(--ink-idle);margin:0 0 22px;max-width:86ch}
+  .sub b{color:var(--ink-lit);font-weight:600}
+  h2{font-size:13px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--ink-idle);margin:34px 0 12px}
+
+  /* ── pickers ─────────────────────────────────────────────── */
+  .pickers{display:flex;flex-wrap:wrap;gap:10px 26px;padding:14px 16px;background:#181818;
+           border:1px solid var(--outline);border-radius:12px}
+  .pick{display:flex;align-items:baseline;gap:10px}
+  .pick > span{font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:#7C7C80;white-space:nowrap}
+  .segs{display:flex;gap:2px;background:#111;border:1px solid var(--outline);border-radius:9px;padding:2px}
+  .segs button{all:unset;cursor:pointer;font-family:var(--font);font-size:11.5px;color:var(--ink-idle);
+               padding:5px 11px;border-radius:7px;transition:color .12s,background .12s}
+  .segs button:hover{color:var(--ink-lit)}
+  .segs button[aria-pressed="true"]{color:var(--ink-lit);background:#2C2C31}
+
+  /* ── stage ───────────────────────────────────────────────── */
+  .stage-shell{position:relative;margin-top:14px;border:1px solid var(--outline);border-radius:14px;
+               overflow:hidden;background:#0E0E10}
+  .stage{position:relative;width:100%;height:520px;overflow:hidden}
+  .video{position:absolute;inset:0;
+         background:
+           radial-gradient(120% 90% at 50% 42%, #2A2C31 0%, #191A1D 46%, #0E0E10 100%),
+           repeating-linear-gradient(115deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px);}
+  .video::after{content:'';position:absolute;inset:0;box-shadow:inset 0 0 180px 40px rgba(0,0,0,.55)}
+
+  /* fused chrome block: 40 title + 108 controller = 148 */
+  .chrome{position:absolute;top:0;left:0;right:0;height:148px;z-index:6;
+          background:linear-gradient(180deg, rgba(16,16,17,.93), rgba(30,30,30,.80));
+          backdrop-filter:blur(18px) saturate(120%);-webkit-backdrop-filter:blur(18px) saturate(120%);
+          border-bottom:1px solid var(--outline)}
+  .titlebar{height:40px;display:flex;align-items:center;padding:0 6px 0 16px;position:relative}
+  .titlebar .t{position:absolute;left:0;right:0;text-align:center;font-size:12px;color:var(--ink-idle);
+               letter-spacing:.2px;pointer-events:none}
+  .caps{margin-left:auto;display:flex;align-items:center;gap:0}
+  .capbtn{width:44px;height:32px;display:grid;place-items:center;color:var(--ink-idle);cursor:default;
+          border-radius:6px;transition:background .12s,color .12s}
+  .capbtn:hover{background:rgba(255,255,255,.10);color:var(--ink-lit)}
+  .capbtn.close:hover{background:#E81123;color:#fff}
+
+  .controller{height:108px;padding:4px 18px 12px}
+  .timeline-box{height:48px;position:relative}
+  .bar{position:absolute;top:0;left:0;right:0;height:23px;border-radius:6px;background:var(--track);overflow:hidden}
+  .bar .f{position:absolute;inset:0 auto 0 0;background:var(--fill);border-radius:6px 0 0 6px}
+  .bar .th{position:absolute;top:4px;bottom:4px;width:2px;border-radius:1px;background:var(--thumb)}
+  .bar .lbl{position:absolute;inset:0;display:flex;align-items:center;padding:0 12px;font-size:12px;
+            font-weight:500;letter-spacing:.4px;color:var(--ink-lit);text-shadow:0 0 2px rgba(0,0,0,.6);
+            font-variant-numeric:tabular-nums}
+  .bar .lbl .c{margin:0 auto}
+  .row2{height:36px;margin-top:8px;position:relative}
+
+  /* zones of row 2 */
+  .zone-left{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center}
+  .zone-center{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .zone-center > *{pointer-events:auto}
+  .zone-right{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center}
+  .cluster{display:flex;align-items:center}
+
+  /* ── THE one icon recipe (follow.md §2) ──────────────────── */
+  .salu-btn{width:36px;height:36px;display:grid;place-items:center;color:var(--ink-idle);cursor:pointer;
+            transition:transform .12s ease-out,color .12s ease-out;flex:0 0 auto}
+  .salu-btn svg{display:block}
+  .salu-btn:hover{color:var(--ink-lit);transform:scale(1.06)}
+  .salu-btn:active{transform:scale(.90)}
+  .salu-btn.on{color:var(--ink-lit);filter:drop-shadow(0 0 7px rgba(255,255,255,.30))}
+  .salu-btn.off{color:rgba(166,166,166,.37);cursor:default}
+  .salu-btn.off:hover{transform:none;color:rgba(166,166,166,.37)}
+  .salu-btn .flip{transition:transform .13s cubic-bezier(.215,.61,.355,1)}
+  .salu-btn.on .flip{transform:scaleX(-1)}
+  .volwrap{display:flex;align-items:center}
+  .vol{width:140px;height:34px;position:relative;display:grid;place-items:center;cursor:pointer}
+  .vol .vbar{width:100%;height:14px;border-radius:4px;background:var(--track);position:relative;overflow:hidden;
+             transition:height .12s}
+  .vol:hover .vbar{height:16px}
+  .vol .vbar .vf{position:absolute;inset:0 auto 0 0;background:var(--fill)}
+  .vol .vbar .vl{position:absolute;top:0;bottom:0;width:34px;display:grid;place-items:center;font-size:10px;
+                 font-weight:500;letter-spacing:.3px;color:var(--ink-idle);font-variant-numeric:tabular-nums}
+  .vol:hover .vbar .vl{color:var(--ink-lit)}
+
+  /* ── the Open pill ───────────────────────────────────────── */
+  .pill{position:absolute;z-index:7;height:42px;border-radius:21px;padding:0 8px;display:flex;align-items:center;
+        gap:2px;background:var(--glass);border:1px solid var(--outline);
+        backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+        transform-origin:0 0;opacity:0;transform:scale(.96);pointer-events:none;
+        transition:opacity .13s cubic-bezier(.215,.61,.355,1),transform .13s cubic-bezier(.215,.61,.355,1)}
+  .pill.show{opacity:1;transform:scale(1);pointer-events:auto}
+
+  /* ── the playlist panel ──────────────────────────────────── */
+  .panel{position:absolute;right:0;width:322px;z-index:5;display:flex;flex-direction:column;
+         background:var(--glass);border-left:1px solid var(--outline);
+         backdrop-filter:blur(18px) saturate(120%);-webkit-backdrop-filter:blur(18px) saturate(120%);
+         transform:translateX(100%);transition:transform .22s cubic-bezier(.215,.61,.355,1)}
+  .panel.show{transform:translateX(0)}
+  .panel.below{top:148px;bottom:0;border-radius:14px 0 0 0}
+  .panel.full{top:0;bottom:0}
+  .ptabs{display:flex;align-items:center;gap:2px;padding:10px 12px 8px;border-bottom:1px solid var(--divider)}
+  .ptabs .salu-btn{width:32px;height:32px}
+  .ptabs .sp{margin-left:auto;font-size:10px;color:#7C7C80;letter-spacing:.6px}
+  .prows{flex:1;overflow:auto;padding:6px 6px 14px}
+  .prow{display:flex;align-items:center;gap:8px;height:38px;padding:0 8px;border-radius:9px;color:var(--ink-idle);
+        cursor:pointer;transition:background .12s,color .12s}
+  .prow:hover{background:rgba(255,255,255,.055);color:var(--ink-lit)}
+  .prow .nm{font-size:12.5px;color:#C9C9CC;letter-spacing:.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow.now .nm{color:var(--ink-lit);font-weight:600}
+  .prow .dur{margin-left:auto;font-size:10.5px;color:#7C7C80;font-variant-numeric:tabular-nums}
+  .prow .act{display:flex;gap:0;opacity:0;transition:opacity .12s}
+  .prow:hover .act{opacity:1}
+  .prow .act .salu-btn{width:28px;height:28px}
+  .pempty{flex:1;display:grid;place-items:center;color:rgba(166,166,166,.30)}
+
+  /* guides */
+  .guides{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:0;transition:opacity .15s}
+  .guides.show{opacity:1}
+  .g{position:absolute;border:1px dashed rgba(76,158,235,.55)}
+  .gl{position:absolute;font-size:9.5px;color:#8FC4F5;letter-spacing:.5px;background:rgba(10,14,18,.75);
+      padding:1px 5px;border-radius:4px;white-space:nowrap}
+
+  .verdict{margin:12px 0 0;font-size:12.5px;line-height:1.7;color:#C6C6C9;max-width:96ch;
+           border-left:2px solid #3D6E9E;padding-left:12px}
+  .verdict b{color:var(--ink-lit)}
+
+  /* ── gallery ─────────────────────────────────────────────── */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+  .card{background:#181818;border:1px solid var(--outline);border-radius:13px;padding:14px 15px 15px;
+        transition:border-color .15s}
+  .card:hover{border-color:#45454A}
+  .card.sel{border-color:#4C9EEB;box-shadow:0 0 0 1px rgba(76,158,235,.35) inset}
+  .card h3{margin:0 0 2px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .card h3 .tag{font-size:9.5px;letter-spacing:.7px;text-transform:uppercase;color:#0F1216;background:#4C9EEB;
+                padding:2px 6px;border-radius:5px;font-weight:700}
+  .card .why{font-size:12px;line-height:1.6;color:var(--ink-idle);margin:4px 0 12px}
+  .demo{display:flex;align-items:center;gap:18px;padding:10px 12px;border-radius:10px;
+        background:radial-gradient(120% 140% at 50% 0%, #23252A, #14151700 70%),#131315;
+        border:1px solid #26262A}
+  .demo .zoom{width:56px;height:56px;display:grid;place-items:center;color:var(--ink-idle)}
+  .demo .real{display:flex;align-items:center;gap:6px}
+  .demo .cap{font-size:9.5px;letter-spacing:.7px;text-transform:uppercase;color:#6E6E73;margin-bottom:2px}
+  .demo .col{display:flex;flex-direction:column}
+  .collide{margin-top:11px;font-size:11.5px;line-height:1.6;color:#9A9A9E}
+  .collide b{color:#D2D2D5;font-weight:600}
+  .use{all:unset;cursor:pointer;margin-top:12px;font-size:11px;letter-spacing:.5px;color:#8FC4F5;
+       border:1px solid #2F4A66;padding:5px 10px;border-radius:8px;transition:background .12s,color .12s}
+  .use:hover{background:#1B2A3A;color:#CFE6FB}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid #26262A;vertical-align:top;line-height:1.55}
+  th{color:#7C7C80;font-size:10px;letter-spacing:.8px;text-transform:uppercase;font-weight:600}
+  td:first-child{color:var(--ink-lit);white-space:nowrap}
+  td{color:#A9A9AD}
+  .rec{background:#15181B;border:1px solid #2B3B4A;border-radius:13px;padding:16px 18px;margin-top:14px}
+  .rec h3{margin:0 0 8px;font-size:14px}
+  .rec ol{margin:0;padding-left:19px;font-size:12.5px;line-height:1.8;color:#BDBDC1}
+  .rec ol b{color:var(--ink-lit)}
+  code{font-family:'Cascadia Mono',Consolas,monospace;font-size:11.5px;background:#202024;padding:1px 5px;border-radius:5px;color:#CFE6FB}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>SALU · playlist control — placement &amp; mark study</h1>
+  <p class="sub">
+    Everything below is drawn at <b>1:1</b> with SALU's own numbers: chrome block 40 + 108 = <b>148 px</b>,
+    control row <b>36 px</b>, container padding <b>18 px</b>, pitch <b>6 / 14 / 26 px</b>, timeline bar <b>23 px</b>,
+    volume bar <b>140 × 14</b>. Marks use the family geometry — stroke <code>clamp(size × 0.085, 1.4, 2.2)</code>,
+    round caps/joins, monochrome, <b>hover → white in 120 ms at 1.06×</b>, <b>press 0.90×</b>, glow only when active.
+    Hover and click everything; the states are live.
+  </p>
+
+  <div class="pickers">
+    <div class="pick"><span>Placement</span>
+      <div class="segs" id="seg-place">
+        <button data-v="A" aria-pressed="true">A · right edge</button>
+        <button data-v="B" aria-pressed="false">B · beside +</button>
+        <button data-v="C" aria-pressed="false">C · own group right of +</button>
+      </div>
+    </div>
+    <div class="pick"><span>Queue state</span>
+      <div class="segs" id="seg-queue">
+        <button data-v="0" aria-pressed="false">empty</button>
+        <button data-v="1" aria-pressed="true">now = 1</button>
+        <button data-v="3" aria-pressed="false">now = 3</button>
+      </div>
+    </div>
+    <div class="pick"><span>Panel top</span>
+      <div class="segs" id="seg-panel">
+        <button data-v="below" aria-pressed="true">below chrome (148)</button>
+        <button data-v="full" aria-pressed="false">full height — the trap</button>
+      </div>
+    </div>
+    <div class="pick"><span>Guides</span>
+      <div class="segs" id="seg-guides">
+        <button data-v="off" aria-pressed="true">off</button>
+        <button data-v="on" aria-pressed="false">on</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pickers" style="margin-top:10px">
+    <div class="pick"><span>Rail · ticks</span>
+      <div class="segs" id="seg-ticks">
+        <button data-v="2" aria-pressed="false">2</button>
+        <button data-v="3" aria-pressed="true">3</button>
+        <button data-v="4" aria-pressed="false">4</button>
+      </div>
+    </div>
+    <div class="pick"><span>Rail · bead means</span>
+      <div class="segs" id="seg-bead">
+        <button data-v="top" aria-pressed="true">something is playing</button>
+        <button data-v="thirds" aria-pressed="false">position in thirds</button>
+        <button data-v="off" aria-pressed="false">no bead</button>
+      </div>
+    </div>
+    <div class="pick"><span>Rail · mirror while open</span>
+      <div class="segs" id="seg-mirror">
+        <button data-v="on" aria-pressed="true">on</button>
+        <button data-v="off" aria-pressed="false">off (glow only)</button>
+      </div>
+    </div>
+    <div class="pick"><span>Rail · spine</span>
+      <div class="segs" id="seg-spine">
+        <button data-v="left" aria-pressed="true">left (reads “list”)</button>
+        <button data-v="right" aria-pressed="false">right (reads “panel”)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage-shell">
+    <div class="stage" id="stage">
+      <div class="video"></div>
+
+      <div class="panel below" id="panel">
+        <div class="ptabs" id="ptabs"></div>
+        <div class="prows" id="prows"></div>
+      </div>
+
+      <div class="chrome">
+        <div class="titlebar">
+          <div class="t">Episode 07 — The Long Way Round.mkv</div>
+          <div class="caps" id="caps"></div>
+        </div>
+        <div class="controller">
+          <div class="timeline-box">
+            <div class="bar">
+              <div class="f" style="width:38%"></div>
+              <div class="th" style="left:calc(38% - 1px)"></div>
+              <div class="lbl"><span>00:41:07</span><span class="c">−01:07:22</span><span>01:48:29</span></div>
+            </div>
+          </div>
+          <div class="row2" id="row2"></div>
+        </div>
+      </div>
+
+      <div class="pill" id="pill"></div>
+
+      <div class="guides" id="guides"></div>
+    </div>
+  </div>
+  <p class="verdict" id="verdict"></p>
+
+  <h2>Mark candidates — real size (20 px) and zoomed (56 px)</h2>
+  <p class="sub" style="margin-bottom:10px">
+    Every candidate obeys the collision table at the bottom: no <code>≡</code> (drag handle), no stacked frames
+    (Open Folder), no film frame (Open File), no six dots (Settings), no hollow square (Stop).
+    The <b>queue state</b> picker above drives the “now” indicator in each of them — the mark reports the queue
+    the same way the speaker mark reports the level.
+  </p>
+  <div class="grid" id="gallery"></div>
+
+  <h2>Queue Rail · the three decisions, and a size ladder</h2>
+  <p class="sub" style="margin-bottom:10px">
+    The rail carries more ink than a chevron, so it has to be weighed against the family, not looked at alone.
+    Below: the real stroke clamp at each size (<code>clamp(size × 0.085, 1.4, 2.2)</code> px), and the rail standing
+    in the row next to the transport marks at their true sizes — if it shouts, shorten the ticks or shrink the bead.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>Size ladder</h3>
+      <p class="why">The mark has to survive 18 px in the panel's tab strip and 16 px in any future menu, not just 20 px in the row.</p>
+      <div class="demo" id="ladder" style="gap:22px;align-items:flex-end"></div>
+      <p class="collide" id="ladderNote"></p>
+    </div>
+    <div class="card">
+      <h3>Optical weight check</h3>
+      <p class="why">The rail as it will actually sit — same sizes, same pitch, same gray, against the marks it will neighbour.</p>
+      <div class="demo" id="weight" style="gap:14px;justify-content:center"></div>
+      <p class="collide" id="weightNote"></p>
+    </div>
+  </div>
+
+  <h2>Collision table (what each mark must never be mistaken for)</h2>
+  <table id="collideTable">
+    <thead><tr><th>existing mark</th><th>meaning</th><th>consequence for a playlist mark</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="rec">
+    <h3>Recommendation</h3>
+    <ol id="recList"></ol>
+  </div>
+
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   SALU mark geometry — ported 1:1 from salu_marks.dart /
+   transport_marks.dart into a 100×100 viewBox.
+   stroke = clamp(size*0.085, 1.4, 2.2) → 1.7px @20px → 8.5 units.
+   ══════════════════════════════════════════════════════════════ */
+const SW = 8.5;
+
+function svg(inner, size = 20, sw = SW) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" fill="none"
+    stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+const q = s => `<g opacity=".55">${s}</g>`;          // the family's "quieter" ink (withAlpha(140))
+const solid = s => `<g fill="currentColor" stroke="currentColor">${s}</g>`;
+
+function arc(cx, cy, r, a0, sweep) {
+  const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+  const x1 = cx + r * Math.cos(a0 + sweep), y1 = cy + r * Math.sin(a0 + sweep);
+  const laf = Math.abs(sweep) > Math.PI ? 1 : 0, sf = sweep > 0 ? 1 : 0;
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${laf} ${sf} ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+/* ── existing family ───────────────────────────────────────── */
+const F = {
+  plus:    () => `<path d="M8 50H92M50 8V92"/>`,
+  play:    () => `<path d="M34 22L66 50L34 78"/>`,
+  pause:   () => `<path d="M36 24V76M64 24V76"/>`,
+  stop:    () => `<rect x="21" y="21" width="58" height="58" rx="13"/>`,
+  chev2:   (bar, left) => {
+    const [a1, a2] = bar ? [42, 74] : [46, 82];
+    const p = `<path d="M${a1-24} 22L${a1} 50L${a1-24} 78M${a2-24} 22L${a2} 50L${a2-24} 78"/>`
+            + (bar ? `<path d="M90 24V76"/>` : '');
+    return left ? `<g transform="translate(100,0) scale(-1,1)">${p}</g>` : p;
+  },
+  speaker: (arcs, muted) => {
+    let s = `<path d="M12 40H28L44 23V77L28 60H12Z"/>`;
+    if (muted) return s + `<path d="M56 30L88 70"/>`;
+    const a0 = -Math.PI / 3.1, sw = 2 * Math.PI / 3.1;
+    for (let i = 0; i < arcs; i++) s += `<path d="${arc(50, 50, 20 + 16 * i, a0, sw)}"/>`;
+    return s;
+  },
+  film:    () => `<rect x="12" y="18" width="76" height="64" rx="12"/>
+                  <path d="M12 40H22M78 40H88M12 60H22M78 60H88"/>`,
+  stack:   () => q(`<rect x="26" y="14" width="60" height="50" rx="10"/>`)
+               + `<rect x="12" y="34" width="60" height="50" rx="10"/>`,
+  link:    () => `<g transform="rotate(-45 50 50)">
+                    <rect x="14" y="35" width="46" height="30" rx="15"/>
+                    <rect x="40" y="35" width="46" height="30" rx="15"/></g>`,
+  grip:    () => `<path d="M24 30H76M24 50H76M24 70H76"/>`,
+  trash:   () => `<path d="M14 28H86M38 28V15H62V28M23 28L29 85H71L77 28"/>`,
+  dots:    () => { let s=''; for (const y of [34,66]) for (const x of [26,50,74])
+                     s += `<circle cx="${x}" cy="${y}" r="5" fill="currentColor" stroke="none"/>`;
+                   return s; },
+  subs:    () => `<rect x="10" y="22" width="80" height="56" rx="12"/>
+                  <path d="M26 54H48M56 54H74M26 66H62"/>`,
+  sliders: () => `<path d="M20 30H80M20 50H80M20 70H80"/>
+                  <circle cx="40" cy="30" r="7"/><circle cx="62" cy="50" r="7"/><circle cx="34" cy="70" r="7"/>`,
+};
+
+/* ── playlist candidates ───────────────────────────────────── */
+/* st = {now: index of the playing row (-1 when the queue is empty), count} */
+
+/* The Queue Rail, parameterised — the "Rail" pickers drive it.
+   Ticks are evenly spaced between y=28 and y=72 and deliberately ragged
+   (70 / 56 / 64 / 50) so the mark can never be read as ≡, the drag handle. */
+function railDraw(st, o) {
+  const n = o.ticks, right = o.spine === 'right';
+  const spineX = right ? 80 : 20, beadX = right ? 18 : 82;
+  const ragged = [70, 56, 64, 50];
+  const ys = n === 1 ? [50] : Array.from({ length: n }, (_, i) => 26 + 48 * i / (n - 1));
+
+  // Which row carries the bead — the mark's whole state vocabulary.
+  let br = -1;
+  if (st.now >= 0 && o.bead !== 'off') {
+    br = o.bead === 'thirds'
+      ? Math.min(n - 1, Math.floor((st.now / Math.max(1, st.count)) * n))
+      : 0;
+  }
+
+  let s = `<path d="M${spineX} 16V84"/>`;
+  ys.forEach((y, i) => {
+    const L = ragged[i % ragged.length];
+    const x2 = right ? spineX - (L - 20) : L;
+    const t = `<path d="M${spineX} ${y.toFixed(1)}H${x2}"/>`;
+    s += (i === br) ? t : q(t);          // the bead's row stays full ink
+  });
+  if (br >= 0) {
+    s += `<circle cx="${beadX}" cy="${ys[br].toFixed(1)}" r="7" fill="currentColor" stroke="none"/>`;
+  }
+  return s;
+}
+
+const CAND = {
+  rail: {
+    name: 'Queue Rail',
+    tag: 'recommended',
+    why: 'A spine with ragged ticks is a list, and the solid bead is the item that is playing. Nothing else in the family uses a spine, so it collides with nothing. While the panel is open the whole mark mirrors — the spine swings to the right edge and points at the panel it opened, the same trick as the plus rotating into ×. All four of its parameters are tunable above.',
+    collide: '<b>Collides with:</b> nothing. <b>Near-miss:</b> <code>≡</code> drag handle — killed by the spine plus the ragged (unequal) tick lengths. <b>Watch:</b> 4 ticks at 16 px start to merge; the ladder below is the honest test.',
+    draw: st => railDraw(st, S0),
+    flip: true,
+  },
+
+  railHinge: {
+    name: 'Queue Rail · hinged',
+    tag: '= spine right',
+    why: 'The same rail drawn permanently mirrored: spine on the right, ticks running left. It is a miniature of the panel itself — the spine is the panel\'s left edge, the ticks are its rows. Reads as "a list that lives on the right side of my screen", which is exactly where SALU\'s panel slides out from. (Identical to setting the tuner above to spine = right, mirror = off.)',
+    collide: '<b>Collides with:</b> nothing. <b>Trade-off:</b> as a standalone glyph it reads slightly less like "list" than the left-spine version (Western reading direction), and it has no open-state motion left to give.',
+    draw: st => railDraw(st, { ticks: S0.ticks, spine: 'right', bead: S0.bead }),
+    flip: false,
+  },
+
+  chevRow: {
+    name: 'Now Row',
+    tag: 'most literal',
+    why: 'The universal "playlist" signifier — a list with a play glyph on it — redrawn in SALU\'s hand: the head of the playing row carries the family\'s own solid chevron, the other rows fall back to 55 % ink. Instantly readable with zero instruction text, at any size.',
+    collide: '<b>Collides with:</b> the transport <code>&gt;</code> play chevron — this mark puts a second play glyph in the control row, so it must never sit near the cluster. <b>Near-miss:</b> <code>≡</code>, broken by the ragged lengths and the chevron head.',
+    draw: st => {
+      const rows = [28, 52, 76], len = [86, 68, 78];
+      let s = '';
+      // every row that is not playing falls back to the family's 55 % ink
+      rows.forEach((y, i) => {
+        if (st.now === i) return;
+        s += q(`<path d="M16 ${y}H${len[i]}"/>`);
+      });
+      // the playing row: solid chevron head + a full-ink rule
+      if (st.now >= 0) {
+        const y = rows[st.now];
+        s += `<path d="M16 ${y - 8}L30 ${y}L16 ${y + 8}Z" fill="currentColor"/>`;
+        s += `<path d="M38 ${y}H${len[st.now]}"/>`;
+      }
+      return s;
+    },
+    flip: false,
+  },
+
+  beads: {
+    name: 'Bead Queue',
+    tag: 'most abstract',
+    why: 'Three beads on a hairline wire — a queue as a sequence rather than as a page of text. The filled bead is the current item, so the mark silently reports "you are on 2 of 3". The most geometric of the five and the one that will age best next to the transport chevrons.',
+    collide: '<b>Collides with:</b> nothing hard. <b>Near-miss:</b> three beads on a line can read as <i>chapters of the current item</i> rather than <i>items of the queue</i> — a real ambiguity, since chapters are already planned inside this very panel.',
+    draw: st => {
+      let s = q(`<path d="M8 50H92"/>`);
+      [24, 50, 76].forEach((x, i) => {
+        s += (st.now === i)
+          ? `<circle cx="${x}" cy="50" r="9.5" fill="currentColor" stroke="none"/>`
+          : `<circle cx="${x}" cy="50" r="9"/>`;
+      });
+      return s;
+    },
+    flip: false,
+  },
+
+  hinge: {
+    name: 'Panel Hinge',
+    tag: 'safe baseline',
+    why: 'The conventional "toggle side panel" glyph: a hollow sheet with a divider at its right edge. Zero learning cost — everybody has clicked this icon — and it honestly says "a panel slides out from the right". It is also the least SALU of the five: it is the stock answer, and it is a rectangle in a family that avoids rectangles.',
+    collide: '<b>Collides with:</b> <code>□</code> Stop — both are hollow rounded rectangles in the same 36 px row; the wider proportion (80×68 vs 58×58) is the only thing separating them. <b>Also:</b> it says nothing about a <i>queue</i>, so an empty panel still looks "full".',
+    draw: st => {
+      let s = `<rect x="10" y="16" width="80" height="68" rx="12"/><path d="M64 16V84"/>`;
+      if (st.now >= 0) {
+        s += `<path d="M22 38H52"/>` + q(`<path d="M22 56H46M22 72H50"/>`);
+      }
+      return s;
+    },
+    flip: false,
+  },
+};
+
+/* ══════════════════════════════════════════════════════════════
+   state
+   ══════════════════════════════════════════════════════════════ */
+const S0 = { place: 'A', mark: 'rail', queue: 1, panelTop: 'below', panelOpen: false, pillOpen: false, guides: false,
+             ticks: 3, bead: 'top', mirror: true, spine: 'left' };
+const ITEMS = [
+  ['Episode 05 — First Light.mkv',       '24:10'],
+  ['Episode 06 — Cold Harbour.mkv',      '23:58'],
+  ['Episode 07 — The Long Way Round.mkv','22:41'],
+  ['Episode 08 — Ash and Wire.mkv',      '25:02'],
+  ['Episode 09 — The Quiet Part.mkv',    '24:33'],
+];
+
+/* The queue state every mark reads: `now` = playing index (-1 = empty),
+   `count` = queue length. Same shape for the row, the panel and the gallery. */
+const stNow = () => ({ now: S0.queue === 0 ? -1 : S0.queue - 1,
+                       count: S0.queue === 0 ? 0 : ITEMS.length });
+const stEmpty = () => ({ now: -1, count: 0 });
+
+function seg(id, key, after) {
+  const el = document.getElementById(id);
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...el.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    after(b.dataset.v); render();
+  });
+}
+
+/* ── button factory (the ONE recipe) ───────────────────────── */
+function btn(mark, opts = {}) {
+  const { size = 20, cls = '', tip = '', flip = false, sw = SW } = opts;
+  return `<div class="salu-btn ${cls}" title="${tip}">${flip ? '<span class="flip" style="display:grid;place-items:center">' + svg(mark, size, sw) + '</span>' : svg(mark, size, sw)}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   render — control row
+   ══════════════════════════════════════════════════════════════ */
+function playlistBtn() {
+  const c = CAND[S0.mark];
+  const st = stNow();
+  return `<div class="salu-btn ${S0.panelOpen ? 'on' : ''}" id="plBtn" title="Playlist">`
+       + ((c.flip && S0.mirror) ? `<span class="flip" style="display:grid;place-items:center">${svg(c.draw(st), 20)}</span>`
+                 : svg(c.draw(st), 20))
+       + `</div>`;
+}
+
+function cluster() {
+  let s = `<div class="cluster">`;
+  s += btn(F.play(), { tip: 'Play' });
+  s += `<span style="width:6px"></span>` + btn(F.stop(), { size: 16, tip: 'Stop' });
+  s += `<span style="width:14px"></span>`;
+  s += btn(F.chev2(true, true), { tip: 'Previous' });
+  s += `<span style="width:6px"></span>` + btn(F.chev2(true, false), { tip: 'Next' });
+  s += `<span style="width:14px"></span>`;
+  s += btn(F.chev2(false, true), { tip: 'Seek backward' });
+  s += `<span style="width:6px"></span>` + btn(F.chev2(false, false), { tip: 'Seek forward' });
+  s += `<span style="width:26px"></span>`;
+  s += btn(F.speaker(2, false), { tip: 'Mute' });
+  s += `<span style="width:6px"></span>`;
+  s += `<div class="volwrap"><div class="vol"><div class="vbar"><div class="vf" style="width:62%"></div>
+       <div class="vl" style="left:calc(62% - 41px)">62%</div></div></div></div>`;
+  s += `</div>`;
+  return s;
+}
+
+function renderRow() {
+  const row = document.getElementById('row2');
+  const pill = document.getElementById('pill');
+  const openMark = `<div class="salu-btn ${S0.pillOpen ? 'on' : ''}" id="plusBtn" title="Open media">
+      <span class="plusflip" style="display:grid;place-items:center;transition:transform .13s cubic-bezier(.215,.61,.355,1);
+      transform:rotate(${S0.pillOpen ? 45 : 0}deg)">${svg(F.plus(), 19)}</span></div>`;
+
+  let left = openMark;
+  if (S0.place === 'B') left += `<span style="width:2px"></span>` + playlistBtn();
+  if (S0.place === 'C') left += `<span style="width:26px"></span>` + playlistBtn();
+
+  let right = '';
+  if (S0.place === 'A') right = playlistBtn();
+
+  row.innerHTML =
+      `<div class="zone-left">${left}</div>`
+    + `<div class="zone-center">${cluster()}</div>`
+    + `<div class="zone-right">${right}</div>`;
+
+  /* pill anchored under the plus */
+  const plusEl = document.getElementById('plusBtn');
+  const stage = document.getElementById('stage');
+  const r = plusEl.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+  pill.style.left = (r.left - sr.left) + 'px';
+  pill.style.top  = (r.top - sr.top + r.height + 6) + 'px';
+  pill.innerHTML = btn(F.film(), { tip: 'Open file' }) + btn(F.stack(), { tip: 'Open folder' }) + btn(F.link(), { tip: 'Open URL' });
+  pill.classList.toggle('show', S0.pillOpen);
+
+  document.getElementById('plusBtn').onclick = () => { S0.pillOpen = !S0.pillOpen; render(); };
+  const pl = document.getElementById('plBtn');
+  if (pl) pl.onclick = () => { S0.panelOpen = !S0.panelOpen; render(); };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   render — panel, caps, guides
+   ══════════════════════════════════════════════════════════════ */
+function renderPanel() {
+  const p = document.getElementById('panel');
+  p.className = 'panel ' + (S0.panelTop === 'below' ? 'below' : 'full') + (S0.panelOpen ? ' show' : '');
+  const c = CAND[S0.mark], st = stNow();
+  document.getElementById('ptabs').innerHTML =
+      `<div class="salu-btn on" title="Playlist">${svg(c.draw(st), 18)}</div>`
+    + btn(F.film(), { size: 18, tip: 'Video' })
+    + btn(F.speaker(2, false), { size: 18, tip: 'Audio' })
+    + btn(F.subs(), { size: 18, tip: 'Subtitles' })
+    + `<span class="sp">4 tabs · marks, no words</span>`;
+
+  const rows = document.getElementById('prows');
+  if (S0.queue === 0) {
+    rows.innerHTML = `<div class="pempty">${svg(c.draw(stEmpty()), 46, strokeUnits(46))}</div>`;
+    return;
+  }
+  rows.innerHTML = ITEMS.map((it, i) => `
+    <div class="prow ${i === st.now ? 'now' : ''}">
+      ${svg(F.grip(), 16, 9)}
+      ${i === st.now ? `<span style="color:#EDEDED;display:grid;place-items:center">${svg(F.play(), 12, 11)}</span>` : `<span style="width:12px"></span>`}
+      <span class="nm">${it[0]}</span>
+      <span class="dur">${it[1]}</span>
+      <span class="act">${btn(F.trash(), { size: 16, tip: 'Remove' })}</span>
+    </div>`).join('');
+}
+
+function renderCaps() {
+  document.getElementById('caps').innerHTML =
+      `<div class="capbtn" title="Settings">${svg(F.dots(), 16, 0)}</div>
+       <div class="capbtn" title="Minimize"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M1 6h10" stroke="currentColor" stroke-width="1"/></svg></div>
+       <div class="capbtn" title="Maximize"><svg width="11" height="11" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></div>
+       <div class="capbtn close" title="Close"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1"/></svg></div>`;
+}
+
+function renderGuides() {
+  const g = document.getElementById('guides');
+  g.classList.toggle('show', S0.guides);
+  const stage = document.getElementById('stage'), sr = stage.getBoundingClientRect();
+  const right = sr.width - 18 - 36;               // playlist slot, placement A
+  g.innerHTML = S0.guides ? `
+    <div class="g" style="left:0;right:0;top:0;height:148px"></div>
+    <div class="gl" style="left:8px;top:150px">chrome block 148 px — the panel must start here</div>
+    <div class="g" style="left:${right}px;top:112px;width:36px;height:36px"></div>
+    <div class="gl" style="left:${right - 150}px;top:118px">18 px from the window edge</div>
+    <div class="g" style="left:18px;top:112px;width:36px;height:36px"></div>
+    <div class="gl" style="left:60px;top:118px">Open + — the pill blooms below, 6 px</div>
+    <div class="g" style="right:0;top:${S0.panelTop === 'below' ? 148 : 0}px;bottom:0;width:322px"></div>
+    <div class="gl" style="right:330px;top:${S0.panelTop === 'below' ? 160 : 12}px">panel 322 px, slides from the right edge</div>
+  ` : '';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   verdicts + gallery
+   ══════════════════════════════════════════════════════════════ */
+const VERDICT = {
+  A: `<b>A · right edge of the control row — recommended.</b> The toggle becomes the panel's handle: it sits 18 px from the window's right edge, directly above the panel's leading edge, so the click and the 322 px slide share one hinge and the eye never has to cross the screen. follow.md §5 already reserves exactly this slot ("the row's right edge stays free for future controls — tracks, PiP, fullscreen, <b>panels</b>"), and the left zone stays a single mark so the Open pill keeps its clean drop-below geometry. One condition: the panel must start <b>below</b> the 148 px chrome block — flip "Panel top" to full height and watch the panel swallow its own toggle.`,
+  B: `<b>B · 2 px beside the + — the weakest of the three.</b> At that pitch the playlist mark joins the Open group and inherits its verb: it reads as a <i>fourth open action</i> ("load an .m3u") rather than as a view of the queue — and SALU really can open .m3u/.m3u8 files through Open File (<code>MediaUtils.isPlaylist</code>), so the misreading is plausible, not theoretical. The 128 px pill also blooms 6 px below the plus and reaches under the neighbour, so a popup visually claims a control that is not part of it; the plus's 45° rotation into × fires in its peripheral vision too. Meanwhile the row's reserved right edge stays empty and the panel still slides in from the opposite side of the screen. Click the + and the playlist mark here to feel both collisions.`,
+  C: `<b>C · own group, 26 px right of the + — defensible, still second best.</b> The 26 px gap takes it out of the Open group, so the "fourth open action" misreading dies and the pill no longer roofs it. But the spatial logic is still inverted: the click happens at the far left while 322 px of glass slides in at the far right, and the toggle ends up governing something it is nowhere near. Take this only if you ever decide the playlist panel should slide out of the <i>left</i> edge — then the hinge argument flips and C becomes the right answer.`,
+};
+
+function renderGallery() {
+  const g = document.getElementById('gallery');
+  const st = stNow();
+  // A live button: mirrored + glowing while the panel is open and this
+  // mark is the one mounted in the stage.
+  const live = (k, c) => {
+    const on = S0.panelOpen && S0.mark === k;
+    const body = svg(c.draw(st), 20);
+    return `<div class="salu-btn ${on ? 'on' : ''}" title="${on ? 'active (panel open)' : 'hover me'}">`
+         + ((c.flip && S0.mirror) ? `<span class="flip" style="display:grid;place-items:center">${body}</span>` : body)
+         + `</div>`;
+  };
+  g.innerHTML = Object.entries(CAND).map(([k, c]) => `
+    <div class="card ${S0.mark === k ? 'sel' : ''}" data-k="${k}">
+      <h3>${c.name} <span class="tag">${c.tag}</span></h3>
+      <p class="why">${c.why}</p>
+      <div class="demo">
+        <div class="col"><div class="cap">zoom 56</div><div class="zoom">${svg(c.draw(st), 56)}</div></div>
+        <div class="col"><div class="cap">real 20 · live recipe</div>
+          <div class="real">
+            ${live(k, c)}
+            <div class="salu-btn off" title="dimmed = enabled:false">${svg(c.draw(stEmpty()), 20)}</div>
+          </div>
+        </div>
+      </div>
+      <p class="collide">${c.collide}</p>
+      <button class="use">${S0.mark === k ? 'in the stage now' : 'try it in the stage'}</button>
+    </div>`).join('');
+  g.querySelectorAll('.card').forEach(card => {
+    card.querySelector('.use').onclick = () => { S0.mark = card.dataset.k; render(); };
+  });
+}
+
+const COLLIDE = [
+  ['<code>≡</code> three rules', 'drag handle (row reorder)', 'The stock "playlist" icon is three rules with a triangle — already taken. Any list mark needs ragged lengths, a spine, or a head glyph to break the ≡ read.'],
+  ['stacked frames', 'Open Folder', 'A "deck of cards / stacked items" playlist mark dies here — two offset rounded rects already mean folder.'],
+  ['film frame', 'Open File', 'No rect-with-notches variants; also the frame is reused as the panel\'s Video tab.'],
+  ['<code>□</code> hollow square', 'Stop', 'The conventional sidebar glyph (rect + divider) is one hollow rounded rect away from Stop, in the same 36 px row.'],
+  ['<code>&gt;</code> chevron', 'Play', 'A play triangle inside the playlist mark doubles the play signifier in the row — acceptable at the right edge, unacceptable next to the cluster.'],
+  ['six dots', 'Settings (title bar)', 'No dot clusters. Three beads in a line is the closest legal neighbour, and it must stay a <i>line</i>.'],
+  ['speaker + arcs', 'sound level', 'State-driven marks are legal precedent: the playlist mark may report the queue the way the speaker reports the level.'],
+];
+
+function renderCollide() {
+  document.querySelector('#collideTable tbody').innerHTML =
+    COLLIDE.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+}
+
+const REC = [
+  `<b>Placement: right edge of the control row</b>, <code>Align(centerRight)</code> in the same Stack that already holds the Open control and the cluster — a three-line change in <code>controller_panel.dart</code>. It is the slot follow.md §5 reserved for panels, and it makes the mark the panel's handle.`,
+  `<b>Mark: Queue Rail</b> — spine + ragged ticks + a solid bead for the playing item. Zero collisions, and it is the only candidate that can honestly report queue state (no bead = nothing queued).`,
+  `<b>It must be a toggle, not a verb.</b> Panel open → <code>active: true</code>: full white + the faint static glow, plus the 130 ms mirror that swings the spine toward the panel. That is the plus→× rule applied to a panel.`,
+  `<b>The panel starts below the chrome block</b> (<code>top: kChromeBlockHeight</code>), never full height — otherwise it covers its own toggle and the row can't close it.`,
+  `<b>Grow the right group leftwards</b> as members arrive: <code>[playlist · tracks] 14 px [PiP · fullscreen]</code>, fullscreen always rightmost. Playlist first in the panel pair, matching Phase 4's tab order (Playlist · Video · Audio · Subtitles).`,
+  `<b>Decide the panel's identity now:</b> one mark that opens the panel on the Playlist tab, or one mark per tab group. If Phase 4's single 4-tab right panel survives, the rail is the Playlist tab's shortcut — and the tab strip itself should be marks, not words, since hard rule 6 forbids text buttons.`,
+  `<b>Empty state without words:</b> the panel with nothing queued shows the rail mark itself at ~30 % ink, centred. Rule 1 allows no instruction text, and a mark is not text.`,
+];
+
+/* ══════════════════════════════════════════════════════════════
+   rail lab — size ladder (real stroke clamp) + optical weight
+   ══════════════════════════════════════════════════════════════ */
+function strokeUnits(size) {
+  // clamp(size * 0.085, 1.4, 2.2) px, expressed in viewBox units
+  const px = Math.min(2.2, Math.max(1.4, size * 0.085));
+  return (px / size) * 100;
+}
+
+function renderRailLab() {
+  const st = stNow();
+  const sizes = [16, 18, 20, 24, 28];
+  document.getElementById('ladder').innerHTML = sizes.map(s => `
+    <div class="col" style="align-items:center">
+      <div class="cap">${s} px</div>
+      <div class="salu-btn" style="width:${s + 16}px;height:${s + 16}px">${svg(CAND.rail.draw(st), s, strokeUnits(s))}</div>
+      <div class="cap" style="margin:2px 0 0">${Math.min(2.2, Math.max(1.4, s * 0.085)).toFixed(2)} px stroke</div>
+    </div>`).join('');
+  // Honest air between strokes: the ticks sit on a 48-unit band, so the
+  // row pitch in px is (48/(n-1))% of the size, minus the clamped stroke.
+  const pitchAt = s => (48 / Math.max(1, S0.ticks - 1)) / 100 * s;
+  const strokeAt = s => Math.min(2.2, Math.max(1.4, s * 0.085));
+  const white = s => (pitchAt(s) - strokeAt(s)).toFixed(1);
+  document.getElementById('ladderNote').innerHTML =
+    `<b>Reading:</b> ${S0.ticks} ticks · spine ${S0.spine} · bead = ${
+      S0.bead === 'top' ? '“something is queued”' : S0.bead === 'thirds' ? '“position in thirds”' : 'none'
+    }. White between strokes: <b>${white(16)} px at 16 px</b>, ${white(18)} px at 18 px, ${white(20)} px at 20 px.
+     Under ~1.2 px the rows merge on a normal-DPI Windows panel — that is the real ceiling on tick count,
+     not taste.${S0.ticks >= 4 ? ' <b>4 ticks are already through the floor at 16 px.</b>' : ''}`;
+
+  // The rail standing in the row at true sizes / true pitch.
+  const marks = [
+    ['rail (playlist)', svg(CAND.rail.draw(st), 20, strokeUnits(20))],
+    ['play',            svg(F.play(), 20, strokeUnits(20))],
+    ['stop',            svg(F.stop(), 16, strokeUnits(16))],
+    ['previous',        svg(F.chev2(true, true), 20, strokeUnits(20))],
+    ['seek back',       svg(F.chev2(false, true), 20, strokeUnits(20))],
+    ['sound',           svg(F.speaker(2, false), 20, strokeUnits(20))],
+    ['open +',          svg(F.plus(), 19, strokeUnits(19))],
+    ['grip ≡',          svg(F.grip(), 16, strokeUnits(16))],
+  ];
+  document.getElementById('weight').innerHTML = marks.map(([n, m]) => `
+    <div class="col" style="align-items:center;gap:4px">
+      <div class="salu-btn">${m}</div><div class="cap">${n}</div>
+    </div>`).join('');
+  document.getElementById('weightNote').innerHTML =
+    `<b>Reading:</b> the rail is the densest mark in the row — spine + ${S0.ticks} ticks + bead. If it outweighs
+     <code>&gt;</code> or <code>□</code> beside it, the fixes are: shorten the longest tick (70 → 62), drop the bead
+     to r = 6, or thin the spine by drawing it at the quiet 55 % ink and leaving the ticks full.`;
+}
+
+function renderRec(){ document.getElementById('recList').innerHTML = REC.map(x=>`<li>${x}</li>`).join(''); }
+
+/* ══════════════════════════════════════════════════════════════ */
+function render() {
+  renderRow(); renderPanel(); renderCaps(); renderGuides(); renderGallery(); renderRailLab();
+  document.getElementById('verdict').innerHTML = VERDICT[S0.place];
+}
+seg('seg-place', 'place', v => S0.place = v);
+seg('seg-queue', 'queue', v => S0.queue = +v);
+seg('seg-panel', 'panelTop', v => S0.panelTop = v);
+seg('seg-guides', 'guides', v => S0.guides = v === 'on');
+seg('seg-ticks',  'ticks',  v => S0.ticks = +v);
+seg('seg-bead',   'bead',   v => S0.bead = v);
+seg('seg-mirror', 'mirror', v => S0.mirror = v === 'on');
+seg('seg-spine',  'spine',  v => S0.spine = v);
+renderCollide(); renderRec(); render();
+window.addEventListener('resize', () => { renderRow(); renderGuides(); });
+document.getElementById('stage').addEventListener('click', e => {
+  if (!e.target.closest('#pill') && !e.target.closest('#plusBtn') && S0.pillOpen) { S0.pillOpen = false; render(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { S0.pillOpen = false; S0.panelOpen = false; render(); }
+});
+</script>
+</body>
+</html>
