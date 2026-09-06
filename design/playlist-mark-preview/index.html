@@ -111,9 +111,40 @@
   .panel.show{transform:translateX(0)}
   .panel.below{top:148px;bottom:0;border-radius:14px 0 0 0}
   .panel.full{top:0;bottom:0}
-  .ptabs{display:flex;align-items:center;gap:2px;padding:10px 12px 8px;border-bottom:1px solid var(--divider)}
-  .ptabs .salu-btn{width:32px;height:32px}
-  .ptabs .sp{margin-left:auto;font-size:10px;color:#7C7C80;letter-spacing:.6px}
+  .phead{display:flex;align-items:center;gap:2px;padding:8px 10px;border-bottom:1px solid var(--divider)}
+  .phead .salu-btn{width:30px;height:30px}
+  .psearch{position:relative;flex:1;height:28px;min-width:34px;display:flex;align-items:center;
+           background:rgba(255,255,255,.045);border:1px solid #2E2E33;border-radius:14px;
+           transition:min-width .22s cubic-bezier(.215,.61,.355,1),background .15s}
+  .psearch:focus-within{background:rgba(255,255,255,.075);border-color:#45454A}
+  .psearch .mag{position:absolute;left:7px;display:grid;place-items:center;color:#7C7C80;pointer-events:none}
+  .psearch input{all:unset;flex:1;font-family:var(--font);font-size:12px;color:var(--ink-lit);
+                 padding:0 26px 0 26px;width:100%;cursor:text}
+  .psearch .clr{position:absolute;right:3px;display:none}
+  .psearch.has .clr{display:grid}
+  .pfoot{display:flex;align-items:center;gap:2px;padding:8px 10px;border-top:1px solid var(--divider)}
+  .pfoot .sp{margin-left:auto;font-size:10px;color:#6E6E73;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+
+  /* the undocked playlist: its own draggable glass window */
+  .panel.detached{transition:opacity .22s cubic-bezier(.215,.61,.355,1),box-shadow .2s;
+                  top:auto;bottom:auto;left:auto;right:auto;width:322px;height:452px;
+                  border:1px solid var(--outline);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.62);
+                  transform:none;z-index:8}
+  .panel.detached.show{transform:none}
+  .panel.detached .phead{cursor:grab;border-radius:14px 14px 0 0}
+  .panel.detached .phead:active{cursor:grabbing}
+  .panel.detached.raise{box-shadow:0 22px 60px rgba(0,0,0,.62),0 0 0 1px rgba(76,158,235,.75)}
+  .panel.detached:not(.show){opacity:0;pointer-events:none}
+  .salu-btn.mute{color:#7A7A7E}
+  .salu-btn.mute:hover{color:#C4C4C8}
+  .toast{position:absolute;left:50%;bottom:34px;transform:translate(-50%,8px);z-index:12;display:flex;
+         align-items:center;gap:10px;height:40px;padding:0 8px 0 16px;border-radius:10px;
+         background:rgba(30,30,30,.90);border:1px solid var(--outline);backdrop-filter:blur(18px);
+         font-size:12px;color:var(--ink-lit);opacity:0;pointer-events:none;
+         transition:opacity .16s,transform .16s cubic-bezier(.215,.61,.355,1)}
+  .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+  .toast .salu-btn{width:auto;height:32px;padding:0 10px;font-size:11.5px;color:#8FC4F5;display:grid;place-items:center}
+  .toast .salu-btn:hover{color:#CFE6FB}
   .prows{flex:1;overflow:auto;padding:6px 6px 14px}
   .prow{display:flex;align-items:center;gap:8px;height:38px;padding:0 8px;border-radius:9px;color:var(--ink-idle);
         cursor:pointer;transition:background .12s,color .12s}
@@ -195,8 +226,8 @@
     <div class="pick"><span>Queue state</span>
       <div class="segs" id="seg-queue">
         <button data-v="0" aria-pressed="false">empty</button>
-        <button data-v="1" aria-pressed="true">now = 1</button>
-        <button data-v="3" aria-pressed="false">now = 3</button>
+        <button data-v="1" aria-pressed="true">now = 1 of 14</button>
+        <button data-v="12" aria-pressed="false">now = 12 of 14</button>
       </div>
     </div>
     <div class="pick"><span>Panel top</span>
@@ -253,8 +284,9 @@
       <div class="video"></div>
 
       <div class="panel below" id="panel">
-        <div class="ptabs" id="ptabs"></div>
+        <div class="phead" id="phead"></div>
         <div class="prows" id="prows"></div>
+        <div class="pfoot" id="pfoot"></div>
       </div>
 
       <div class="chrome">
@@ -276,6 +308,7 @@
 
       <div class="pill" id="pill"></div>
 
+      <div class="toast" id="toast"></div>
       <div class="guides" id="guides"></div>
     </div>
   </div>
@@ -381,6 +414,28 @@ const F = {
                   <path d="M26 54H48M56 54H74M26 66H62"/>`,
   sliders: () => `<path d="M20 30H80M20 50H80M20 70H80"/>
                   <circle cx="40" cy="30" r="7"/><circle cx="62" cy="50" r="7"/><circle cx="34" cy="70" r="7"/>`,
+
+  /* ── header marks (all new to the family except the bin and the ×) ── */
+  // Repeat: the family's existing ¾-arc + arrowhead (RestartMark), reused.
+  loop: () => {
+    const a0 = 3 * Math.PI / 4, sw = 3 * Math.PI / 2, r = 32, c = 50;
+    const end = a0 + sw;
+    const tip = [c + r * Math.cos(end), c + r * Math.sin(end)];
+    const tan = [-Math.sin(end), Math.cos(end)], nor = [tan[1], -tan[0]];
+    const k = 11, b = 16;
+    const head = `M${(tip[0]-tan[0]*b+nor[0]*k).toFixed(1)} ${(tip[1]-tan[1]*b+nor[1]*k).toFixed(1)}`
+               + `L${tip[0].toFixed(1)} ${tip[1].toFixed(1)}`
+               + `L${(tip[0]-tan[0]*b-nor[0]*k).toFixed(1)} ${(tip[1]-tan[1]*b-nor[1]*k).toFixed(1)}`;
+    return `<path d="${arc(c, c, r, a0, sw)}"/><path d="${head}"/>`;
+  },
+  // Repeat one: the same loop with a solid bead at its centre — no numeral.
+  loopOne: () => F.loop() + `<circle cx="50" cy="50" r="8" fill="currentColor" stroke="none"/>`,
+  shuffle: () => `<path d="M14 36H32L54 64H70M14 64H32L54 36H70"/>
+                  <path d="M72 30L84 36L72 42M72 58L84 64L72 70"/>`,
+  search: () => `<circle cx="43" cy="43" r="23"/><path d="M60 60L83 83"/>`,
+  cross:  () => `<path d="M28 28L72 72M72 28L28 72"/>`,   // the × the plus already becomes
+  undock: () => `<rect x="10" y="28" width="60" height="50" rx="10"/><path d="M56 44L86 14M74 14H86V26"/>`,
+  dock:   () => `<rect x="10" y="28" width="60" height="50" rx="10"/><path d="M86 14L58 42M58 30V42H70"/>`,
 };
 
 /* ── playlist candidates ───────────────────────────────────── */
@@ -496,13 +551,17 @@ const CAND = {
    state
    ══════════════════════════════════════════════════════════════ */
 const S0 = { place: 'A', mark: 'rail', queue: 1, panelTop: 'below', panelOpen: false, pillOpen: false, guides: false,
-             ticks: 3, bead: 'top', mirror: true, spine: 'left', dock: false };
+             ticks: 3, bead: 'top', mirror: true, spine: 'left', dock: false,
+             repeat: 'off', shuffle: false, undocked: false, search: '',
+             win: { x: 0, y: 0 }, placed: false, firstOpen: true };
 const ITEMS = [
-  ['Episode 05 — First Light.mkv',       '24:10'],
-  ['Episode 06 — Cold Harbour.mkv',      '23:58'],
-  ['Episode 07 — The Long Way Round.mkv','22:41'],
-  ['Episode 08 — Ash and Wire.mkv',      '25:02'],
-  ['Episode 09 — The Quiet Part.mkv',    '24:33'],
+  ['Episode 01 — Cold Open.mkv','23:41'], ['Episode 02 — Salt and Iron.mkv','24:02'],
+  ['Episode 03 — The Ferryman.mkv','22:58'], ['Episode 04 — Nightglass.mkv','24:44'],
+  ['Episode 05 — First Light.mkv','24:10'], ['Episode 06 — Cold Harbour.mkv','23:58'],
+  ['Episode 07 — The Long Way Round.mkv','22:41'], ['Episode 08 — Ash and Wire.mkv','25:02'],
+  ['Episode 09 — The Quiet Part.mkv','24:33'], ['Episode 10 — Halfway House.mkv','23:19'],
+  ['Episode 11 — Broken Compass.mkv','24:47'], ['Episode 12 — The Undertow.mkv','25:11'],
+  ['Episode 13 — Ash Wednesday.mkv','23:36'], ['Episode 14 — Last Light.mkv','26:04'],
 ];
 
 /* The queue state every mark reads: `now` = playing index (-1 = empty),
@@ -587,36 +646,188 @@ function renderRow() {
 
   document.getElementById('plusBtn').onclick = () => { S0.pillOpen = !S0.pillOpen; render(); };
   const pl = document.getElementById('plBtn');
-  if (pl) pl.onclick = () => { S0.panelOpen = !S0.panelOpen; render(); };
+  if (pl) pl.onclick = () => {
+    if (S0.undocked) {                    // one playlist, one truth: raise the loose window
+      S0.panelOpen = true; render();
+      const p = document.getElementById('panel');
+      p.classList.add('raise'); setTimeout(() => p.classList.remove('raise'), 460);
+    } else {
+      S0.panelOpen = !S0.panelOpen; S0.firstOpen = S0.panelOpen; render();
+    }
+  };
 }
 
 /* ══════════════════════════════════════════════════════════════
    render — panel, caps, guides
    ══════════════════════════════════════════════════════════════ */
-function renderPanel() {
-  const p = document.getElementById('panel');
-  p.className = 'panel ' + (S0.panelTop === 'below' ? 'below' : 'full') + (S0.panelOpen ? ' show' : '');
-  const c = CAND[S0.mark], st = stNow();
-  document.getElementById('ptabs').innerHTML =
-      `<div class="salu-btn on" title="Playlist">${svg(c.draw(st), 18)}</div>`
-    + btn(F.film(), { size: 18, tip: 'Video' })
-    + btn(F.speaker(2, false), { size: 18, tip: 'Audio' })
-    + btn(F.subs(), { size: 18, tip: 'Subtitles' })
-    + `<span class="sp">4 tabs · marks, no words</span>`;
+function headerMarkup() {
+  const rep = S0.repeat;
+  const repMark = rep === 'one' ? F.loopOne() : F.loop();
+  const repCls  = rep === 'off' ? 'mute' : 'on';
+  const repTip  = rep === 'off' ? 'Repeat off' : rep === 'all' ? 'Repeat all' : 'Repeat one';
+  return `
+    <div class="salu-btn ${repCls}" id="hRepeat" title="${repTip}">${svg(repMark, 18)}</div>
+    <div class="salu-btn ${S0.shuffle ? 'on' : ''}" id="hShuffle" title="Shuffle">${svg(F.shuffle(), 18)}</div>
+    <div class="psearch ${S0.search ? 'has' : ''}">
+      <span class="mag">${svg(F.search(), 13, 11)}</span>
+      <input id="hSearch" value="${S0.search.replace(/"/g, '&quot;')}" spellcheck="false" aria-label="filter">
+      <div class="salu-btn clr" id="hClear" title="Clear">${svg(F.cross(), 11, 12)}</div>
+    </div>
+    <div class="salu-btn" id="hWipe" title="Clear playlist">${svg(F.trash(), 18)}</div>
+    <div class="salu-btn" id="hDock" title="${S0.undocked ? 'Dock back' : 'Undock'}">${svg(S0.undocked ? F.dock() : F.undock(), 18)}</div>`;
+}
 
-  const rows = document.getElementById('prows');
-  if (S0.queue === 0) {
-    rows.innerHTML = `<div class="pempty">${svg(c.draw(stEmpty()), 46, strokeUnits(46))}</div>`;
-    return;
-  }
-  rows.innerHTML = ITEMS.map((it, i) => `
-    <div class="prow ${i === st.now ? 'now' : ''}">
+function rowHtml(it, i, now) {
+  return `
+    <div class="prow ${i === now ? 'now' : ''}" data-i="${i}">
       ${svg(F.grip(), 16, 9)}
-      ${i === st.now ? `<span style="color:#EDEDED;display:grid;place-items:center">${svg(F.play(), 12, 11)}</span>` : `<span style="width:12px"></span>`}
+      ${i === now ? `<span style="color:#EDEDED;display:grid;place-items:center">${svg(F.play(), 12, 11)}</span>`
+                  : `<span style="width:12px"></span>`}
       <span class="nm">${it[0]}</span>
       <span class="dur">${it[1]}</span>
       <span class="act">${btn(F.trash(), { size: 16, tip: 'Remove' })}</span>
-    </div>`).join('');
+    </div>`;
+}
+
+/* The list, filtered by the header field. Filtering changes the VIEW only —
+   the queue itself is never reordered or trimmed by a search. */
+function renderRows() {
+  const rows = document.getElementById('prows');
+  const st = stNow();
+  const term = S0.search.trim().toLowerCase();
+  if (S0.queue === 0) {
+    rows.innerHTML = `<div class="pempty">${svg(CAND[S0.mark].draw(stEmpty()), 46, strokeUnits(46))}</div>`;
+    return 0;
+  }
+  const shown = ITEMS.map((it, i) => [it, i]).filter(([it]) => !term || it[0].toLowerCase().includes(term));
+  rows.innerHTML = shown.length
+    ? shown.map(([it, i]) => rowHtml(it, i, st.now)).join('')
+    : `<div class="pempty">${svg(F.search(), 40, strokeUnits(40))}</div>`;   // no match: the mark, no words
+  return shown.length;
+}
+
+/* Auto-scroll — only when required, and by the shortest distance. */
+function revealNow(instant) {
+  const list = document.getElementById('prows');
+  const row = list && list.querySelector('.prow.now');
+  if (!row) return;                       // filtered out → nothing to reveal, nothing to fight over
+  const pad = 6, lr = list.getBoundingClientRect(), rr = row.getBoundingClientRect();
+  const above = rr.top < lr.top + pad, below = rr.bottom > lr.bottom - pad;
+  if (!above && !below) return;           // already comfortably in view → do not move
+  const delta = above ? (rr.top - lr.top - pad) : (rr.bottom - lr.bottom + pad);
+  list.scrollTo({ top: list.scrollTop + delta, behavior: instant ? 'auto' : 'smooth' });
+}
+
+let toastTimer = null;
+function toast(msg, undo) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span>${msg}</span>` + (undo ? `<div class="salu-btn" id="tUndo">Undo</div>` : '');
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 5000);
+  if (undo) t.querySelector('#tUndo').onclick = () => { clearTimeout(toastTimer); t.classList.remove('show'); undo(); };
+}
+
+function syncQueueSegs() {
+  const el = document.getElementById('seg-queue');
+  [...el.children].forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.v === S0.queue)));
+}
+
+function renderPanel() {
+  const p = document.getElementById('panel');
+  let cls = 'panel';
+  cls += S0.undocked ? ' detached' : (S0.panelTop === 'below' ? ' below' : ' full');
+  if (S0.panelOpen) cls += ' show';
+  p.className = cls;
+
+  if (S0.undocked) {
+    if (!S0.placed) {
+      const sr = document.getElementById('stage').getBoundingClientRect();
+      S0.win = { x: Math.round(sr.width - 322 - 72), y: 196 };
+      S0.placed = true;
+    }
+    p.style.left = S0.win.x + 'px';
+    p.style.top = S0.win.y + 'px';
+  } else { p.style.left = ''; p.style.top = ''; }
+
+  // The header exists only once something is queued (owner's rule).
+  document.getElementById('phead').innerHTML = S0.queue === 0 ? '' : headerMarkup();
+  document.getElementById('phead').style.display = S0.queue === 0 ? 'none' : 'flex';
+
+  const shown = renderRows();
+
+  document.getElementById('pfoot').innerHTML =
+      `<div class="salu-btn" id="fAdd" title="Add files">${svg(F.plus(), 18)}</div>`
+    + `<span class="sp">${S0.queue === 0 ? '0' : (shown === ITEMS.length ? String(ITEMS.length) : shown + ' / ' + ITEMS.length)}</span>`;
+
+  wirePanel();
+  revealNow(S0.firstOpen);
+  S0.firstOpen = false;
+}
+
+function wirePanel() {
+  const on = (id, fn) => { const e = document.getElementById(id); if (e) e.onclick = fn; };
+
+  on('hRepeat', () => {
+    S0.repeat = S0.repeat === 'off' ? 'all' : S0.repeat === 'all' ? 'one' : 'off';
+    render();
+  });
+  on('hShuffle', () => { S0.shuffle = !S0.shuffle; render(); });
+
+  const inp = document.getElementById('hSearch');
+  if (inp) {
+    // Only the rows re-render while typing — the field keeps focus and caret.
+    inp.oninput = e => { S0.search = e.target.value; renderRows(); revealNow(false);
+      document.getElementById('pfoot').querySelector('.sp').textContent =
+        S0.queue === 0 ? '0' : String(document.querySelectorAll('.prow').length); };
+    inp.onkeydown = e => {
+      if (e.key === 'Escape') {                       // field first, panel second
+        if (S0.search) { S0.search = ''; e.stopPropagation(); render(); }
+        else { S0.panelOpen = false; render(); }
+      }
+    };
+  }
+  on('hClear', () => { S0.search = ''; render(); const f = document.getElementById('hSearch'); if (f) f.focus(); });
+
+  on('hWipe', () => {                                  // rule 3: instant, no dialog, 5 s Undo
+    const prev = S0.queue;
+    S0.queue = 0; syncQueueSegs(); render();
+    toast('Playlist cleared', () => { S0.queue = prev; syncQueueSegs(); render(); });
+  });
+
+  on('hDock', () => { S0.undocked = !S0.undocked; S0.placed = false; render(); });
+  on('fAdd', () => toast('Native picker → appended, playback untouched'));
+
+  document.querySelectorAll('.prow').forEach(r => {
+    r.onclick = e => {
+      if (e.target.closest('.act')) {                  // per-row remove + Undo
+        const i = +r.dataset.i, prev = S0.queue;
+        toast('Removed from playlist', () => { S0.queue = prev; syncQueueSegs(); render(); });
+        r.style.opacity = '0'; r.style.transform = 'translateX(14px)';
+        r.style.transition = 'opacity .16s, transform .16s';
+        return;
+      }
+      S0.queue = +r.dataset.i + 1; syncQueueSegs(); S0.firstOpen = false; render();
+    };
+  });
+
+  // Dragging the undocked window by its header.
+  const p = document.getElementById('panel');
+  if (S0.undocked) {
+    const head = document.getElementById('phead');
+    head.onpointerdown = e => {
+      if (e.target.closest('.salu-btn') || e.target.closest('.psearch')) return;
+      const sx = e.clientX - S0.win.x, sy = e.clientY - S0.win.y;
+      head.setPointerCapture(e.pointerId);
+      head.onpointermove = ev => {
+        S0.win = { x: ev.clientX - sx, y: ev.clientY - sy };
+        p.style.left = S0.win.x + 'px'; p.style.top = S0.win.y + 'px';
+      };
+      head.onpointerup = () => { head.onpointermove = null; head.onpointerup = null; };
+    };
+  } else {
+    document.getElementById('phead').onpointerdown = null;
+  }
 }
 
 function renderCaps() {
@@ -797,7 +1008,15 @@ document.getElementById('stage').addEventListener('click', e => {
   if (!e.target.closest('#pill') && !e.target.closest('#plusBtn') && S0.pillOpen) { S0.pillOpen = false; render(); }
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { S0.pillOpen = false; S0.panelOpen = false; render(); }
+  if (e.key === 'Escape') {
+    if (document.activeElement && document.activeElement.id === 'hSearch') return; // field owns Esc
+    if (S0.pillOpen) { S0.pillOpen = false; render(); return; }
+    if (S0.panelOpen) { S0.panelOpen = false; render(); }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {   // the silent shortcut
+    e.preventDefault();
+    document.getElementById('plBtn').click();   // identical to clicking the mark
+  }
 });
 </script>
 </body>
