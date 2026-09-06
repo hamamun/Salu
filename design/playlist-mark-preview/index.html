@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU · playlist control — placement &amp; mark study</title>
+<style>
+  :root{color-scheme:dark;
+    --bg:#121212; --surface:#252526; --glass:rgba(30,30,30,.80);
+    --outline:#333336; --divider:#3A3A3C;
+    --ink-idle:#A6A6A6; --ink-lit:#EDEDED;
+    --track:#35353C; --fill:rgba(255,255,255,.50); --thumb:#F2F2F2;
+    --font:'Segoe UI Variable Display','Segoe UI Variable Text','Segoe UI Variable','Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink-lit);font-family:var(--font)}
+  body{padding:28px 24px 80px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:19px;font-weight:600;letter-spacing:.2px;margin:0 0 6px}
+  .sub{font-size:12.5px;line-height:1.65;color:var(--ink-idle);margin:0 0 22px;max-width:86ch}
+  .sub b{color:var(--ink-lit);font-weight:600}
+  h2{font-size:13px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--ink-idle);margin:34px 0 12px}
+
+  /* ── pickers ─────────────────────────────────────────────── */
+  .pickers{display:flex;flex-wrap:wrap;gap:10px 26px;padding:14px 16px;background:#181818;
+           border:1px solid var(--outline);border-radius:12px}
+  .pick{display:flex;align-items:baseline;gap:10px}
+  .pick > span{font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:#7C7C80;white-space:nowrap}
+  .segs{display:flex;gap:2px;background:#111;border:1px solid var(--outline);border-radius:9px;padding:2px}
+  .segs button{all:unset;cursor:pointer;font-family:var(--font);font-size:11.5px;color:var(--ink-idle);
+               padding:5px 11px;border-radius:7px;transition:color .12s,background .12s}
+  .segs button:hover{color:var(--ink-lit)}
+  .segs button[aria-pressed="true"]{color:var(--ink-lit);background:#2C2C31}
+
+  /* ── stage ───────────────────────────────────────────────── */
+  .stage-shell{position:relative;margin-top:14px;border:1px solid var(--outline);border-radius:14px;
+               overflow:hidden;background:#0E0E10}
+  .stage{position:relative;width:100%;height:520px;overflow:hidden}
+  .video{position:absolute;inset:0;transition:margin-right .22s cubic-bezier(.215,.61,.355,1);
+         background:
+           radial-gradient(120% 90% at 50% 42%, #2A2C31 0%, #191A1D 46%, #0E0E10 100%),
+           repeating-linear-gradient(115deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px);}
+  .video::after{content:'';position:absolute;inset:0;box-shadow:inset 0 0 180px 40px rgba(0,0,0,.55)}
+
+  /* fused chrome block: 40 title + 108 controller = 148 */
+  .chrome{position:absolute;top:0;left:0;right:0;height:148px;z-index:6;
+          background:linear-gradient(180deg, rgba(16,16,17,.93), rgba(30,30,30,.80));
+          backdrop-filter:blur(18px) saturate(120%);-webkit-backdrop-filter:blur(18px) saturate(120%);
+          border-bottom:1px solid var(--outline)}
+  .titlebar{height:40px;display:flex;align-items:center;padding:0 6px 0 16px;position:relative}
+  .titlebar .t{position:absolute;left:0;right:0;text-align:center;font-size:12px;color:var(--ink-idle);
+               letter-spacing:.2px;pointer-events:none}
+  .caps{margin-left:auto;display:flex;align-items:center;gap:0}
+  .capbtn{width:44px;height:32px;display:grid;place-items:center;color:var(--ink-idle);cursor:default;
+          border-radius:6px;transition:background .12s,color .12s}
+  .capbtn:hover{background:rgba(255,255,255,.10);color:var(--ink-lit)}
+  .capbtn.close:hover{background:#E81123;color:#fff}
+
+  .controller{height:108px;padding:4px 18px 12px}
+  .timeline-box{height:48px;position:relative}
+  .bar{position:absolute;top:0;left:0;right:0;height:23px;border-radius:6px;background:var(--track);overflow:hidden}
+  .bar .f{position:absolute;inset:0 auto 0 0;background:var(--fill);border-radius:6px 0 0 6px}
+  .bar .th{position:absolute;top:4px;bottom:4px;width:2px;border-radius:1px;background:var(--thumb)}
+  .bar .lbl{position:absolute;inset:0;display:flex;align-items:center;padding:0 12px;font-size:12px;
+            font-weight:500;letter-spacing:.4px;color:var(--ink-lit);text-shadow:0 0 2px rgba(0,0,0,.6);
+            font-variant-numeric:tabular-nums}
+  .bar .lbl .c{margin:0 auto}
+  .row2{height:36px;margin-top:8px;position:relative}
+
+  /* zones of row 2 */
+  .zone-left{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center}
+  .zone-center{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .zone-center > *{pointer-events:auto}
+  .zone-right{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center}
+  .cluster{display:flex;align-items:center}
+
+  /* ── THE one icon recipe (follow.md §2) ──────────────────── */
+  .salu-btn{width:36px;height:36px;display:grid;place-items:center;color:var(--ink-idle);cursor:pointer;
+            transition:transform .12s ease-out,color .12s ease-out;flex:0 0 auto}
+  .salu-btn svg{display:block}
+  .salu-btn:hover{color:var(--ink-lit);transform:scale(1.06)}
+  .salu-btn:active{transform:scale(.90)}
+  .salu-btn.on{color:var(--ink-lit);filter:drop-shadow(0 0 7px rgba(255,255,255,.30))}
+  .salu-btn.off{color:rgba(166,166,166,.37);cursor:default}
+  .salu-btn.off:hover{transform:none;color:rgba(166,166,166,.37)}
+  .salu-btn .flip{transition:transform .13s cubic-bezier(.215,.61,.355,1)}
+  .salu-btn.on .flip{transform:scaleX(-1)}
+  .volwrap{display:flex;align-items:center}
+  .vol{width:140px;height:34px;position:relative;display:grid;place-items:center;cursor:pointer}
+  .vol .vbar{width:100%;height:14px;border-radius:4px;background:var(--track);position:relative;overflow:hidden;
+             transition:height .12s}
+  .vol:hover .vbar{height:16px}
+  .vol .vbar .vf{position:absolute;inset:0 auto 0 0;background:var(--fill)}
+  .vol .vbar .vl{position:absolute;top:0;bottom:0;width:34px;display:grid;place-items:center;font-size:10px;
+                 font-weight:500;letter-spacing:.3px;color:var(--ink-idle);font-variant-numeric:tabular-nums}
+  .vol:hover .vbar .vl{color:var(--ink-lit)}
+
+  /* ── the Open pill ───────────────────────────────────────── */
+  .pill{position:absolute;z-index:7;height:42px;border-radius:21px;padding:0 8px;display:flex;align-items:center;
+        gap:2px;background:var(--glass);border:1px solid var(--outline);
+        backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+        transform-origin:0 0;opacity:0;transform:scale(.96);pointer-events:none;
+        transition:opacity .13s cubic-bezier(.215,.61,.355,1),transform .13s cubic-bezier(.215,.61,.355,1)}
+  .pill.show{opacity:1;transform:scale(1);pointer-events:auto}
+
+  /* ── the playlist panel ──────────────────────────────────── */
+  .panel{position:absolute;right:0;width:322px;z-index:5;display:flex;flex-direction:column;
+         background:var(--glass);border-left:1px solid var(--outline);
+         backdrop-filter:blur(18px) saturate(120%);-webkit-backdrop-filter:blur(18px) saturate(120%);
+         transform:translateX(100%);transition:transform .22s cubic-bezier(.215,.61,.355,1)}
+  .panel.show{transform:translateX(0)}
+  .panel.below{top:148px;bottom:0;border-radius:14px 0 0 0}
+  .panel.full{top:0;bottom:0}
+  .phead{display:flex;align-items:center;gap:2px;padding:8px 10px;border-bottom:1px solid var(--divider)}
+  .phead .salu-btn{width:30px;height:30px}
+  .psearch{position:relative;flex:1;height:28px;min-width:34px;display:flex;align-items:center;
+           background:rgba(255,255,255,.045);border:1px solid #2E2E33;border-radius:14px;
+           transition:min-width .22s cubic-bezier(.215,.61,.355,1),background .15s}
+  .psearch:focus-within{background:rgba(255,255,255,.075);border-color:#45454A}
+  .psearch .mag{position:absolute;left:7px;display:grid;place-items:center;color:#7C7C80;pointer-events:none}
+  .psearch input{all:unset;flex:1;font-family:var(--font);font-size:12px;color:var(--ink-lit);
+                 padding:0 26px 0 26px;width:100%;cursor:text}
+  .psearch .clr{position:absolute;right:3px;display:none}
+  .psearch.has .clr{display:grid}
+  /* the count lives INSIDE the field, left of the ✕ — there is no footer */
+  .psearch .cnt{position:absolute;right:9px;font-size:10px;color:#7C7C80;letter-spacing:.3px;
+                font-variant-numeric:tabular-nums;pointer-events:none;transition:right .15s}
+  .psearch.has .cnt{right:28px}
+  .idle{position:absolute;inset:0;z-index:1;display:grid;place-items:center;opacity:0;
+        transition:opacity .3s ease-out;pointer-events:none}
+  .idle.show{opacity:1}
+  .idle .wm{font-size:32px;font-weight:300;letter-spacing:14px;color:rgba(237,237,237,.13)}
+
+  /* the undocked playlist: its own draggable glass window */
+  .panel.detached{transition:opacity .22s cubic-bezier(.215,.61,.355,1),box-shadow .2s;
+                  top:auto;bottom:auto;left:auto;right:auto;width:322px;height:452px;
+                  border:1px solid var(--outline);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.62);
+                  transform:none;z-index:8}
+  .panel.detached.show{transform:none}
+  .panel.detached .phead{cursor:grab;border-radius:14px 14px 0 0}
+  .panel.detached .phead:active{cursor:grabbing}
+  .panel.detached.raise{box-shadow:0 22px 60px rgba(0,0,0,.62),0 0 0 1px rgba(76,158,235,.75)}
+  .panel.detached:not(.show){opacity:0;pointer-events:none}
+  .salu-btn.mute{color:#7A7A7E}
+  .salu-btn.mute:hover{color:#C4C4C8}
+  .toast{position:absolute;left:50%;bottom:34px;transform:translate(-50%,8px);z-index:12;display:flex;
+         align-items:center;gap:10px;height:40px;padding:0 8px 0 16px;border-radius:10px;
+         background:rgba(30,30,30,.90);border:1px solid var(--outline);backdrop-filter:blur(18px);
+         font-size:12px;color:var(--ink-lit);opacity:0;pointer-events:none;
+         transition:opacity .16s,transform .16s cubic-bezier(.215,.61,.355,1)}
+  .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+  .toast .salu-btn{width:auto;height:32px;padding:0 10px;font-size:11.5px;color:#8FC4F5;display:grid;place-items:center}
+  .toast .salu-btn:hover{color:#CFE6FB}
+  .prows{flex:1;overflow:auto;padding:6px 6px 14px;scrollbar-width:thin;
+         scrollbar-color:rgba(255,255,255,.18) transparent}
+  .prows::-webkit-scrollbar{width:6px}
+  .prows::-webkit-scrollbar-track{background:transparent}
+  .prows::-webkit-scrollbar-corner{background:transparent}
+  .prows::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:3px}
+  .prows::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.30)}
+  .prow{display:flex;align-items:center;gap:8px;height:38px;padding:0 8px;border-radius:9px;color:var(--ink-idle);
+        cursor:pointer;transition:background .12s,color .12s}
+  .prow:hover{background:rgba(255,255,255,.055);color:var(--ink-lit)}
+  .prow .nm{font-size:12.5px;color:#C9C9CC;letter-spacing:.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow.now .nm{color:var(--ink-lit);font-weight:600}
+  .prow .dur{margin-left:auto;font-size:10.5px;color:#7C7C80;font-variant-numeric:tabular-nums}
+  .prow .act{display:flex;gap:0;opacity:0;transition:opacity .12s}
+  .prow:hover .act{opacity:1}
+  .prow .act .salu-btn{width:28px;height:28px}
+  .pempty{flex:1;display:grid;place-items:center;color:rgba(166,166,166,.30)}
+
+  /* guides */
+  .guides{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:0;transition:opacity .15s}
+  .guides.show{opacity:1}
+  .g{position:absolute;border:1px dashed rgba(76,158,235,.55)}
+  .gl{position:absolute;font-size:9.5px;color:#8FC4F5;letter-spacing:.5px;background:rgba(10,14,18,.75);
+      padding:1px 5px;border-radius:4px;white-space:nowrap}
+
+  .verdict{margin:12px 0 0;font-size:12.5px;line-height:1.7;color:#C6C6C9;max-width:96ch;
+           border-left:2px solid #3D6E9E;padding-left:12px}
+  .verdict b{color:var(--ink-lit)}
+
+  /* ── gallery ─────────────────────────────────────────────── */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+  .card{background:#181818;border:1px solid var(--outline);border-radius:13px;padding:14px 15px 15px;
+        transition:border-color .15s}
+  .card:hover{border-color:#45454A}
+  .card.sel{border-color:#4C9EEB;box-shadow:0 0 0 1px rgba(76,158,235,.35) inset}
+  .card h3{margin:0 0 2px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .card h3 .tag{font-size:9.5px;letter-spacing:.7px;text-transform:uppercase;color:#0F1216;background:#4C9EEB;
+                padding:2px 6px;border-radius:5px;font-weight:700}
+  .card .why{font-size:12px;line-height:1.6;color:var(--ink-idle);margin:4px 0 12px}
+  .demo{display:flex;align-items:center;gap:18px;padding:10px 12px;border-radius:10px;
+        background:radial-gradient(120% 140% at 50% 0%, #23252A, #14151700 70%),#131315;
+        border:1px solid #26262A}
+  .demo .zoom{width:56px;height:56px;display:grid;place-items:center;color:var(--ink-idle)}
+  .demo .real{display:flex;align-items:center;gap:6px}
+  .demo .cap{font-size:9.5px;letter-spacing:.7px;text-transform:uppercase;color:#6E6E73;margin-bottom:2px}
+  .demo .col{display:flex;flex-direction:column}
+  .collide{margin-top:11px;font-size:11.5px;line-height:1.6;color:#9A9A9E}
+  .collide b{color:#D2D2D5;font-weight:600}
+  .use{all:unset;cursor:pointer;margin-top:12px;font-size:11px;letter-spacing:.5px;color:#8FC4F5;
+       border:1px solid #2F4A66;padding:5px 10px;border-radius:8px;transition:background .12s,color .12s}
+  .use:hover{background:#1B2A3A;color:#CFE6FB}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid #26262A;vertical-align:top;line-height:1.55}
+  th{color:#7C7C80;font-size:10px;letter-spacing:.8px;text-transform:uppercase;font-weight:600}
+  td:first-child{color:var(--ink-lit);white-space:nowrap}
+  td{color:#A9A9AD}
+  .rec{background:#15181B;border:1px solid #2B3B4A;border-radius:13px;padding:16px 18px;margin-top:14px}
+  .rec h3{margin:0 0 8px;font-size:14px}
+  .rec ol{margin:0;padding-left:19px;font-size:12.5px;line-height:1.8;color:#BDBDC1}
+  .rec ol b{color:var(--ink-lit)}
+  code{font-family:'Cascadia Mono',Consolas,monospace;font-size:11.5px;background:#202024;padding:1px 5px;border-radius:5px;color:#CFE6FB}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>SALU · playlist control — placement &amp; mark study</h1>
+  <p class="sub">
+    Everything below is drawn at <b>1:1</b> with SALU's own numbers: chrome block 40 + 108 = <b>148 px</b>,
+    control row <b>36 px</b>, container padding <b>18 px</b>, pitch <b>6 / 14 / 26 px</b>, timeline bar <b>23 px</b>,
+    volume bar <b>140 × 14</b>. Marks use the family geometry — stroke <code>clamp(size × 0.085, 1.4, 2.2)</code>,
+    round caps/joins, monochrome, <b>hover → white in 120 ms at 1.06×</b>, <b>press 0.90×</b>, glow only when active.
+    Hover and click everything; the states are live.
+  </p>
+
+  <div class="pickers">
+    <div class="pick"><span>Placement</span>
+      <div class="segs" id="seg-place">
+        <button data-v="A" aria-pressed="true">A · right edge</button>
+        <button data-v="B" aria-pressed="false">B · beside +</button>
+        <button data-v="C" aria-pressed="false">C · own group right of +</button>
+      </div>
+    </div>
+    <div class="pick"><span>Source</span>
+      <div class="segs" id="seg-source">
+        <button data-v="local" aria-pressed="true">local files</button>
+        <button data-v="m3u" aria-pressed="false">m3u url · 24 channels</button>
+      </div>
+    </div>
+    <div class="pick"><span>m3u tags</span>
+      <div class="segs" id="seg-tags">
+        <button data-v="full" aria-pressed="true">group-title + language + country</button>
+        <button data-v="thin" aria-pressed="false">group-title only</button>
+      </div>
+    </div>
+    <div class="pick"><span>Queue state</span>
+      <div class="segs" id="seg-queue">
+        <button data-v="0" aria-pressed="false">empty</button>
+        <button data-v="1" aria-pressed="true">now = 1 of 14</button>
+        <button data-v="12" aria-pressed="false">now = 12 of 14</button>
+      </div>
+    </div>
+    <div class="pick"><span>Panel top</span>
+      <div class="segs" id="seg-panel">
+        <button data-v="below" aria-pressed="true">below chrome (148)</button>
+        <button data-v="full" aria-pressed="false">full height — the trap</button>
+      </div>
+    </div>
+    <div class="pick"><span>Panel opens</span>
+      <div class="segs" id="seg-dock">
+        <button data-v="over" aria-pressed="true">over the video</button>
+        <button data-v="dock" aria-pressed="false">docks the video</button>
+      </div>
+    </div>
+    <div class="pick"><span>Guides</span>
+      <div class="segs" id="seg-guides">
+        <button data-v="off" aria-pressed="true">off</button>
+        <button data-v="on" aria-pressed="false">on</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pickers" style="margin-top:10px">
+    <div class="pick"><span>Rail · ticks</span>
+      <div class="segs" id="seg-ticks">
+        <button data-v="2" aria-pressed="false">2</button>
+        <button data-v="3" aria-pressed="true">3</button>
+        <button data-v="4" aria-pressed="false">4</button>
+      </div>
+    </div>
+    <div class="pick"><span>Rail · bead means</span>
+      <div class="segs" id="seg-bead">
+        <button data-v="top" aria-pressed="true">something is playing</button>
+        <button data-v="thirds" aria-pressed="false">position in thirds</button>
+        <button data-v="off" aria-pressed="false">no bead</button>
+      </div>
+    </div>
+    <div class="pick"><span>Rail · mirror while open</span>
+      <div class="segs" id="seg-mirror">
+        <button data-v="on" aria-pressed="true">on</button>
+        <button data-v="off" aria-pressed="false">off (glow only)</button>
+      </div>
+    </div>
+    <div class="pick"><span>Rail · spine</span>
+      <div class="segs" id="seg-spine">
+        <button data-v="left" aria-pressed="true">left (reads “list”)</button>
+        <button data-v="right" aria-pressed="false">right (reads “panel”)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage-shell">
+    <div class="stage" id="stage">
+      <div class="video"></div>
+
+      <div class="panel below" id="panel">
+        <div class="phead" id="phead"></div>
+        <div class="prows" id="prows"></div>
+        <div class="gpill" id="gpill"></div>
+      </div>
+      <div class="idle" id="idle"><div class="wm">SALU</div></div>
+
+      <div class="chrome">
+        <div class="titlebar">
+          <div class="t" id="tbTitle">Episode 07 — The Long Way Round.mkv</div>
+          <div class="caps" id="caps"></div>
+        </div>
+        <div class="controller">
+          <div class="timeline-box">
+            <div class="bar">
+              <div class="f" style="width:38%"></div>
+              <div class="th" style="left:calc(38% - 1px)"></div>
+              <div class="lbl"><span>00:41:07</span><span class="c">−01:07:22</span><span>01:48:29</span></div>
+            </div>
+          </div>
+          <div class="row2" id="row2"></div>
+        </div>
+      </div>
+
+      <div class="pill" id="pill"></div>
+
+      <div class="toast" id="toast"></div>
+      <div class="guides" id="guides"></div>
+    </div>
+  </div>
+  <p class="verdict" id="verdict"></p>
+
+  <h2>Mark candidates — real size (20 px) and zoomed (56 px)</h2>
+  <p class="sub" style="margin-bottom:10px">
+    Every candidate obeys the collision table at the bottom: no <code>≡</code> (drag handle), no stacked frames
+    (Open Folder), no film frame (Open File), no six dots (Settings), no hollow square (Stop).
+    The <b>queue state</b> picker above drives the “now” indicator in each of them — the mark reports the queue
+    the same way the speaker mark reports the level.
+  </p>
+  <div class="grid" id="gallery"></div>
+
+  <h2>Queue Rail · the three decisions, and a size ladder</h2>
+  <p class="sub" style="margin-bottom:10px">
+    The rail carries more ink than a chevron, so it has to be weighed against the family, not looked at alone.
+    Below: the real stroke clamp at each size (<code>clamp(size × 0.085, 1.4, 2.2)</code> px), and the rail standing
+    in the row next to the transport marks at their true sizes — if it shouts, shorten the ticks or shrink the bead.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>Size ladder</h3>
+      <p class="why">The mark has to survive 18 px in the panel's tab strip and 16 px in any future menu, not just 20 px in the row.</p>
+      <div class="demo" id="ladder" style="gap:22px;align-items:flex-end"></div>
+      <p class="collide" id="ladderNote"></p>
+    </div>
+    <div class="card">
+      <h3>Optical weight check</h3>
+      <p class="why">The rail as it will actually sit — same sizes, same pitch, same gray, against the marks it will neighbour.</p>
+      <div class="demo" id="weight" style="gap:14px;justify-content:center"></div>
+      <p class="collide" id="weightNote"></p>
+    </div>
+  </div>
+
+  <h2>Collision table (what each mark must never be mistaken for)</h2>
+  <table id="collideTable">
+    <thead><tr><th>existing mark</th><th>meaning</th><th>consequence for a playlist mark</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="rec">
+    <h3>Recommendation</h3>
+    <ol id="recList"></ol>
+  </div>
+
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   SALU mark geometry — ported 1:1 from salu_marks.dart /
+   transport_marks.dart into a 100×100 viewBox.
+   stroke = clamp(size*0.085, 1.4, 2.2) → 1.7px @20px → 8.5 units.
+   ══════════════════════════════════════════════════════════════ */
+const SW = 8.5;
+
+function svg(inner, size = 20, sw = SW) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" fill="none"
+    stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+const q = s => `<g opacity=".55">${s}</g>`;          // the family's "quieter" ink (withAlpha(140))
+const solid = s => `<g fill="currentColor" stroke="currentColor">${s}</g>`;
+
+function arc(cx, cy, r, a0, sweep) {
+  const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+  const x1 = cx + r * Math.cos(a0 + sweep), y1 = cy + r * Math.sin(a0 + sweep);
+  const laf = Math.abs(sweep) > Math.PI ? 1 : 0, sf = sweep > 0 ? 1 : 0;
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${laf} ${sf} ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+/* ── existing family ───────────────────────────────────────── */
+const F = {
+  plus:    () => `<path d="M8 50H92M50 8V92"/>`,
+  play:    () => `<path d="M34 22L66 50L34 78"/>`,
+  pause:   () => `<path d="M36 24V76M64 24V76"/>`,
+  stop:    () => `<rect x="21" y="21" width="58" height="58" rx="13"/>`,
+  chev2:   (bar, left) => {
+    const [a1, a2] = bar ? [42, 74] : [46, 82];
+    const p = `<path d="M${a1-24} 22L${a1} 50L${a1-24} 78M${a2-24} 22L${a2} 50L${a2-24} 78"/>`
+            + (bar ? `<path d="M90 24V76"/>` : '');
+    return left ? `<g transform="translate(100,0) scale(-1,1)">${p}</g>` : p;
+  },
+  speaker: (arcs, muted) => {
+    let s = `<path d="M12 40H28L44 23V77L28 60H12Z"/>`;
+    if (muted) return s + `<path d="M56 30L88 70"/>`;
+    const a0 = -Math.PI / 3.1, sw = 2 * Math.PI / 3.1;
+    for (let i = 0; i < arcs; i++) s += `<path d="${arc(50, 50, 20 + 16 * i, a0, sw)}"/>`;
+    return s;
+  },
+  film:    () => `<rect x="12" y="18" width="76" height="64" rx="12"/>
+                  <path d="M12 40H22M78 40H88M12 60H22M78 60H88"/>`,
+  stack:   () => q(`<rect x="26" y="14" width="60" height="50" rx="10"/>`)
+               + `<rect x="12" y="34" width="60" height="50" rx="10"/>`,
+  link:    () => `<g transform="rotate(-45 50 50)">
+                    <rect x="14" y="35" width="46" height="30" rx="15"/>
+                    <rect x="40" y="35" width="46" height="30" rx="15"/></g>`,
+  grip:    () => `<path d="M24 30H76M24 50H76M24 70H76"/>`,
+  trash:   () => `<path d="M14 28H86M38 28V15H62V28M23 28L29 85H71L77 28"/>`,
+  dots:    () => { let s=''; for (const y of [34,66]) for (const x of [26,50,74])
+                     s += `<circle cx="${x}" cy="${y}" r="5" fill="currentColor" stroke="none"/>`;
+                   return s; },
+  subs:    () => `<rect x="10" y="22" width="80" height="56" rx="12"/>
+                  <path d="M26 54H48M56 54H74M26 66H62"/>`,
+  sliders: () => `<path d="M20 30H80M20 50H80M20 70H80"/>
+                  <circle cx="40" cy="30" r="7"/><circle cx="62" cy="50" r="7"/><circle cx="34" cy="70" r="7"/>`,
+
+  /* ── header marks (all new to the family except the bin and the ×) ── */
+  // Repeat: the family's existing ¾-arc + arrowhead (RestartMark), reused.
+  loop: () => {
+    const a0 = 3 * Math.PI / 4, sw = 3 * Math.PI / 2, r = 32, c = 50;
+    const end = a0 + sw;
+    const tip = [c + r * Math.cos(end), c + r * Math.sin(end)];
+    const tan = [-Math.sin(end), Math.cos(end)], nor = [tan[1], -tan[0]];
+    const k = 11, b = 16;
+    const head = `M${(tip[0]-tan[0]*b+nor[0]*k).toFixed(1)} ${(tip[1]-tan[1]*b+nor[1]*k).toFixed(1)}`
+               + `L${tip[0].toFixed(1)} ${tip[1].toFixed(1)}`
+               + `L${(tip[0]-tan[0]*b-nor[0]*k).toFixed(1)} ${(tip[1]-tan[1]*b-nor[1]*k).toFixed(1)}`;
+    return `<path d="${arc(c, c, r, a0, sw)}"/><path d="${head}"/>`;
+  },
+  // Repeat one: the same loop with a solid bead at its centre — no numeral.
+  loopOne: () => F.loop() + `<circle cx="50" cy="50" r="8" fill="currentColor" stroke="none"/>`,
+  shuffle: () => `<path d="M14 36H32L54 64H70M14 64H32L54 36H70"/>
+                  <path d="M72 30L84 36L72 42M72 58L84 64L72 70"/>`,
+  search: () => `<circle cx="43" cy="43" r="23"/><path d="M60 60L83 83"/>`,
+  cross:  () => `<path d="M28 28L72 72M72 28L28 72"/>`,   // the × the plus already becomes
+  undock: () => `<rect x="10" y="28" width="60" height="50" rx="10"/><path d="M56 44L86 14M74 14H86V26"/>`,
+  dock:   () => `<rect x="10" y="28" width="60" height="50" rx="10"/><path d="M86 14L58 42M58 30V42H70"/>`,
+
+  // ── the m3u header marks (group-by pill + favourite bookmark) ──
+  gFlat: () => [28, 50, 72].map(y =>
+      `<circle cx="17" cy="${y}" r="5" fill="currentColor" stroke="none"/><path d="M30 ${y}H86"/>`).join(''),
+  gCat:  () => `<path d="M20 26H64"/><path d="M26 40H20V78H26"/>` +
+               q(`<path d="M34 52H80M34 70H72"/>`),
+  gLang: () => `<rect x="12" y="16" width="76" height="48" rx="14"/><path d="M36 64V82L56 64"/>` +
+               q(`<path d="M26 34H62M26 48H74"/>`),
+  gFlag: () => `<path d="M24 12V88"/><path d="M24 20H76L62 34L76 48H24"/>`,
+  bookmark: (filled) => `<path d="M26 12H74V86L50 68L26 86Z"${filled ? ' fill="currentColor"' : ''}/>`,
+};
+
+/* ── the m3u model: 24 channels with the tags a real IPTV list carries ── */
+const M3U = (() => {
+  const groups = [
+    ['News',   ['BBC News HD', 'Sky News', 'CNN International', 'France 24', 'Al Jazeera English', 'NHK World']],
+    ['Sports', ['BT Sport 1', 'ESPN HD', 'beIN Sports 1', 'Sky Sports F1', 'Eurosport 1', 'Star Sports 1']],
+    ['Movies', ['TCM HD', 'Sky Cinema Premiere', 'AMC HD', 'Paramount Network', 'Sony Movies', 'Action Movies']],
+    ['Kids',   ['Cartoon Network', 'Nickelodeon', 'Disney Junior', 'CBeebies', 'Boomerang', 'Nick Jr']],
+  ];
+  const langs = ['English', 'English', 'French', 'Spanish', 'English', 'Japanese'];
+  const ctry  = ['United Kingdom', 'United Kingdom', 'United States', 'France', 'Qatar', 'Japan'];
+  const out = []; let n = 101;
+  groups.forEach(([g, list], gi) => list.forEach((nm, i) => out.push({
+    name: nm, group: g, lang: langs[(gi + i) % langs.length],
+    country: ctry[(gi * 2 + i) % ctry.length], chno: n++,
+  })));
+  return out;
+})();
+const groupKey = (ch, mode) => mode === 'category' ? ch.group
+  : mode === 'language' ? ch.lang : mode === 'country' ? ch.country : '';
+const GROUP_MODES = [['flat', 'gFlat', 'Flat'], ['category', 'gCat', 'Category'],
+                     ['language', 'gLang', 'Language'], ['country', 'gFlag', 'Country']];
+
+/* ── playlist candidates ───────────────────────────────────── */
+/* st = {now: index of the playing row (-1 when the queue is empty), count} */
+
+/* The Queue Rail, parameterised — the "Rail" pickers drive it.
+   Ticks are evenly spaced between y=28 and y=72 and deliberately ragged
+   (70 / 56 / 64 / 50) so the mark can never be read as ≡, the drag handle. */
+function railDraw(st, o) {
+  const n = o.ticks, right = o.spine === 'right';
+  const spineX = right ? 80 : 20, beadX = right ? 18 : 82;
+  const ragged = [70, 56, 64, 50];
+  const ys = n === 1 ? [50] : Array.from({ length: n }, (_, i) => 26 + 48 * i / (n - 1));
+
+  // Which row carries the bead — the mark's whole state vocabulary.
+  let br = -1;
+  if (st.now >= 0 && o.bead !== 'off') {
+    br = o.bead === 'thirds'
+      ? Math.min(n - 1, Math.floor((st.now / Math.max(1, st.count)) * n))
+      : 0;
+  }
+
+  let s = `<path d="M${spineX} 16V84"/>`;
+  ys.forEach((y, i) => {
+    const L = ragged[i % ragged.length];
+    const x2 = right ? spineX - (L - 20) : L;
+    const t = `<path d="M${spineX} ${y.toFixed(1)}H${x2}"/>`;
+    s += (i === br) ? t : q(t);          // the bead's row stays full ink
+  });
+  if (br >= 0) {
+    s += `<circle cx="${beadX}" cy="${ys[br].toFixed(1)}" r="7" fill="currentColor" stroke="none"/>`;
+  }
+  return s;
+}
+
+const CAND = {
+  rail: {
+    name: 'Queue Rail',
+    tag: 'recommended',
+    why: 'A spine with ragged ticks is a list, and the solid bead is the item that is playing. Nothing else in the family uses a spine, so it collides with nothing. While the panel is open the whole mark mirrors — the spine swings to the right edge and points at the panel it opened, the same trick as the plus rotating into ×. All four of its parameters are tunable above.',
+    collide: '<b>Collides with:</b> nothing. <b>Near-miss:</b> <code>≡</code> drag handle — killed by the spine plus the ragged (unequal) tick lengths. <b>Watch:</b> 4 ticks at 16 px start to merge; the ladder below is the honest test.',
+    draw: st => railDraw(st, S0),
+    flip: true,
+  },
+
+  railHinge: {
+    name: 'Queue Rail · hinged',
+    tag: '= spine right',
+    why: 'The same rail drawn permanently mirrored: spine on the right, ticks running left. It is a miniature of the panel itself — the spine is the panel\'s left edge, the ticks are its rows. Reads as "a list that lives on the right side of my screen", which is exactly where SALU\'s panel slides out from. (Identical to setting the tuner above to spine = right, mirror = off.)',
+    collide: '<b>Collides with:</b> nothing. <b>Trade-off:</b> as a standalone glyph it reads slightly less like "list" than the left-spine version (Western reading direction), and it has no open-state motion left to give.',
+    draw: st => railDraw(st, { ticks: S0.ticks, spine: 'right', bead: S0.bead }),
+    flip: false,
+  },
+
+  chevRow: {
+    name: 'Now Row',
+    tag: 'most literal',
+    why: 'The universal "playlist" signifier — a list with a play glyph on it — redrawn in SALU\'s hand: the head of the playing row carries the family\'s own solid chevron, the other rows fall back to 55 % ink. Instantly readable with zero instruction text, at any size.',
+    collide: '<b>Collides with:</b> the transport <code>&gt;</code> play chevron — this mark puts a second play glyph in the control row, so it must never sit near the cluster. <b>Near-miss:</b> <code>≡</code>, broken by the ragged lengths and the chevron head.',
+    draw: st => {
+      const rows = [28, 52, 76], len = [86, 68, 78];
+      let s = '';
+      // every row that is not playing falls back to the family's 55 % ink
+      rows.forEach((y, i) => {
+        if (st.now === i) return;
+        s += q(`<path d="M16 ${y}H${len[i]}"/>`);
+      });
+      // the playing row: solid chevron head + a full-ink rule
+      if (st.now >= 0) {
+        const y = rows[st.now];
+        s += `<path d="M16 ${y - 8}L30 ${y}L16 ${y + 8}Z" fill="currentColor"/>`;
+        s += `<path d="M38 ${y}H${len[st.now]}"/>`;
+      }
+      return s;
+    },
+    flip: false,
+  },
+
+  beads: {
+    name: 'Bead Queue',
+    tag: 'most abstract',
+    why: 'Three beads on a hairline wire — a queue as a sequence rather than as a page of text. The filled bead is the current item, so the mark silently reports "you are on 2 of 3". The most geometric of the five and the one that will age best next to the transport chevrons.',
+    collide: '<b>Collides with:</b> nothing hard. <b>Near-miss:</b> three beads on a line can read as <i>chapters of the current item</i> rather than <i>items of the queue</i> — a real ambiguity, since chapters are already planned inside this very panel.',
+    draw: st => {
+      let s = q(`<path d="M8 50H92"/>`);
+      [24, 50, 76].forEach((x, i) => {
+        s += (st.now === i)
+          ? `<circle cx="${x}" cy="50" r="9.5" fill="currentColor" stroke="none"/>`
+          : `<circle cx="${x}" cy="50" r="9"/>`;
+      });
+      return s;
+    },
+    flip: false,
+  },
+
+  hinge: {
+    name: 'Panel Hinge',
+    tag: 'safe baseline',
+    why: 'The conventional "toggle side panel" glyph: a hollow sheet with a divider at its right edge. Zero learning cost — everybody has clicked this icon — and it honestly says "a panel slides out from the right". It is also the least SALU of the five: it is the stock answer, and it is a rectangle in a family that avoids rectangles.',
+    collide: '<b>Collides with:</b> <code>□</code> Stop — both are hollow rounded rectangles in the same 36 px row; the wider proportion (80×68 vs 58×58) is the only thing separating them. <b>Also:</b> it says nothing about a <i>queue</i>, so an empty panel still looks "full".',
+    draw: st => {
+      let s = `<rect x="10" y="16" width="80" height="68" rx="12"/><path d="M64 16V84"/>`;
+      if (st.now >= 0) {
+        s += `<path d="M22 38H52"/>` + q(`<path d="M22 56H46M22 72H50"/>`);
+      }
+      return s;
+    },
+    flip: false,
+  },
+};
+
+/* ══════════════════════════════════════════════════════════════
+   state
+   ══════════════════════════════════════════════════════════════ */
+const S0 = { place: 'A', mark: 'rail', queue: 1, panelTop: 'below', panelOpen: false, pillOpen: false, guides: false,
+             ticks: 3, bead: 'top', mirror: true, spine: 'left', dock: false,
+             repeat: 'off', shuffle: false, undocked: false, search: '',
+             win: { x: 0, y: 0 }, placed: false, firstOpen: true,
+             source: 'local', group: 'category', groupPill: false, openGroup: null,
+             favFilter: false, favs: new Set(['BBC News HD', 'Sky Sports F1', 'TCM HD']),
+             m3uLoaded: true, mnow: 6, revealKey: null, thinTags: false };
+const ITEMS = [
+  ['Episode 01 — Cold Open.mkv','23:41'], ['Episode 02 — Salt and Iron.mkv','24:02'],
+  ['Episode 03 — The Ferryman.mkv','22:58'], ['Episode 04 — Nightglass.mkv','24:44'],
+  ['Episode 05 — First Light.mkv','24:10'], ['Episode 06 — Cold Harbour.mkv','23:58'],
+  ['Episode 07 — The Long Way Round.mkv','22:41'], ['Episode 08 — Ash and Wire.mkv','25:02'],
+  ['Episode 09 — The Quiet Part.mkv','24:33'], ['Episode 10 — Halfway House.mkv','23:19'],
+  ['Episode 11 — Broken Compass.mkv','24:47'], ['Episode 12 — The Undertow.mkv','25:11'],
+  ['Episode 13 — Ash Wednesday.mkv','23:36'], ['Episode 14 — Last Light.mkv','26:04'],
+];
+
+/* The queue state every mark reads: `now` = playing index (-1 = empty),
+   `count` = queue length. Same shape for the row, the panel and the gallery. */
+S0.items = ITEMS.slice();            // the working queue (remove / clear mutate it)
+const stNow = () => S0.source === 'm3u'
+  ? { now: (S0.m3uLoaded && S0.mnow >= 0) ? S0.mnow : -1, count: M3U.length }
+  : { now: S0.queue === 0 ? -1 : S0.queue - 1, count: S0.items.length };
+const stEmpty = () => ({ now: -1, count: 0 });
+
+function seg(id, key, after) {
+  const el = document.getElementById(id);
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...el.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    after(b.dataset.v); render();
+  });
+}
+
+/* ── button factory (the ONE recipe) ───────────────────────── */
+function btn(mark, opts = {}) {
+  const { size = 20, cls = '', tip = '', flip = false, sw = SW } = opts;
+  return `<div class="salu-btn ${cls}" title="${tip}">${flip ? '<span class="flip" style="display:grid;place-items:center">' + svg(mark, size, sw) + '</span>' : svg(mark, size, sw)}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   render — control row
+   ══════════════════════════════════════════════════════════════ */
+function playlistBtn() {
+  const c = CAND[S0.mark];
+  const st = stNow();
+  return `<div class="salu-btn ${S0.panelOpen ? 'on' : ''}" id="plBtn" title="Playlist">`
+       + ((c.flip && S0.mirror) ? `<span class="flip" style="display:grid;place-items:center">${svg(c.draw(st), 20)}</span>`
+                 : svg(c.draw(st), 20))
+       + `</div>`;
+}
+
+function cluster() {
+  let s = `<div class="cluster">`;
+  s += btn(F.play(), { tip: 'Play' });
+  s += `<span style="width:6px"></span>` + btn(F.stop(), { size: 16, tip: 'Stop' });
+  s += `<span style="width:14px"></span>`;
+  s += btn(F.chev2(true, true), { tip: 'Previous' });
+  s += `<span style="width:6px"></span>` + btn(F.chev2(true, false), { tip: 'Next' });
+  s += `<span style="width:14px"></span>`;
+  s += btn(F.chev2(false, true), { tip: 'Seek backward' });
+  s += `<span style="width:6px"></span>` + btn(F.chev2(false, false), { tip: 'Seek forward' });
+  s += `<span style="width:26px"></span>`;
+  s += btn(F.speaker(2, false), { tip: 'Mute' });
+  s += `<span style="width:6px"></span>`;
+  s += `<div class="volwrap"><div class="vol"><div class="vbar"><div class="vf" style="width:62%"></div>
+       <div class="vl" style="left:calc(62% - 41px)">62%</div></div></div></div>`;
+  s += `</div>`;
+  return s;
+}
+
+function renderRow() {
+  const row = document.getElementById('row2');
+  const pill = document.getElementById('pill');
+  const openMark = `<div class="salu-btn ${S0.pillOpen ? 'on' : ''}" id="plusBtn" title="Open media">
+      <span class="plusflip" style="display:grid;place-items:center;transition:transform .13s cubic-bezier(.215,.61,.355,1);
+      transform:rotate(${S0.pillOpen ? 45 : 0}deg)">${svg(F.plus(), 19)}</span></div>`;
+
+  let left = openMark;
+  if (S0.place === 'B') left += `<span style="width:2px"></span>` + playlistBtn();
+  if (S0.place === 'C') left += `<span style="width:26px"></span>` + playlistBtn();
+
+  let right = '';
+  if (S0.place === 'A') right = playlistBtn();
+
+  row.innerHTML =
+      `<div class="zone-left">${left}</div>`
+    + `<div class="zone-center">${cluster()}</div>`
+    + `<div class="zone-right">${right}</div>`;
+
+  /* pill anchored under the plus */
+  const plusEl = document.getElementById('plusBtn');
+  const stage = document.getElementById('stage');
+  const r = plusEl.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+  pill.style.left = (r.left - sr.left) + 'px';
+  pill.style.top  = (r.top - sr.top + r.height + 6) + 'px';
+  pill.innerHTML = btn(F.film(), { tip: 'Open file' }) + btn(F.stack(), { tip: 'Open folder' }) + btn(F.link(), { tip: 'Open URL' });
+  pill.classList.toggle('show', S0.pillOpen);
+
+  document.getElementById('plusBtn').onclick = () => { S0.pillOpen = !S0.pillOpen; render(); };
+  const pl = document.getElementById('plBtn');
+  if (pl) pl.onclick = () => {
+    if (S0.undocked) {                    // one playlist, one truth: raise the loose window
+      S0.panelOpen = true; render();
+      const p = document.getElementById('panel');
+      p.classList.add('raise'); setTimeout(() => p.classList.remove('raise'), 460);
+    } else {
+      S0.panelOpen = !S0.panelOpen; S0.firstOpen = S0.panelOpen; render();
+    }
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   render — panel, caps, guides
+   ══════════════════════════════════════════════════════════════ */
+function searchMarkup() {
+  return `
+    <div class="psearch ${S0.search ? 'has' : ''}" id="hSearchWrap">
+      <span class="mag">${svg(F.search(), 13, 11)}</span>
+      <input id="hSearch" value="${S0.search.replace(/"/g, '&quot;')}" spellcheck="false" aria-label="filter">
+      <span class="cnt" id="hCount">0</span>
+      <div class="salu-btn clr" id="hClear" title="Clear">${svg(F.cross(), 11, 12)}</div>
+    </div>`;
+}
+
+/* One header, five slots. Slots 1–2 swap with the source; 3–5 never do:
+   local  → repeat · shuffle   · search · clear · undock
+   m3u    → group · favourite · search · clear · undock                     */
+function headerMarkup() {
+  let one, two;
+  if (S0.source === 'm3u') {
+    const gm = GROUP_MODES.find(m => m[0] === S0.group);
+    // A filter suspends grouping — and the mark says so with the same quiet
+    // ink shuffle borrows under repeat-one. One grammar for "not in effect".
+    const suspended = S0.group !== 'flat' && (S0.search.trim() !== '' || S0.favFilter);
+    one = `<div class="salu-btn ${S0.groupPill ? 'on' : (suspended ? 'mute' : '')}" id="hGroup"
+            title="Group by · ${gm[2]}">${svg(F[gm[1]](), 18)}</div>`;
+    two = `<div class="salu-btn ${S0.favFilter ? 'on' : ''}" id="hFav" title="Favourites only">
+            ${svg(F.bookmark(S0.favFilter), 18)}</div>`;
+  } else {
+    const rep = S0.repeat;
+    one = `<div class="salu-btn ${rep === 'off' ? 'mute' : 'on'}" id="hRepeat"
+            title="${rep === 'off' ? 'Repeat off' : rep === 'all' ? 'Repeat all' : 'Repeat one'}">
+            ${svg(rep === 'one' ? F.loopOne() : F.loop(), 18)}</div>`;
+    two = `<div class="salu-btn ${S0.shuffle ? 'on' : ''}" id="hShuffle" title="Shuffle">
+            ${svg(F.shuffle(), 18)}</div>`;
+  }
+  return one + two + searchMarkup()
+    + `<div class="salu-btn" id="hWipe" title="Clear playlist">${svg(F.trash(), 18)}</div>`
+    + `<div class="salu-btn" id="hDock" title="${S0.undocked ? 'Dock back' : 'Undock'}">
+        ${svg(S0.undocked ? F.dock() : F.undock(), 18)}</div>`;
+}
+
+function m3uRow(ch, i, now) {
+  const fav = S0.favs.has(ch.name);
+  return `
+    <div class="prow ${i === now ? 'now' : ''}" data-m="${i}">
+      ${i === now ? `<span style="color:#EDEDED;display:grid;place-items:center">${svg(F.play(), 12, 11)}</span>`
+                  : `<span style="width:12px"></span>`}
+      <span class="nm">${ch.name}</span>
+      <span class="dur">${ch.chno}</span>
+      <div class="salu-btn fav ${fav ? 'on' : ''}" data-fav="${i}" title="${fav ? 'Remove favourite' : 'Favourite'}">${svg(F.bookmark(fav), 15)}</div>
+    </div>`;
+}
+
+/* Flat · or an accordion where exactly one group is open, and the group that
+   holds the playing channel is the one that opens. */
+function renderM3URows() {
+  const rows = document.getElementById('prows'), st = stNow();
+  if (!S0.m3uLoaded) {
+    rows.innerHTML = `<div class="pempty">${svg(CAND[S0.mark].draw(stEmpty()), 46, strokeUnits(46))}</div>`;
+    return 0;
+  }
+  const term = S0.search.trim().toLowerCase();
+  const filtering = term !== '' || S0.favFilter;
+  let list = M3U.map((ch, i) => [ch, i]);
+  if (S0.favFilter) list = list.filter(([ch]) => S0.favs.has(ch.name));
+  if (term) list = list.filter(([ch]) =>
+    ch.name.toLowerCase().includes(term) || ch.group.toLowerCase().includes(term));
+
+  if (!list.length) {                       // no match: the mark, no words
+    rows.innerHTML = `<div class="pempty">${svg(S0.favFilter && !term ? F.bookmark(false) : F.search(), 40, strokeUnits(40))}</div>`;
+    return 0;
+  }
+  // Filtering answers "where is X", grouping answers "browse" — so a filter
+  // shows matches flat and grouping is suspended (its mark goes quiet).
+  if (S0.group === 'flat' || filtering) {
+    rows.innerHTML = list.map(([ch, i]) => m3uRow(ch, i, st.now)).join('');
+    return list.length;
+  }
+
+  const keys = [...new Set(M3U.map(ch => groupKey(ch, S0.group)))].sort();
+  const nowCh = st.now >= 0 ? M3U[st.now] : null;
+  if (S0.openGroup === null || (S0.openGroup !== '' && !keys.includes(S0.openGroup))) {
+    S0.openGroup = nowCh ? groupKey(nowCh, S0.group) : keys[0];
+  }
+  let html = '';
+  keys.forEach(k => {
+    const members = M3U.map((ch, i) => [ch, i]).filter(([ch]) => groupKey(ch, S0.group) === k);
+    const open = S0.openGroup === k;
+    html += `<div class="ghead ${open ? 'open' : ''}" data-g="${k}">
+        <span class="chev">${svg(F.play(), 11, 12)}</span>
+        <span class="gn">${k}</span><span class="gc">${members.length}</span></div>`;
+    if (open) html += members.map(([ch, i]) => m3uRow(ch, i, st.now)).join('');
+  });
+  rows.innerHTML = html;
+  return list.length;
+}
+
+function rowHtml(it, i, now) {
+  return `
+    <div class="prow ${i === now ? 'now' : ''}" data-i="${i}">
+      ${svg(F.grip(), 16, 9)}
+      ${i === now ? `<span style="color:#EDEDED;display:grid;place-items:center">${svg(F.play(), 12, 11)}</span>`
+                  : `<span style="width:12px"></span>`}
+      <span class="nm">${it[0]}</span>
+      <span class="dur">${it[1]}</span>
+      <span class="act">${btn(F.trash(), { size: 16, tip: 'Remove' })}</span>
+    </div>`;
+}
+
+/* The list, filtered by the header field. Filtering changes the VIEW only —
+   the queue itself is never reordered or trimmed by a search. */
+function renderRows() {
+  if (S0.source === 'm3u') return renderM3URows();
+  const rows = document.getElementById('prows');
+  const st = stNow();
+  const term = S0.search.trim().toLowerCase();
+  if (S0.queue === 0) {
+    rows.innerHTML = `<div class="pempty">${svg(CAND[S0.mark].draw(stEmpty()), 46, strokeUnits(46))}</div>`;
+    return 0;
+  }
+  const shown = S0.items.map((it, i) => [it, i]).filter(([it]) => !term || it[0].toLowerCase().includes(term));
+  rows.innerHTML = shown.length
+    ? shown.map(([it, i]) => rowHtml(it, i, st.now)).join('')
+    : `<div class="pempty">${svg(F.search(), 40, strokeUnits(40))}</div>`;   // no match: the mark, no words
+  return shown.length;
+}
+
+/* Auto-scroll — only when required, and by the shortest distance. */
+function revealNow(instant) {
+  const list = document.getElementById('prows');
+  const row = list && list.querySelector('.prow.now');
+  if (!row) return;                       // filtered out → nothing to reveal, nothing to fight over
+  const pad = 6, lr = list.getBoundingClientRect(), rr = row.getBoundingClientRect();
+  const above = rr.top < lr.top + pad, below = rr.bottom > lr.bottom - pad;
+  if (!above && !below) return;           // already comfortably in view → do not move
+  const delta = above ? (rr.top - lr.top - pad) : (rr.bottom - lr.bottom + pad);
+  list.scrollTo({ top: list.scrollTop + delta, behavior: instant ? 'auto' : 'smooth' });
+}
+
+let toastTimer = null;
+function toast(msg, undo) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span>${msg}</span>` + (undo ? `<div class="salu-btn" id="tUndo">Undo</div>` : '');
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 5000);
+  if (undo) t.querySelector('#tUndo').onclick = () => { clearTimeout(toastTimer); t.classList.remove('show'); undo(); };
+}
+
+function syncQueueSegs() {
+  const el = document.getElementById('seg-queue');
+  const cur = S0.source === 'm3u'
+    ? (!S0.m3uLoaded ? 0 : (S0.mnow === 0 ? 1 : (S0.mnow >= 12 ? 12 : -1)))
+    : S0.queue;
+  [...el.children].forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.v === cur)));
+}
+
+function nothingLoaded() {
+  return S0.source === 'm3u' ? !S0.m3uLoaded : S0.items.length === 0;
+}
+
+function renderGroupPill() {
+  const el = document.getElementById('gpill');
+  const show = S0.source === 'm3u' && S0.groupPill && S0.panelOpen && S0.m3uLoaded;
+  el.className = 'gpill' + (show ? ' show' : '');
+  el.innerHTML = GROUP_MODES.map(([k, mk, label]) => {
+    // A mode the playlist carries no tags for is dimmed, not hidden — the
+    // honest answer to "most m3u files only have group-title".
+    const dead = S0.thinTags && (k === 'language' || k === 'country');
+    return `<div class="salu-btn ${S0.group === k ? 'on' : ''} ${dead ? 'off' : ''}"
+              data-gm="${k}" title="Group by ${label}">${svg(F[mk](), 19)}</div>`;
+  }).join('');
+  el.querySelectorAll('[data-gm]').forEach(b => b.onclick = () => {
+    if (b.classList.contains('off')) return;
+    S0.group = b.dataset.gm; S0.groupPill = false; S0.openGroup = null; render();
+  });
+}
+
+function renderPanel() {
+  const p = document.getElementById('panel');
+  let cls = 'panel';
+  cls += S0.undocked ? ' detached' : (S0.panelTop === 'below' ? ' below' : ' full');
+  if (S0.panelOpen) cls += ' show';
+  p.className = cls;
+
+  if (S0.undocked) {
+    if (!S0.placed) {
+      const sr = document.getElementById('stage').getBoundingClientRect();
+      S0.win = { x: Math.round(sr.width - 322 - 72), y: 196 };
+      S0.placed = true;
+    }
+    p.style.left = S0.win.x + 'px';
+    p.style.top = S0.win.y + 'px';
+  } else { p.style.left = ''; p.style.top = ''; }
+
+  // The header exists only once something is loaded (owner's rule).
+  const empty = nothingLoaded();
+  document.getElementById('phead').innerHTML = empty ? '' : headerMarkup();
+  document.getElementById('phead').style.display = empty ? 'none' : 'flex';
+
+  const shown = renderRows();
+  setCount(shown);
+  renderGroupPill();
+
+  // Nothing loaded = SALU's initial state: the logo canvas, no header, no rows.
+  document.getElementById('idle').classList.toggle('show', empty);
+
+  // The title bar names what is playing — a channel in m3u mode, a file locally.
+  const st = stNow();
+  document.getElementById('tbTitle').textContent = st.now < 0 ? 'SALU'
+    : S0.source === 'm3u' ? M3U[st.now].name
+    : (S0.items[st.now] ? S0.items[st.now][0].replace(/\.\w+$/, '') : 'SALU');
+
+  wirePanel();
+
+  // Reveal ONLY when the playing item (or the grouping) actually changed —
+  // never on a re-render caused by a manual collapse or a hover.
+  const key = S0.source === 'm3u' ? `m${st.now}|${S0.group}` : `l${S0.queue}`;
+  if (S0.firstOpen) { revealNow(true); S0.revealKey = key; }
+  else if (key !== S0.revealKey) { revealNow(false); S0.revealKey = key; }
+  S0.firstOpen = false;
+}
+
+/* The count lives INSIDE the search field (owner's rule): `total`, or
+   `matched / total` while a filter is narrowing. */
+function setCount(shown) {
+  const el = document.getElementById('hCount');
+  if (!el) return;
+  const total = S0.source === 'm3u' ? M3U.length : S0.items.length;
+  el.textContent = (shown === undefined || shown === total) ? String(total) : shown + ' / ' + total;
+}
+
+function wirePanel() {
+  const on = (id, fn) => { const e = document.getElementById(id); if (e) e.onclick = fn; };
+
+  on('hRepeat', () => {
+    S0.repeat = S0.repeat === 'off' ? 'all' : S0.repeat === 'all' ? 'one' : 'off';
+    render();
+  });
+  on('hShuffle', () => { S0.shuffle = !S0.shuffle; render(); });
+  on('hGroup',  () => { S0.groupPill = !S0.groupPill; render(); });
+  on('hFav',    () => { S0.favFilter = !S0.favFilter; render(); });
+
+  const inp = document.getElementById('hSearch');
+  if (inp) {
+    inp.oninput = e => {
+      S0.search = e.target.value;
+      document.getElementById('hSearchWrap').classList.toggle('has', S0.search.length > 0);
+      setCount(renderRows());
+      wireRows();
+      revealNow(false);
+    };
+    inp.onkeydown = e => {
+      if (e.key === 'Escape') {                       // field first, panel second
+        if (S0.search) { S0.search = ''; e.stopPropagation(); render(); }
+        else { S0.panelOpen = false; render(); }
+      }
+    };
+  }
+  on('hClear', () => { S0.search = ''; render(); const f = document.getElementById('hSearch'); if (f) f.focus(); });
+
+  on('hWipe', () => {                                  // rule 3: instant, no dialog, 5 s Undo
+    if (S0.source === 'm3u') {
+      const snap = { loaded: S0.m3uLoaded, now: S0.mnow, search: S0.search };
+      S0.m3uLoaded = false; S0.mnow = -1; S0.search = ''; S0.favFilter = false;
+      syncQueueSegs(); render();
+      toast('Playlist cleared', () => {
+        S0.m3uLoaded = snap.loaded; S0.mnow = snap.now; S0.search = snap.search;
+        S0.openGroup = null; syncQueueSegs(); render();
+      });
+      return;
+    }
+    const snap = { items: S0.items.slice(), queue: S0.queue };
+    S0.items = []; S0.queue = 0; S0.search = '';       // ABSOLUTE: playback stops,
+    syncQueueSegs(); render();                         // SALU returns to its initial state
+    toast('Playlist cleared', () => {
+      S0.items = snap.items; S0.queue = snap.queue; syncQueueSegs(); render();
+    });
+  });
+
+  on('hDock', () => { S0.undocked = !S0.undocked; S0.placed = false; render(); });
+
+  wireRows();
+
+  // Clicking anywhere else in the panel closes the group pill.
+  document.getElementById('panel').onclick = e => {
+    if (S0.groupPill && !e.target.closest('#gpill') && !e.target.closest('#hGroup')) {
+      S0.groupPill = false; renderGroupPill();
+    }
+  };
+
+  // Dragging the undocked window by its header.
+  const p = document.getElementById('panel');
+  if (S0.undocked) {
+    const head = document.getElementById('phead');
+    head.onpointerdown = e => {
+      if (e.target.closest('.salu-btn') || e.target.closest('.psearch')) return;
+      const sx = e.clientX - S0.win.x, sy = e.clientY - S0.win.y;
+      head.setPointerCapture(e.pointerId);
+      head.onpointermove = ev => {
+        S0.win = { x: ev.clientX - sx, y: ev.clientY - sy };
+        p.style.left = S0.win.x + 'px'; p.style.top = S0.win.y + 'px';
+      };
+      head.onpointerup = () => { head.onpointermove = null; head.onpointerup = null; };
+    };
+  } else {
+    document.getElementById('phead').onpointerdown = null;
+  }
+}
+
+function wireRows() {
+  // ── m3u rows: no drag, no delete — only the bookmark ──────────────────
+  document.querySelectorAll('.prow[data-m]').forEach(r => {
+    r.onclick = e => {
+      const fav = e.target.closest('[data-fav]');
+      if (fav) {
+        const ch = M3U[+fav.dataset.fav];
+        S0.favs.has(ch.name) ? S0.favs.delete(ch.name) : S0.favs.add(ch.name);
+        render();
+        return;
+      }
+      S0.mnow = +r.dataset.m; S0.openGroup = null;     // a new channel re-opens its group
+      syncQueueSegs(); render();
+    };
+  });
+  document.querySelectorAll('.ghead').forEach(g => {
+    g.onclick = () => {                                // accordion: one open group
+      S0.openGroup = S0.openGroup === g.dataset.g ? '' : g.dataset.g;
+      render();
+    };
+  });
+
+  // ── local rows: drag handle, hover bin, the owner's auto-pick rule ─────
+  document.querySelectorAll('.prow[data-i]').forEach(r => {
+    r.onclick = e => {
+      if (e.target.closest('.act')) {
+        const i = +r.dataset.i;
+        const snap = { items: S0.items.slice(), queue: S0.queue };
+        const nowIdx = S0.queue === 0 ? -1 : S0.queue - 1;
+        S0.items.splice(i, 1);
+        if (nowIdx === i) {                            // deleted the PLAYING item
+          if (S0.items.length === 0) S0.queue = 0;     //   only one track → initial state
+          else if (i < S0.items.length) S0.queue = i + 1;   //   next takes its place
+          else S0.queue = i;                           //   no next → previous
+        } else if (nowIdx > i) {
+          S0.queue = nowIdx;                           // the playing row slid up one
+        }
+        syncQueueSegs(); render();
+        toast('Removed from playlist', () => {
+          S0.items = snap.items; S0.queue = snap.queue; syncQueueSegs(); render();
+        });
+        return;
+      }
+      S0.queue = +r.dataset.i + 1; syncQueueSegs(); render();
+    };
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   verdicts + gallery
+   ══════════════════════════════════════════════════════════════ */
+const VERDICT = {
+  A: `<b>A · right edge of the control row — recommended.</b> The toggle becomes the panel's handle: it sits 18 px from the window's right edge, directly above the panel's leading edge, so the click and the 322 px slide share one hinge and the eye never has to cross the screen. follow.md §5 already reserves exactly this slot ("the row's right edge stays free for future controls — tracks, PiP, fullscreen, <b>panels</b>"), and the left zone stays a single mark so the Open pill keeps its clean drop-below geometry. One condition: the panel must start <b>below</b> the 148 px chrome block — flip "Panel top" to full height and watch the panel swallow its own toggle.`,
+  B: `<b>B · 2 px beside the + — the weakest of the three.</b> At that pitch the playlist mark joins the Open group and inherits its verb: it reads as a <i>fourth open action</i> ("load an .m3u") rather than as a view of the queue — and SALU really can open .m3u/.m3u8 files through Open File (<code>MediaUtils.isPlaylist</code>), so the misreading is plausible, not theoretical. The 128 px pill also blooms 6 px below the plus and reaches under the neighbour, so a popup visually claims a control that is not part of it; the plus's 45° rotation into × fires in its peripheral vision too. Meanwhile the row's reserved right edge stays empty and the panel still slides in from the opposite side of the screen. Click the + and the playlist mark here to feel both collisions.`,
+  C: `<b>C · own group, 26 px right of the + — defensible, still second best.</b> The 26 px gap takes it out of the Open group, so the "fourth open action" misreading dies and the pill no longer roofs it. But the spatial logic is still inverted: the click happens at the far left while 322 px of glass slides in at the far right, and the toggle ends up governing something it is nowhere near. Take this only if you ever decide the playlist panel should slide out of the <i>left</i> edge — then the hinge argument flips and C becomes the right answer.`,
+};
+
+function renderGallery() {
+  const g = document.getElementById('gallery');
+  const st = stNow();
+  // A live button: mirrored + glowing while the panel is open and this
+  // mark is the one mounted in the stage.
+  const live = (k, c) => {
+    const on = S0.panelOpen && S0.mark === k;
+    const body = svg(c.draw(st), 20);
+    return `<div class="salu-btn ${on ? 'on' : ''}" title="${on ? 'active (panel open)' : 'hover me'}">`
+         + ((c.flip && S0.mirror) ? `<span class="flip" style="display:grid;place-items:center">${body}</span>` : body)
+         + `</div>`;
+  };
+  g.innerHTML = Object.entries(CAND).map(([k, c]) => `
+    <div class="card ${S0.mark === k ? 'sel' : ''}" data-k="${k}">
+      <h3>${c.name} <span class="tag">${c.tag}</span></h3>
+      <p class="why">${c.why}</p>
+      <div class="demo">
+        <div class="col"><div class="cap">zoom 56</div><div class="zoom">${svg(c.draw(st), 56)}</div></div>
+        <div class="col"><div class="cap">real 20 · live recipe</div>
+          <div class="real">
+            ${live(k, c)}
+            <div class="salu-btn off" title="dimmed = enabled:false">${svg(c.draw(stEmpty()), 20)}</div>
+          </div>
+        </div>
+      </div>
+      <p class="collide">${c.collide}</p>
+      <button class="use">${S0.mark === k ? 'in the stage now' : 'try it in the stage'}</button>
+    </div>`).join('');
+  g.querySelectorAll('.card').forEach(card => {
+    card.querySelector('.use').onclick = () => { S0.mark = card.dataset.k; render(); };
+  });
+}
+
+const COLLIDE = [
+  ['<code>≡</code> three rules', 'drag handle (row reorder)', 'The stock "playlist" icon is three rules with a triangle — already taken. Any list mark needs ragged lengths, a spine, or a head glyph to break the ≡ read.'],
+  ['stacked frames', 'Open Folder', 'A "deck of cards / stacked items" playlist mark dies here — two offset rounded rects already mean folder.'],
+  ['film frame', 'Open File', 'No rect-with-notches variants; also the frame is reused as the panel\'s Video tab.'],
+  ['<code>□</code> hollow square', 'Stop', 'The conventional sidebar glyph (rect + divider) is one hollow rounded rect away from Stop, in the same 36 px row.'],
+  ['<code>&gt;</code> chevron', 'Play', 'A play triangle inside the playlist mark doubles the play signifier in the row — acceptable at the right edge, unacceptable next to the cluster.'],
+  ['six dots', 'Settings (title bar)', 'No dot clusters. Three beads in a line is the closest legal neighbour, and it must stay a <i>line</i>.'],
+  ['speaker + arcs', 'sound level', 'State-driven marks are legal precedent: the playlist mark may report the queue the way the speaker reports the level.'],
+];
+
+function renderCollide() {
+  document.querySelector('#collideTable tbody').innerHTML =
+    COLLIDE.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+}
+
+const REC = [
+  `<b>Placement: right edge of the control row</b>, <code>Align(centerRight)</code> in the same Stack that already holds the Open control and the cluster — a three-line change in <code>controller_panel.dart</code>. It is the slot follow.md §5 reserved for panels, and it makes the mark the panel's handle.`,
+  `<b>Mark: Queue Rail</b> — spine + ragged ticks + a solid bead for the playing item. Zero collisions, and it is the only candidate that can honestly report queue state (no bead = nothing queued).`,
+  `<b>It must be a toggle, not a verb.</b> Panel open → <code>active: true</code>: full white + the faint static glow, plus the 130 ms mirror that swings the spine toward the panel. That is the plus→× rule applied to a panel.`,
+  `<b>The panel starts below the chrome block</b> (<code>top: kChromeBlockHeight</code>), never full height — otherwise it covers its own toggle and the row can't close it.`,
+  `<b>Grow the right group leftwards</b> as members arrive: <code>[playlist · tracks] 14 px [PiP · fullscreen]</code>, fullscreen always rightmost. Playlist first in the panel pair, matching Phase 4's tab order (Playlist · Video · Audio · Subtitles).`,
+  `<b>Decide the panel's identity now:</b> one mark that opens the panel on the Playlist tab, or one mark per tab group. If Phase 4's single 4-tab right panel survives, the rail is the Playlist tab's shortcut — and the tab strip itself should be marks, not words, since hard rule 6 forbids text buttons.`,
+  `<b>Empty state without words:</b> the panel with nothing queued shows the rail mark itself at ~30 % ink, centred. Rule 1 allows no instruction text, and a mark is not text.`,
+];
+
+/* ══════════════════════════════════════════════════════════════
+   rail lab — size ladder (real stroke clamp) + optical weight
+   ══════════════════════════════════════════════════════════════ */
+function strokeUnits(size) {
+  // clamp(size * 0.085, 1.4, 2.2) px, expressed in viewBox units
+  const px = Math.min(2.2, Math.max(1.4, size * 0.085));
+  return (px / size) * 100;
+}
+
+function renderRailLab() {
+  const st = stNow();
+  const sizes = [16, 18, 20, 24, 28];
+  document.getElementById('ladder').innerHTML = sizes.map(s => `
+    <div class="col" style="align-items:center">
+      <div class="cap">${s} px</div>
+      <div class="salu-btn" style="width:${s + 16}px;height:${s + 16}px">${svg(CAND.rail.draw(st), s, strokeUnits(s))}</div>
+      <div class="cap" style="margin:2px 0 0">${Math.min(2.2, Math.max(1.4, s * 0.085)).toFixed(2)} px stroke</div>
+    </div>`).join('');
+  // Honest air between strokes: the ticks sit on a 48-unit band, so the
+  // row pitch in px is (48/(n-1))% of the size, minus the clamped stroke.
+  const pitchAt = s => (48 / Math.max(1, S0.ticks - 1)) / 100 * s;
+  const strokeAt = s => Math.min(2.2, Math.max(1.4, s * 0.085));
+  const white = s => (pitchAt(s) - strokeAt(s)).toFixed(1);
+  document.getElementById('ladderNote').innerHTML =
+    `<b>Reading:</b> ${S0.ticks} ticks · spine ${S0.spine} · bead = ${
+      S0.bead === 'top' ? '“something is queued”' : S0.bead === 'thirds' ? '“position in thirds”' : 'none'
+    }. White between strokes: <b>${white(16)} px at 16 px</b>, ${white(18)} px at 18 px, ${white(20)} px at 20 px.
+     Under ~1.2 px the rows merge on a normal-DPI Windows panel — that is the real ceiling on tick count,
+     not taste.${S0.ticks >= 4 ? ' <b>4 ticks are already through the floor at 16 px.</b>' : ''}`;
+
+  // The rail standing in the row at true sizes / true pitch.
+  const marks = [
+    ['rail (playlist)', svg(CAND.rail.draw(st), 20, strokeUnits(20))],
+    ['play',            svg(F.play(), 20, strokeUnits(20))],
+    ['stop',            svg(F.stop(), 16, strokeUnits(16))],
+    ['previous',        svg(F.chev2(true, true), 20, strokeUnits(20))],
+    ['seek back',       svg(F.chev2(false, true), 20, strokeUnits(20))],
+    ['sound',           svg(F.speaker(2, false), 20, strokeUnits(20))],
+    ['open +',          svg(F.plus(), 19, strokeUnits(19))],
+    ['grip ≡',          svg(F.grip(), 16, strokeUnits(16))],
+  ];
+  document.getElementById('weight').innerHTML = marks.map(([n, m]) => `
+    <div class="col" style="align-items:center;gap:4px">
+      <div class="salu-btn">${m}</div><div class="cap">${n}</div>
+    </div>`).join('');
+  document.getElementById('weightNote').innerHTML =
+    `<b>Reading:</b> the rail is the densest mark in the row — spine + ${S0.ticks} ticks + bead. If it outweighs
+     <code>&gt;</code> or <code>□</code> beside it, the fixes are: shorten the longest tick (70 → 62), drop the bead
+     to r = 6, or thin the spine by drawing it at the quiet 55 % ink and leaving the ticks full.`;
+}
+
+function renderRec(){ document.getElementById('recList').innerHTML = REC.map(x=>`<li>${x}</li>`).join(''); }
+
+/* ══════════════════════════════════════════════════════════════ */
+function renderVideo() {
+  // Docking rescales the picture; the chrome block can never follow (rule 5),
+  // so the video ends up narrower than the timeline sitting above it.
+  document.querySelector('.video').style.marginRight =
+    (S0.dock && S0.panelOpen) ? '322px' : '0';
+}
+
+function render() {
+  renderRow(); renderPanel(); renderCaps(); renderGuides(); renderGallery(); renderRailLab(); renderVideo();
+  document.getElementById('verdict').innerHTML = VERDICT[S0.place]
+    + (S0.dock
+      ? `<br><b>Docking the video:</b> the picture rescales on every open and every close — a visible jump
+         mid-scene — and the chrome block cannot follow it (hard rule 5: the container never shifts), so the
+         322 px of video you lose is <i>not</i> matched by the timeline above. SALU's glass already makes an
+         overlaid panel translucent; that is why "over the video" is the locked answer.`
+      : '');
+}
+seg('seg-place', 'place', v => S0.place = v);
+function labelQueueSegs() {
+  const [empty, a, b] = document.getElementById('seg-queue').children;
+  const m = S0.source === 'm3u';
+  a.textContent = m ? 'ch 1 of 24' : 'now = 1 of 14';
+  b.textContent = m ? 'ch 18 of 24' : 'now = 12 of 14';
+}
+document.getElementById('seg-queue').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  const v = +b.dataset.v;
+  if (S0.source === 'm3u') {
+    S0.m3uLoaded = v !== 0;
+    S0.mnow = v === 0 ? -1 : (v === 1 ? 0 : 17);       // 18th channel → a real scroll
+  } else {
+    S0.queue = v;
+    S0.items = v === 0 ? [] : ITEMS.slice();           // reseed the working queue
+  }
+  S0.search = ''; S0.openGroup = null; S0.firstOpen = true; S0.revealKey = null; render();
+});
+seg('seg-panel', 'panelTop', v => S0.panelTop = v);
+seg('seg-guides', 'guides', v => S0.guides = v === 'on');
+seg('seg-dock',  'dock',   v => S0.dock = v === 'dock');
+seg('seg-tags',  'thinTags', v => S0.thinTags = v === 'thin');
+document.getElementById('seg-source').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  S0.source = b.dataset.v; S0.search = ''; S0.groupPill = false;
+  S0.openGroup = null; S0.firstOpen = true; S0.revealKey = null;
+  if (S0.source === 'm3u') { S0.m3uLoaded = true; S0.mnow = 6; }
+  labelQueueSegs(); render();
+});
+seg('seg-ticks',  'ticks',  v => S0.ticks = +v);
+seg('seg-bead',   'bead',   v => S0.bead = v);
+seg('seg-mirror', 'mirror', v => S0.mirror = v === 'on');
+seg('seg-spine',  'spine',  v => S0.spine = v);
+renderCollide(); renderRec(); labelQueueSegs(); render();
+window.addEventListener('resize', () => { renderRow(); renderGuides(); });
+document.getElementById('stage').addEventListener('click', e => {
+  if (!e.target.closest('#pill') && !e.target.closest('#plusBtn') && S0.pillOpen) { S0.pillOpen = false; render(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.activeElement && document.activeElement.id === 'hSearch') return; // field owns Esc
+    if (S0.pillOpen) { S0.pillOpen = false; render(); return; }
+    if (S0.panelOpen) { S0.panelOpen = false; render(); }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {   // the silent shortcut
+    e.preventDefault();
+    document.getElementById('plBtn').click();   // identical to clicking the mark
+  }
+});
+</script>
+</body>
+</html>
