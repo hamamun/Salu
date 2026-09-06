@@ -1,6 +1,30 @@
 # Playlist control & slide-out panel — implementation brief
 
-> **Status:** DECIDED, **NOT IMPLEMENTED** (2026-09-06, revised the same day:
+> **Status:** DECIDED, **NOT IMPLEMENTED** (2026-09-06).
+>
+> **New session? Read this box, then §10 in full.** The document covers two
+> phases that ship in order:
+> **(A) the local playlist panel — §§1–9**, and
+> **(B) m3u / IPTV channel mode — §10**, which is built *after* A and never
+> interleaved with it.
+> §10 is self-contained: brief (§10.0–10.11), build steps (§10.12), acceptance
+> checklist (§10.13) and 49 numbered decisions M1–M46 (§10.14).
+> **Start at §10.0** — it documents a blocker verified in the code: SALU
+> currently hands the whole `.m3u` URL to mpv, so no channel metadata ever
+> reaches the app. Nothing else in §10 can be built before the parser.
+> The interactive study `design/playlist-mark-preview/index.html` implements
+> every §10 behaviour (Source → m3u; Scale → 50 000 channels) and is the
+> reference for anything the prose leaves ambiguous.
+>
+> §10 headlines: the header's first two slots swap to group-by and favourite,
+> repeat and shuffle are dropped, rows lose drag and delete, groups are an
+> accordion, a dead channel toasts **"Failed to load"** and **skips to the next**
+> (3 strikes stop the cascade), the timeline goes inert with a live shimmer, and
+> the engine holds one media instead of the whole list.
+> **Note the one reversal:** M3 ("stay on the dead channel") was overturned by
+> the owner on the same day and is superseded by **M3b–M3e** — the table keeps
+> the dead row struck through so the change is not silently re-litigated.
+> Earlier the same day:
 > the panel's four-tab strip is **removed** and replaced by a five-mark header
 > row — repeat · shuffle · search · clear · undock — with no footer, the count
 > inside the search field, absolute clear, and undock built in the same pass.
@@ -708,10 +732,11 @@ is removed from this panel** (§4.4) and, per the owner (2026-09-06), those thre
 will be **re-planned separately later**; nothing is assumed about where they go,
 and the control row's right edge stays reserved and empty until that plan exists.
 Also out of scope: chapter markers;
-IPTV grouping of large `.m3u` files and `.m3u` handling generally (**the owner
-takes that next**); per-item metadata probing; persisting the queue, repeat or
+per-item metadata probing; persisting the queue, repeat or
 shuffle across restarts (`shared_preferences` is allowed, the queue stays
-runtime — follow.md §7).
+runtime — follow.md §7). **IPTV / `.m3u` handling is no longer out of scope —
+it is specified in §10 and is its own build phase, starting with the parser
+(§10.0).**
 
 ---
 
@@ -836,6 +861,600 @@ runtime — follow.md §7).
 | 28 | Shuffle engine | SALU picks the next index off `stream.completed`; **never** `player.setShuffle` | default, §5 |
 | 29 | Build order | steps 1–12 docked, step 13 undock — one feature, one branch, shipped together | default, §7 |
 | 30 | Video / Audio / Subtitles | **re-planned separately later** — nothing assumed, the row's right edge stays reserved and empty | **owner**, 2026-09-06 |
+
+---
+
+## 10. m3u mode — the IPTV playlist (owner's brief, 2026-09-06)
+
+> **Status:** DECIDED, **NOT IMPLEMENTED**. This section replaces the earlier
+> "out of scope: IPTV grouping … the owner takes that next". Everything in
+> §§1–9 still governs; this section states only what **changes when the loaded
+> playlist is an m3u URL**. Entries marked *(default)* may be vetoed.
+
+### 10.0 The blocker — SALU must parse the m3u itself
+
+Verified in the code (2026-09-06):
+
+| Fact | Where |
+|---|---|
+| `playUrl` → `openPath(url)` → `setQueue([url], 0)` — the queue holds **one** entry: the m3u URL | `open_media_service.dart:74`, `player_service.dart:349` |
+| mpv expands the playlist internally; SALU never sees the channels | `_openQueueAt` hands mpv one `Media` |
+| The index mirror is gated on `queue.paths.length == playlist.medias.length` → `1 != 24`, so **it is skipped** and SALU never learns which channel plays | `player_service.dart:177` |
+| `currentTitle` = `MediaUtils.displayName(uri)` → a stream URL `…/live/user/pass/1234.ts` titles the window **"1234"** | `player_service.dart:169` |
+
+**Therefore: SALU fetches and parses the m3u, then hands mpv a resolved list of
+channel URLs.** Without a parser there is no `group-title`, no `tvg-language`,
+no `tvg-country`, no `tvg-chno` and no display name — i.e. none of §§10.1–10.6
+can exist. This parser is step 1 of the build order and nothing else starts
+before it.
+
+**Data model — settled (owner's challenge, 2026-09-06).** An earlier draft
+proposed a **parallel `List<ChannelMeta>?`** alongside `paths`. The owner
+rejected it — *"how does the user switch between local and m3u, and is it not
+complicated?"* — and the code agrees: `paths` has **6 read sites and 3 mutation
+sites**, so a parallel list would force every one of them to keep two
+collections in lockstep forever. One missed mutation and every row shows the
+wrong channel's name. Switching local → m3u → local would mean nulling and
+rebuilding a second list each time, with two things to keep honest instead of
+one.
+
+**Decision: one list of objects, no parallel table, no mode flag.**
+
+```dart
+/// One queue entry. Local files fill `url` only; m3u channels fill the rest.
+class QueueItem {
+  const QueueItem(this.url, {this.name, this.group, this.language,
+                             this.country, this.chno, this.tvgId});
+  final String url;        // what mpv is handed — the only field local mode needs
+  final String? name;      // m3u display name; null → derive from the path
+  final String? group, language, country, chno, tvgId;
+}
+```
+
+- Local mode builds `QueueItem(path)` with every other field null, so local
+  playback is **byte-identical to today**.
+- m3u mode fills the metadata. **Switching sources is just `setQueue(...)` with
+  a different list** — exactly the mechanism that exists now. No second list, no
+  null-and-rebuild, no possible desync.
+- The header swap reads off the data, not a flag:
+  `bool get isChannelList => items.any((QueueItem i) => i.name != null);`
+- Transitional keeper so the 6 existing call sites keep compiling and can be
+  migrated one at a time:
+  `List<String> get paths => items.map((QueueItem i) => i.url).toList();`
+
+Attribute reference: `#EXTINF:-1 tvg-id tvg-name tvg-logo tvg-language
+tvg-country tvg-chno group-title,Display Name`.
+
+### 10.1 The header swaps two slots, and only two
+
+Slots 3 · 4 · 5 (search · clear · undock) are **identical to local mode**.
+Slots 1 · 2 swap:
+
+| # | local mode | **m3u mode** |
+|---|---|---|
+| 1 | Repeat | **Group by** — flat / category / language / country |
+| 2 | Shuffle | **Favourite** — filter to favourites only |
+
+**Repeat and shuffle are dropped in m3u mode** (owner, 2026-09-06). They are
+queue verbs; live channels are not a queue. They return untouched the moment a
+local queue is loaded. Recorded consequence: an m3u of VOD items also loses
+them — accepted.
+
+**Pitch, not a flat gap.** The header follows SALU's own grammar:
+`[group · favourite] 14 [search] 14 [bin] 14 [undock]`, 6 px inside the mode
+pair. The 2 px gap of the first draft put the field's **✕ (clear the text)**
+about 4 px from the **🗑 (clear the whole playlist)**. Destructive controls do
+not get 2 px.
+
+### 10.2 Slot 1 — Group by *(default, except the four modes)*
+
+- **One stable mark plus a pill below it** — the `+` → pill pattern the app
+  already teaches. The mark **never morphs** into four different glyphs: the
+  family's grammar is *one mark, modified* (repeat is one loop arc across three
+  states). Four unrelated glyphs can never be learned.
+- **The mark does not report the mode; the list does it better** — grouping on
+  = named group heads on screen, flat = none. No 18 px glyph beats that.
+- **Auto-pick on load:** if more than ~60 % of entries carry `group-title` →
+  category, else flat. Remembered per playlist. The default is then right with
+  no click.
+- **A mode the file has no tags for is dimmed, never hidden** — a vanishing
+  option reads as a broken app.
+- **Group order:** category keeps the playlist's own **first-appearance** order
+  (providers order deliberately); language and country are alphabetical;
+  `Uncategorized` always last.
+- **Normalise country and language.** `tvg-country` is usually a code (`UK`,
+  `GB`, `US`), `tvg-language` a word. Without a small ISO-3166 / ISO-639 map the
+  heads fragment into `UK` / `GB` / `United Kingdom`.
+- **Multi-value fields are NOT split this phase.** `group-title="UK | News"`
+  and `tvg-language="English;Spanish"` are real. Splitting puts one channel in
+  two groups and breaks "one row = one channel index". Treat the whole string
+  as one key.
+
+### 10.3 Slot 2 — Favourites
+
+- **Mark: the bookmark, not a star.** A five-point star at 15 px with a 1.4 px
+  round-join stroke turns to mush; a bookmark is two verticals and a notch.
+- **The row bookmark's visibility is the whole design** *(strong
+  recommendation)*: **filled + full ink and always visible when the channel IS
+  a favourite; invisible until the row is hovered when it is not.** A
+  3000-channel list carrying 3000 outline bookmarks destroys the exact signal
+  favourites exist to give. Hover-to-add is already the local rows' grammar.
+- **Keying a channel:** `tvg-id` → `tvg-name` → display name, in that order.
+  Never the index (order changes) and never the stream URL (it rotates).
+  Display name alone is not enough: duplicate names are rampant in IPTV lists
+  (same channel at several qualities), so one click would light four rows.
+- **Keying the playlist: by HOST, not the full URL** *(default)*. Providers
+  rotate credentials (`/live/USER/TOKEN/`), and a full-URL key silently wipes
+  every favourite on rotation. Honest trade: two playlists on one host share
+  favourites — for a personal player that is a feature.
+- Storage `shared_preferences` (follow.md §7), **writes debounced ~500 ms** —
+  the whole file is rewritten on every change.
+- **Never prune orphaned favourites** on reload; the provider may restore the
+  channel tomorrow.
+- **Favourites-only keeps grouping.** A search answers *"where is X"* and so
+  flattens the list; favourites-only is a **browse** mode. Only the search
+  suspends grouping (and only then does the group mark drop to quiet ink).
+
+### 10.4 Rows — no reorder, no delete
+
+- **No `≡` grip, no drag, no up/down** (owner): the order is the provider's.
+- **No per-row bin** (owner). The only row action is the favourite bookmark.
+- Anatomy: `[chevron if playing] · name · channel no. · favourite`.
+- The channel number rides the local list's **duration** slot — live duration is
+  `-1`, so the slot is free. **No `tvg-chno` → the slot stays empty**, never `0`,
+  never the word "LIVE".
+- Click a row = play that channel. Hover wash and the now-row treatment are
+  §4.3's, unchanged.
+
+### 10.5 Grouping and the accordion
+
+- **Flat** → one plain list.
+- **Category / language / country** → collapsible heads, **accordion: exactly
+  one group open at a time** (owner).
+- **All collapsed by default; only the playing channel's group is open**
+  (owner). With **nothing playing, nothing is open** — an all-collapsed list is
+  the map of the playlist, which is the point of grouping. *(This overrides the
+  preview's earlier "open the first group".)*
+- **An auto-advance must not steal the view** *(default)*: the open group
+  follows the playing channel **only while the open group is already the
+  playing one**. Deliberately opening "Movies" while News plays must survive an
+  advance inside News (follow.md — never fight the user).
+- **Collapsing a group above the viewport must not yank the list** — compensate
+  the scroll offset so rows under the cursor stay put.
+- **Sticky group head** while a long group is scrolled *(default)*.
+- Empty groups vanish under a filter; the head count reflects what is shown.
+
+### 10.6 Keeping the playing channel visible
+
+§4.3's reveal rule applies, plus the two cases the accordion creates:
+
+- **The playing channel sits inside a COLLAPSED group** → its group head
+  carries the play chevron, so "where am I" survives the accordion.
+- **The playing row is scrolled off-screen** *(default, innovative)* → a small
+  quiet chevron fades in at the list edge it is hiding behind, pointing toward
+  it; click = expand its group if needed, then reveal. It exists only while the
+  signal is actually lost, costs no permanent control and no words. At 12 000
+  channels this matters far more than at 14 files.
+
+### 10.7 Title bar
+
+The title bar shows the **playing channel's name**, exactly as local files show
+their file name. One rule to lock: **the playlist's display name wins — mpv's
+ICY / HLS stream metadata must never overwrite it**, or the title flickers
+between "BBC News HD" and whatever the stream announces mid-programme.
+
+### 10.8 A dead channel is skipped, not sat on (owner, 2026-09-06 — **reverses the earlier M3**)
+
+**Earlier decision (superseded):** "stay on the dead channel, never auto-advance."
+**Owner's final call:** *"toast will say failed to load, then auto advance to the
+next and play that. The user shouldn't have to keep clicking next on failing
+channels — and they can see in the title bar what is playing."* Correct: with a
+50 000-channel provider list, dead entries are routine, and making the viewer
+hand-click past each one is the worse failure mode. The title bar (M22) is what
+makes the skip safe — you always know where you landed.
+
+**The behaviour**
+
+1. A channel fails to load → the toast reads **"Failed to load"** with the
+   channel's name, in the deck's existing card shape (the same slot that already
+   names the item on Next).
+2. SALU immediately opens the **next channel in list order** and plays it.
+3. The title bar and the panel's now-row follow, so the viewer sees where the
+   skip landed.
+
+**10.8a-i Why SALU drives the advance, not mpv** *(this is not a preference)*
+
+The owner's instinct — *"if it's native mpv, why not use it"* — is right in
+spirit and impossible in this mode. **mpv's native advance only works if mpv is
+holding the playlist**, and M40 forbids exactly that: handing mpv 50 000 entries
+costs ~1 s per `playlist-pos` change at 40 k and ~2 s at 80 k (mpv#6162). Using
+native advance would trade a 2-second stall on *every* channel change for a few
+lines of Dart.
+
+SALU gets the identical behaviour for free, because the hook already exists:
+`player.stream.error` is **already subscribed** (`player_service.dart:267`, it
+currently only `debugPrint`s). In channel mode that listener fires the toast and
+calls the next channel. Same outcome, no engine list, no stall.
+
+**10.8a-ii The cascade guard — mandatory** *(default)*
+
+Auto-advance creates a failure mode the old "stay put" rule did not have: when a
+provider's credentials expire **every** channel fails, so a naive advance
+stampedes the whole 50 000-entry list, firing a toast per channel and hammering
+the network, with no way for the viewer to catch it.
+
+- **Stop after 3 consecutive failures.** Three in a row is not a dead channel,
+  it is a dead provider (expired credentials, no internet, wrong URL). SALU stops
+  on the third, leaves the toast up, and waits — that is where the *original*
+  "stay put" instinct genuinely belongs.
+- The counter **resets on any successful playback** and on **any manual channel
+  pick** (row click, Prev/Next) — a deliberate choice is never treated as part
+  of a cascade.
+- **Do not wrap at the end of the list.** If the tail fails, stop; wrapping to
+  index 0 risks a silent loop.
+- Skipping is **failure-only**. A live channel never "ends", so `completed` is
+  not an advance trigger in channel mode.
+
+### 10.8a The chrome during live playback (owner, 2026-09-06)
+
+A live channel has no duration (`#EXTINF:-1`), so there is no position to draw
+and nothing to seek. **SALU already has this exact state** — Stop, per
+`outline_transport_osd_resume.md` §2: *"zero the timeline (`00:00:00 /
+00:00:00`, inert) · hide the bottom progress hairline"*. Live playback reuses
+it rather than inventing a second "nothing to show" look.
+
+| Element | Live behaviour |
+|---|---|
+| **Timeline (Row 1)** | **Stays exactly where it is, at its exact size** — hard rule 5 forbids hiding it (the container never shifts). It keeps its track and loses everything that encodes a position: no fill, no thumb, no left/middle/right readouts, no minute ticks, no hover chip. **An empty track already says "there is no position here."** |
+| Timeline input | Inert — click, press-drag and wheel all do nothing. |
+| **Greying it out** | **Rejected.** Dimming is SALU's *disabled-icon* language (follow.md §2); a greyed 23 px slab reads as broken chrome, not as live TV. |
+| **Hiding it** | **Rejected** — hard rule 5. |
+| **Bottom progress hairline** | **Carries the same shimmer** while the chrome is auto-hidden — see §10.8c. (It is still hidden while stopped or idle, exactly as today.) |
+| **Seek backward / forward marks** | **Dimmed** — the same `enabled: false` Stop already applies to them. |
+| **← / → keys** | **Silent.** A live key behind a dimmed button is worse than either alone: the marks say "not available" while the keyboard disagrees. |
+| Play / Pause · Stop · sound group · volume bar | Unchanged. |
+
+**The live shimmer** *(default — vetoable; the plain inert track alone is also
+correct)*. The empty track is not wasted: a **slow, very quiet shimmer drifting
+left → right along it** is SALU's own "live, no timeline" signal. It reads as
+*flowing* rather than *broken*; it needs no text, no red dot and no "LIVE"
+badge (rules 1 and 6 forbid all three); and because it is driven by the arrival
+of data it **stops when the stream stalls** — so buffering gets an honest,
+wordless indicator for free. Amplitude stays under the volume bar's hover
+brightening: this is a status, not a control.
+
+### 10.8b Transport in m3u mode (owner, 2026-09-06)
+
+Everything here already exists; m3u mode only changes *which* rules apply.
+
+| Action | m3u behaviour |
+|---|---|
+| **Play / Pause** | Works. OSD deck cards exactly as local. |
+| **Stop** | Identical to local: playback stops, the canvas returns to the **initial SALU window** (logo, title bar reads `SALU`), and **the channel list stays loaded, parked on the same channel** — Stop ≠ Start Over. The panel keeps showing the list; the parked channel keeps the now-row highlight. |
+| **Previous / Next** | Walk the **channel list**. Dimmed when the list holds a single channel, exactly as local dims them with one item. |
+| **Seek ± (marks and keys)** | Dimmed and silent — §10.8a. |
+| **Volume / Mute** | Unchanged, OSD cards unchanged. |
+| **Failed channel** | The existing toast reads **"Failed to load"** + the channel name, then SALU **advances to the next channel and plays it** (§10.8). No new surface, no dialog. Three consecutive failures stop the cascade. |
+
+**Previous / Next follow list order, never the visible order** (owner agreed,
+2026-09-06). With
+the accordion open on "Movies" while a News channel plays, Next plays the next
+channel **in the list**, not the next visible row. Browsing must never change
+what Next does — the same principle as §5's "shuffle never reorders the visible
+list". If Next lands in a collapsed group, §10.5's accordion rule opens it and
+§10.6 reveals the row.
+
+**Previous's 3-second rule does not apply** (owner agreed, 2026-09-06). Locally, Previous restarts the
+current item when the position is past 3 s. A live stream has no position to
+restart from, so in m3u mode **Previous always moves to the previous channel**.
+
+### 10.8c The hairline carries the live signal too (owner, 2026-09-06)
+
+The owner's extension of §10.8a: *"we may also use the bottom thin line for the
+same purpose if chrome is autohide."* Correct — and it repairs an element that
+is currently **dead** in this state.
+
+**The bug it fixes.** `_AutoHideProgress` (`home_screen.dart`) draws
+`width: w * frac`, and `frac` falls back to `0.0` when
+`duration <= Duration.zero`. A live stream has no duration, so today, with the
+chrome auto-hidden, the hairline is **visible and draws nothing** — a 2 px strip
+of pure background. It passes its own visibility test (`playing` → `true`) and
+then renders emptiness. The shimmer gives it the only honest thing it can say.
+
+| | Local file | **Live channel** |
+|---|---|---|
+| Hairline content | fill from the left = position | **the §10.8a shimmer**, drifting left → right |
+| While buffering / stalled | n/a | the drift **stops** — same wordless signal as the timeline |
+| Stopped / idle | hidden (unchanged) | hidden (unchanged) |
+
+**The two surfaces never appear together.** The hairline exists *only* while the
+chrome is hidden, and the timeline only while it is shown, so the live signal
+**hands off** between them and is never duplicated. That is the whole value:
+with the chrome auto-hidden over a live channel, the shimmer is the only thing
+on screen still reporting that data is arriving.
+
+- **The hairline's shimmer must be brighter than the timeline's** *(default)*:
+  2 px of height needs far more contrast than a 23 px bar to read at all. The
+  bar's highlight sits near `rgba(255,255,255,.11)`, the hairline's near `.55`.
+- Everything else about the hairline is unchanged: 2 px, window bottom, the
+  180 ms fade, and **strictly display-only** — the existing `Listener` that
+  absorbs pointer events stays, so it can never be clicked, dragged, scrolled
+  or hovered for a tooltip (it must not become a seek surface by accident).
+- Same source of truth as the timeline: one "live and receiving" flag drives
+  both, so they can never disagree.
+
+### 10.9 Search, clear, undock in m3u mode
+
+- **Search matches name + group, never the URL** — matching the URL would
+  surface credentials. Precompute one lowercase key per channel at parse time;
+  never `toLowerCase()` 12 000 strings per keystroke.
+- **The count needs room:** `9 / 14` fits, `1284 / 12750` is eleven characters
+  at 10 px. In m3u mode §4.4's collapsing-field escape hatch stops being
+  optional.
+- **The bin unloads the channels only.** Playback stops, the list empties, SALU
+  returns to the logo canvas — and the **saved URL seven (`UrlLibraryService`)
+  is untouched**, as is the favourites store. 5 s Undo restores **from an
+  in-memory snapshot, never a re-fetch**: an Undo that stalls 10 s on a slow
+  provider is not an Undo.
+- **Undock:** §4.8's "one snapshot per change" contract does not survive 12 000
+  channels crossing an isolate. Send the list **once**, then deltas only (index,
+  favourites, mode, filter). Phase 8's WebSocket has the identical problem, so
+  the `PlaylistBridge` must be delta-shaped from the start.
+
+### 10.10 Performance — 50 000 channels, and why there is no cap
+
+**Decision: no channel cap. The cap was the wrong answer to the right worry.**
+A cap only converts "slow" into "refused", and the owner's requirement is
+*"nothing but keep changing channels and keep viewing"*. Measured on a
+generated **50 000-channel, 12.9 MB** playlist with the real attribute set
+(`tvg-id`, `tvg-name`, `tvg-logo`, `tvg-language`, `tvg-country`, `tvg-chno`,
+`group-title`):
+
+| Work | Cost at 50 000 |
+|---|---|
+| Parse the whole file | **149 ms** |
+| First 200 rows ready to paint | **0.9 ms** |
+| Build the grouping index | **8.9 ms** |
+| Precomputed search keys | 18.6 ms |
+| One keystroke, worst case (full rescan) | **3.5 ms** — inside one 60 Hz frame |
+| Naive search (`toLowerCase` per row per keystroke) | 40.8 ms — **a dropped frame; banned** |
+
+Parsing is not the problem. **The engine is.**
+
+#### 10.10a The real bottleneck — never hand mpv the whole list
+
+`_openQueueAt` (`player_service.dart:371`) builds a `List<Media>` for the
+**entire** queue and calls `player.open(Playlist(medias, index:))` — and every
+channel change goes through it (`next()` :547, `previous()` :537, a row click).
+At 50 000 channels that is a 50 000-entry playlist handed across the Dart→mpv
+boundary **on every zap**, which mpv is documented to handle badly:
+`playlist-pos` changes cost **~1 s at 40 000 entries and ~2 s at 80 000**
+(mpv-player/mpv#6162), with a further regression reported at 200 000 (#15264).
+Local playback never exposed this because a folder queue is tens of items.
+
+**The rule: in channel-list mode the engine holds ONE media, never the list.**
+
+- SALU owns the list (`List<QueueItem>`, §10.0) and is the only thing that
+  knows about channels 0…49 999.
+- A channel change opens **just that channel's URL**. Measured cost of the
+  rebuild we are deleting: 2.7 ms of Dart allocation and ~1.6 MB of garbage per
+  zap — before mpv's own per-entry cost, which is the part that actually hurts.
+- Nothing is lost: the advance that matters in this mode is the **failure skip**
+  (§10.8), and SALU drives it from `stream.error` rather than from mpv's
+  playlist — which is what makes holding one media possible. Live streams
+  have no resume memory to carry (`resume_service.dart:92` skips anything with
+  `://`). Those were the only two reasons `_openQueueAt` handed over the whole
+  list.
+- Local mode is untouched — it keeps handing mpv the full queue, keeping native
+  gapless advance and `Media(start:)` resume exactly as they are today.
+
+#### 10.10b Progressive load — the list is usable in ~1 ms
+
+Parse on a background isolate and stream the result: **the first ~200 rows are
+ready in 0.9 ms**, the remaining 49 800 arrive 149 ms later. The user sees a
+populated, scrollable, clickable list effectively instantly; the tail lands
+before they can reach it. No spinner is needed for a 149 ms job — and per rule 1
+there is no text to show anyway.
+
+- **The wordless loading state** (§10.9) is therefore only for the **network
+  fetch** of a 12.9 MB file, which is the genuinely slow part and entirely
+  outside SALU's control. Reuse the live shimmer of §10.8a: the timeline is
+  already inert with nothing to report, and a drifting shimmer during the
+  download says "working" with no words and no new vocabulary.
+- **Play before the parse finishes.** If the user clicks a channel while the
+  tail is still arriving, it plays immediately — SALU only needs that one URL.
+- **If the fetch itself fails** (bad URL, dead provider, past the M46 byte
+  ceiling): the shimmer stops and the same toast wording is used —
+  **"Failed to load"** with the playlist's name, never its URL (§10.10e). SALU
+  returns to whatever it was doing; a failed *playlist* load is not a failed
+  channel and must not trigger the M3b skip.
+
+#### 10.10c The three rules that keep 50 000 rows fluid
+
+1. **`ListView.builder` only** — never a mapped child list. The row count is the
+   only thing that scales; built rows stay proportional to the viewport.
+2. **Precompute one lowercase search key per channel at parse time**
+   (`name + group`). 18.6 ms once, versus 40.8 ms *per keystroke* naively.
+   Narrowing the previous result while the term grows costs 10.1 ms across five
+   keystrokes.
+3. **Intern the low-cardinality fields** (`group`, `language`, `country`). A
+   50 000-channel list holds ~28 unique values across those three fields; without
+   interning it holds 150 000 separate strings. This is what makes the grouping
+   index cheap enough to rebuild on a mode switch (8.9 ms) instead of caching
+   four of them.
+
+Also: the grouping index is rebuilt in SALU only — **switching group mode never
+touches the engine**, so it cannot interrupt playback.
+
+#### 10.10d Where a limit does belong
+
+Not on channels — on the **download**. A hostile or mistyped URL can stream
+gigabytes. Abort the fetch past a generous byte ceiling *(default: 64 MB, ~5×
+the 12.9 MB measured at 50 000 channels)* and treat it as a failed load, using
+the same toast a failed channel uses (M37). That bounds the real risk without
+ever telling a legitimate 50 000-channel user "no".
+
+### 10.10e Privacy
+
+- **Never render a playlist URL** in a row, tooltip, title bar, OSD card or log
+  — they carry credentials.
+- Search matches name and group only, never the URL (§10.9) — otherwise a
+  typed token could surface a credential as a "match".
+
+### 10.11 Out of scope, explicitly
+
+`tvg-logo` (colour art per row fights rule 6, plus thousands of fetches),
+EPG / `tvg-id` guide data, catch-up, Xtream APIs, editing or saving a modified
+m3u, and per-channel resume (`resume_service.dart:92` already skips anything
+containing `://`).
+
+### 10.12 Build steps — m3u mode (each leaves the app runnable)
+
+m3u mode is **its own phase, built after steps 1–13 of §7**. The docked local
+panel must work first; this phase then adds the channel-list behaviour behind
+it. Do not interleave them.
+
+| # | Step | Leaves the app |
+|---|---|---|
+| **M-1** | **`QueueItem` + `QueueService`** (§10.0). Turn `paths` into `List<QueueItem>`, keep `List<String> get paths` as the transitional getter so the 6 existing read sites compile untouched. Add `isChannelList`. | identical behaviour, local only |
+| **M-2** | **The parser** — fetch, `#EXTINF` attribute regex, display name after the comma, intern group/language/country (M44), precompute the lowercase search key (M43), byte ceiling (M46). **Off the UI isolate.** Pure Dart, unit-testable with no UI. | unused, but tested |
+| **M-3** | **Route m3u URLs to the parser** instead of to mpv (`open_media_service.playUrl`). Build the queue from the parsed channels. Fix the index mirror, which is gated on `paths.length == medias.length` (`player_service.dart:177`). | m3u loads, plain list, no grouping |
+| **M-4** | **The engine path (M40)** — in channel mode `_openQueueAt` opens **one** media, never the list. Local mode keeps the existing full-queue path untouched. | channel changes are constant-time |
+| **M-4b** | **Failure skip (§10.8)** — extend the existing `stream.error` listener (`player_service.dart:267`, currently a `debugPrint`): toast "Failed to load" + name, advance to the next channel, and enforce the 3-strike cascade guard. | dead channels self-skip |
+| **M-5** | **Title bar + rows** — channel name (M22), channel number in the duration slot, no grip, no bin, favourite only (M14/M15). | list is usable |
+| **M-6** | **Favourites** — the store keyed by host → `tvg-id`/`tvg-name`/name (M11/M12), debounced writes, the filter toggle, hover-vs-filled visibility (M10). | favourites work |
+| **M-7** | **Grouping + accordion** — the group index, the four modes, auto-pick (M6), the pill, dimming unavailable modes, the accordion rules of §10.5, sticky heads. | grouping works |
+| **M-8** | **Reveal** — chevron on a collapsed playing group, the off-screen edge chevron (§10.6). | never lose the playing channel |
+| **M-9** | **Live chrome** — the inert timeline, the shimmer, the hairline handoff, dimmed+silent seek, Prev/Next rules (§10.8a–c). | live playback reads correctly |
+| **M-10** | **Progressive load** (M41) + the fetch shimmer (M42) + the failed-channel toast (M37). | 50 000 channels feel instant |
+| **M-11** | **Docs** — flip this section's status, update `follow.md` §1.6 with any new marks, README phase table. | shipped |
+
+**Two traps, both already paid for once in §5:** every action must act on the
+**real** channel list, never on the filtered view; and the group index is a view
+over the list, so a mode switch must never touch the engine (M45).
+
+### 10.13 Acceptance checklist — m3u mode
+
+1. Load an m3u URL → the panel lists **channels**, not one row named after the
+   playlist file.
+2. Title bar reads the channel's display name, never `1234` from the stream URL,
+   and never flickers to ICY metadata mid-programme.
+3. Header slots 1–2 are **group-by** and **favourite**; repeat and shuffle are
+   **absent**. Load a local folder → repeat and shuffle are back, unchanged.
+4. Header pitch: the field's ✕ is nowhere near the bin. `[group·fav] 14
+   [search] 14 [bin] 14 [undock]`.
+5. Group-by opens a pill with four modes, the active one glowing; the mark
+   itself never changes shape. A playlist carrying only `group-title` dims
+   language and country instead of hiding them.
+6. Category keeps the provider's first-appearance order; language and country
+   are alphabetical; `Uncategorized` is last.
+7. All groups collapsed by default, only the playing channel's group open. With
+   nothing playing, **nothing** is open.
+8. Exactly one group open at a time; opening another closes the first.
+9. Open "Movies" while a News channel plays, let it advance → **Movies stays
+   open** and the News group head carries the chevron.
+10. Collapse a group above the viewport → the rows under the cursor do not jump.
+11. Scroll the playing channel off screen → an edge chevron fades in; click it →
+    the group expands if needed and the row is revealed.
+12. Favourite a channel → filled bookmark, always visible. Non-favourites show
+    the bookmark **only on hover**.
+13. Reload the same playlist → favourites are still there. Reload it after the
+    provider rotates the credentials in the URL → **still there** (host key).
+14. Favourites-only **keeps** the group heads; a search **flattens** them and
+    the group mark drops to quiet ink. Clearing the search restores both.
+15. Search matches name and group, never the URL. No credential can ever appear
+    as a match.
+16. Rows have no grip and no bin; drag does nothing; the only row action is the
+    bookmark.
+17. Channel number sits in the duration slot; a channel with no `tvg-chno`
+    leaves it **empty** — never `0`, never "LIVE".
+18. While a live channel plays: the timeline is **present, full size, empty and
+    inert** — no fill, no thumb, no readouts, no hover chip, and clicking or
+    dragging it does nothing.
+19. The shimmer drifts while data arrives and **stops** when the stream stalls.
+20. Auto-hide the chrome → the hairline carries the same shimmer. Bring the
+    chrome back → the hairline goes, the timeline resumes it. **Never both.**
+21. Seek marks are dimmed **and** ← → do nothing.
+22. Stop → logo canvas, title `SALU`, and the channel list stays loaded on the
+    same channel. Play → that channel plays again.
+23. Prev/Next walk the channel list even when the accordion shows another group;
+    with one channel they dim. Previous always steps back a channel — it never
+    "restarts" a live stream.
+24. A channel that fails shows **"Failed to load"** + its name, then SALU
+    **plays the next channel**; the title bar and now-row follow it.
+24b. Point the playlist at expired credentials so every channel fails → SALU
+    stops after **3** consecutive failures instead of stampeding the list. Click
+    a working channel → the counter resets and skipping works again.
+24c. Let the **last** channel in the list fail → SALU stops; it does not wrap
+    around to index 0.
+25. Bin → channels unload, logo canvas. The **saved URL seven and the favourites
+    store are untouched**. Undo restores instantly (no re-fetch).
+26. A 50 000-channel playlist: rows appear almost immediately, the panel scrolls
+    smoothly, typing does not stutter, and switching group mode does not
+    interrupt playback.
+27. Click a channel while the tail of a big playlist is still parsing → it plays
+    immediately.
+28. No instruction text, no placeholder, no "LIVE" badge, no red dot, no
+    spinner, no confirmation dialog anywhere in m3u mode.
+
+### 10.14 Decision record — m3u
+
+| # | Decision | Value | Chosen by |
+|---|---|---|---|
+| M1 | Header slots 1–2 swap with the source | group-by · favourite | **owner** |
+| M2 | Repeat & shuffle | **dropped** in m3u mode | **owner**, 2026-09-06 |
+| M3 | Dead channel | ~~stay on it, never auto-advance~~ → **REVERSED (M3b)** | superseded |
+| M3b | Dead channel | toast **"Failed to load"** + name, then **auto-advance to the next channel and play it** — the viewer never hand-clicks past dead entries | **owner**, 2026-09-06, §10.8 |
+| M3c | Who drives the skip | **SALU, off `stream.error`** — never mpv's native advance, which would require handing mpv the whole list and cost ~1–2 s per change (M40). The listener already exists at `player_service.dart:267` | forced by M40, §10.8a-i |
+| M3d | Cascade guard | **stop after 3 consecutive failures**; reset on any success or manual pick; never wrap past the end of the list | default, §10.8a-ii |
+| M3e | Skip trigger | **failure only** — `completed` never advances in channel mode (a live channel does not end) | default, §10.8a-ii |
+| M4 | Group modes | flat · category · language · country | **owner** |
+| M5 | Group-by UI | one stable mark + pill, never a morphing glyph | default, §10.2 |
+| M6 | Group-by default | auto-pick from tag coverage, remembered per playlist | default, §10.2 |
+| M7 | Missing-tag modes | dimmed, not hidden | default, §10.2 |
+| M8 | Multi-value tags | not split this phase | default, §10.2 |
+| M9 | Favourite mark | bookmark, not star | default, §10.3 |
+| M10 | Row bookmark visibility | filled+visible when favourite; hover-only when not | default, §10.3 |
+| M11 | Channel key | `tvg-id` → `tvg-name` → name | default, §10.3 |
+| M12 | Playlist key | **host**, not full URL | default, §10.3 |
+| M13 | Favourites + grouping | favourites keep groups; only search flattens | default, §10.3 |
+| M14 | Rows | no drag, no reorder, no per-row delete | **owner** |
+| M15 | Row action | favourite only | **owner** |
+| M16 | Channel number | in the duration slot; empty when absent | default, §10.4 |
+| M17 | Accordion | one group open; all collapsed by default; playing group open | **owner** |
+| M18 | Nothing playing | nothing open | default, §10.5 |
+| M19 | Auto-advance vs the open group | the view is not stolen | default, §10.5 |
+| M20 | Playing channel in a collapsed group | chevron on the group head | default, §10.6 |
+| M21 | Playing row off-screen | edge chevron, click = reveal | default, §10.6 |
+| M22 | Title bar | channel name; playlist name beats stream metadata | **owner** + default |
+| M23 | Search scope | name + group, never the URL | default, §10.9 |
+| M24 | Bin | unloads channels only; saved seven and favourites survive | default, §10.9 |
+| M25 | Undo | in-memory snapshot, never a re-fetch | default, §10.9 |
+| M26 | Bridge | delta-shaped, not snapshot-per-change | default, §10.9 |
+| M27 | Parser | SALU parses the m3u; mpv gets resolved URLs | forced by §10.0 |
+| M28 | Data model | **one `List<QueueItem>`** — the parallel metadata list is **rejected** (desync across 9 call sites; a source switch would rebuild two collections) | **owner** (challenge) + §10.0 |
+| M29 | Timeline when live | stays, exact size, **inert and empty** — never hidden (rule 5), never greyed (that is icon-disabled language) | **owner** (raised) + default, §10.8a |
+| M30 | Live shimmer | slow quiet left→right drift on the empty track; stops when the stream stalls = free buffering signal | default, §10.8a |
+| M31 | Bottom hairline when live | **carries the same shimmer** while the chrome is auto-hidden — the two surfaces hand off and never both show; fixes a hairline that currently renders empty on live (`frac = 0`) | **owner**, 2026-09-06, §10.8c |
+| M31b | Hairline shimmer contrast | brighter than the bar's (~`.55` vs `.11`) — 2 px needs it | default, §10.8c |
+| M31c | Hairline stays display-only | the existing pointer-absorbing `Listener` stays; never a seek surface | default, §10.8c |
+| M32 | Seek marks + ← → keys | dimmed **and** silent | **owner**, 2026-09-06 |
+| M33 | Stop in m3u | canvas → initial state; **channel list stays parked on the same channel** | **owner**, 2026-09-06 |
+| M34 | Previous / Next | walk the channel list; dim at a single channel | **owner**, 2026-09-06 |
+| M35 | Prev/Next order | **list order, never the visible order** — browsing must not change what Next does | **owner agreed**, 2026-09-06, §10.8b |
+| M36 | Previous's 3 s restart rule | does not apply live — Previous always steps back a channel | **owner agreed**, 2026-09-06, §10.8b |
+| M37 | Failed-channel toast | the existing card shape, wording **"Failed to load"** + the channel name (a toast may carry words; follow.md §1.6 allows it — controls may not) | **owner**, 2026-09-06 |
+| M38 | Volume / mute OSD | unchanged from local | **owner**, 2026-09-06 |
+| M39 | **Channel cap** | **none** — a cap turns "slow" into "refused"; 50 000 parses in 149 ms | **owner** ("stay responsive at 50k"), §10.10 |
+| M40 | **Engine holds ONE media in channel mode** | never hand mpv the list — `playlist-pos` costs ~1 s at 40k, ~2 s at 80k (mpv#6162). Local mode keeps the full-queue path | forced by §10.10a |
+| M41 | Progressive load | first ~200 rows at 0.9 ms, tail at 149 ms; a channel is playable before the parse ends | default, §10.10b |
+| M42 | Loading state | only for the network fetch; reuse the §10.8a shimmer, no spinner, no words | default, §10.10b |
+| M43 | Search keys | precomputed at parse time; narrowing while typing. Naive per-keystroke lowercasing is **banned** (40.8 ms = dropped frame) | default, §10.10c |
+| M44 | String interning | intern group / language / country — 28 unique values instead of 150 000 strings | default, §10.10c |
+| M45 | Group-mode switch | re-index in SALU only, never an engine call — cannot interrupt playback | default, §10.10c |
+| M46 | Download ceiling | abort past ~64 MB and fail with the M37 toast — the limit belongs on bytes, not channels | default, §10.10d |
+
+---
 
 Rejected on the way (recorded so they are not re-proposed silently): Queue Rail
 and its hinged/mirrored variants, Bead Queue, Panel Hinge (rect + divider —

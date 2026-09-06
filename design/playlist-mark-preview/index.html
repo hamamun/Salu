@@ -65,6 +65,42 @@
             font-weight:500;letter-spacing:.4px;color:var(--ink-lit);text-shadow:0 0 2px rgba(0,0,0,.6);
             font-variant-numeric:tabular-nums}
   .bar .lbl .c{margin:0 auto}
+
+  /* ── live (m3u): the bar keeps its exact size and loses everything that
+     encodes a position — no fill, no thumb, no readouts. An empty track
+     already says "there is no position here". Never hidden (rule 5), never
+     greyed (that is the disabled-ICON language). ─────────────────────── */
+  .bar.live .f, .bar.live .th, .bar.live .lbl{display:none}
+  /* The shimmer: a slow quiet drift that reads as flowing, not broken. It is
+     driven by playback, so it STOPS when the stream stalls — buffering gets a
+     wordless indicator for free. */
+  .bar.live::before{content:'';position:absolute;inset:0;border-radius:6px;
+    background:linear-gradient(100deg,transparent 0%,transparent 34%,
+      rgba(255,255,255,.11) 50%,transparent 66%,transparent 100%);
+    background-size:260% 100%;animation:liveDrift 3.4s linear infinite}
+  .bar.live.stalled::before{animation-play-state:paused;opacity:.45}
+  @keyframes liveDrift{from{background-position:120% 0}to{background-position:-120% 0}}
+
+  /* ── the auto-hide hairline (2 px, window bottom) ─────────────────────
+     Local: a plain fill = progress. Live: the SAME shimmer as the timeline,
+     so the live/buffering signal survives the chrome hiding. The two never
+     show at once — the hairline exists only while the chrome is hidden. */
+  .thread{position:absolute;left:0;right:0;bottom:0;height:2px;z-index:7;overflow:hidden;
+          opacity:0;pointer-events:none;transition:opacity .18s}
+  .thread.show{opacity:1}
+  .thread .tf{position:absolute;left:0;top:0;bottom:0;background:var(--fill)}
+  .thread.live .tf{display:none}
+  /* Brighter than the 23 px bar's shimmer: 2 px of height needs the contrast. */
+  .thread.live::before{content:'';position:absolute;inset:0;
+    background:linear-gradient(100deg,transparent 0%,transparent 34%,
+      rgba(255,255,255,.55) 50%,transparent 66%,transparent 100%);
+    background-size:260% 100%;animation:liveDrift 3.4s linear infinite}
+  .thread.live.stalled::before{animation-play-state:paused;opacity:.40}
+
+  /* Chrome auto-hide — the block fades and lifts as one piece (rule 5: the
+     rows never move, the whole block goes). */
+  .chrome{transition:opacity .18s ease-out,transform .18s ease-out}
+  .chrome.hidden{opacity:0;transform:translateY(-10px);pointer-events:none}
   .row2{height:36px;margin-top:8px;position:relative}
 
   /* zones of row 2 */
@@ -111,7 +147,9 @@
   .panel.show{transform:translateX(0)}
   .panel.below{top:148px;bottom:0;border-radius:14px 0 0 0}
   .panel.full{top:0;bottom:0}
-  .phead{display:flex;align-items:center;gap:2px;padding:8px 10px;border-bottom:1px solid var(--divider)}
+  /* gap:0 — the header uses SALU's own pitch grammar instead (6 px inside a
+     group, 14 px between), so the field's ✕ can never sit 4 px from the bin. */
+  .phead{display:flex;align-items:center;gap:0;padding:8px 10px;border-bottom:1px solid var(--divider)}
   .phead .salu-btn{width:30px;height:30px}
   .psearch{position:relative;flex:1;height:28px;min-width:34px;display:flex;align-items:center;
            background:rgba(255,255,255,.045);border:1px solid #2E2E33;border-radius:14px;
@@ -168,6 +206,54 @@
   .prow:hover .act{opacity:1}
   .prow .act .salu-btn{width:28px;height:28px}
   .pempty{flex:1;display:grid;place-items:center;color:rgba(166,166,166,.30)}
+
+  /* ── m3u mode: group-by pill · group heads · row favourite ─ */
+  /* The pill is the Open-pill recipe again: same glass, same 130 ms
+     fade + 0.96→1.0, anchored under the mark that opened it. */
+  .gpill{position:absolute;z-index:9;height:38px;border-radius:19px;padding:0 7px;display:flex;
+         align-items:center;gap:6px;background:var(--glass);border:1px solid var(--outline);
+         backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+         transform-origin:0 0;opacity:0;transform:scale(.96);pointer-events:none;
+         transition:opacity .13s cubic-bezier(.215,.61,.355,1),transform .13s cubic-bezier(.215,.61,.355,1)}
+  .gpill.show{opacity:1;transform:scale(1);pointer-events:auto}
+  .gpill .salu-btn{width:30px;height:30px}
+
+  /* Group head — sticky so a 400-channel open group never loses its name. */
+  .ghead{display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:9px;
+         cursor:pointer;color:var(--ink-idle);position:sticky;top:0;z-index:2;
+         background:rgba(26,26,28,.94);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+         transition:background .12s,color .12s}
+  .ghead:hover{color:var(--ink-lit);background:rgba(38,38,42,.94)}
+  .ghead .chev{display:grid;place-items:center;color:currentColor;
+               transition:transform .16s cubic-bezier(.215,.61,.355,1)}
+  .ghead.open .chev{transform:rotate(90deg)}
+  .ghead .gn{font-size:12px;letter-spacing:.3px;font-weight:600;white-space:nowrap;
+             overflow:hidden;text-overflow:ellipsis}
+  .ghead.open .gn{color:var(--ink-lit)}
+  .ghead .gc{margin-left:auto;font-size:10px;color:#7C7C80;font-variant-numeric:tabular-nums}
+  /* The playing channel is inside this collapsed group — the "where am I"
+     signal survives the accordion. */
+  .ghead .nowmark{display:grid;place-items:center;color:var(--ink-lit)}
+  .ghead.hasnow .gn{color:var(--ink-lit)}
+
+  /* Row favourite: full ink and always visible when it IS a favourite,
+     invisible until hover when it is not. 3000 outline bookmarks would
+     destroy the very signal favourites exist to give. */
+  .prow .fav{width:28px;height:28px;opacity:0;transition:opacity .12s,color .12s}
+  .prow:hover .fav{opacity:1}
+  .prow .fav.on{opacity:1;color:var(--ink-lit)}
+
+  /* Off-screen playing channel: a quiet chevron at the edge it is hiding
+     behind. Appears only when needed; click = reveal. */
+  .revealtip{position:absolute;left:50%;transform:translateX(-50%);z-index:4;width:30px;height:22px;
+             display:grid;place-items:center;border-radius:11px;cursor:pointer;
+             background:rgba(26,26,28,.92);border:1px solid var(--outline);
+             color:rgba(237,237,237,.62);opacity:0;pointer-events:none;
+             transition:opacity .18s,color .12s}
+  .revealtip:hover{color:var(--ink-lit)}
+  .revealtip.show{opacity:1;pointer-events:auto}
+  .revealtip.up{top:53px}
+  .revealtip.dn{bottom:10px}
 
   /* guides */
   .guides{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:0;transition:opacity .15s}
@@ -241,6 +327,12 @@
         <button data-v="m3u" aria-pressed="false">m3u url · 24 channels</button>
       </div>
     </div>
+    <div class="pick"><span>Scale</span>
+      <div class="segs" id="seg-scale">
+        <button data-v="24" aria-pressed="true">24 channels</button>
+        <button data-v="50000" aria-pressed="false">50 000 channels</button>
+      </div>
+    </div>
     <div class="pick"><span>m3u tags</span>
       <div class="segs" id="seg-tags">
         <button data-v="full" aria-pressed="true">group-title + language + country</button>
@@ -264,6 +356,19 @@
       <div class="segs" id="seg-dock">
         <button data-v="over" aria-pressed="true">over the video</button>
         <button data-v="dock" aria-pressed="false">docks the video</button>
+      </div>
+    </div>
+    <div class="pick"><span>Chrome</span>
+      <div class="segs" id="seg-chrome">
+        <button data-v="show" aria-pressed="true">visible</button>
+        <button data-v="hide" aria-pressed="false">auto-hidden → hairline</button>
+      </div>
+    </div>
+    <div class="pick"><span>Live stream</span>
+      <div class="segs" id="seg-live">
+        <button data-v="ok" aria-pressed="true">playing</button>
+        <button data-v="stall" aria-pressed="false">stalled (shimmer stops)</button>
+        <button data-v="fail" aria-pressed="false">failed → toast</button>
       </div>
     </div>
     <div class="pick"><span>Guides</span>
@@ -310,6 +415,8 @@
       <div class="panel below" id="panel">
         <div class="phead" id="phead"></div>
         <div class="prows" id="prows"></div>
+        <div class="revealtip up" id="revealUp"></div>
+        <div class="revealtip dn" id="revealDn"></div>
         <div class="gpill" id="gpill"></div>
       </div>
       <div class="idle" id="idle"><div class="wm">SALU</div></div>
@@ -333,11 +440,14 @@
 
       <div class="pill" id="pill"></div>
 
+      <div class="thread" id="thread"><div class="tf"></div></div>
+
       <div class="toast" id="toast"></div>
       <div class="guides" id="guides"></div>
     </div>
   </div>
   <p class="verdict" id="verdict"></p>
+  <p class="sub" id="perf" style="margin:8px 0 0;font-variant-numeric:tabular-nums;color:#8FC4F5"></p>
 
   <h2>Mark candidates — real size (20 px) and zoomed (56 px)</h2>
   <p class="sub" style="margin-bottom:10px">
@@ -490,6 +600,30 @@ const M3U = (() => {
   })));
   return out;
 })();
+/* The 50 000-channel stress list, generated with the same shape a real IPTV
+   provider ships. Built once, lazily, so the 24-channel demo stays instant. */
+let BIG = null;
+function bigList() {
+  if (BIG) return BIG;
+  const groups = ['News', 'Sports', 'Movies', 'Kids', 'Entertainment',
+                  'Documentary', 'Music', 'Local', 'Religious', 'Shopping'];
+  const langs = ['English', 'Spanish', 'French', 'German', 'Arabic', 'Hindi', 'Portuguese', 'Japanese'];
+  const ctry = ['United Kingdom', 'United States', 'France', 'Germany', 'Qatar',
+                'India', 'Brazil', 'Japan', 'Spain', 'Italy'];
+  BIG = new Array(50000);
+  for (let i = 0; i < 50000; i++) {
+    const g = groups[i % groups.length];
+    BIG[i] = { name: `${g} Channel ${i} HD`, group: g,
+               lang: langs[i % langs.length], country: ctry[i % ctry.length],
+               chno: 1000 + i };
+  }
+  // Precomputed lowercase search keys — the spec's rule, so the stress test
+  // measures the design we actually intend to ship (§10.10c).
+  for (const ch of BIG) ch.key = (ch.name + ' ' + ch.group).toLowerCase();
+  return BIG;
+}
+const CH = () => S0.scale === 50000 ? bigList() : M3U;
+
 const groupKey = (ch, mode) => mode === 'category' ? ch.group
   : mode === 'language' ? ch.lang : mode === 'country' ? ch.country : '';
 const GROUP_MODES = [['flat', 'gFlat', 'Flat'], ['category', 'gCat', 'Category'],
@@ -611,8 +745,9 @@ const S0 = { place: 'A', mark: 'rail', queue: 1, panelTop: 'below', panelOpen: f
              ticks: 3, bead: 'top', mirror: true, spine: 'left', dock: false,
              repeat: 'off', shuffle: false, undocked: false, search: '',
              win: { x: 0, y: 0 }, placed: false, firstOpen: true,
-             source: 'local', group: 'category', groupPill: false, openGroup: null,
+             source: 'local', group: 'category', groupPill: false, openGroup: null, userGroup: false,
              favFilter: false, favs: new Set(['BBC News HD', 'Sky Sports F1', 'TCM HD']),
+             stalled: false, chromeHidden: false, scale: 24, perf: null, fails: 0,
              m3uLoaded: true, mnow: 6, revealKey: null, thinTags: false };
 const ITEMS = [
   ['Episode 01 — Cold Open.mkv','23:41'], ['Episode 02 — Salt and Iron.mkv','24:02'],
@@ -628,7 +763,7 @@ const ITEMS = [
    `count` = queue length. Same shape for the row, the panel and the gallery. */
 S0.items = ITEMS.slice();            // the working queue (remove / clear mutate it)
 const stNow = () => S0.source === 'm3u'
-  ? { now: (S0.m3uLoaded && S0.mnow >= 0) ? S0.mnow : -1, count: M3U.length }
+  ? { now: (S0.m3uLoaded && S0.mnow >= 0) ? S0.mnow : -1, count: CH().length }
   : { now: S0.queue === 0 ? -1 : S0.queue - 1, count: S0.items.length };
 const stEmpty = () => ({ now: -1, count: 0 });
 
@@ -660,15 +795,23 @@ function playlistBtn() {
 }
 
 function cluster() {
+  const st = stNow();
+  const live = S0.source === 'm3u' && S0.m3uLoaded && st.now >= 0;
+  // Live: no position to seek to, so both seek marks dim (and their ← →
+  // keys go silent). A single channel dims Previous / Next, exactly as a
+  // single local item does.
+  const seekCls = live ? 'off' : '';
+  const oneItem = st.count <= 1;
+  const stepCls = oneItem ? 'off' : '';
   let s = `<div class="cluster">`;
   s += btn(F.play(), { tip: 'Play' });
   s += `<span style="width:6px"></span>` + btn(F.stop(), { size: 16, tip: 'Stop' });
   s += `<span style="width:14px"></span>`;
-  s += btn(F.chev2(true, true), { tip: 'Previous' });
-  s += `<span style="width:6px"></span>` + btn(F.chev2(true, false), { tip: 'Next' });
+  s += btn(F.chev2(true, true), { tip: 'Previous', cls: stepCls });
+  s += `<span style="width:6px"></span>` + btn(F.chev2(true, false), { tip: 'Next', cls: stepCls });
   s += `<span style="width:14px"></span>`;
-  s += btn(F.chev2(false, true), { tip: 'Seek backward' });
-  s += `<span style="width:6px"></span>` + btn(F.chev2(false, false), { tip: 'Seek forward' });
+  s += btn(F.chev2(false, true), { tip: 'Seek backward', cls: seekCls });
+  s += `<span style="width:6px"></span>` + btn(F.chev2(false, false), { tip: 'Seek forward', cls: seekCls });
   s += `<span style="width:26px"></span>`;
   s += btn(F.speaker(2, false), { tip: 'Mute' });
   s += `<span style="width:6px"></span>`;
@@ -741,7 +884,7 @@ function headerMarkup() {
     const gm = GROUP_MODES.find(m => m[0] === S0.group);
     // A filter suspends grouping — and the mark says so with the same quiet
     // ink shuffle borrows under repeat-one. One grammar for "not in effect".
-    const suspended = S0.group !== 'flat' && (S0.search.trim() !== '' || S0.favFilter);
+    const suspended = S0.group !== 'flat' && S0.search.trim() !== '';
     one = `<div class="salu-btn ${S0.groupPill ? 'on' : (suspended ? 'mute' : '')}" id="hGroup"
             title="Group by · ${gm[2]}">${svg(F[gm[1]](), 18)}</div>`;
     two = `<div class="salu-btn ${S0.favFilter ? 'on' : ''}" id="hFav" title="Favourites only">
@@ -754,8 +897,13 @@ function headerMarkup() {
     two = `<div class="salu-btn ${S0.shuffle ? 'on' : ''}" id="hShuffle" title="Shuffle">
             ${svg(F.shuffle(), 18)}</div>`;
   }
-  return one + two + searchMarkup()
+  // Pitch grammar, not a flat 2 px gap: 6 px inside the mode pair, 14 px
+  // before and after the field, so the field's ✕ can never be mistaken for
+  // the bin (clear the WHOLE playlist) sitting next to it.
+  const gap = n => `<span style="width:${n}px"></span>`;
+  return one + gap(6) + two + gap(14) + searchMarkup() + gap(14)
     + `<div class="salu-btn" id="hWipe" title="Clear playlist">${svg(F.trash(), 18)}</div>`
+    + gap(14)
     + `<div class="salu-btn" id="hDock" title="${S0.undocked ? 'Dock back' : 'Undock'}">
         ${svg(S0.undocked ? F.dock() : F.undock(), 18)}</div>`;
 }
@@ -772,6 +920,24 @@ function m3uRow(ch, i, now) {
     </div>`;
 }
 
+/* The browser stand-in for Flutter's ListView.builder: build only the rows in
+   view (plus a small overscan) and reserve the rest with two spacers. This is
+   what makes 50 000 channels cost the same as 30. */
+const ROW_H = 38;
+function windowed(list, now) {
+  const el = document.getElementById('prows');
+  const h = el.clientHeight || 380;
+  const top = el.scrollTop || 0;
+  const over = 8;
+  const first = Math.max(0, Math.floor(top / ROW_H) - over);
+  const last = Math.min(list.length, Math.ceil((top + h) / ROW_H) + over);
+  let s = '';
+  if (first > 0) s += `<div style="height:${first * ROW_H}px"></div>`;
+  for (let k = first; k < last; k++) s += m3uRow(list[k][0], list[k][1], now);
+  if (last < list.length) s += `<div style="height:${(list.length - last) * ROW_H}px"></div>`;
+  return s;
+}
+
 /* Flat · or an accordion where exactly one group is open, and the group that
    holds the playing channel is the one that opens. */
 function renderM3URows() {
@@ -781,8 +947,10 @@ function renderM3URows() {
     return 0;
   }
   const term = S0.search.trim().toLowerCase();
-  const filtering = term !== '' || S0.favFilter;
-  let list = M3U.map((ch, i) => [ch, i]);
+  // Search answers "where is X" → it flattens. Favourites-only is a BROWSE
+  // mode, so it keeps its groups. Only the search suspends grouping.
+  const filtering = term !== '';
+  let list = CH().map((ch, i) => [ch, i]);
   if (S0.favFilter) list = list.filter(([ch]) => S0.favs.has(ch.name));
   if (term) list = list.filter(([ch]) =>
     ch.name.toLowerCase().includes(term) || ch.group.toLowerCase().includes(term));
@@ -794,23 +962,51 @@ function renderM3URows() {
   // Filtering answers "where is X", grouping answers "browse" — so a filter
   // shows matches flat and grouping is suspended (its mark goes quiet).
   if (S0.group === 'flat' || filtering) {
-    rows.innerHTML = list.map(([ch, i]) => m3uRow(ch, i, st.now)).join('');
+    // Windowed like Flutter's ListView.builder: only the visible slice is
+    // built, with spacer divs standing in for the rest, so 50 000 rows cost
+    // the same as 30 (§10.10c rule 1).
+    rows.innerHTML = windowed(list, st.now);
     return list.length;
   }
 
-  const keys = [...new Set(M3U.map(ch => groupKey(ch, S0.group)))].sort();
-  const nowCh = st.now >= 0 ? M3U[st.now] : null;
+  // Category keeps the playlist's own first-appearance order (providers
+  // order deliberately); language / country are alphabetical. Uncategorized
+  // always sinks to the bottom.
+  // Grouping runs over the FILTERED list, so favourites-only shows the same
+  // groups holding only favourite channels (empty groups simply vanish).
+  const seen = [...new Set(list.map(([ch]) => groupKey(ch, S0.group)))];
+  const keys = S0.group === 'category' ? seen : seen.slice().sort();
+  const UNC = 'Uncategorized';
+  if (keys.includes(UNC)) { keys.splice(keys.indexOf(UNC), 1); keys.push(UNC); }
+
+  const nowCh = st.now >= 0 ? CH()[st.now] : null;
+  const nowKey = nowCh ? groupKey(nowCh, S0.group) : null;
+  // Owner's rule: everything collapsed, only the PLAYING group open. With
+  // nothing playing, nothing is open — an all-collapsed list is the map of
+  // the playlist, which is the whole point of grouping.
   if (S0.openGroup === null || (S0.openGroup !== '' && !keys.includes(S0.openGroup))) {
-    S0.openGroup = nowCh ? groupKey(nowCh, S0.group) : keys[0];
+    // Follow the playing group ONLY when the user has not deliberately
+    // opened another one. Reading "Movies" while News plays must survive an
+    // auto-advance inside News (follow.md: never fight the user).
+    S0.openGroup = S0.userGroup ? (S0.openGroup ?? '') : (nowKey ?? '');
   }
-  let html = '';
+  let html = '', openMembers = null;
   keys.forEach(k => {
-    const members = M3U.map((ch, i) => [ch, i]).filter(([ch]) => groupKey(ch, S0.group) === k);
+    const members = list.filter(([ch]) => groupKey(ch, S0.group) === k);
     const open = S0.openGroup === k;
-    html += `<div class="ghead ${open ? 'open' : ''}" data-g="${k}">
+    const hasNow = nowKey === k;
+    if (open) openMembers = members;
+    // The playing channel is inside a COLLAPSED group → the chevron rides
+    // the head, so "where am I" survives the accordion.
+    const nowBadge = (hasNow && !open)
+      ? `<span class="nowmark">${svg(F.play(), 11, 12)}</span>` : '';
+    html += `<div class="ghead ${open ? 'open' : ''} ${hasNow ? 'hasnow' : ''}" data-g="${k}">
         <span class="chev">${svg(F.play(), 11, 12)}</span>
-        <span class="gn">${k}</span><span class="gc">${members.length}</span></div>`;
-    if (open) html += members.map(([ch, i]) => m3uRow(ch, i, st.now)).join('');
+        <span class="gn">${k}</span>${nowBadge}<span class="gc">${members.length}</span></div>`;
+    // An open group can itself hold thousands of channels, so it is windowed
+    // exactly like the flat list.
+    if (open) html += members.length > 60 ? windowed(members, st.now)
+                                          : members.map(([ch, i]) => m3uRow(ch, i, st.now)).join('');
   });
   rows.innerHTML = html;
   return list.length;
@@ -850,12 +1046,41 @@ function renderRows() {
 function revealNow(instant) {
   const list = document.getElementById('prows');
   const row = list && list.querySelector('.prow.now');
-  if (!row) return;                       // filtered out → nothing to reveal, nothing to fight over
+  if (!row) { syncRevealTips(); return; } // filtered out / collapsed → nothing to reveal
   const pad = 6, lr = list.getBoundingClientRect(), rr = row.getBoundingClientRect();
   const above = rr.top < lr.top + pad, below = rr.bottom > lr.bottom - pad;
-  if (!above && !below) return;           // already comfortably in view → do not move
+  if (!above && !below) { syncRevealTips(); return; }   // already in view → do not move
   const delta = above ? (rr.top - lr.top - pad) : (rr.bottom - lr.bottom + pad);
   list.scrollTo({ top: list.scrollTop + delta, behavior: instant ? 'auto' : 'smooth' });
+  setTimeout(syncRevealTips, instant ? 0 : 320);
+}
+
+/* The playing channel is off-screen (scrolled away, or sitting inside a
+   collapsed group): fade a quiet chevron in at the edge it is hiding behind.
+   Click = reveal. No words, no permanent control — it exists only when the
+   signal is actually lost, which at 12 000 channels is often. */
+function syncRevealTips() {
+  const list = document.getElementById('prows');
+  const up = document.getElementById('revealUp');
+  const dn = document.getElementById('revealDn');
+  if (!list || !up || !dn) return;
+  let showUp = false, showDn = false;
+  const target = list.querySelector('.prow.now') || list.querySelector('.ghead.hasnow');
+  if (target && S0.panelOpen) {
+    const lr = list.getBoundingClientRect(), rr = target.getBoundingClientRect();
+    showUp = rr.top < lr.top + 2;
+    showDn = rr.bottom > lr.bottom - 2;
+  }
+  up.innerHTML = showUp ? `<span style="transform:rotate(-90deg);display:grid">${svg(F.play(), 11, 12)}</span>` : '';
+  dn.innerHTML = showDn ? `<span style="transform:rotate(90deg);display:grid">${svg(F.play(), 11, 12)}</span>` : '';
+  up.classList.toggle('show', showUp);
+  dn.classList.toggle('show', showDn);
+  up.onclick = dn.onclick = () => {
+    // A collapsed group is re-opened first, then revealed.
+    const head = list.querySelector('.ghead.hasnow:not(.open)');
+    if (head) { S0.openGroup = head.dataset.g; render(); }
+    revealNow(false);
+  };
 }
 
 let toastTimer = null;
@@ -891,10 +1116,49 @@ function renderGroupPill() {
     return `<div class="salu-btn ${S0.group === k ? 'on' : ''} ${dead ? 'off' : ''}"
               data-gm="${k}" title="Group by ${label}">${svg(F[mk](), 19)}</div>`;
   }).join('');
+  // Anchored under the mark that opened it — the Open pill's exact geometry.
+  const anchor = document.getElementById('hGroup');
+  const panel = document.getElementById('panel');
+  if (show && anchor) {
+    const ar = anchor.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+    el.style.left = Math.round(ar.left - pr.left) + 'px';
+    el.style.top = Math.round(ar.top - pr.top + ar.height + 6) + 'px';
+  }
   el.querySelectorAll('[data-gm]').forEach(b => b.onclick = () => {
     if (b.classList.contains('off')) return;
-    S0.group = b.dataset.gm; S0.groupPill = false; S0.openGroup = null; render();
+    S0.group = b.dataset.gm; S0.groupPill = false;
+    S0.openGroup = null; S0.userGroup = false;       // a mode change re-follows the playing group
+    render();
   });
+}
+
+/* The invisible-until-hover caption row (title bar, right side). */
+function renderCaps() {
+  const caps = document.getElementById('caps');
+  if (caps.dataset.done) return;
+  caps.innerHTML =
+      `<div class="capbtn" title="Minimize">${svg(`<path d="M18 50H82"/>`, 13, 7)}</div>`
+    + `<div class="capbtn" title="Maximize">${svg(`<rect x="18" y="18" width="64" height="64" rx="8"/>`, 13, 7)}</div>`
+    + `<div class="capbtn close" title="Close">${svg(F.cross(), 13, 7)}</div>`;
+  caps.dataset.done = '1';
+}
+
+/* Measurement overlay — the numbers this study is drawn to. */
+function renderGuides() {
+  const g = document.getElementById('guides');
+  g.classList.toggle('show', S0.guides);
+  if (!S0.guides) { g.innerHTML = ''; return; }
+  const box = (css, label, lcss) =>
+    `<div class="g" style="${css}"></div><div class="gl" style="${lcss}">${label}</div>`;
+  let s = '';
+  s += box('left:0;right:0;top:0;height:40px', 'title bar · 40', 'left:8px;top:4px');
+  s += box('left:0;right:0;top:40px;height:108px', 'controller · 108', 'left:8px;top:44px');
+  s += box('left:0;right:0;top:0;height:148px;border-width:2px', 'chrome block · 148', 'right:8px;top:126px');
+  if (S0.panelOpen && !S0.undocked) {
+    const top = S0.panelTop === 'below' ? 148 : 0;
+    s += box(`right:0;top:${top}px;bottom:0;width:322px`, 'panel · 322 wide', `right:8px;top:${top + 6}px`);
+  }
+  g.innerHTML = s;
 }
 
 function renderPanel() {
@@ -929,7 +1193,7 @@ function renderPanel() {
   // The title bar names what is playing — a channel in m3u mode, a file locally.
   const st = stNow();
   document.getElementById('tbTitle').textContent = st.now < 0 ? 'SALU'
-    : S0.source === 'm3u' ? M3U[st.now].name
+    : S0.source === 'm3u' ? CH()[st.now].name
     : (S0.items[st.now] ? S0.items[st.now][0].replace(/\.\w+$/, '') : 'SALU');
 
   wirePanel();
@@ -939,7 +1203,25 @@ function renderPanel() {
   const key = S0.source === 'm3u' ? `m${st.now}|${S0.group}` : `l${S0.queue}`;
   if (S0.firstOpen) { revealNow(true); S0.revealKey = key; }
   else if (key !== S0.revealKey) { revealNow(false); S0.revealKey = key; }
+  else syncRevealTips();
   S0.firstOpen = false;
+
+  // The edge chevrons follow a manual scroll too.
+  const listEl = document.getElementById('prows');
+  if (listEl && !listEl.dataset.wired) {
+    listEl.addEventListener('scroll', () => {
+      syncRevealTips();
+      // Windowed lists must rebuild their slice as the viewport moves.
+      if (S0.source === 'm3u' && S0.scale === 50000) {
+        const t0 = performance.now();
+        setCount(renderRows());
+        wireRows();
+        S0.perf = { build: S0.perf ? S0.perf.build : 0, render: performance.now() - t0 };
+        showPerf();
+      }
+    }, { passive: true });
+    listEl.dataset.wired = '1';
+  }
 }
 
 /* The count lives INSIDE the search field (owner's rule): `total`, or
@@ -947,7 +1229,7 @@ function renderPanel() {
 function setCount(shown) {
   const el = document.getElementById('hCount');
   if (!el) return;
-  const total = S0.source === 'm3u' ? M3U.length : S0.items.length;
+  const total = S0.source === 'm3u' ? CH().length : S0.items.length;
   el.textContent = (shown === undefined || shown === total) ? String(total) : shown + ' / ' + total;
 }
 
@@ -969,6 +1251,12 @@ function wirePanel() {
       document.getElementById('hSearchWrap').classList.toggle('has', S0.search.length > 0);
       setCount(renderRows());
       wireRows();
+      // The header is NOT re-rendered here (that would destroy the field and
+      // steal focus mid-word), so the group mark's "suspended" ink is toggled
+      // in place: a search flattens the list, and the mark must say so.
+      const gm = document.getElementById('hGroup');
+      if (gm) gm.classList.toggle('mute',
+        !S0.groupPill && S0.group !== 'flat' && S0.search.trim() !== '');
       revealNow(false);
     };
     inp.onkeydown = e => {
@@ -1035,19 +1323,34 @@ function wireRows() {
     r.onclick = e => {
       const fav = e.target.closest('[data-fav]');
       if (fav) {
-        const ch = M3U[+fav.dataset.fav];
+        const ch = CH()[+fav.dataset.fav];
         S0.favs.has(ch.name) ? S0.favs.delete(ch.name) : S0.favs.add(ch.name);
         render();
         return;
       }
       S0.mnow = +r.dataset.m; S0.openGroup = null;     // a new channel re-opens its group
+      S0.userGroup = false;                            // a click is not "browsing elsewhere"
+      S0.fails = 0;                                    // M3d: a deliberate pick ends any cascade
       syncQueueSegs(); render();
     };
   });
   document.querySelectorAll('.ghead').forEach(g => {
     g.onclick = () => {                                // accordion: one open group
-      S0.openGroup = S0.openGroup === g.dataset.g ? '' : g.dataset.g;
+      const list = document.getElementById('prows');
+      const before = g.getBoundingClientRect().top;
+      const wasOpen = S0.openGroup === g.dataset.g;
+      S0.openGroup = wasOpen ? '' : g.dataset.g;
+      // Opening a group elsewhere = deliberate browsing. From now on an
+      // auto-advance inside ANOTHER group must not yank the view back.
+      const st = stNow();
+      const nowKey = st.now >= 0 ? groupKey(CH()[st.now], S0.group) : null;
+      S0.userGroup = !wasOpen && S0.openGroup !== nowKey;
       render();
+      // Collapsing a group above the viewport would yank every row under
+      // the cursor upward — compensate so nothing moves beneath the mouse.
+      const after = document.querySelector(`.ghead[data-g="${CSS.escape(g.dataset.g)}"]`);
+      if (after) list.scrollTop += after.getBoundingClientRect().top - before;
+      syncRevealTips();
     };
   });
 
@@ -1198,6 +1501,30 @@ function renderRailLab() {
 function renderRec(){ document.getElementById('recList').innerHTML = REC.map(x=>`<li>${x}</li>`).join(''); }
 
 /* ══════════════════════════════════════════════════════════════ */
+/* Live playback: the timeline goes inert, the seek marks dim, the bottom
+   hairline hides. Everything else in the row is untouched. */
+function renderChrome() {
+  const st = stNow();
+  const live = S0.source === 'm3u' && S0.m3uLoaded && st.now >= 0;
+  const bar = document.querySelector('.bar');
+  bar.classList.toggle('live', live);
+  bar.classList.toggle('stalled', live && S0.stalled);
+  bar.title = live ? (S0.stalled ? 'Buffering' : 'Live') : '';
+
+  // The chrome block hides as one piece; the hairline takes over below it.
+  document.querySelector('.chrome').classList.toggle('hidden', S0.chromeHidden);
+
+  // The hairline: same two states as the timeline, so the live / buffering
+  // signal survives the chrome hiding. Nothing loaded = nothing to draw.
+  const th = document.getElementById('thread');
+  const loaded = !nothingLoaded() && st.now >= 0;
+  th.className = 'thread'
+    + (S0.chromeHidden && loaded ? ' show' : '')
+    + (live ? ' live' : '')
+    + (live && S0.stalled ? ' stalled' : '');
+  th.querySelector('.tf').style.width = live ? '0' : '38%';   // 38% = the stage's demo position
+}
+
 function renderVideo() {
   // Docking rescales the picture; the chrome block can never follow (rule 5),
   // so the video ends up narrower than the timeline sitting above it.
@@ -1206,7 +1533,8 @@ function renderVideo() {
 }
 
 function render() {
-  renderRow(); renderPanel(); renderCaps(); renderGuides(); renderGallery(); renderRailLab(); renderVideo();
+  renderRow(); renderPanel(); renderCaps(); renderGuides(); renderGallery(); renderRailLab();
+  renderVideo(); renderChrome();
   document.getElementById('verdict').innerHTML = VERDICT[S0.place]
     + (S0.dock
       ? `<br><b>Docking the video:</b> the picture rescales on every open and every close — a visible jump
@@ -1237,6 +1565,57 @@ document.getElementById('seg-queue').addEventListener('click', e => {
 });
 seg('seg-panel', 'panelTop', v => S0.panelTop = v);
 seg('seg-guides', 'guides', v => S0.guides = v === 'on');
+seg('seg-chrome', 'chromeHidden', v => S0.chromeHidden = v === 'hide');
+document.getElementById('seg-scale').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  const t0 = performance.now();
+  S0.scale = +b.dataset.v;
+  bigList();                                  // pay the build cost up front
+  const tBuild = performance.now() - t0;
+  S0.mnow = Math.min(S0.mnow, S0.scale - 1);
+  S0.search = ''; S0.openGroup = null; S0.userGroup = false;
+  S0.firstOpen = true; S0.revealKey = null;
+  const le = document.getElementById('prows');
+  if (le) le.scrollTop = 0;                   // a new list starts at the top
+  const t1 = performance.now();
+  render();
+  S0.perf = { build: tBuild, render: performance.now() - t1 };
+  showPerf();
+});
+/* A live readout so the scale claim is measured in front of the owner, not
+   asserted in a document. */
+function showPerf() {
+  if (!S0.perf) return;
+  const el = document.getElementById('perf');
+  el.textContent = `${S0.scale.toLocaleString()} channels · list built ${S0.perf.build.toFixed(0)} ms · `
+    + `panel rendered ${S0.perf.render.toFixed(1)} ms · rows in DOM ${document.querySelectorAll('.prow').length}`;
+}
+document.getElementById('seg-live').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  S0.stalled = b.dataset.v === 'stall';
+  if (b.dataset.v === 'fail') {
+    // M3b: the toast names the failure, then SALU advances to the next channel
+    // and plays it — the viewer never hand-clicks past dead entries. M3d: three
+    // consecutive failures stop the cascade (that is a dead provider, not a
+    // dead channel), and the run never wraps past the end of the list.
+    const st = stNow();
+    const list = CH();
+    const nm = (S0.source === 'm3u' && st.now >= 0) ? list[st.now].name : 'Channel';
+    S0.fails = (S0.fails || 0) + 1;
+    toast(`Failed to load  ${nm}`);
+    if (S0.fails < 3 && st.now >= 0 && st.now < list.length - 1) {
+      S0.mnow = st.now + 1;               // skip to the next channel and play it
+      S0.openGroup = null; S0.userGroup = false;
+      syncQueueSegs();
+    }
+    // 3 strikes, or the tail of the list: stop here and leave the toast up.
+  } else {
+    S0.fails = 0;                          // any success resets the run
+  }
+  render();
+});
 seg('seg-dock',  'dock',   v => S0.dock = v === 'dock');
 seg('seg-tags',  'thinTags', v => S0.thinTags = v === 'thin');
 document.getElementById('seg-source').addEventListener('click', e => {
