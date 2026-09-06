@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SALU · playlist control — placement &amp; mark study</title>
 <style>
-  :root{
+  :root{color-scheme:dark;
     --bg:#121212; --surface:#252526; --glass:rgba(30,30,30,.80);
     --outline:#333336; --divider:#3A3A3C;
     --ink-idle:#A6A6A6; --ink-lit:#EDEDED;
@@ -122,8 +122,14 @@
                  padding:0 26px 0 26px;width:100%;cursor:text}
   .psearch .clr{position:absolute;right:3px;display:none}
   .psearch.has .clr{display:grid}
-  .pfoot{display:flex;align-items:center;gap:2px;padding:8px 10px;border-top:1px solid var(--divider)}
-  .pfoot .sp{margin-left:auto;font-size:10px;color:#6E6E73;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+  /* the count lives INSIDE the field, left of the ✕ — there is no footer */
+  .psearch .cnt{position:absolute;right:9px;font-size:10px;color:#7C7C80;letter-spacing:.3px;
+                font-variant-numeric:tabular-nums;pointer-events:none;transition:right .15s}
+  .psearch.has .cnt{right:28px}
+  .idle{position:absolute;inset:0;z-index:1;display:grid;place-items:center;opacity:0;
+        transition:opacity .3s ease-out;pointer-events:none}
+  .idle.show{opacity:1}
+  .idle .wm{font-size:32px;font-weight:300;letter-spacing:14px;color:rgba(237,237,237,.13)}
 
   /* the undocked playlist: its own draggable glass window */
   .panel.detached{transition:opacity .22s cubic-bezier(.215,.61,.355,1),box-shadow .2s;
@@ -145,7 +151,13 @@
   .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
   .toast .salu-btn{width:auto;height:32px;padding:0 10px;font-size:11.5px;color:#8FC4F5;display:grid;place-items:center}
   .toast .salu-btn:hover{color:#CFE6FB}
-  .prows{flex:1;overflow:auto;padding:6px 6px 14px}
+  .prows{flex:1;overflow:auto;padding:6px 6px 14px;scrollbar-width:thin;
+         scrollbar-color:rgba(255,255,255,.18) transparent}
+  .prows::-webkit-scrollbar{width:6px}
+  .prows::-webkit-scrollbar-track{background:transparent}
+  .prows::-webkit-scrollbar-corner{background:transparent}
+  .prows::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:3px}
+  .prows::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.30)}
   .prow{display:flex;align-items:center;gap:8px;height:38px;padding:0 8px;border-radius:9px;color:var(--ink-idle);
         cursor:pointer;transition:background .12s,color .12s}
   .prow:hover{background:rgba(255,255,255,.055);color:var(--ink-lit)}
@@ -286,8 +298,8 @@
       <div class="panel below" id="panel">
         <div class="phead" id="phead"></div>
         <div class="prows" id="prows"></div>
-        <div class="pfoot" id="pfoot"></div>
       </div>
+      <div class="idle" id="idle"><div class="wm">SALU</div></div>
 
       <div class="chrome">
         <div class="titlebar">
@@ -566,8 +578,8 @@ const ITEMS = [
 
 /* The queue state every mark reads: `now` = playing index (-1 = empty),
    `count` = queue length. Same shape for the row, the panel and the gallery. */
-const stNow = () => ({ now: S0.queue === 0 ? -1 : S0.queue - 1,
-                       count: S0.queue === 0 ? 0 : ITEMS.length });
+S0.items = ITEMS.slice();            // the working queue (remove / clear mutate it)
+const stNow = () => ({ now: S0.queue === 0 ? -1 : S0.queue - 1, count: S0.items.length });
 const stEmpty = () => ({ now: -1, count: 0 });
 
 function seg(id, key, after) {
@@ -668,9 +680,10 @@ function headerMarkup() {
   return `
     <div class="salu-btn ${repCls}" id="hRepeat" title="${repTip}">${svg(repMark, 18)}</div>
     <div class="salu-btn ${S0.shuffle ? 'on' : ''}" id="hShuffle" title="Shuffle">${svg(F.shuffle(), 18)}</div>
-    <div class="psearch ${S0.search ? 'has' : ''}">
+    <div class="psearch ${S0.search ? 'has' : ''}" id="hSearchWrap">
       <span class="mag">${svg(F.search(), 13, 11)}</span>
       <input id="hSearch" value="${S0.search.replace(/"/g, '&quot;')}" spellcheck="false" aria-label="filter">
+      <span class="cnt" id="hCount">${S0.items.length}</span>
       <div class="salu-btn clr" id="hClear" title="Clear">${svg(F.cross(), 11, 12)}</div>
     </div>
     <div class="salu-btn" id="hWipe" title="Clear playlist">${svg(F.trash(), 18)}</div>
@@ -699,7 +712,7 @@ function renderRows() {
     rows.innerHTML = `<div class="pempty">${svg(CAND[S0.mark].draw(stEmpty()), 46, strokeUnits(46))}</div>`;
     return 0;
   }
-  const shown = ITEMS.map((it, i) => [it, i]).filter(([it]) => !term || it[0].toLowerCase().includes(term));
+  const shown = S0.items.map((it, i) => [it, i]).filter(([it]) => !term || it[0].toLowerCase().includes(term));
   rows.innerHTML = shown.length
     ? shown.map(([it, i]) => rowHtml(it, i, st.now)).join('')
     : `<div class="pempty">${svg(F.search(), 40, strokeUnits(40))}</div>`;   // no match: the mark, no words
@@ -755,14 +768,24 @@ function renderPanel() {
   document.getElementById('phead').style.display = S0.queue === 0 ? 'none' : 'flex';
 
   const shown = renderRows();
+  setCount(shown);
 
-  document.getElementById('pfoot').innerHTML =
-      `<div class="salu-btn" id="fAdd" title="Add files">${svg(F.plus(), 18)}</div>`
-    + `<span class="sp">${S0.queue === 0 ? '0' : (shown === ITEMS.length ? String(ITEMS.length) : shown + ' / ' + ITEMS.length)}</span>`;
+  // Empty queue = SALU's initial state: the logo canvas, no header, no rows.
+  document.getElementById('idle').classList.toggle('show', S0.items.length === 0);
 
   wirePanel();
   revealNow(S0.firstOpen);
   S0.firstOpen = false;
+}
+
+/* The count lives inside the field: the total, or matched / total while
+   filtering. Numerals are data, not instruction text (rule 1) — same
+   precedent as the volume bar's in-bar 62 %. */
+function setCount(shown) {
+  const el = document.getElementById('hCount');
+  if (!el) return;
+  const total = S0.items.length;
+  el.textContent = (shown === undefined || shown === total) ? String(total) : shown + ' / ' + total;
 }
 
 function wirePanel() {
@@ -777,9 +800,14 @@ function wirePanel() {
   const inp = document.getElementById('hSearch');
   if (inp) {
     // Only the rows re-render while typing — the field keeps focus and caret.
-    inp.oninput = e => { S0.search = e.target.value; renderRows(); revealNow(false);
-      document.getElementById('pfoot').querySelector('.sp').textContent =
-        S0.queue === 0 ? '0' : String(document.querySelectorAll('.prow').length); };
+    inp.oninput = e => {
+      S0.search = e.target.value;
+      // Only the rows + the field's own furniture re-render — never the header,
+      // or the field would lose focus and the caret on every keystroke.
+      document.getElementById('hSearchWrap').classList.toggle('has', S0.search.length > 0);
+      setCount(renderRows());
+      revealNow(false);
+    };
     inp.onkeydown = e => {
       if (e.key === 'Escape') {                       // field first, panel second
         if (S0.search) { S0.search = ''; e.stopPropagation(); render(); }
@@ -790,21 +818,34 @@ function wirePanel() {
   on('hClear', () => { S0.search = ''; render(); const f = document.getElementById('hSearch'); if (f) f.focus(); });
 
   on('hWipe', () => {                                  // rule 3: instant, no dialog, 5 s Undo
-    const prev = S0.queue;
-    S0.queue = 0; syncQueueSegs(); render();
-    toast('Playlist cleared', () => { S0.queue = prev; syncQueueSegs(); render(); });
+    const snap = { items: S0.items.slice(), queue: S0.queue };
+    S0.items = []; S0.queue = 0; S0.search = '';       // ABSOLUTE: playback stops,
+    syncQueueSegs(); render();                         // SALU returns to its initial state
+    toast('Playlist cleared', () => {
+      S0.items = snap.items; S0.queue = snap.queue; syncQueueSegs(); render();
+    });
   });
 
   on('hDock', () => { S0.undocked = !S0.undocked; S0.placed = false; render(); });
-  on('fAdd', () => toast('Native picker → appended, playback untouched'));
 
   document.querySelectorAll('.prow').forEach(r => {
     r.onclick = e => {
       if (e.target.closest('.act')) {                  // per-row remove + Undo
-        const i = +r.dataset.i, prev = S0.queue;
-        toast('Removed from playlist', () => { S0.queue = prev; syncQueueSegs(); render(); });
-        r.style.opacity = '0'; r.style.transform = 'translateX(14px)';
-        r.style.transition = 'opacity .16s, transform .16s';
+        const i = +r.dataset.i;
+        const snap = { items: S0.items.slice(), queue: S0.queue };
+        const nowIdx = S0.queue === 0 ? -1 : S0.queue - 1;
+        S0.items.splice(i, 1);
+        if (nowIdx === i) {                            // deleted the PLAYING item
+          if (S0.items.length === 0) S0.queue = 0;     //   only one track → initial state
+          else if (i < S0.items.length) S0.queue = i + 1;   //   next takes its place
+          else S0.queue = i;                           //   no next → previous
+        } else if (nowIdx > i) {
+          S0.queue = nowIdx;                           // the playing row slid up one
+        }
+        syncQueueSegs(); render();
+        toast('Removed from playlist', () => {
+          S0.items = snap.items; S0.queue = snap.queue; syncQueueSegs(); render();
+        });
         return;
       }
       S0.queue = +r.dataset.i + 1; syncQueueSegs(); S0.firstOpen = false; render();
@@ -994,7 +1035,13 @@ function render() {
       : '');
 }
 seg('seg-place', 'place', v => S0.place = v);
-seg('seg-queue', 'queue', v => S0.queue = +v);
+document.getElementById('seg-queue').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  S0.queue = +b.dataset.v;
+  S0.items = S0.queue === 0 ? [] : ITEMS.slice();      // reseed the working queue
+  S0.search = ''; S0.firstOpen = true; render();
+});
 seg('seg-panel', 'panelTop', v => S0.panelTop = v);
 seg('seg-guides', 'guides', v => S0.guides = v === 'on');
 seg('seg-dock',  'dock',   v => S0.dock = v === 'dock');

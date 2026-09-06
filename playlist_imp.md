@@ -2,7 +2,9 @@
 
 > **Status:** DECIDED, **NOT IMPLEMENTED** (2026-09-06, revised the same day:
 > the panel's four-tab strip is **removed** and replaced by a five-mark header
-> row — repeat · shuffle · search · clear · undock — see §4.4 and §4.9). This is
+> row — repeat · shuffle · search · clear · undock — with no footer, the count
+> inside the search field, absolute clear, and undock built in the same pass.
+> See §4.4, §4.5 and §4.8). This is
 > the binding
 > spec for SALU's playlist control and its slide-out panel. Placement, mark
 > and state semantics were chosen by the owner in the interactive study
@@ -213,9 +215,10 @@ SaluIconButton(
 
 **3.1 Always enabled — *(default)*.** It never dims, even with an empty queue.
 Dimming would hide the panel from anyone who has not queued anything yet, and
-the empty panel is not a dead end (it carries the append control, §4.4).
-Precedent for dimming (`Stop`, `Next`) applies to *transport verbs with nothing
-to act on*; a view toggle is not a verb.
+the ghost mark inside it tells the truth ("nothing is queued") better than a
+dimmed control in the row does. The empty panel still accepts drops (§7 step 9),
+so it is not inert. Precedent for dimming (`Stop`, `Next`) applies to *transport
+verbs with nothing to act on*; a view toggle is not a verb.
 
 **3.2 State ownership — new `lib/core/panel_service.dart`.**
 
@@ -250,7 +253,7 @@ panel is open closes it.
 | **same frame** | **Nothing moves that must not move**: the video keeps its size and scale, the chrome block does not shift, the timeline stays Row 1 (rule 5). The panel is glass *over* the picture — see 4.1. |
 | **~220 ms** · settled | Rows are laid out and the list is scrolled so the playing row is on screen (4.3). **No OSD card flashes** — the deck is transport/volume only. |
 | **never** | The click does not start playback, does not touch the queue, does not take focus, does not acquire `ChromeLock`, does not open a modal. |
-| **+3 s** | The chrome auto-hides as usual (§4.6) and the panel stays, anchored at y = 148, hanging over the video where the chrome was. |
+| **+3 s** | The chrome auto-hides as usual (§4.7) and the panel stays, anchored at y = 148, hanging over the video where the chrome was. |
 
 **Closing** (mark again · Esc · Ctrl+L) runs the reverse: `translateX(0 → 322)` +
 fade out, 220 ms `Curves.easeInCubic` (the pill's `reverseCurve`), glow off via
@@ -291,7 +294,7 @@ The OSD deck must stay above the panel — at the 800 px minimum width a wide
 card (the Resume toast) can reach the panel's left edge, and the deck is never
 allowed to be covered.
 
-The **undocked** window (§4.9) is not in this Stack at all: it is a separate OS
+The **undocked** window (§4.8) is not in this Stack at all: it is a separate OS
 window owned by the same process, so it floats above SALU's whole surface and
 follows its own drag position.
 
@@ -312,6 +315,20 @@ Row anatomy, 38 px tall, radius 9:
 - Hover wash `rgba(255,255,255,.055)`; the 🗑 (`TrashMark`, 16 px) fades in on
   the right, on hover only — the URL rows' exact pattern.
 - Click anywhere on a row = play that index. No "select then load".
+- **Deleting the row that is playing** (owner's rule, 2026-09-06): SALU picks the
+  **next** item automatically; if there is no next, the **previous**; if the
+  deleted item was the only one, SALU returns to its **initial state** (playback
+  stopped, queue empty, logo canvas). The picked item goes through `playIndex`,
+  so its resume memory applies exactly as it does for Next. Full mechanics in §5.
+- **The scrollbar is SALU's own**, never the platform's or Material's: a thin
+  (~5–6 px) rounded thumb at `rgba(255,255,255,.16)`, brightening to ~`.30` on
+  hover, over a **transparent track**, no arrow buttons, and it fades out when
+  the list is idle. Flutter's desktop `ScrollBehavior` attaches a Material
+  scrollbar whose light gray thumb reads as a white stripe on `#1E1E1E` glass —
+  override it (`ScrollConfiguration` with `scrollbars: false`, then SALU's own
+  `RawScrollbar` styling). This is a hard style rule, not a detail.
+- **Shuffle never reorders the visible list** (owner's rule): the rows always
+  show the queue's natural order. Shuffle changes *playback order* only — see §5.
 
 ### Auto-scroll — the playing row stays in the visible area
 
@@ -346,14 +363,19 @@ in a 322 px panel with 8/10 px padding and a hairline underneath:
 |---|---|---|---|
 | 1 | **Repeat** | the family's existing ¾-arc + arrowhead (`RestartMark`'s geometry) | cycles **off → all → one**. Off = the arc at the quiet 55 % ink (still hoverable) · all = full ink · one = full ink **plus a solid bead at the arc's centre** — never a numeral, rules 1 & 6. `active:` glow when not off. Tooltips "Repeat off / Repeat all / Repeat one" (the Mute/Unmute precedent) |
 | 2 | **Shuffle** | two crossing rules with arrowheads at their right ends | on/off toggle, glow when on, tooltip "Shuffle". Must cross and carry heads so it can never be read as the transport's `<<` / `>>` |
-| 3 | **Search** | thin glass field, radius 14, **magnifier mark inside the left edge**, **✕ inside the right edge only while there is text** | no placeholder text (rule 1) — the magnifier and the tooltip name it. Takes the remaining width |
-| 4 | **Clear playlist** | `TrashMark` | instant, no confirmation, 5 s **Undo** toast (rule 3) |
+| 3 | **Search** | thin glass field, radius 14 · inside it, left to right: **magnifier mark · the typed text · the count · ✕ (only while there is text)** | no placeholder text (rule 1) — the magnifier and the tooltip name it. Takes the remaining width. The count is part of the field, not a footer (§4.5) |
+| 4 | **Clear playlist** | `TrashMark` | **absolute**: playback stops, the queue empties, SALU returns to its initial state (the logo canvas). Instant, no confirmation, 5 s **Undo** toast (rule 3) — see §5 |
 | 5 | **Undock / Dock back** | one slot, two marks: a window with an arrow leaving it / the same window with the arrow returning | swaps with the state (the plus→× precedent), tooltips "Undock" / "Dock back" |
 
-Space math: four 30 px marks + gaps ≈ 128 px, leaving ~174 px for the field.
-Tight but workable. **Escape hatch if it ever feels cramped:** a collapsing
-field — at rest just the magnifier mark, expanding into the field on click.
-Recorded, not built pre-emptively.
+Space math: four 30 px marks + gaps ≈ 128 px, leaving ~174 px for the field —
+and the field now has to hold the magnifier (~20 px), the count (~28 px) and the
+✕ (~20 px) as well, so typed text gets ~100 px. Tight but workable, and removing
+the footer is what keeps it that way. **Escape hatch if it ever feels cramped:**
+a collapsing field — at rest just the magnifier mark, expanding into the field on
+click. Recorded, not built pre-emptively.
+
+**The panel has exactly two zones: the header and the rows.** No footer, no tab
+strip, no title, no section labels (rules 1 and 6).
 
 Marks this needs: **three new drawings** (shuffle, magnifier, the undock/dock
 pair). Everything else is reused: the loop arc from `RestartMark`, the ✕ the
@@ -367,10 +389,16 @@ plus already rotates into, `TrashMark`, `PlusMark`.
   it into the tests.)
 - Live filtering as you type — no submit, no button.
 - **No match** → the magnifier at 40 px, 30 % ink, centred. No words (rule 1).
-- Footer count: `9 / 14` while filtering, `14` otherwise. Numerals are data,
-  not instruction text — the same precedent as the volume bar's in-bar `62%`
-  and the timeline's readouts.
-- **Focus — the one exception to §4.8.** Clicking the field takes focus, so
+- **The count lives inside the field**, at its right edge, left of the ✕
+  (owner's decision — there is no footer at all, §4.4). It reads `14` normally
+  and `9 / 14` while a filter is hiding rows. Numerals are data, not instruction
+  text — the same precedent as the volume bar's in-bar `62%` and the timeline's
+  readouts. 10 px, `#7C7C80`, tabular figures, and it must never be clickable.
+- **There is no footer and no append button in this panel** (owner's decision).
+  Files enter the queue through the Open control (`+` → file / folder / URL) or
+  by dropping onto the panel; the playlist panel only *shows and orders* what is
+  already queued. Removing the footer also gives the field its width back.
+- **Focus — the one exception to §4.7.** Clicking the field takes focus, so
   while it is focused Space and ←→ type and move the caret instead of driving
   the transport. Clicking anywhere else in the panel (a row, a header mark, the
   background) releases focus and the transport keys work again. The panel
@@ -379,19 +407,14 @@ plus already rotates into, `TrashMark`, `PlusMark`.
   consume. Field focused and *empty* → release focus, consume. Panel open, no
   field focus → close the panel. Pill open → the pill wins, it already owns Esc.
 
-**4.6 Footer — one mark**
+**4.6 Empty state — the mark itself**
 
-`PlusMark` (18 px) = **append files** → the native Windows picker, appended to
-the queue without disturbing playback, plus the count readout (§4.5). Removal is
-per-row (🗑). The footer stays visible even with an empty queue, so the panel is
-never a dead end.
+Nothing queued: **no header**, `NowRowMark(size: 46, now: -1)` at ~30 % ink
+centred, and that is all — the panel is two zones (header + rows) and when there
+is no queue there is no header either. No words, no hint, no illustration
+(rule 1). The panel still accepts drops while empty (§7 step 9).
 
-**4.7 Empty state — the mark itself**
-
-Nothing queued: no header, `NowRowMark(size: 46, now: -1)` at ~30 % ink centred,
-and the footer's `+`. No words, no hint, no illustration (rule 1).
-
-**4.8 The panel is not a popup — *(default, veto-able)***
+**4.7 The panel is not a popup — *(default, veto-able)***
 
 follow.md §3's "Esc closes · click-outside closes" governs **popups, menus and
 modals**. §8 classifies the playlist as a **slide-out panel** — a live task used
@@ -407,7 +430,7 @@ modals**. §8 classifies the playlist as a **slide-out panel** — a live task u
   open; the panel stays anchored at y = 148 and does not slide up. Locking the
   chrome would pin the top bar for a whole episode.
 
-**4.9 Undock / dock — a third surface class**
+**4.8 Undock / dock — a third surface class**
 
 What the owner wants: the playlist leaves the player and becomes **its own
 window** — same 322 px width, same glass, draggable anywhere on the desktop,
@@ -421,9 +444,23 @@ session will read "never mix" and refuse to build it, or build it silently and
 break the contract.
 
 **It is the largest single item in this feature — bigger than the panel.**
-`window_manager` manages one window; a second needs a multi-window package
-(e.g. `desktop_multi_window`), which spawns a child window with **its own
-engine and isolate**. Consequences:
+Verified state of the platform (checked 2026-09-06):
+
+- Flutter **stable ships no public multi-window API**. As of 3.44.8 (2026-07-23)
+  the framework's windowing API exists but only on the **main** channel behind
+  `flutter config --enable-windowing`, is marked `@internal`, and is documented
+  as breaking between patch releases — not a foundation for a production build.
+  Its decisive property: **all windows share one engine and one isolate**, so a
+  `ValueNotifier` in a common ancestor is visible to both with no channel and no
+  serialization. That is exactly what this feature wants.
+- On stable today the practical path is the **`desktop_multi_window`** plugin
+  (0.3.0, published 2025-10-28; Windows / Linux / macOS), which spawns a child
+  window with **its own engine and isolate**. `window_manager` — what SALU
+  already uses — manages one window only and cannot create a second.
+
+**Owner's verdict (2026-09-06): it is possible, so it is IN SCOPE and must be
+fully implemented as part of this playlist build** — not deferred to a later
+phase. Consequences of doing it on stable today:
 
 - The child cannot read `QueueService.instance` — different isolate. Every
   state change (queue, index, position, repeat, shuffle, filter text) must
@@ -455,10 +492,25 @@ Locked behaviours:
   permanently top-most window over other applications is hostile.
 - While undocked, the video, the chrome and the control row are unchanged.
 
-**Phasing (recommended):** ship the docked panel first — mark, control, panel,
-rows, header, search, auto-scroll — then build undock as its own step behind the
-same `PanelService`. It carries a new dependency and engine-level work, and it
-must not hold the docked panel hostage.
+**Build order inside this feature:** the docked panel first (steps 1–12), then
+undock (step 13) — same feature, same branch, shipped together.
+
+**Step 13a is a bounded spike, and it is the abort gate.** Before wiring
+anything: create the child window, **strip its frame** so it is borderless like
+the main window, apply the glass material, and verify DPI scaling, header
+dragging, and that SALU's single-instance handshake does not treat the child as
+a second launch. If the child window cannot be made to look like SALU — a native
+title bar we cannot remove, wrong DPI, or a visible engine-start stutter — then
+**undock is dropped**, the header keeps four marks, and this section is rewritten
+as rejected. We do not ship a native-looking window hanging off a borderless
+player.
+
+**Write the sync seam so it can be deleted later.** Keep every cross-window
+message inside one thin `PlaylistBridge` (snapshot-out / intent-in). If the
+framework windowing API reaches stable, the bridge disappears and the loose
+window becomes a subtree reading `QueueService.instance` directly — with **no
+change to the panel's UI code**. Until then the same bridge is the shape Phase 8's
+Android remote needs over a WebSocket, so it is built once and used twice.
 
 ## 5. Service work
 
@@ -471,16 +523,29 @@ void removeAt(int i);              // keeps `index` honest, see below
 void move(int from, int to);
 ```
 
-`removeAt` index rule: removing an item **before** the current one decrements
-`index`; removing the current one leaves `index` where it is (the engine keeps
-playing the file it already opened — mpv's playlist entry is removed, playback
-is not interrupted); removing the last item clamps `index`.
+**`removeAt` — the owner's rule (2026-09-06), and it replaces the earlier
+"playback keeps running" idea.**
 
-> **Verify on Windows before shipping step 5:** that mpv really continues the
-> loaded file after `player.remove(currentIndex)`. If it instead advances or
-> stops, change the rule to *"removing the playing item ends playback of it and
-> selects the neighbour"* and update checklist item 6 — do not silently keep a
-> rule the engine does not honour.
+| what was deleted | what SALU does |
+|---|---|
+| an item **before** the playing one | `index` shifts down one; playback untouched |
+| an item **after** the playing one | nothing changes; playback untouched |
+| **the playing item**, and a next exists | remove it, then play the **next** item via `playIndex` (resume memory applies) |
+| **the playing item**, no next, a previous exists | remove it, then play the **previous** item via `playIndex` |
+| **the only item** | remove it → **initial state**: playback stopped, queue empty, logo canvas — exactly what `stop()` + `clear()` produce |
+
+Order of operations matters: update `QueueService` first, then the engine
+(`player.remove(i)`), then the follow-up `playIndex` — so the row that disappears
+and the row that lights up change in the same frame the audio changes.
+
+**`clear()` — absolute (owner's rule).** Clear playlist means: stop playback,
+empty the queue, and leave SALU in its **initial state** — the logo canvas, an
+empty queue, `TransportState.idle`, every transport mark dim. Nothing keeps
+playing. Two things it must **not** touch: the on-disk **resume memory** (a
+cleared playlist is not a wiped history) and the **saved URL seven**
+(`UrlLibraryService`). The 5 s **Undo** toast restores the queue *and* re-opens
+the item that was playing at its remembered position, silently — that is what
+makes an absolute clear safe without a confirmation dialog (rule 3).
 
 **`PlayerService`** — public wrappers, because `_openQueueAt` is private and
 carries the resume memory:
@@ -518,6 +583,35 @@ final ValueNotifier<bool> shuffleOn;          // PlayerService
 - Shuffle picks from the **not-yet-played** items of the current pass, then
   starts a new pass — never the same item twice in a row, never a pure random
   pick that can repeat.
+
+### Repeat × shuffle — the one decision table (no collisions, no conflicts)
+
+Two controls, one question: *the item ended, what plays now?* Exactly one of
+them may answer, and the marks must show which one is answering.
+
+| repeat | shuffle | end of an item | end of the queue |
+|---|---|---|---|
+| **one** | off | the same item again | n/a — it never reaches the end |
+| **one** | **on** | the same item again — **repeat one wins, shuffle is suspended** | n/a |
+| all | off | the next item in list order | wrap to index 0 |
+| all | **on** | the next item of the shuffle pass | start a **new pass** (fresh random order; its first item should not be the one that just ended) |
+| off | off | the next item in list order | **stop** → the queue parks (Stop ≠ Start Over) |
+| off | **on** | the next unplayed item of the pass | the pass is exhausted → **stop** → the queue parks |
+
+- **Suspension is visible, and the setting survives.** While repeat-one is
+  active, the shuffle mark drops to the quiet 55 % ink and loses its glow —
+  icon-only language for "not in effect right now" — but its *state* is kept.
+  Turning repeat back to all/off re-lights shuffle exactly as it was. Nothing is
+  silently reset, and no text is needed to explain it.
+- **A shuffle pass** = every item played once, in random order, never the same
+  item twice in a row. Track it as a list of not-yet-played indexes; a manual row
+  click during shuffle counts that item as played; adding, removing or clearing
+  items resets the pass.
+- **`|<<` and `>>|` follow what you heard, not what you see.** With shuffle on,
+  Previous returns to the item actually played before and Next goes to the next
+  shuffled pick — so keep a small **play-order history** in `QueueService` (a
+  stack of visited indexes, reset on a new pass, on clear, and on a fresh open).
+  The visible list never reorders.
 - Both must survive Stop: Stop parks the queue, and the parked queue keeps its
   repeat/shuffle mode. Persisting them across app restarts is **out of scope**
   (`shared_preferences` is allowed by §7 of follow.md, but not decided here).
@@ -525,11 +619,19 @@ final ValueNotifier<bool> shuffleOn;          // PlayerService
   advance for the shuffled / repeat-one cases. Acceptable for video; if gapless
   audio ever matters, that is the trade being made.
 
-**Undo (rule 3, no confirmation dialogs):** removal and reorder are instant and
-offer a **5 s Undo toast** — reuse the Resume toast's interactive-card pattern
-(one word on the action is the single allowed exception to "no text on
-controls"). Undo restores the item at its original index via `player.add` +
-`player.move`.
+**Undo (rule 3, no confirmation dialogs):** removal, reorder and clear are
+instant and offer a **5 s Undo toast** — reuse the Resume toast's interactive-card
+pattern (one word on the action is the single allowed exception to "no text on
+controls"). What Undo restores:
+
+- **the list, always** — the item goes back to its original index
+  (`player.add` + `player.move`), or the whole queue comes back in its original
+  order after a clear.
+- **playback, only when the deletion had taken it away.** If Undo restores an
+  item while something else is playing, playback is *not* yanked back — you are
+  watching that other item on purpose. If the deletion had landed SALU in its
+  initial state (the only item removed, or clear playlist), Undo **also**
+  re-opens the item that was playing, silently at its remembered position.
 
 ---
 
@@ -540,7 +642,7 @@ controls"). Undo restores the item at its original index via `player.add` +
 | **Ctrl+L** | toggle the playlist panel | add to the Ctrl block in `_onKeyEvent` next to Ctrl+O/F/U. `L` is free; a bare letter is not acceptable (M and S are taken, and a search field is on the roadmap) |
 | **Esc** | close the panel (consumed) | precedence, highest first: **pill** (already owns Esc) → **search field with text** (clear it, keep focus) → **search field empty** (release focus) → **panel** (close). Extend the existing Esc branch in this order |
 | Space, ←→, ↑↓, M, S, PgUp/PgDn | unchanged | the panel takes no focus, so the transport set keeps working while it is open — **except while the search field is focused** (§4.5), which is the one place typing must win |
-| Ctrl+L while undocked | raise the loose window | identical to clicking the mark: never opens a second docked panel (§4.9) |
+| Ctrl+L while undocked | raise the loose window | identical to clicking the mark: never opens a second docked panel (§4.8) |
 
 ---
 
@@ -571,35 +673,41 @@ controls"). Undo restores the item at its original index via `player.add` +
 6. **Auto-scroll** — the reveal rule of §4.3: jump on entrance, 220–300 ms
    animated afterwards, shortest distance, only when required, suppressed for
    ~3 s after a manual scroll.
-7. **Header row** — repeat (off/all/one, bead for "one"), shuffle, clear
-   playlist (+ Undo toast), undock/dock slot. Three new marks to draw:
-   shuffle, magnifier, the undock/dock pair. Header hidden while the queue is
-   empty (§4.4, §4.7).
+7. **Header row** — repeat (off/all/one, bead for "one"), shuffle, the search
+   field with the count inside it, clear playlist, and the undock/dock slot.
+   Three new marks to draw: shuffle, magnifier, the undock/dock pair. Header
+   hidden while the queue is empty (§4.4, §4.6). **No footer** — the panel is
+   header + rows and nothing else.
 8. **Search** — the field, live view-only filtering, the ✕ inside it, the
-   no-match state, the footer count, and the focus/Esc rules of §4.5. This step
+   no-match state, the count inside the field, and the focus/Esc rules of §4.5. This step
    is the one that touches the keyboard handler.
-9. **Repeat & shuffle behaviour** — §5: `RepeatMode`, `shuffleOn`, the
-   `stream.completed` interception, never `player.setShuffle`.
-10. **Append** — footer `PlusMark` (native picker → append) and the panel as a
-    drop target: **drop on the panel = append, drop on the canvas = replace**
-    (Phase 5's rule; `drop_handler.dart` needs the panel-hit-test branch).
-11. **Polish** — empty states, Esc/Ctrl+L, glow on `active`, motion timings, and
-    a pass over R2/R3 (pill coexistence, glow visibility from a distance).
+9. **Repeat & shuffle behaviour** — §5: `RepeatMode`, `shuffleOn`, the decision
+   table, the shuffle pass, the play-order history that makes `|<<` honest during
+   shuffle, the `stream.completed` interception, and **never**
+   `player.setShuffle`. The visible list order must not change.
+10. **Drops** — the panel as a drop target: **drop on the panel = append, drop on
+    the canvas = replace** (Phase 5's rule; `drop_handler.dart` needs the
+    panel-hit-test branch, including while the panel is empty).
+11. **Polish** — empty states, **SALU's own dark scrollbar** (§4.3, overriding
+    Flutter's desktop Material scrollbar), Esc/Ctrl+L, glow on `active`, motion
+    timings, and a pass over R2/R3 (pill coexistence, glow visibility from a
+    distance).
 12. **Docs** — README phase table (Phase 4 → in progress), add the new marks to
     `follow.md` §1.6's family list, **amend follow.md §8 for the third surface
-    class (§4.9)**, and flip this file's status line to *FINAL & IMPLEMENTED*
+    class (§4.8)**, and flip this file's status line to *FINAL & IMPLEMENTED*
     with the date and commit.
 
-**Then, as its own phase (do not start it before step 12):**
-
-13. **Undock / dock** — the multi-window dependency, the child window's glass
-    shell, the snapshot-out / intent-in channel (§4.9), drag by the header,
-    raise-on-summon, dock-back, and closing = docking. Written so Phase 8's
-    Android remote can reuse the same protocol.
+13. **Undock / dock — in scope, built last** (§4.8). 13a is the frameless-child
+    window **spike and abort gate**; then the `desktop_multi_window` dependency,
+    the child's glass shell, the `PlaylistBridge` snapshot-out / intent-in seam,
+    drag by the header, raise-on-summon, dock-back, and closing = docking. If
+    13a fails, undock is dropped and steps 1–12 still ship.
 
 **Out of scope here:** the Video / Audio / Subtitle views — **the four-tab strip
-is removed from this panel** (§4.4) and those three need a new home, most likely
-their own marks on the control row's still-reserved right edge; chapter markers;
+is removed from this panel** (§4.4) and, per the owner (2026-09-06), those three
+will be **re-planned separately later**; nothing is assumed about where they go,
+and the control row's right edge stays reserved and empty until that plan exists.
+Also out of scope: chapter markers;
 IPTV grouping of large `.m3u` files and `.m3u` handling generally (**the owner
 takes that next**); per-item metadata probing; persisting the queue, repeat or
 shuffle across restarts (`shared_preferences` is allowed, the queue stays
@@ -619,8 +727,9 @@ runtime — follow.md §7).
    y = 148, control row fully visible and clickable, mark full white + faint glow.
 5. Click a row → that item plays; a remembered position resumes silently and the
    Resume toast fires exactly as it does for Next.
-6. Hover a row → 🗑 fades in; click → the row is gone instantly + a 5 s Undo
-   toast; Undo puts it back at the same index, playback undisturbed.
+6. Hover a row **that is not playing** → 🗑 fades in; click → the row is gone
+   instantly + a 5 s Undo toast; Undo puts it back at the same index, playback
+   undisturbed. (Deleting the *playing* row is item 26.)
 7. Drag a row by `≡` → the list reorders, mpv's playlist follows, playback does
    not restart.
 8. Drop 3 files on the panel → appended, current item untouched. Drop the same
@@ -640,36 +749,50 @@ runtime — follow.md §7).
     shift, and the timeline's readouts stay where they were.
 15. Click the mark mid-slide → the panel reverses from where it is, it does not
     restart or jump.
-16. The header appears **only** once something is queued; with an empty queue
-    the panel is the ghost mark plus the footer `+`, and nothing else.
+16. The header appears **only** once something is queued; with an empty queue the
+    panel is the ghost mark and nothing else — no header, no footer — and the
+    canvas is back to its initial state.
 17. Repeat cycles off → all → one per click: quiet arc → full arc → arc + centre
-    bead, glow on anything but off, and the tooltip names the new state each time.
-18. Shuffle toggles with the glow — and mpv's own playlist order is untouched
-    (no `player.setShuffle`), so a row click, a removal and a reorder still hit
-    the items they appear to hit.
-19. Type in the field → the list filters live, the ✕ appears inside the field,
-    the footer reads `n / 14`; clear it → the full list returns. The real queue
-    never changed: repeat, shuffle, clear and row-clicks act on all 14.
-20. Field focused → Space types a space and ←→ move the caret, the transport does
+    bead, glow on anything but off, tooltip naming the new state each time.
+18. Repeat **one** with shuffle on → the shuffle mark drops to quiet ink and loses
+    its glow while the same item repeats; switching repeat back to all/off
+    re-lights shuffle with its setting intact. One control answers, and the marks
+    say which.
+19. Shuffle toggles with the glow; mpv's own playlist order is untouched (no
+    `player.setShuffle`), the **visible order never changes**, and a row click, a
+    removal and a reorder still hit the items they appear to hit.
+20. Shuffle on: `>>|` plays an unplayed item at random and never the same one
+    twice in a row; `|<<` returns to the item actually heard before; exhausting
+    the pass with repeat off parks the queue (Stop ≠ Start Over).
+21. Typing filters live, the ✕ appears inside the field, and the count **inside
+    the field** reads `n / 14`; clearing returns the full list and `14`. The real
+    queue never changed: repeat, shuffle, clear and row-clicks act on all 14.
+22. Field focused → Space types a space and ←→ move the caret, the transport does
     not fire; click a row → Space is play/pause again.
-21. Esc: text in the field → the text clears and the panel stays; empty field →
-    focus releases; again → the panel closes; pill open → only the pill closes.
-22. A filter with no match → the magnifier at 30 % ink, centred, no words.
-23. Clear playlist → the queue is gone instantly with no dialog, and a 5 s Undo
-    toast restores it exactly as it was.
-24. Undock → the playlist becomes its own window at the same 322 px width,
-    draggable by its header, the docked slot goes empty, and the header mark
-    becomes dock-back. While it is loose, the control-row mark and Ctrl+L
-    **raise** it rather than opening a second docked panel, and its own ✕ docks
-    it back — it never deletes the playlist.
-25. With a 14-item queue: opening on item 12 reveals it with **no** scroll
+23. Esc, in order: pill → field with text (text clears, panel stays) → empty field
+    (focus releases) → panel closes.
+24. A filter with no match → the magnifier at 30 % ink, centred, no words.
+25. Deleting a row **before or after** the playing one leaves playback untouched
+    and the highlighted row still the same file.
+26. Deleting **the playing** row starts the next item (with its resume memory);
+    with no next, the previous; with no other item at all, SALU returns to its
+    initial state. Each case offers a 5 s Undo that restores exactly what was there.
+27. Clear playlist → playback stops, the queue empties, SALU is in its initial
+    state; Undo restores the queue **and** resumes the item at its remembered
+    position. On-disk resume memory and the saved URL seven are untouched.
+28. The list scrollbar is SALU's own thin dark thumb on a transparent track — no
+    light gray Material thumb, no arrow buttons.
+29. With a 14-item queue: opening on item 12 reveals it with **no** scroll
     animation; advancing to 13 scrolls the shortest distance in ~250 ms; manual
     scrolling suppresses the reveal for ~3 s.
-26. No ripples, no splashes, no filled box or pill behind any icon, no
-    instruction text, no placeholder string, no shortcut labels, no confirmation
-    dialog — and **no tab strip anywhere in the panel**.
-
----
+30. Undock → the playlist becomes its own **borderless glass** window at the same
+    322 px width, draggable by its header, the docked slot goes empty, and the
+    header mark becomes dock-back. While it is loose, the control-row mark and
+    Ctrl+L **raise** it rather than opening a second docked panel, and its own ✕
+    docks it back — it never deletes the playlist.
+31. No ripples, no splashes, no filled box or pill behind any icon, no instruction
+    text, no placeholder string, no shortcut labels, no confirmation dialog,
+    **no footer, and no tab strip anywhere in the panel**.
 
 ## 9. Decision record
 
@@ -683,7 +806,7 @@ runtime — follow.md §7).
 | 6 | Open state | `active:` glow only, no glyph change | default, §2.2 |
 | 7 | Enabled | always, never dims | default, §3.1 |
 | 8 | Tooltip | "Playlist" (not "Queue") | default, §3 |
-| 9 | Panel ≠ popup | no click-outside close, no focus steal, no ChromeLock | default, §4.6 |
+| 9 | Panel ≠ popup | no click-outside close, no focus steal, no ChromeLock | default, §4.7 |
 | 10 | Close paths | mark toggle · Esc · Ctrl+L | default, §6 |
 | 11 | Width / material | 322 px, `GlassCapsule` recipe, left hairline | default, §4.1 |
 | 12 | Rows | click = play · hover 🗑 + Undo · `≡` drag reorder | default, §4.3 |
@@ -695,15 +818,24 @@ runtime — follow.md §7).
 | 18 | Reveal | opening scrolls to the playing row with no animation | default, §4.3 |
 | 19 | Header row | repeat · shuffle · search · clear playlist · undock, left to right, marks only | **owner**, 2026-09-06 |
 | 20 | Header visibility | only while the queue is non-empty | **owner**, 2026-09-06 |
-| 21 | Search field | magnifier inside-left, ✕ inside-right, no placeholder, **filters the view only** | **owner** (field + ✕) + default, §4.5 |
+| 21 | Search field | magnifier inside-left · **count inside-right** · ✕ inside-right while there is text · no placeholder · **filters the view only** | **owner**, 2026-09-06 |
+| 21b | Footer | **none** — the panel is header + rows; no append button (files arrive via the Open control or a drop) | **owner**, 2026-09-06 |
 | 22 | Repeat glyph | the family's loop arc · bead at its centre = repeat one · quiet ink = off · never a numeral | default, §4.4 |
 | 23 | Focus | the search field is the only focusable thing in the panel; Esc precedence per §4.5 | default, §4.5 |
-| 24 | Clear playlist | instant + 5 s Undo, no confirmation | default, §4.4 |
-| 25 | Undock | its own draggable window, same 322 px, header = drag area; the mark raises it while loose; closing = dock back | **owner**, 2026-09-06 |
-| 26 | Undock stacking | above SALU only, never system-wide always-on-top | default, §4.9 |
+| 24 | Clear playlist | **absolute** — playback stops, queue empties, SALU returns to its initial state; 5 s Undo restores the queue *and* the position; resume memory and the saved seven untouched | **owner**, 2026-09-06 |
+| 24b | Deleting the playing row | next → else previous → else initial state | **owner**, 2026-09-06 |
+| 24c | Scrollbar | SALU's own thin dark thumb, transparent track, no arrows — never the Material/platform one | **owner** (catch) + default (spec), §4.3 |
+| 24d | Shuffle & the view | shuffle never reorders the visible list; playback order only | **owner**, 2026-09-06 |
+| 24e | Repeat × shuffle | the decision table of §5; repeat-one **suspends** shuffle (quiet ink, no glow) and the setting survives | default, §5 |
+| 24f | Prev/Next during shuffle | follow the play-order history (what was heard), not the list | default, §5 |
+| 25 | Undock | its own draggable borderless glass window, same 322 px, header = drag area; the mark raises it while loose; closing = dock back | **owner**, 2026-09-06 |
+| 25b | Undock scope | **in scope for this build** (owner: "if it is possible it has to be fully implemented while making the playlist"), built as step 13 behind a frameless-window spike that is the abort gate | **owner** + default, §4.8 |
+| 25c | Undock plumbing | `desktop_multi_window` on stable (Flutter ships no public multi-window API), all traffic through one `PlaylistBridge` seam so it can be deleted when the framework API lands, and reused by Phase 8 | default, §4.8 |
+| 26 | Undock stacking | above SALU only, never system-wide always-on-top | default, §4.8 |
 | 27 | Auto-scroll | only when required · shortest distance · jump on entrance · ~3 s suppression after a manual scroll | **owner** (behaviour) + default (numbers), §4.3 |
 | 28 | Shuffle engine | SALU picks the next index off `stream.completed`; **never** `player.setShuffle` | default, §5 |
-| 29 | Build order | docked panel first (steps 1–12), undock as its own phase (step 13) | default, §7 |
+| 29 | Build order | steps 1–12 docked, step 13 undock — one feature, one branch, shipped together | default, §7 |
+| 30 | Video / Audio / Subtitles | **re-planned separately later** — nothing assumed, the row's right edge stays reserved and empty | **owner**, 2026-09-06 |
 
 Rejected on the way (recorded so they are not re-proposed silently): Queue Rail
 and its hinged/mirrored variants, Bead Queue, Panel Hinge (rect + divider —
@@ -714,5 +846,8 @@ scale-on-enter motion for the panel (edge-anchored surfaces slide, they do not
 grow), **the four-tab strip inside this panel** (owner's change of plan), a
 numeral "1" inside the repeat loop (text on a control, rules 1 & 6), a
 placeholder string in the search field, `player.setShuffle` (it desyncs mpv's
-order from `QueueService`), and centring the playing row on every advance
-(long jumps on a 40-file queue).
+order from `QueueService`), centring the playing row on every advance (long jumps
+on a 40-file queue), **a footer of any kind** — including the append `+` and the
+count that first lived there, **the platform/Material scrollbar**, letting
+repeat-one and shuffle both answer "what plays next", and deferring undock to a
+later phase (the owner wants it built with the playlist).
