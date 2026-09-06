@@ -248,7 +248,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
 
     // Time readouts.
     final Duration shown =
-        _pressFrac != null && usable ? _targetForFrac(_pressFrac!) : pos;
+        _pressFrac != null && usable ? _targetForFrac(_pressFrac) : pos;
     final Duration remaining =
         dur - shown > Duration.zero ? dur - shown : Duration.zero;
     final bool showTicks = usable && (_hoverFrac != null || _pressFrac != null);

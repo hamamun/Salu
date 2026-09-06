@@ -191,7 +191,7 @@ class M3uLoader {
       _parseBody(text, base, port);
       port.send(const _ParseDone());
     } catch (e) {
-      port.send(_ParseFailed('Playlist failed to parse'));
+      port.send(const _ParseFailed('Playlist failed to parse'));
     }
   }
 
@@ -255,7 +255,7 @@ class M3uLoader {
 
       final String searchKey = ('$name|${group ?? ''}').toLowerCase();
       batch.add(QueueItem(
-        url: resolved,
+        resolved,
         name: name,
         group: group,
         language: language,

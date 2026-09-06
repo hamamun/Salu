@@ -7,12 +7,12 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/channel_service.dart';
 import 'core/favourites_service.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
 import 'core/resume_service.dart';
 import 'core/settings_service.dart';
-import 'core/channel_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/panels/playlist_child.dart';
 import 'ui/screens/home_screen.dart';
@@ -26,7 +26,8 @@ Future<void> main(List<String> args) async {
   // never be treated as a second app launch (it would exit immediately).
   bool isPlaylistWindow = false;
   try {
-    final WindowController current = WindowController.fromCurrentEngine();
+    final WindowController current =
+        await WindowController.fromCurrentEngine();
     isPlaylistWindow =
         current.arguments.contains('salu-playlist-window');
   } catch (_) {
