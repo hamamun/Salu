@@ -62,6 +62,27 @@ class OsdUndoCard extends OsdCard {
   final VoidCallback onUndo;
 }
 
+/// The folder auto-load whisper (autoload_imp.md §4): one transient
+/// status card naming what just grew around the playing item — "12
+/// videos queued from “Season 1”". Pure display, never interactive; a
+/// big folder must never silently become the playlist.
+class OsdAutoloadCard extends OsdCard {
+  const OsdAutoloadCard({
+    required this.count,
+    required this.audio,
+    required this.folder,
+  }) : super(ttl: const Duration(milliseconds: 1000));
+
+  /// Rows now in the queue.
+  final int count;
+
+  /// Kind word for the copy: `true` → tracks, `false` → videos.
+  final bool audio;
+
+  /// Display name of the folder the rows were picked up from.
+  final String folder;
+}
+
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {
   OsdController._internal();

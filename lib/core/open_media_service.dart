@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart' as fs;
 import 'package:flutter/foundation.dart';
 
 import 'drop_handler.dart';
+import 'folder_autoload_service.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
 import 'url_library_service.dart';
@@ -52,6 +53,10 @@ class OpenMediaService {
     final PlayerService player = PlayerService.instance;
     if (paths.length == 1) {
       await player.openPath(paths.first);
+      // Folder auto-load (autoload_imp.md §2): a single pick may grow
+      // its own folder queue behind the playing file — behind, never
+      // blocking, and never for a multi-pick batch.
+      unawaited(FolderAutoloadService.instance.maybeExpand(paths.first));
     } else {
       await player.openPaths(paths);
     }

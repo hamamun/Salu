@@ -156,6 +156,22 @@ class _GeneralTab extends StatelessWidget {
           ),
           SizedBox(height: 16),
           _ResumeModePicker(),
+          SizedBox(height: 28),
+          Text(
+            'Folder auto-load',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'What loads when a single file is opened.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _FolderAutoloadPicker(),
         ],
       ),
     );
@@ -274,6 +290,79 @@ class _ResumeModePicker extends StatelessWidget {
       },
     );
   }
+}
+
+/// The "Folder auto-load" section (autoload_imp.md §5) — what happens
+/// when exactly one local media file is loaded. Applies from the next
+/// load; the live queue is never retrofitted.
+class _FolderAutoloadPicker extends StatelessWidget {
+  const _FolderAutoloadPicker();
+
+  static const List<_FolderAutoloadOption> _options =
+      <_FolderAutoloadOption>[
+    _FolderAutoloadOption(
+      mode: FolderAutoloadMode.allVideos,
+      icon: Icons.video_library_outlined,
+      label: 'All videos in folder',
+      helper: 'The whole folder is queued, starting at the file you opened.',
+      isDefault: true,
+    ),
+    _FolderAutoloadOption(
+      mode: FolderAutoloadMode.sameSeries,
+      icon: Icons.movie_filter_outlined,
+      label: 'Same series only',
+      helper: 'Only files named like the picked one — never the whole folder.',
+    ),
+    _FolderAutoloadOption(
+      mode: FolderAutoloadMode.off,
+      icon: Icons.block_outlined,
+      label: 'Off',
+      helper: 'Only the picked file is loaded.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<FolderAutoloadMode>(
+      valueListenable: SettingsService.instance.folderAutoloadMode,
+      builder:
+          (BuildContext context, FolderAutoloadMode mode, Widget? _) {
+        return Column(
+          children: <Widget>[
+            for (final _FolderAutoloadOption option in _options)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionTile(
+                  icon: option.icon,
+                  label: option.label,
+                  helper: option.helper,
+                  isDefault: option.isDefault,
+                  selected: mode == option.mode,
+                  onTap: () => SettingsService.instance
+                      .setFolderAutoloadMode(option.mode),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _FolderAutoloadOption {
+  const _FolderAutoloadOption({
+    required this.mode,
+    required this.icon,
+    required this.label,
+    required this.helper,
+    this.isDefault = false,
+  });
+
+  final FolderAutoloadMode mode;
+  final IconData icon;
+  final String label;
+  final String helper;
+  final bool isDefault;
 }
 
 class _ModeOption {

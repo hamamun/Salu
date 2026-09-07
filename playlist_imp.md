@@ -15,7 +15,10 @@
 >   will be implemented.
 > - **A local file load starts at the top.** When local files are loaded,
 >   playback starts from the **first file of the playlist the panel is
->   showing** — row 0 of the sorted, shown list (§1 decision 5).
+>   showing** — row 0 of the sorted, shown list (§1 decision 5). **One
+>   sanctioned exception (owner, 2026-09-07):** a *folder auto-load*
+>   trigger (`autoload_imp.md`, Phase B — shipped) starts at the picked
+>   file's natural folder row instead; do not "fix" that back.
 >
 > Phase A in brief: a playlist mark and toggle in the control row (§§2–3), a
 > slide-out glass panel over the video (§4), queue/repeat/shuffle service work
