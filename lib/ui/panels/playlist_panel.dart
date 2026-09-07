@@ -161,6 +161,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       final int pos = _visibleRows(_queue.paths.value).indexOf(current);
       if (pos < 0) return;
       final ScrollPosition p = _scroll.position;
+      // Skip until content metrics exist — reading them earlier throws a
+      // null check on the very frame a list is added to / resized.
+      if (!p.hasPixels ||
+          !p.hasViewportDimension ||
+          !p.hasContentDimensions) {
+        return;
+      }
       final double target = (pos * _rowExtent)
           .clamp(0.0, p.maxScrollExtent)
           .toDouble();
@@ -729,19 +736,26 @@ class _SaluScrollView extends StatelessWidget {
               ListenableBuilder(
                 listenable: controller,
                 builder: (BuildContext context, Widget? _) {
+                  // A freshly attached (or mid-layout) scroll position can
+                  // report clients before its pixels/content dimensions
+                  // exist — sampling them then throws a null check. So wait
+                  // until every metric is present before drawing the thumb.
                   if (!controller.hasClients) return const SizedBox.shrink();
                   final ScrollPosition p = controller.position;
-                  if (p.maxScrollExtent <= 0 || p.viewportDimension <= 0) {
+                  if (!p.hasPixels ||
+                      !p.hasViewportDimension ||
+                      !p.hasContentDimensions) {
                     return const SizedBox.shrink();
                   }
-                  double thumbH =
-                      h * (p.viewportDimension /
-                          (p.viewportDimension + p.maxScrollExtent));
+                  final double viewport = p.viewportDimension;
+                  final double max = p.maxScrollExtent;
+                  if (max <= 0 || viewport <= 0) {
+                    return const SizedBox.shrink();
+                  }
+                  double thumbH = h * (viewport / (viewport + max));
                   if (thumbH < 24) thumbH = 24;
                   final double travel = h - thumbH;
-                  double y = travel > 0
-                      ? travel * (p.pixels / p.maxScrollExtent)
-                      : 0;
+                  double y = travel > 0 ? travel * (p.pixels / max) : 0;
                   if (y < 0) y = 0;
                   if (y > travel) y = travel;
                   return Positioned(
