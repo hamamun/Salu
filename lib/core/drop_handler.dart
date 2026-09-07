@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'folder_autoload_service.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
 
@@ -47,6 +49,11 @@ class DropHandler {
     // 3. Play: single file plays directly, multiple files become a queue.
     if (mediaPaths.length == 1) {
       await service.openPath(mediaPaths.first);
+      // Folder auto-load (autoload_imp.md §2): a single dropped file may
+      // grow its own folder queue behind the playing file. Never fires
+      // on a batch, and never on the append path (panel-open drops).
+      unawaited(FolderAutoloadService.instance
+          .maybeExpand(mediaPaths.first));
     } else {
       await service.openPaths(mediaPaths);
     }
@@ -58,15 +65,25 @@ class DropHandler {
 
   /// Shallow-scans a folder for playable media, natural episode order
   /// (folder first, then the name — `ep2` before `ep10`, playlist_imp.md
-  /// §5's one-gesture = one-block rule). Shared by drag-and-drop and the
-  /// Open Folder… picker.
-  static List<String> scanFolderForMedia(String folderPath) {
+  /// §5's one-gesture = one-block rule). Shared by drag-and-drop, the
+  /// Open Folder… picker and folder auto-load.
+  ///
+  /// [kind] narrows the scan to one kind (autoload_imp.md §1 lock 4:
+  /// video → videos only, audio → audio only); omitted keeps the
+  /// original video+audio behaviour every existing caller relies on.
+  static List<String> scanFolderForMedia(String folderPath,
+      {MediaKind? kind}) {
     try {
+      final bool Function(String) accept = switch (kind) {
+        MediaKind.video => MediaUtils.isVideo,
+        MediaKind.audio => MediaUtils.isAudio,
+        null => MediaUtils.isMedia,
+      };
       final List<String> found = Directory(folderPath)
           .listSync()
           .whereType<File>()
           .map((File f) => f.path)
-          .where(MediaUtils.isMedia)
+          .where(accept)
           .toList();
       found.sort(MediaUtils.naturalPathCompare);
       return found;

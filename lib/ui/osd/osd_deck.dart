@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
 import '../osc/volume_bar.dart';
 import '../widgets/glass_capsule.dart';
+import '../widgets/salu_marks.dart';
 import '../widgets/transport_marks.dart';
 import 'osd_controller.dart';
 
@@ -132,7 +133,38 @@ class _OsdDeckState extends State<OsdDeck>
       OsdVolumeCard c => _TransientCard(child: _volumeBody(c)),
       OsdResumeCard c => _ResumeToast(card: c),
       OsdUndoCard c => _UndoToast(card: c),
+      OsdAutoloadCard c => _TransientCard(child: _autoloadBody(c)),
     };
+  }
+
+  /// The auto-load whisper (autoload_imp.md §4): the playlist's quiet
+  /// Now Row mark + "12 videos queued from “Season 1”".
+  Widget _autoloadBody(OsdAutoloadCard card) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconTheme.merge(
+          data: const IconThemeData(color: AppColors.textPrimary),
+          // No chevron (now: −1) — this card reports growth, not play.
+          child: const NowRowMark(size: 16),
+        ),
+        const SizedBox(width: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: Text(
+            '${card.count} ${card.audio ? 'tracks' : 'videos'} queued from “${card.folder}”',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _transportBody(OsdTransportCard card) {

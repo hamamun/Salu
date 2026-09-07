@@ -1,5 +1,10 @@
 import 'package:path/path.dart' as p;
 
+/// The two playable kinds SALU distinguishes (autoload_imp.md §1 lock
+/// 4): a folder scan never mixes them — a picked video queues videos,
+/// a picked track queues tracks.
+enum MediaKind { video, audio }
+
 /// Central knowledge of which file types SALU understands.
 class MediaUtils {
   MediaUtils._();

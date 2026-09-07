@@ -1200,6 +1200,79 @@ class PlayerService {
     }
   }
 
+  /// Grows a SINGLE-row queue in place — folder auto-load
+  /// (autoload_imp.md §2 step 5): [before] and [after] slot in around
+  /// the item playing right now, in the folder's natural order, so the
+  /// picked file's row becomes its natural folder position
+  /// (`before.length`). The current media is NEVER reopened — no
+  /// flicker, no position jump, resume memory untouched. Neighbours are
+  /// plain `Media`s (no `start:` offsets), exactly like
+  /// [appendToQueue]: a remembered position applies when a row is
+  /// explicitly opened later — the established append precedent.
+  ///
+  /// Callers guarantee the queue is the untouched singleton a fresh
+  /// single-file load just installed; anything else is a no-op. Returns
+  /// `true` when the queue grew.
+  Future<bool> insertAroundCurrent({
+    required List<String> before,
+    required List<String> after,
+  }) async {
+    if (before.isEmpty && after.isEmpty) return false;
+    final QueueService queue = QueueService.instance;
+    final List<String> paths = queue.paths.value;
+    // The caller's contract: exactly the freshly loaded item, playing.
+    if (paths.length != 1 || queue.index.value != 0 || !hasMedia.value) {
+      return false;
+    }
+
+    final List<String> beforeC =
+        before.map(MediaUtils.canonicalPath).toList(growable: false);
+    final List<String> afterC =
+        after.map(MediaUtils.canonicalPath).toList(growable: false);
+
+    // Engine mirror. The queue is still the singleton while the engine
+    // playlist grows, so the playlist stream's length guard
+    // (`queue.paths.value.length == playlist.medias.length`) blocks any
+    // mid-surgery setIndex from clobbering the row the queue lands on
+    // below; mpv keeps the CURRENT entry through every add/move, so
+    // title and path never leave the picked file either.
+    int engineLength = 1;
+    for (final String p in afterC) {
+      try {
+        await player.add(Media(p));
+        engineLength++;
+      } catch (_) {
+        // Best-effort mirror; the queue is already authoritative.
+      }
+    }
+    for (int j = 0; j < beforeC.length; j++) {
+      try {
+        await player.add(Media(beforeC[j]));
+        engineLength++;
+        await player.move(engineLength - 1, j);
+      } catch (_) {
+        // Best-effort mirror; the queue is already authoritative.
+      }
+    }
+
+    // The queue lands in its final shape only after the engine is done:
+    // one paths.value fire, the panel fills in a single pass, and the
+    // picked file sits at its natural row.
+    queue.setQueue(
+      <String>[...beforeC, paths.first, ...afterC],
+      beforeC.length,
+    );
+
+    // The repeat × shuffle engine state was answered for a one-row
+    // queue — it just stopped being one, so re-answer "what plays next"
+    // (a live shuffle now takes over the advance).
+    await _applyPlaylistMode();
+
+    debugPrint(
+        '[SALU] auto-load inserted ${beforeC.length + afterC.length} item(s) around the current one');
+    return true;
+  }
+
   // ── Hardware acceleration check (Phase 2 requirement) ────────────────
 
   /// Queries mpv for the decoder that is actually active right now.

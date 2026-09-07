@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/drop_handler.dart';
+import '../../core/folder_autoload_service.dart';
 import '../../core/open_media_service.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
@@ -110,6 +111,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (initial != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _player.openPath(initial);
+        // Single-file open-with — folder auto-load may kick in
+        // (autoload_imp.md §2).
+        unawaited(FolderAutoloadService.instance.maybeExpand(initial));
       });
     }
   }

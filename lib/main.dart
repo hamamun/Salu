@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/folder_autoload_service.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
 import 'core/resume_service.dart';
@@ -37,6 +38,10 @@ Future<void> main(List<String> args) async {
         final String? path = extractMediaPathFromArgs(secondArgs);
         if (path != null) {
           await PlayerService.instance.openPath(path);
+          // Single-file open-with — folder auto-load may kick in
+          // (autoload_imp.md §2; the mode setting and exclusions gate
+          // everything inside).
+          unawaited(FolderAutoloadService.instance.maybeExpand(path));
         }
       },
     );
