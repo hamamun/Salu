@@ -97,7 +97,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   void _onOpenChanged() {
     if (_panel.playlistOpen.value) {
       _open.forward();
-      _revealPlaying(animate: false); // jump on entrance — no scroll motion
+      // Entrance jump — ignore any stale scroll suppression.
+      _revealPlaying(animate: false, force: true);
     } else {
       _open.reverse();
     }
@@ -108,8 +109,15 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   void _onIndexChanged() {
     setState(() {});
-    // Auto-advance / Next / Previous while open — reveal the new row.
-    if (_panel.playlistOpen.value) _revealPlaying(animate: true);
+    // A deliberate index change (auto-advance, Next, Previous, row click)
+    // must always reveal the playing row. Per §4.3 the "don't fight the
+    // user" suppression is lifted on the next index change, so we clear
+    // it here and force the reveal even if a recent scroll had armed it.
+    if (_panel.playlistOpen.value) {
+      _userScrollTimer?.cancel();
+      _userScrolled = false;
+      _revealPlaying(animate: true, force: true);
+    }
   }
 
   /// A manual scroll suppresses the reveal for ~3 s (never fight the
@@ -150,11 +158,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     return MediaUtils.displayName(path);
   }
 
-  /// Scrolls so the playing row is visible — only when required, the
-  /// shortest distance to the nearest edge (§4.3). Nothing happens when
-  /// the row is filtered out or the user just scrolled.
-  void _revealPlaying({required bool animate}) {
-    if (_userScrolled) return;
+  /// Scrolls so the playing row is visible. A *deliberate* step (auto-advance,
+  /// Next, Previous, row click, panel open) passes [force] to bypass the
+  /// "never fight the user" scroll suppression; only a live/very-recent
+  /// manual scroll should hold the reveal back (§4.3).
+  void _revealPlaying({required bool animate, bool force = false}) {
+    if (_userScrolled && !force) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
       final int current = _queue.index.value;
