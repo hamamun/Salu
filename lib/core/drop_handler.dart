@@ -97,8 +97,18 @@ class DropHandler {
   /// and the batch sorted (§5); only the inside of the appended block is
   /// ordered. Returns `true` when anything was appended.
   static Future<bool> appendDroppedToQueue(List<String> paths) async {
+    // 1. Attach any dropped subtitle files if media is active.
+    final List<String> subtitles =
+        paths.where(MediaUtils.isSubtitle).toList();
+    if (subtitles.isNotEmpty && PlayerService.instance.hasMedia.value) {
+      for (final String subtitle in subtitles) {
+        await PlayerService.instance.loadExternalSubtitle(subtitle);
+      }
+    }
+
+    // 2. Expand folders and collect playable media files.
     final List<String> mediaPaths = collectPlayable(paths);
-    if (mediaPaths.isEmpty) return false;
+    if (mediaPaths.isEmpty) return subtitles.isNotEmpty;
     await PlayerService.instance.appendToQueue(mediaPaths);
     debugPrint('[SALU] appended ${mediaPaths.length} file(s) to the queue');
     return true;
