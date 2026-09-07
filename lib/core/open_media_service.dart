@@ -45,6 +45,10 @@ class OpenMediaService {
             MediaUtils.isMedia(p) || MediaUtils.isPlaylist(p))
         .toList();
     if (paths.isEmpty) return;
+    // The shell's multi-select order is never trusted — re-sort the batch
+    // into the folder's own natural order (playlist_imp.md §5) so a fresh
+    // load always starts from row 0 of the shown list.
+    paths.sort(MediaUtils.naturalPathCompare);
     final PlayerService player = PlayerService.instance;
     if (paths.length == 1) {
       await player.openPath(paths.first);

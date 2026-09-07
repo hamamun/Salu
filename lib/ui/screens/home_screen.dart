@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/drop_handler.dart';
 import '../../core/open_media_service.dart';
+import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/transport_actions.dart';
@@ -15,6 +16,7 @@ import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
 import '../osc/open_url_dialog.dart';
 import '../osd/osd_controller.dart';
 import '../osd/osd_deck.dart';
+import '../panels/playlist_panel.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/settings_dialog.dart';
 import 'video_screen.dart';
@@ -28,7 +30,8 @@ import 'video_screen.dart';
 /// entirely while STOPPED — a parked queue has no progress to draw).
 ///
 /// Layers, back to front: video canvas → drop overlay → progress hairline
-/// → top chrome → resume-toast click-outside listener → OSD deck.
+/// → top chrome → slide-out playlist panel → resume-toast click-outside
+/// listener → OSD deck.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialFilePath});
 
@@ -247,11 +250,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final LogicalKeyboardKey key = event.logicalKey;
 
-    // Esc — dismisses the Resume toast (the only thing Esc owns here).
-    // With no toast up it is just another key: activity → chrome wakes.
+    // Esc — dismisses the Resume toast, else closes the playlist panel
+    // (its search field already consumed Esc first when it had focus).
+    // With neither up it is just another key: activity → chrome wakes.
     if (key == LogicalKeyboardKey.escape) {
       if (_osd.isResumeToast) {
         _osd.dismiss();
+        return KeyEventResult.handled;
+      }
+      if (PanelService.instance.playlistOpen.value) {
+        PanelService.instance.closePlaylist();
         return KeyEventResult.handled;
       }
       _wakeChrome();
@@ -316,6 +324,10 @@ class _HomeScreenState extends State<HomeScreen> {
       showOpenUrlDialog(context);
       return KeyEventResult.handled;
     }
+    if (ctrl && key == LogicalKeyboardKey.keyL) {
+      PanelService.instance.togglePlaylist();
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
@@ -362,7 +374,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 //     single fused glass block (one gradient, one motion).
                 _buildTopChrome(chromeVisible),
 
-                // 5 · Resume-toast click-outside: dismiss ONLY — never
+                // 5 · The slide-out playlist panel — glass over the video,
+                //     anchored below the chrome block (top: kChromeBlockHeight).
+                //     Sits under the OSD deck (z-order §4.2) and under the
+                //     resume-toast dismiss layer.
+                const PlaylistPanel(),
+
+                // 6 · Resume-toast click-outside: dismiss ONLY — never
                 //     triggers Restart, never swallows the click (the
                 //     translucent listener lets everything beneath keep
                 //     working). Sits under the deck, so a click on the
@@ -380,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
 
-                // 6 · The OSD deck — top center, anchored below the
+                // 7 · The OSD deck — top center, anchored below the
                 //     chrome block, never waking the chrome.
                 const OsdDeck(),
               ],
