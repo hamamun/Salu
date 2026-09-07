@@ -226,13 +226,18 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Drag & drop ────────────────────────────────────────────────────────
 
   Future<void> _onDropDone(DropDoneDetails details) async {
+    final bool playlistOpen = PanelService.instance.playlistOpen.value;
     setState(() => _dropHovering = false);
     // The drop overlay that was holding the bar up just went away — wake
     // the chrome so the freshly loaded title stays visible for 3 seconds.
     _wakeChrome();
     final List<String> paths =
         details.files.map((file) => file.path).toList();
-    await DropHandler.handleDroppedPaths(paths);
+    if (playlistOpen) {
+      await DropHandler.appendDroppedToQueue(paths);
+    } else {
+      await DropHandler.handleDroppedPaths(paths);
+    }
   }
 
   // ── Keyboard (silent set — never printed anywhere; follow.md rule 2) ──
@@ -362,7 +367,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
 
                 // 2 · Drop highlight overlay.
-                _DropOverlay(visible: _dropHovering),
+                _DropOverlay(
+                  visible: _dropHovering,
+                  playlistOpen: PanelService.instance.playlistOpen.value,
+                ),
 
                 // 3 · The auto-hide hairline — appears at the very bottom
                 //     when the chrome hides, and disappears entirely
@@ -572,9 +580,10 @@ class _AutoHideProgress extends StatelessWidget {
 
 /// Soft rounded highlight shown while files hover over the window.
 class _DropOverlay extends StatelessWidget {
-  const _DropOverlay({required this.visible});
+  const _DropOverlay({required this.visible, this.playlistOpen = false});
 
   final bool visible;
+  final bool playlistOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -597,15 +606,20 @@ class _DropOverlay extends StatelessWidget {
               color: AppColors.glass,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Column(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Icon(Icons.file_download_outlined,
-                    size: 34, color: AppColors.textPrimary),
-                SizedBox(height: 8),
+                Icon(
+                  playlistOpen
+                      ? Icons.playlist_add_outlined
+                      : Icons.file_download_outlined,
+                  size: 34,
+                  color: AppColors.textPrimary,
+                ),
+                const SizedBox(height: 8),
                 Text(
-                  'Drop to play',
-                  style: TextStyle(
+                  playlistOpen ? 'Drop to add to playlist' : 'Drop to play',
+                  style: const TextStyle(
                     fontSize: 15,
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w500,

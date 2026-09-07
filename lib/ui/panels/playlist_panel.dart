@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter/services.dart';
 
@@ -266,18 +265,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
               opacity: v,
               child: Transform.translate(
                 offset: Offset((1 - v) * PlaylistPanel.width, 0),
-                child: DropTarget(
-                  // Drop on the open panel APPENDS; the canvas drop that
-                  // the outer target routes to still replaces (§7 step 10).
-                  onDragEntered: (_) {},
-                  onDragExited: (_) {},
-                  onDragDone: (DropDoneDetails details) async {
-                    final List<String> paths =
-                        details.files.map((f) => f.path).toList();
-                    await DropHandler.appendDroppedToQueue(paths);
-                  },
-                  child: _glass(_body()),
-                ),
+                child: _glass(_body()),
               ),
             );
           },
@@ -582,7 +570,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       child: const GripMark(size: 16),
     );
     return _RowTile(
-      key: ValueKey<String>(path),
+      key: ValueKey<String>('$index:$path'),
       index: index,
       isNow: isNow,
       name: _rowName(path),
