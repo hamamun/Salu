@@ -82,9 +82,11 @@ class TransportCluster extends StatelessWidget {
             const SizedBox(width: _inGroup),
             SaluIconButton(
               tooltip: 'Next',
-              // Dimmed when there is no next item (single file = always
-              // dim: honest).
-              enabled: queue.hasNext,
+              // Dimmed when nothing can play next: single-file queue in
+              // list order. While shuffle drives the advance a pick
+              // always exists (an exhausted pass starts a fresh one), so
+              // Next stays live — one owner answers the question.
+              enabled: player.hasNextItem,
               onTap: TransportActions.instance.next,
               child: const NextMark(),
             ),
