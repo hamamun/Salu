@@ -865,7 +865,7 @@ class _MagnifierPainter extends CustomPainter {
     canvas.drawCircle(c, r, paint);
 
     // Handle: from the ring's lower-right rim down toward the box corner.
-    final double a = math.pi / 4; // 45°, down-right
+    const double a = math.pi / 4; // 45°, down-right
     canvas.drawLine(
       Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a)),
       Offset(c.dx + (r + s * 0.20) * math.cos(a),

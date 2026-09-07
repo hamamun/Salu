@@ -125,7 +125,7 @@ class QueueService {
   bool move(int from, int to) {
     final List<String> current = paths.value;
     if (from < 0 || from >= current.length) return false;
-    final int cur = this.index.value;
+    final int cur = index.value;
     final String? currentPath = (cur >= 0 && cur < current.length)
         ? current[cur]
         : null;
@@ -135,7 +135,7 @@ class QueueService {
     final int at = to.clamp(0, next.length).toInt();
     next.insert(at, item);
     paths.value = List<String>.unmodifiable(next);
-    this.index.value = currentPath == null
+    index.value = currentPath == null
         ? -1
         : next.indexOf(currentPath);
     _resetPass();

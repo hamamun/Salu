@@ -36,15 +36,9 @@ class DropHandler {
       }
     }
 
-    // 2. Expand folders into their contained media files.
-    final List<String> mediaPaths = <String>[];
-    for (final String path in paths) {
-      if (FileSystemEntity.isDirectorySync(path)) {
-        mediaPaths.addAll(scanFolderForMedia(path));
-      } else if (MediaUtils.isMedia(path) || MediaUtils.isPlaylist(path)) {
-        mediaPaths.add(path);
-      }
-    }
+    // 2. Expand folders into their contained media files and sort the
+    //    batch into the folder's own order (one gesture = one block, §5).
+    final List<String> mediaPaths = collectPlayable(paths);
 
     if (mediaPaths.isEmpty) {
       return subtitles.isNotEmpty ? 'Subtitle loaded' : null;
@@ -62,9 +56,10 @@ class DropHandler {
         : 'Queued ${mediaPaths.length} files';
   }
 
-  /// Shallow-scans a folder for playable media, alphabetically sorted.
-  /// Shared by drag-and-drop and the Open Folder… picker.
-  /// (Natural episode-order sorting arrives with Phase 5's smart queue.)
+  /// Shallow-scans a folder for playable media, natural episode order
+  /// (folder first, then the name — `ep2` before `ep10`, playlist_imp.md
+  /// §5's one-gesture = one-block rule). Shared by drag-and-drop and the
+  /// Open Folder… picker.
   static List<String> scanFolderForMedia(String folderPath) {
     try {
       final List<String> found = Directory(folderPath)
@@ -72,13 +67,40 @@ class DropHandler {
           .whereType<File>()
           .map((File f) => f.path)
           .where(MediaUtils.isMedia)
-          .toList()
-        ..sort((String a, String b) =>
-            a.toLowerCase().compareTo(b.toLowerCase()));
+          .toList();
+      found.sort(MediaUtils.naturalPathCompare);
       return found;
     } catch (error) {
       debugPrint('[SALU] folder scan failed: $error');
       return const <String>[];
     }
+  }
+
+  /// Expands folders into their contained media and sorts the whole batch
+  /// into the folder's own order (folder first, then name, natural).
+  /// The shell's multi-select array order is never trusted (§5).
+  static List<String> collectPlayable(List<String> paths) {
+    final List<String> mediaPaths = <String>[];
+    for (final String path in paths) {
+      if (FileSystemEntity.isDirectorySync(path)) {
+        mediaPaths.addAll(scanFolderForMedia(path));
+      } else if (MediaUtils.isMedia(path) || MediaUtils.isPlaylist(path)) {
+        mediaPaths.add(path);
+      }
+    }
+    mediaPaths.sort(MediaUtils.naturalPathCompare);
+    return mediaPaths;
+  }
+
+  /// Appends a dropped batch to the (open) playlist panel — the queue is
+  /// never replaced, the current item is untouched. Folders are expanded
+  /// and the batch sorted (§5); only the inside of the appended block is
+  /// ordered. Returns `true` when anything was appended.
+  static Future<bool> appendDroppedToQueue(List<String> paths) async {
+    final List<String> mediaPaths = collectPlayable(paths);
+    if (mediaPaths.isEmpty) return false;
+    await PlayerService.instance.appendToQueue(mediaPaths);
+    debugPrint('[SALU] appended ${mediaPaths.length} file(s) to the queue');
+    return true;
   }
 }

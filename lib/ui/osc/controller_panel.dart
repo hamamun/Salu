@@ -55,7 +55,7 @@ class ControllerPanel extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const <Widget>[
+                    children: <Widget>[
                       OpenMediaControl(),
                       SizedBox(width: 6), // §1.1 — set 2 to fuse them
                       PlaylistControl(),

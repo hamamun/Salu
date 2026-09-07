@@ -131,6 +131,7 @@ class _OsdDeckState extends State<OsdDeck>
       OsdTransportCard c => _TransientCard(child: _transportBody(c)),
       OsdVolumeCard c => _TransientCard(child: _volumeBody(c)),
       OsdResumeCard c => _ResumeToast(card: c),
+      OsdUndoCard c => _UndoToast(card: c),
     };
   }
 
@@ -296,6 +297,88 @@ class _ResumeToastState extends State<_ResumeToast> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The interactive Undo toast (playlist_imp.md §5):
+///
+/// ```
+/// removed clip.mp4                  [ Undo ]
+/// ```
+///
+/// Left: what changed (a file name, or "Playlist cleared"). Right: the
+/// single allowed word-action, "Undo", lighting to white on hover — no
+/// box, no second glyph. Auto-dismiss 5 s; clicking Undo performs the
+/// restore and dismisses. The one word on the action is the single
+/// allowed exception to "no text on controls" (follow.md §1.6).
+class _UndoToast extends StatefulWidget {
+  const _UndoToast({required this.card});
+
+  final OsdUndoCard card;
+
+  @override
+  State<_UndoToast> createState() => _UndoToastState();
+}
+
+class _UndoToastState extends State<_UndoToast> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color tone =
+        _hovered ? AppColors.textPrimary : AppColors.iconIdle;
+    return GlassCapsule(
+      radius: 10,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // What changed — ellipsized so a long name never overruns.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text(
+              widget.card.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          const SizedBox(width: 26),
+          // Undo — one hover target, word only (the allowed exception).
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                OsdController.instance.dismiss();
+                widget.card.onUndo();
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 6, horizontal: 2),
+                child: Text(
+                  'Undo',
+                  style: TextStyle(
+                    color: tone,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ),

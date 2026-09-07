@@ -47,6 +47,21 @@ class OsdResumeCard extends OsdCard {
   final Duration position;
 }
 
+/// The interactive Undo toast (playlist_imp.md §5 — rule 3, no dialogs):
+/// names what changed and offers the single allowed word-action, "Undo".
+/// Shown for removals, drag-reorders and the absolute Clear playlist.
+/// Auto-dismisses after 5 s; clicking "Undo" runs [onUndo] and dismisses.
+class OsdUndoCard extends OsdCard {
+  const OsdUndoCard({required this.label, required this.onUndo})
+      : super(ttl: const Duration(seconds: 5));
+
+  /// What changed (a file name, or "Playlist cleared").
+  final String label;
+
+  /// Performs the undo (the panel passes the captured [QueueUndo] token).
+  final VoidCallback onUndo;
+}
+
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {
   OsdController._internal();
