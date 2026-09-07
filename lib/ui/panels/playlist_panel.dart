@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter/services.dart';
 
 import '../../core/drop_handler.dart';
@@ -11,8 +11,8 @@ import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
 import '../../theme/app_theme.dart';
-import '../osd/osd_controller.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
+import '../osd/osd_controller.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 
@@ -346,9 +346,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
             _headerButton(
               tooltip: 'Close playlist',
               active: false,
-              mark: const Transform.rotate(
+              mark: Transform.rotate(
                 angle: 0.7853981633974483,
-                child: PlusMark(size: 16),
+                child: const PlusMark(size: 16),
               ),
               onTap: () => _panel.closePlaylist(),
             ),
@@ -489,9 +489,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           padding: const EdgeInsets.all(2),
           child: IconTheme.merge(
             data: const IconThemeData(color: AppColors.iconIdle),
-            child: const Transform.rotate(
+            child: Transform.rotate(
               angle: 0.7853981633974483,
-              child: PlusMark(size: 12),
+              child: const PlusMark(size: 12),
             ),
           ),
         ),
@@ -545,8 +545,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         buildDefaultDragHandles: false,
         padding: const EdgeInsets.symmetric(vertical: 2),
         itemCount: visible.length,
-        onReorder: (int oldIndex, int newIndex) {
-          if (newIndex > oldIndex) newIndex -= 1;
+        onReorderItem: (int oldIndex, int newIndex) {
           unawaited(_move(oldIndex, newIndex));
         },
         itemBuilder: (BuildContext context, int i) =>
