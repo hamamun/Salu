@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// SALU's custom icon family (see follow.md · hard rule 6).
@@ -19,6 +21,10 @@ import 'package:flutter/material.dart';
 ///   · bin            — Delete              [TrashMark]
 ///   · tick           — Done (inline edit)  [TickMark]
 ///   · three rules    — Drag handle         [GripMark]
+///   · ragged rules   — Playlist (Now Row)  [NowRowMark]
+///   · ¾ arc + arrow  — Repeat              [RepeatMark] (arc: RestartMark's)
+///   · crossing rules — Shuffle             [ShuffleMark]
+///   · circle + stem  — Search (magnifier)  [MagnifierMark]
 
 /// Shared stroke weight so the whole family reads as one hand (public so
 /// the transport marks share it — see transport_marks.dart).
@@ -568,5 +574,307 @@ class _GripPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GripPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Playlist — three ragged rules; the row that is playing carries the
+/// family's solid play chevron at its head (playlist_imp.md §2).
+///
+/// The chevron's row reports the queue's position in thirds: with the
+/// queue empty ([now] = −1) the three rules stay quiet and no chevron is
+/// drawn. Raggedness is load-bearing — three EQUAL rules would read as
+/// the ≡ drag handle (hard rule 6), so the ends must stay 0.86 / 0.68 /
+/// 0.78. Never used near the transport cluster (§1.2 R4).
+class NowRowMark extends StatelessWidget {
+  const NowRowMark({super.key, this.size = 20, this.now = -1});
+
+  final double size;
+
+  /// 0…2 = the rule (third) that carries the chevron; −1 = nothing queued.
+  final int now;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _NowRowPainter(markInk(context), markStrokeFor(size), now),
+    );
+  }
+}
+
+class _NowRowPainter extends CustomPainter {
+  const _NowRowPainter(this.ink, this.stroke, this.now);
+
+  final Color ink;
+  final double stroke;
+  final int now;
+
+  static const List<double> _ys = <double>[0.28, 0.52, 0.76];
+  static const List<double> _ends = <double>[0.86, 0.68, 0.78];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width, h = size.height;
+    final Paint quiet = Paint()
+      ..color = ink.withAlpha(140)
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    final Paint line = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    final Paint fill = Paint()
+      ..color = ink
+      ..style = PaintingStyle.fill;
+    final Paint round = Paint()
+      ..color = ink
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+
+    for (int i = 0; i < _ys.length; i++) {
+      if (i == now) continue; // the playing row is drawn last, full ink
+      final double y = h * _ys[i];
+      canvas.drawLine(Offset(w * 0.16, y), Offset(w * _ends[i], y), quiet);
+    }
+    if (now < 0) return; // empty queue — no chevron, nothing full-ink
+
+    final double y = h * _ys[now];
+    final Path head = Path()
+      ..moveTo(w * 0.16, y - h * 0.08)
+      ..lineTo(w * 0.30, y)
+      ..lineTo(w * 0.16, y + h * 0.08)
+      ..close();
+    canvas.drawPath(head, fill);
+    canvas.drawPath(head, round); // softens the points, as PlayMark does
+    canvas.drawLine(Offset(w * 0.38, y), Offset(w * _ends[now], y), line);
+  }
+
+  @override
+  bool shouldRepaint(_NowRowPainter old) =>
+      old.ink != ink || old.stroke != stroke || old.now != now;
+}
+
+/// Repeat — the family's ¾-arc + arrowhead (geometry identical to the
+/// transport Restart mark), reporting the repeat state by modification:
+/// quiet (off, [quiet] = true) · full (all) · full + a solid bead at the
+/// arc's centre (one). Never a numeral (rules 1 & 6).
+class RepeatMark extends StatelessWidget {
+  const RepeatMark({super.key, this.size = 18, this.quiet = false, this.bead = false});
+
+  final double size;
+
+  /// Off state — the arc sits at the quiet 55 % ink (still hoverable).
+  final bool quiet;
+
+  /// Repeat-one state — a solid bead at the arc's centre.
+  final bool bead;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color ink = markInk(context);
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _RepeatPainter(
+        quiet ? ink.withAlpha(140) : ink,
+        markStrokeFor(size),
+        bead ? ink : null,
+      ),
+    );
+  }
+}
+
+class _RepeatPainter extends CustomPainter {
+  const _RepeatPainter(this.ink, this.stroke, this.beadInk);
+
+  final Color ink;
+  final double stroke;
+
+  /// Full ink when the bead is shown, `null` without one.
+  final Color? beadInk;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    final double s = size.width;
+    final Offset c = Offset(s * 0.5, s * 0.5);
+    final double r = s * 0.32;
+
+    // ¾ arc: starts low-left, sweeps clockwise, ends pointing right-down
+    // (the exact Restart geometry).
+    const double start = 3 * math.pi / 4;
+    const double sweep = 3 * math.pi / 2;
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r),
+      start,
+      sweep,
+      false,
+      paint,
+    );
+
+    // Arrowhead at the arc's end, pointing along the sweep.
+    const double endAngle = start + sweep;
+    final Offset tip = Offset(
+      c.dx + r * math.cos(endAngle),
+      c.dy + r * math.sin(endAngle),
+    );
+    final Offset tangent = Offset(-math.sin(endAngle), math.cos(endAngle));
+    final Offset normal = Offset(tangent.dy, -tangent.dx) * (s * 0.11);
+    final Path head = Path()
+      ..moveTo(tip.dx - tangent.dx * s * 0.16 + normal.dx,
+          tip.dy - tangent.dy * s * 0.16 + normal.dy)
+      ..lineTo(tip.dx, tip.dy)
+      ..lineTo(tip.dx - tangent.dx * s * 0.16 - normal.dx,
+          tip.dy - tangent.dy * s * 0.16 - normal.dy);
+    canvas.drawPath(head, paint);
+
+    // Repeat-one bead at the arc's centre.
+    final Color? bead = beadInk;
+    if (bead != null) {
+      canvas.drawCircle(
+        c,
+        s * 0.09,
+        Paint()
+          ..color = bead
+          ..style = PaintingStyle.fill,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RepeatPainter old) =>
+      old.ink != ink || old.stroke != stroke || old.beadInk != beadInk;
+}
+
+/// Shuffle — two crossing rules with arrowheads at their right ends.
+/// Must cross and carry heads so it can never be read as the transport's
+/// `<<` / `>>`. While suspended (repeat-one active) [quiet] drops the
+/// whole mark to the quiet 55 % ink and the header loses its glow.
+class ShuffleMark extends StatelessWidget {
+  const ShuffleMark({super.key, this.size = 18, this.quiet = false});
+
+  final double size;
+
+  final bool quiet;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color ink = markInk(context);
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _ShufflePainter(
+        quiet ? ink.withAlpha(140) : ink,
+        markStrokeFor(size),
+      ),
+    );
+  }
+}
+
+class _ShufflePainter extends CustomPainter {
+  const _ShufflePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    final double s = size.width;
+
+    // Two rules that cross near the middle: the upper arm falls to the
+    // right, the lower arm rises to the right.
+    final Offset topStart = Offset(s * 0.16, s * 0.30);
+    final Offset topEnd = Offset(s * 0.62, s * 0.58);
+    final Offset bottomStart = Offset(s * 0.16, s * 0.70);
+    final Offset bottomEnd = Offset(s * 0.62, s * 0.42);
+    canvas.drawLine(topStart, topEnd, paint);
+    canvas.drawLine(bottomStart, bottomEnd, paint);
+
+    // Arrowhead at each right end, along its rule's direction.
+    _drawHead(canvas, paint, s, topEnd, (topEnd - topStart) / (topEnd - topStart).distance);
+    _drawHead(canvas, paint, s, bottomEnd,
+        (bottomEnd - bottomStart) / (bottomEnd - bottomStart).distance);
+  }
+
+  static void _drawHead(
+      Canvas canvas, Paint paint, double s, Offset tip, Offset unit) {
+    // A chevron-V: two strokes from the tip back along the rule, splayed
+    // by halfWidth on each side.
+    final Offset back = tip - unit * (s * 0.18);
+    final Offset n = Offset(unit.dy, -unit.dx) * (s * 0.075);
+    final Path head = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(back.dx + n.dx, back.dy + n.dy)
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(back.dx - n.dx, back.dy - n.dy);
+    canvas.drawPath(head, paint);
+  }
+
+  @override
+  bool shouldRepaint(_ShufflePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Search — a thin magnifier: a small circle with a short handle falling
+/// from its lower-right rim. The header field's own wordless label (no
+/// placeholder text — rule 1); the same mark also renders the panel's
+/// no-match state alone at a larger size.
+class MagnifierMark extends StatelessWidget {
+  const MagnifierMark({super.key, this.size = 16});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _MagnifierPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _MagnifierPainter extends CustomPainter {
+  const _MagnifierPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final double s = size.width;
+
+    // Lens: a ring centred slightly up-left of the box's middle.
+    final Offset c = Offset(s * 0.40, s * 0.40);
+    final double r = s * 0.24;
+    canvas.drawCircle(c, r, paint);
+
+    // Handle: from the ring's lower-right rim down toward the box corner.
+    final double a = math.pi / 4; // 45°, down-right
+    canvas.drawLine(
+      Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a)),
+      Offset(c.dx + (r + s * 0.20) * math.cos(a),
+          c.dy + (r + s * 0.20) * math.sin(a)),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MagnifierPainter old) =>
       old.ink != ink || old.stroke != stroke;
 }

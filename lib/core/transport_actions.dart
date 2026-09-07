@@ -123,50 +123,44 @@ class TransportActions {
   }
 
   /// Previous item — one rule in every state. The card names the item
-  /// (or `00:00:00` on a same-item restart). Titles are read from the
-  /// queue, not the engine's title stream — the card must be right the
-  /// instant the action fires.
+  /// that actually ended up playing (`00:00:00` on a same-item restart).
+  /// During shuffle `|<<` follows the play-order history, so the card
+  /// reads the index [PlayerService.previous] returns — never a
+  /// list-order guess.
   void previous() {
     if (!queue.hasQueue) return;
     resetSeekRamps();
     osd.dismissResumeToast();
-    final bool restart = _previousRestartsThisItem();
+    final bool restart = player.previousRestartsThisItem;
     final int from = queue.index.value;
-    _run(player.previous().then((_) {
-      final List<String> paths = queue.paths.value;
-      final int to = restart ? from : from - 1;
-      final String text = restart
-          ? '00:00:00'
-          : (to >= 0 && to < paths.length
-              ? MediaUtils.displayName(paths[to])
-              : '00:00:00');
+    _run(player.previous().then((int? to) {
+      final String text;
+      if (restart) {
+        text = '00:00:00';
+      } else if (to != null && to >= 0 && to < queue.paths.value.length) {
+        text = MediaUtils.displayName(queue.paths.value[to]);
+      } else {
+        text = from > 0 && from <= queue.paths.value.length
+            ? MediaUtils.displayName(queue.paths.value[from - 1])
+            : '00:00:00';
+      }
       osd.show(OsdTransportCard(mark: OsdMark.previous, text: text));
     }));
   }
 
-  /// The Previous rule: position (stop memory while stopped) > 3 s, or
-  /// first item → THIS item restarts from `0:00`.
-  bool _previousRestartsThisItem() {
-    final TransportState state = player.transportState.value;
-    final Duration pos =
-        (state == TransportState.stopped && player.stopMemory.value != null)
-            ? player.stopMemory.value!.position
-            : player.position.value;
-    return pos > const Duration(seconds: 3) || queue.index.value <= 0;
-  }
-
-  /// Next item — dimmed in the UI when there is none.
+  /// Next item — dimmed in the UI when there is none. While shuffle
+  /// drives the advance there is always a pick, so the guard asks the
+  /// player; the card names whatever actually played.
   void next() {
-    if (!queue.hasNext) return;
+    if (!player.hasNextItem) return;
     resetSeekRamps();
     osd.dismissResumeToast();
-    final int to = queue.index.value + 1;
-    final List<String> paths = queue.paths.value;
-    _run(player.next().then((_) {
-      osd.show(OsdTransportCard(
-        mark: OsdMark.next,
-        text: to < paths.length ? MediaUtils.displayName(paths[to]) : null,
-      ));
+    _run(player.next().then((int? to) {
+      final String? text =
+          (to != null && to >= 0 && to < queue.paths.value.length)
+              ? MediaUtils.displayName(queue.paths.value[to])
+              : null;
+      osd.show(OsdTransportCard(mark: OsdMark.next, text: text));
     }));
   }
 

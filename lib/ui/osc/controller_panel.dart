@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../widgets/custom_title_bar.dart';
 import 'media_timeline.dart';
 import 'open_media_control.dart';
+import 'playlist_control.dart';
 import 'transport_cluster.dart';
 
 /// SALU's on-screen controller container.
@@ -47,14 +48,23 @@ class ControllerPanel extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: <Widget>[
-                // Left zone · the Open Media control (plus → pill).
+                // Left zone · the Open Media control (+ → pill) then the
+                // Playlist control, 6 px apart — the sibling pair of the
+                // row's left edge (playlist_imp.md §1.1).
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: OpenMediaControl(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const <Widget>[
+                      OpenMediaControl(),
+                      SizedBox(width: 6), // §1.1 — set 2 to fuse them
+                      PlaylistControl(),
+                    ],
+                  ),
                 ),
                 // Center zone · the transport cluster + sound group.
                 // The row's right edge stays free for the future
-                // tracks / PiP / fullscreen / panel toggles.
+                // tracks / PiP / fullscreen controls.
                 Center(child: TransportCluster()),
               ],
             ),

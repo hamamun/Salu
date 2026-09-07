@@ -1,43 +1,37 @@
 # Playlist control & slide-out panel — implementation brief
 
-> **Status:** **FINAL & IMPLEMENTED** (2026-09-06) — phases A (§§1–9,
-> steps 1–13) and B (§10, M-1…M-11) are both in. Bridge transport used is
-> `desktop_multi_window` 0.3.1's `WindowController` + `WindowMethodChannel`
-> pattern; the `PlaylistBridge` message shape (snapshot-out/delta-out/
-> intent-in) is the seam Phase 8's Android remote will reuse over a
-> WebSocket.
+> **Status:** **NOT IMPLEMENTED** (updated 2026-09-07). No playlist code
+> exists in the tree yet. Work order is locked by the owner (2026-09-07):
+> **we implement the LOCAL playlist section first** — §§1–9, i.e. §7's
+> steps 1–12 (Phase A). §10 (m3u / IPTV channel mode) is a **later** phase,
+> built only after Phase A ships and never interleaved with it.
 >
-> **New session? Read this box, then §10 in full.** The document covers two
-> phases that ship in order:
-> **(A) the local playlist panel — §§1–9**, and
-> **(B) m3u / IPTV channel mode — §10**, which is built *after* A and never
-> interleaved with it.
-> §10 is self-contained: brief (§10.0–10.11), build steps (§10.12), acceptance
-> checklist (§10.13) and 49 numbered decisions M1–M46 (§10.14).
-> **Start at §10.0** — it documents a blocker verified in the code: SALU
+> **New session? Read this box, then §1.** Two owner reversals of the
+> 2026-09-06 draft are already recorded in the body — do not re-introduce
+> them:
+> - **Undock / dock is REMOVED.** SALU stays a single surface. Header slot 5
+>   is a **Close ✕** that closes the playlist panel (§4.4, §4.8). No loose
+>   window, no `desktop_multi_window`, no `PlaylistBridge` — none of that
+>   will be implemented.
+> - **A local file load starts at the top.** When local files are loaded,
+>   playback starts from the **first file of the playlist the panel is
+>   showing** — row 0 of the sorted, shown list (§1 decision 5).
+>
+> Phase A in brief: a playlist mark and toggle in the control row (§§2–3), a
+> slide-out glass panel over the video (§4), queue/repeat/shuffle service work
+> (§5) and silent keyboard (§6), built in §7's steps 1–12 and verified against
+> §8's checklist. §10 in brief (read in full only when Phase A ships): the
+> header's first two slots swap to group-by and favourite, repeat and shuffle
+> are dropped, rows lose drag and delete, groups are an accordion, a dead
+> channel toasts **"Failed to load"** and **skips to the next** (3 strikes stop
+> the cascade), the timeline goes inert with a live shimmer, and the engine
+> holds one media instead of the whole list. §10.0's blocker stands: SALU
 > currently hands the whole `.m3u` URL to mpv, so no channel metadata ever
-> reaches the app. Nothing else in §10 can be built before the parser.
-> The interactive study `design/playlist-mark-preview/index.html` implements
-> every §10 behaviour (Source → m3u; Scale → 50 000 channels) and is the
-> reference for anything the prose leaves ambiguous.
+> reaches the app; nothing in §10 can be built before that parser.
 >
-> §10 headlines: the header's first two slots swap to group-by and favourite,
-> repeat and shuffle are dropped, rows lose drag and delete, groups are an
-> accordion, a dead channel toasts **"Failed to load"** and **skips to the next**
-> (3 strikes stop the cascade), the timeline goes inert with a live shimmer, and
-> the engine holds one media instead of the whole list.
-> **Note the one reversal:** M3 ("stay on the dead channel") was overturned by
-> the owner on the same day and is superseded by **M3b–M3e** — the table keeps
-> the dead row struck through so the change is not silently re-litigated.
-> Earlier the same day:
-> the panel's four-tab strip is **removed** and replaced by a five-mark header
-> row — repeat · shuffle · search · clear · undock — with no footer, the count
-> inside the search field, absolute clear, and undock built in the same pass.
-> See §4.4, §4.5 and §4.8). This is
-> the binding
-> spec for SALU's playlist control and its slide-out panel. Placement, mark
-> and state semantics were chosen by the owner in the interactive study
-> `design/playlist-mark-preview/index.html` (serve it with
+> This is the binding spec for SALU's playlist control and its slide-out
+> panel. Placement, mark and state semantics were chosen by the owner in the
+> interactive study `design/playlist-mark-preview/index.html` (serve it with
 > `python3 -m http.server 8123 --bind 0.0.0.0 --directory design/playlist-mark-preview`).
 > Written on branch `arena/01a07168-salu`, base `47b0d90`.
 > **Read `follow.md` first — every hard rule applies.** Where this brief
@@ -75,6 +69,8 @@
 | 2 | **Mark** | **Now Row** — three ragged rules; the row that is playing carries the family's solid play chevron at its head. |
 | 3 | **State channel** | **Position in thirds** — the chevron's row = `floor(index / count × 3)`, clamped 0…2. No chevron at all when the queue is empty. |
 | 4 | **Panel top** | **Below the chrome block**: `top: kChromeBlockHeight` (148 px), sliding from the **right** edge. Never full height — a full-height panel covers its own toggle. |
+| 5 | **Local load → start at the top** | Whenever local files are loaded (Open File… / Open Folder… / drop), the queue is ordered as the folder shows it (§5) and **playback starts from the first file of the playlist the panel is showing** — row 0 of the shown list. A fresh load never starts mid-list and never from a remembered position. |
+| 6 | **Header slot 5** | **Close ✕** — closes the playlist panel (the same 220 ms reverse as the mark toggle · Esc · Ctrl+L). **Undock / dock is REMOVED** (owner, 2026-09-07) — there is no second window and nothing else lives in this slot (§4.4, §4.8). |
 
 ### 1.1 Pitch between `+` and the playlist mark — *(default, one-line veto)*
 
@@ -323,10 +319,6 @@ The OSD deck must stay above the panel — at the 800 px minimum width a wide
 card (the Resume toast) can reach the panel's left edge, and the deck is never
 allowed to be covered.
 
-The **undocked** window (§4.8) is not in this Stack at all: it is a separate OS
-window owned by the same process, so it floats above SALU's whole surface and
-follows its own drag position.
-
 **4.3 Content — rows only, no headers, no labels (rule 1)**
 
 Row anatomy, 38 px tall, radius 9:
@@ -376,7 +368,7 @@ Row anatomy, 38 px tall, radius 9:
 - If the filter (§4.5) has hidden the playing row, the reveal does nothing —
   there is nothing to reveal, and the filter must not be overridden.
 
-**4.4 Header row — five docked marks, no words** *(owner's change of plan, 2026-09-06)*
+**4.4 Header row — five docked marks, no words** *(slots locked 2026-09-06; slot 5 changed to Close by the owner, 2026-09-07)*
 
 The four-tab strip (Playlist · Video · Audio · Subtitles) is **removed** from
 this panel. It is a playlist panel and nothing else. Where the Video / Audio /
@@ -384,10 +376,9 @@ Subtitle views live now is an open Phase 4 question — the control row's right
 edge is still reserved for them (§1, decision 1), and they must not come back
 as tabs on top of the queue.
 
-The docked header appears **only when the queue is non-empty** (owner's rule),
-so none of the five docked controls needs a dimmed state for "nothing to act
-on". The loose window keeps its header even after a clear, so Dock and Close
-remain reachable; queue verbs simply dim there. Left to right, in a 322 px panel
+The header appears **only when the queue is non-empty** (owner's rule),
+so none of the five controls needs a dimmed state for "nothing to act
+on". Left to right, in a 322 px panel
 with 8/10 px padding and a hairline underneath:
 
 | # | Control | Mark | States & tooltip |
@@ -396,12 +387,9 @@ with 8/10 px padding and a hairline underneath:
 | 2 | **Shuffle** | two crossing rules with arrowheads at their right ends | on/off toggle, glow when on, tooltip "Shuffle". Must cross and carry heads so it can never be read as the transport's `<<` / `>>` |
 | 3 | **Search** | thin glass field, radius 14 · inside it, left to right: **magnifier mark · the typed text · the count · ✕ (only while there is text)** | no placeholder text (rule 1) — the magnifier and the tooltip name it. Takes the remaining width. The count is part of the field, not a footer (§4.5) |
 | 4 | **Clear playlist** | `TrashMark` | **absolute**: playback stops, the queue empties, SALU returns to its initial state (the logo canvas). Instant, no confirmation, 5 s **Undo** toast (rule 3) — see §5 |
-| 5 | **Undock / Dock back** | one slot, two marks: a window with an arrow leaving it / the same window with the arrow returning | swaps with the state (the plus→× precedent), tooltips "Undock" / "Dock back" |
+| 5 | **Close** | `✕` — the same cross the plus already rotates into | closes the playlist panel: the 220 ms reverse slide/fade, glow off, exactly as the mark toggle · Esc · Ctrl+L. Tooltip "Close playlist". It only closes the *view* — the queue and playback are untouched; the control-row mark reopens the panel. |
 
-Loose window only: a final **Close** ✕ after Dock hides the playlist view while
-leaving playback and the queue untouched.
-
-Docked space math: four 30 px marks + gaps ≈ 128 px, leaving ~174 px for the field —
+Header space math: four 30 px marks + gaps ≈ 128 px, leaving ~174 px for the field —
 and the field now has to hold the magnifier (~20 px), the count (~28 px) and the
 ✕ (~20 px) as well, so typed text gets ~100 px. Tight but workable, and removing
 the footer is what keeps it that way. **Escape hatch if it ever feels cramped:**
@@ -411,9 +399,9 @@ click. Recorded, not built pre-emptively.
 **The panel has exactly two zones: the header and the rows.** No footer, no tab
 strip, no title, no section labels (rules 1 and 6).
 
-Marks this needs: **three new drawings** (shuffle, magnifier, the undock/dock
-pair). Everything else is reused: the loop arc from `RestartMark`, the ✕ the
-plus already rotates into, `TrashMark`, `PlusMark`.
+Marks this needs: **two new drawings** (shuffle, magnifier). Everything else is
+reused: the loop arc from `RestartMark`, the ✕ the plus already rotates into,
+`TrashMark`, `PlusMark`.
 
 **4.5 Search — the one text field, and what it costs**
 
@@ -464,123 +452,15 @@ modals**. §8 classifies the playlist as a **slide-out panel** — a live task u
   open; the panel stays anchored at y = 148 and does not slide up. Locking the
   chrome would pin the top bar for a whole episode.
 
-**4.8 Undock / dock — a third surface class**
+**4.8 Undock / dock — REMOVED (owner, 2026-09-07)**
 
-What the owner wants: the playlist leaves the player and becomes **its own
-window** — same 322 px width, same glass, draggable anywhere on the desktop,
-independent of the player (it survives auto-hide, minimize and fullscreen), and
-it docks back into the exact same slot.
-
-**This is a contract change, not a detail.** follow.md §8 allows exactly two
-surfaces today ("modal vs panel … never mix"). A detached window is a third
-kind, so **§8 must be amended before this is built** — otherwise the next
-session will read "never mix" and refuse to build it, or build it silently and
-break the contract.
-
-**It is the largest single item in this feature — bigger than the panel.**
-Verified state of the platform (checked 2026-09-06):
-
-- Flutter **stable ships no public multi-window API**. As of 3.44.8 (2026-07-23)
-  the framework's windowing API exists but only on the **main** channel behind
-  `flutter config --enable-windowing`, is marked `@internal`, and is documented
-  as breaking between patch releases — not a foundation for a production build.
-  Its decisive property: **all windows share one engine and one isolate**, so a
-  `ValueNotifier` in a common ancestor is visible to both with no channel and no
-  serialization. That is exactly what this feature wants.
-- On stable today the practical path is the **`desktop_multi_window`** plugin
-  (0.3.0, published 2025-10-28; Windows / Linux / macOS), which spawns a child
-  window with **its own engine and isolate**. `window_manager` — what SALU
-  already uses — manages one window only and cannot create a second.
-
-**Owner's verdict (2026-09-06): it is possible, so it is IN SCOPE and must be
-fully implemented as part of this playlist build** — not deferred to a later
-phase. Consequences of doing it on stable today:
-
-- The child cannot read `QueueService.instance` — different isolate. Every
-  state change (queue, index, position, repeat, shuffle, filter text) must
-  cross a channel, and every action (play row, remove, reorder, clear, toggle)
-  must come back as an intent.
-- **Design that as one snapshot-out / intent-in contract**, because Phase 8's
-  Android remote needs exactly the same shape over a WebSocket. Build the
-  protocol once, reuse it twice.
-- Single instance (follow.md §7) survives — a child window is not a second
-  instance — but `main.dart`'s single-instance handshake and the
-  file-association routing must be verified not to treat the child as a launch.
-
-Locked behaviours:
-
-- Undocking **moves** the panel, it does not copy it: the docked slot goes
-  empty and exactly one playlist view exists on screen.
-- While undocked, the control-row mark **summons and raises** the loose window
-  (with a brief outline pulse) — it never opens a second, empty docked panel.
-  One queue, one truth. Same for Ctrl+L.
-- The header's mark swaps to **dock back**; clicking it returns the window to
-  the slot at y = 148 and disposes the child window.
-- Closing the loose window with its own caption/header ✕ = **hide the playlist
-  view**, never clear the playlist and never stop playback; the next chrome
-  playlist click opens the docked panel again.
-- Its drag area is the header, so the header marks keep working while it is loose.
-- Repeat / shuffle / filter state lives in the **player** process; the loose
-  window mirrors it, so docking back restores exactly what was on screen.
-- *(default)* **Above SALU, not above every other app.** The child stays on top
-  of the player only. System-wide always-on-top is a separate pin, later — a
-  permanently top-most window over other applications is hostile.
-- While undocked, the video, the chrome and the control row are unchanged.
-
-**4.8a The child engine's window contract (learned the hard way, 2026-09-06).**
-The loose window is a SECOND engine, and SALU's plugins are registered per engine.
-Three rules follow, and all three are load-bearing:
-
-- `windows/runner/flutter_window.cpp` MUST hand every child engine the plugin set:
-  `DesktopMultiWindowSetWindowCreatedCallback([](void *c) { RegisterPlugins(
-  reinterpret_cast<flutter::FlutterViewController *>(c)->engine()); });`
-  Without it the child has **no `window_manager` at all** — every call there dies
-  with `MissingPluginException` — so the loose window cannot go frameless, size
-  itself, remember its bounds, hold the close, drag, or destroy itself. If the
-  undocked window ever looks native-sized (800×600, real title bar) or refuses to
-  close, THAT line is the first thing to check, not the Dart.
-- Closing a window is `windowManager.close()` (SC_CLOSE) after
-  `setPreventClose(false)`. **`destroy()` on Windows is `PostQuitMessage(0)`** — it
-  quits a message loop, it never closes the HWND — so it is a last resort, never
-  the first call.
-- **No native bar, ever, in either engine.** The loose window uses the player's
-  own chrome contract — `titleBarStyle: TitleBarStyle.hidden` +
-  `windowButtonVisibility: false` (window_manager eats WM_NCCALCSIZE, so the
-  caption strip and its buttons belong to the Flutter view; the panel's header is
-  the drag area and the only ✕). `_configureWindow()` guards each step separately
-  and answers whether the bar is actually gone; that answer rides to the host with
-  `ready`, and a `false` triggers §13a's abort gate at runtime — the window is
-  hidden, never shown, and the docked slot keeps the playlist. A half-configured
-  window hanging off a borderless player is a dropped feature, not a detail.
-
-**And the host verifies, it does not hope.** `desktop_multi_window` 0.3.x gives the
-main window only `window_show` / `window_hide`: no native destroy. So `dock()`
-keeps the controller until `WindowController.getAll()` confirms the child is gone
-(that registry entry dies with the engine, and `onWindowsChanged` is what reports
-it), retries a bounded number of times, and finally HIDES the window — a zombie
-nobody sees is survivable, an orphan floating over the player after a redock is
-not. The docked slot's state flips first and unconditionally: the player must never
-be held hostage by a window it does not own.
-
-**Build order inside this feature:** the docked panel first (steps 1–12), then
-undock (step 13) — same feature, same branch, shipped together.
-
-**Step 13a is a bounded spike, and it is the abort gate.** Before wiring
-anything: create the child window, **strip its frame** so it is borderless like
-the main window, apply the glass material, and verify DPI scaling, header
-dragging, and that SALU's single-instance handshake does not treat the child as
-a second launch. If the child window cannot be made to look like SALU — a native
-title bar we cannot remove, wrong DPI, or a visible engine-start stutter — then
-**undock is dropped**, the header keeps four marks, and this section is rewritten
-as rejected. We do not ship a native-looking window hanging off a borderless
-player.
-
-**Write the sync seam so it can be deleted later.** Keep every cross-window
-message inside one thin `PlaylistBridge` (snapshot-out / intent-in). If the
-framework windowing API reaches stable, the bridge disappears and the loose
-window becomes a subtree reading `QueueService.instance` directly — with **no
-change to the panel's UI code**. Until then the same bridge is the shape Phase 8's
-Android remote needs over a WebSocket, so it is built once and used twice.
+The earlier plan to let the playlist become its own draggable window is
+**dropped**. SALU stays a single surface: the playlist lives only in the
+docked panel, and the panel is closed with the header's **Close ✕** (§4.4,
+slot 5) or the mark toggle / Esc / Ctrl+L. There will be **no** loose window,
+no `desktop_multi_window` dependency, no `PlaylistBridge` seam, no §13a spike,
+no amend to follow.md §8 — none of it will be implemented. The docked-space
+math above is final.
 
 ## 5. Service work
 
@@ -755,11 +635,15 @@ controls"). What Undo restores:
 | **Ctrl+L** | toggle the playlist panel | add to the Ctrl block in `_onKeyEvent` next to Ctrl+O/F/U. `L` is free; a bare letter is not acceptable (M and S are taken, and a search field is on the roadmap) |
 | **Esc** | close the panel (consumed) | precedence, highest first: **pill** (already owns Esc) → **search field with text** (clear it, keep focus) → **search field empty** (release focus) → **panel** (close). Extend the existing Esc branch in this order |
 | Space, ←→, ↑↓, M, S, PgUp/PgDn | unchanged | the panel takes no focus, so the transport set keeps working while it is open — **except while the search field is focused** (§4.5), which is the one place typing must win |
-| Ctrl+L while undocked | raise the loose window | identical to clicking the mark: never opens a second docked panel (§4.8) |
 
 ---
 
-## 7. Steps (each leaves the app runnable)
+## 7. Steps — Phase A, local playlist only (each leaves the app runnable)
+
+Undock was removed (2026-09-07, §4.8), so Phase A is **steps 1–12 of this
+list** — there is no step 13. Steps 4 and 5 carry the owner's start-at-the-top
+rule (§1, decision 5): loading local files always begins playback from the
+first file of the playlist the panel is showing.
 
 1. **The mark** — `NowRowMark` in `salu_marks.dart` + `playlistRowOf`; add both
    to the family doc-comment list at the top of that file.
@@ -780,15 +664,20 @@ controls"). What Undo restores:
    `top: kChromeBlockHeight, right: 0, bottom: 0, width: 322`, glass + slide +
    `IgnorePointer` when closed; a stub body is fine at this step.
 4. **Rows** — bind to `QueueService`; name, now-chevron, click = `playIndex`;
-   hover wash.
+   hover wash. **Playback starts at the top**: when local files are loaded
+   (Open File… / Open Folder… / drop), the fresh queue plays from row 0 — the
+   first file of the list the panel shows — never from the middle of the list
+   and never from a remembered position (§1 decision 5; ordering rule in §5).
 5. **Row actions** — 🗑 remove + 5 s Undo toast; `≡` drag reorder via
    `ReorderableListView` (or a manual drag) + `player.move`. No up/down buttons.
+   (A drag/reorder is a *deliberate* change, so it keeps whatever is playing;
+   the start-at-the-top rule applies to fresh loads only, §1 decision 5.)
 6. **Auto-scroll** — the reveal rule of §4.3: jump on entrance, 220–300 ms
    animated afterwards, shortest distance, only when required, suppressed for
    ~3 s after a manual scroll.
 7. **Header row** — repeat (off/all/one, bead for "one"), shuffle, the search
-   field with the count inside it, clear playlist, and the undock/dock slot.
-   Three new marks to draw: shuffle, magnifier, the undock/dock pair. Header
+   field with the count inside it, clear playlist, and the **Close ✕** slot.
+   Two new marks to draw: shuffle, magnifier. Header
    hidden while the queue is empty (§4.4, §4.6). **No footer** — the panel is
    header + rows and nothing else.
 8. **Search** — the field, live view-only filtering, the ✕ inside it, the
@@ -800,22 +689,15 @@ controls"). What Undo restores:
    `player.setShuffle`. The visible list order must not change.
 10. **Drops** — the panel as a drop target: **drop on the panel = append, drop on
     the canvas = replace** (Phase 5's rule; `drop_handler.dart` needs the
-    panel-hit-test branch, including while the panel is empty).
+    panel-hit-test branch, including while the panel is empty). A fresh drop
+    batch that replaces the queue also plays from its row 0 (§1 decision 5).
 11. **Polish** — empty states, **SALU's own dark scrollbar** (§4.3, overriding
     Flutter's desktop Material scrollbar), Esc/Ctrl+L, glow on `active`, motion
     timings, and a pass over R2/R3 (pill coexistence, glow visibility from a
     distance).
 12. **Docs** — README phase table (Phase 4 → in progress), add the new marks to
-    `follow.md` §1.6's family list, **amend follow.md §8 for the third surface
-    class (§4.8)**, and flip this file's status line to *FINAL & IMPLEMENTED*
-    with the date and commit.
-
-13. **Undock / dock — in scope, built last** (§4.8). 13a is the frameless-child
-    window **spike and abort gate**; then the `desktop_multi_window` dependency,
-    the child's glass shell, the `PlaylistBridge` snapshot-out / intent-in seam,
-    drag by the header, raise-on-summon, dock-back, and loose-window close =
-    hide playlist view. If 13a fails, undock is dropped and steps 1–12 still
-    ship.
+    `follow.md` §1.6's family list, and flip this file's status line to
+    *FINAL & IMPLEMENTED* with the date and commit.
 
 **Out of scope here:** the Video / Audio / Subtitle views — **the four-tab strip
 is removed from this panel** (§4.4) and, per the owner (2026-09-06), those three
@@ -864,14 +746,17 @@ it is specified in §10 and is its own build phase, starting with the parser
 13. Open with a 40-item queue → the playing row is already on screen when the
     panel settles (no visible scroll); let it auto-advance off-screen → the list
     scrolls to the new row in 220 ms.
+13b. Load a folder of 40 files → the queue reads 1…40 top to bottom and playback
+    starts from the **first file** (row 0) — never mid-list, never from a
+    remembered position. The same holds for Open File… and for a drop that
+    replaces the queue. Reordering rows later does not restart playback.
 14. While the panel is open the picture does **not** rescale, the chrome does not
     shift, and the timeline's readouts stay where they were.
 15. Click the mark mid-slide → the panel reverses from where it is, it does not
     restart or jump.
-16. The docked header appears **only** once something is queued; with an empty
-    docked queue the panel is the ghost mark and nothing else — no header, no
-    footer — and the canvas is back to its initial state. The loose window keeps
-    Dock/Close reachable if a clear empties it.
+16. The header appears **only** once something is queued; with an empty
+    queue the panel is the ghost mark and nothing else — no header, no
+    footer — and the canvas is back to its initial state.
 17. Repeat cycles off → all → one per click: quiet arc → full arc → arc + centre
     bead, glow on anything but off, tooltip naming the new state each time.
 18. Repeat **one** with shuffle on → the shuffle mark drops to quiet ink and loses
@@ -905,13 +790,7 @@ it is specified in §10 and is its own build phase, starting with the parser
 29. With a 14-item queue: opening on item 12 reveals it with **no** scroll
     animation; advancing to 13 scrolls the shortest distance in ~250 ms; manual
     scrolling suppresses the reveal for ~3 s.
-30. Undock → the playlist becomes its own **borderless glass** window at the same
-    322 px width, draggable by its header, the docked slot goes empty, and the
-    header mark becomes dock-back. While it is loose, the control-row mark and
-    Ctrl+L **raise** it rather than opening a second docked panel. Its own ✕
-    hides the playlist view only — it never deletes the playlist or stops
-    playback, and the next chrome playlist click opens the docked panel.
-31. No ripples, no splashes, no filled box or pill behind any icon, no instruction
+30. No ripples, no splashes, no filled box or pill behind any icon, no instruction
     text, no placeholder string, no shortcut labels, no confirmation dialog,
     **no footer, and no tab strip anywhere in the panel**.
 
@@ -937,11 +816,13 @@ it is specified in §10 and is its own build phase, starting with the parser
 | 16 | Video | **overlaid, never docked** — no rescale on open/close | default, §4.1 |
 | 17 | Tooltip | "Playlist" / "Hide playlist", following the Mute/Unmute precedent | default, §3 |
 | 18 | Reveal | opening scrolls to the playing row with no animation | default, §4.3 |
-| 19 | Header row | docked: repeat · shuffle · search · clear playlist · undock, left to right, marks only; loose adds Close ✕ | **owner**, 2026-09-06 |
+| 19 | Header row | repeat · shuffle · search · clear playlist · **Close ✕**, left to right, marks only (slot 5 changed from undock/dock to Close, 2026-09-07) | **owner**, 2026-09-06 (slots) · **owner**, 2026-09-07 (slot 5) |
+| 19b | Header slot 5 | **Close ✕** — closes the playlist panel (220 ms reverse · glow off · queue and playback untouched); the control-row mark, Esc and Ctrl+L close it the same way | **owner**, 2026-09-07 |
 | 20 | Header visibility | only while the queue is non-empty | **owner**, 2026-09-06 |
 | 21 | Search field | magnifier inside-left · **count inside-right** · ✕ inside-right while there is text · no placeholder · **filters the view only** | **owner**, 2026-09-06 |
 | 21b | Footer | **none** — the panel is header + rows; no append button (files arrive via the Open control or a drop) | **owner**, 2026-09-06 |
 | 21c | Local batch order | the shell's array is never trusted: a drop/dialog batch is re-sorted into the folder's own order (natural, case-insensitive) and plays from that top row; blocks still only ever append | **owner** (bug: 8 files started at 6/7), §5 |
+| 21d | Local load → start at the top | **when local files are loaded, playback starts from the first file of the playlist the panel is showing** — row 0 of the shown, sorted list; never mid-list, never from a remembered position. Only *fresh loads* start at the top — reordering rows is deliberate and never restarts playback | **owner**, 2026-09-07 |
 | 22 | Repeat glyph | the family's loop arc · bead at its centre = repeat one · quiet ink = off · never a numeral | default, §4.4 |
 | 23 | Focus | the search field is the only focusable thing in the panel; Esc precedence per §4.5 | default, §4.5 |
 | 24 | Clear playlist | **absolute** — playback stops, queue empties, SALU returns to its initial state; 5 s Undo restores the queue *and* the position; resume memory and the saved seven untouched | **owner**, 2026-09-06 |
@@ -950,23 +831,26 @@ it is specified in §10 and is its own build phase, starting with the parser
 | 24d | Shuffle & the view | shuffle never reorders the visible list; playback order only | **owner**, 2026-09-06 |
 | 24e | Repeat × shuffle | the decision table of §5; repeat-one **suspends** shuffle (quiet ink, no glow) and the setting survives | default, §5 |
 | 24f | Prev/Next during shuffle | follow the play-order history (what was heard), not the list | default, §5 |
-| 25 | Undock | its own draggable borderless glass window, same 322 px, header = drag area; the mark raises it while loose; dock mark docks back; loose-window close/header ✕ hides the playlist view | **owner**, 2026-09-06 |
-| 25b | Undock scope | **in scope for this build** (owner: "if it is possible it has to be fully implemented while making the playlist"), built as step 13 behind a frameless-window spike that is the abort gate | **owner** + default, §4.8 |
-| 25c | Undock plumbing | `desktop_multi_window` on stable (Flutter ships no public multi-window API), all traffic through one `PlaylistBridge` seam so it can be deleted when the framework API lands, and reused by Phase 8 | default, §4.8 |
-| 26 | Undock stacking | above SALU only, never system-wide always-on-top | default, §4.8 |
+| 25–26 | Undock / dock (draft rows 25, 25b, 25c, 26 of 2026-09-06) | **REMOVED — not implemented**: no loose window, no `desktop_multi_window` dependency, no `PlaylistBridge`, no step-13a spike, no follow.md §8 amendment. Header slot 5 is a **Close ✕** instead. Full record in §4.8 | **owner**, 2026-09-07 |
 | 27 | Auto-scroll | only when required · shortest distance · jump on entrance · ~3 s suppression after a manual scroll | **owner** (behaviour) + default (numbers), §4.3 |
 | 28 | Shuffle engine | SALU picks the next index off `stream.completed`; **never** `player.setShuffle` | default, §5 |
-| 29 | Build order | steps 1–12 docked, step 13 undock — one feature, one branch, shipped together | default, §7 |
+| 29 | Build order | **Phase A = §7's steps 1–12 only** (undock removed, so step 13 does not exist) — one feature, one branch, shipped together; Phase B (§10) comes later and is never interleaved | **owner**, 2026-09-07 |
 | 30 | Video / Audio / Subtitles | **re-planned separately later** — nothing assumed, the row's right edge stays reserved and empty | **owner**, 2026-09-06 |
 
 ---
 
 ## 10. m3u mode — the IPTV playlist (owner's brief, 2026-09-06)
 
-> **Status:** **IMPLEMENTED** (2026-09-06). This section replaces the earlier
-> "out of scope: IPTV grouping … the owner takes that next". Everything in
-> §§1–9 still governs; this section states only what **changes when the loaded
-> playlist is an m3u URL**. Entries marked *(default)* may be vetoed.
+> **Status:** **NOT IMPLEMENTED — LATER PHASE** (updated 2026-09-07). Per the
+> owner (2026-09-07) **Phase A — the local playlist (§§1–9, §7 steps 1–12) is
+> built first**; this m3u section ships after it and is never interleaved. This
+> section replaces the earlier "out of scope: IPTV grouping … the owner takes
+> that next". Everything in §§1–9 still governs; this section states only what
+> **changes when the loaded playlist is an m3u URL**. Entries marked *(default)*
+> may be vetoed. **Undock is removed** (2026-09-07, §4.8), so where this section
+> referred to an undocked window the reference is void; there is one playlist
+> surface, the docked panel, and header slot 5 is its **Close ✕** (local and m3u
+> modes alike).
 
 ### 10.0 The blocker — SALU must parse the m3u itself
 
@@ -1024,7 +908,8 @@ tvg-country tvg-chno group-title,Display Name`.
 
 ### 10.1 The header swaps two slots, and only two
 
-Slots 3 · 4 · 5 (search · clear · undock) are **identical to local mode**.
+Slots 3 · 4 · 5 (search · clear · **Close ✕**) are **identical to local mode**
+(2026-09-07: slot 5 is Close in both modes — the undock/dock slot is gone, §4.8).
 Slots 1 · 2 swap:
 
 | # | local mode | **m3u mode** |
@@ -1038,8 +923,9 @@ local queue is loaded. Recorded consequence: an m3u of VOD items also loses
 them — accepted.
 
 **Pitch, not a flat gap.** The header follows SALU's own grammar:
-`[group · favourite] 14 [search] 14 [bin] 14 [undock]`, 6 px inside the mode
-pair. The 2 px gap of the first draft put the field's **✕ (clear the text)**
+`[group · favourite] 14 [search] 14 [bin] 14 [close]`, 6 px inside the mode
+pair (2026-09-07: slot 5 is the Close ✕ — the old `[undock]` slot is gone,
+§4.8). The 2 px gap of the first draft put the field's **✕ (clear the text)**
 about 4 px from the **🗑 (clear the whole playlist)**. Destructive controls do
 not get 2 px.
 
@@ -1280,7 +1166,7 @@ on screen still reporting that data is arriving.
 - Same source of truth as the timeline: one "live and receiving" flag drives
   both, so they can never disagree.
 
-### 10.9 Search, clear, undock in m3u mode
+### 10.9 Search, clear, close in m3u mode
 
 - **Search matches name + group, never the URL** — matching the URL would
   surface credentials. Precompute one lowercase key per channel at parse time;
@@ -1293,10 +1179,10 @@ on screen still reporting that data is arriving.
   is untouched**, as is the favourites store. 5 s Undo restores **from an
   in-memory snapshot, never a re-fetch**: an Undo that stalls 10 s on a slow
   provider is not an Undo.
-- **Undock:** §4.8's "one snapshot per change" contract does not survive 12 000
-  channels crossing an isolate. Send the list **once**, then deltas only (index,
-  favourites, mode, filter). Phase 8's WebSocket has the identical problem, so
-  the `PlaylistBridge` must be delta-shaped from the start.
+- **Close ✕ (slot 5) closes the panel only** — the channel list stays loaded
+  and keeps playing, exactly as in local mode. Undock does not exist (§4.8), so
+  there is no cross-window/cross-isolate bridge to design for m3u mode; Phase 8
+  will design its own transport when it is built.
 
 ### 10.10 Performance — 50 000 channels, and why there is no cap
 
@@ -1407,9 +1293,9 @@ containing `://`).
 
 ### 10.12 Build steps — m3u mode (each leaves the app runnable)
 
-m3u mode is **its own phase, built after steps 1–13 of §7**. The docked local
-panel must work first; this phase then adds the channel-list behaviour behind
-it. Do not interleave them.
+m3u mode is **its own phase, built after steps 1–12 of §7** (Phase A — the
+local panel — must work first; undock no longer exists, §4.8). This phase then
+adds the channel-list behaviour behind it. Do not interleave them.
 
 | # | Step | Leaves the app |
 |---|---|---|
@@ -1439,7 +1325,7 @@ over the list, so a mode switch must never touch the engine (M45).
 3. Header slots 1–2 are **group-by** and **favourite**; repeat and shuffle are
    **absent**. Load a local folder → repeat and shuffle are back, unchanged.
 4. Header pitch: the field's ✕ is nowhere near the bin. `[group·fav] 14
-   [search] 14 [bin] 14 [undock]`.
+   [search] 14 [bin] 14 [close]` (slot 5 is the Close ✕ — no undock slot, §4.8).
 5. Group-by opens a pill with four modes, the active one glowing; the mark
    itself never changes shape. A playlist carrying only `group-title` dims
    language and country instead of hiding them.
@@ -1527,7 +1413,7 @@ over the list, so a mode switch must never touch the engine (M45).
 | M23 | Search scope | name + group, never the URL | default, §10.9 |
 | M24 | Bin | unloads channels only; saved seven and favourites survive | default, §10.9 |
 | M25 | Undo | in-memory snapshot, never a re-fetch | default, §10.9 |
-| M26 | Bridge | delta-shaped, not snapshot-per-change | default, §10.9 |
+| M26 | Bridge | **void** — undock was removed (2026-09-07, §4.8), so no cross-isolate `PlaylistBridge` will be built | ~~default~~ §10.9 |
 | M27 | Parser | SALU parses the m3u; mpv gets resolved URLs | forced by §10.0 |
 | M28 | Data model | **one `List<QueueItem>`** — the parallel metadata list is **rejected** (desync across 9 call sites; a source switch would rebuild two collections) | **owner** (challenge) + §10.0 |
 | M29 | Timeline when live | stays, exact size, **inert and empty** — never hidden (rule 5), never greyed (that is icon-disabled language) | **owner** (raised) + default, §10.8a |
@@ -1565,5 +1451,7 @@ placeholder string in the search field, `player.setShuffle` (it desyncs mpv's
 order from `QueueService`), centring the playing row on every advance (long jumps
 on a 40-file queue), **a footer of any kind** — including the append `+` and the
 count that first lived there, **the platform/Material scrollbar**, letting
-repeat-one and shuffle both answer "what plays next", and deferring undock to a
-later phase (the owner wants it built with the playlist).
+repeat-one and shuffle both answer "what plays next", **undock / dock itself**
+(owner, 2026-09-07 — replaced by a Close ✕; recorded in §4.8 and §9 rows 19b
+and 25–26), and **"the first implementation pass must cover §10 too"** (owner,
+2026-09-07 — Phase A, the local playlist, comes first).

@@ -32,6 +32,80 @@ class StopMemory {
   final Duration duration;
 }
 
+/// Repeat mode (playlist_imp.md §4.4 · §5) — the header's slot-1 control.
+/// Maps onto mpv's playlist modes, except where SALU drives the advance
+/// itself (shuffle). Never persisted across restarts (out of scope).
+enum RepeatMode { off, all, one }
+
+/// Base of every queue mutation that offers a 5-second Undo.
+sealed class QueueUndo {
+  const QueueUndo({required this.text});
+
+  /// Toast copy (a toast may carry words — playlist_imp.md / follow.md).
+  final String text;
+}
+
+/// A removed row. [wasLive] means the deletion landed SALU in its initial
+/// state (the only item was removed), so Undo also re-opens the item.
+/// [wasStopped] means the removal consumed a parked stop memory (the row
+/// was removed from the STOPPED state), so Undo re-arms it.
+class RemovedItemUndo extends QueueUndo {
+  const RemovedItemUndo({
+    required super.text,
+    required this.path,
+    required this.index,
+    required this.wasLive,
+    this.wasStopped = false,
+    this.position,
+    this.duration,
+  });
+
+  final String path;
+  final int index;
+  final bool wasLive;
+  final bool wasStopped;
+  final Duration? position;
+  final Duration? duration;
+}
+
+/// A cleared queue. [wasLive] means the clear stopped live playback, so
+/// Undo also re-opens the item that was playing, at its position, silently.
+/// [wasStopped] means the clear consumed a parked stop memory (Play was
+/// showing its resume card), so Undo re-arms it — the pre-clear stopped
+/// state comes back exactly.
+class ClearedQueueUndo extends QueueUndo {
+  const ClearedQueueUndo({
+    required super.text,
+    required this.paths,
+    required this.index,
+    required this.wasLive,
+    this.wasStopped = false,
+    this.path,
+    this.position,
+    this.duration,
+  });
+
+  final List<String> paths;
+  final int index;
+  final bool wasLive;
+  final bool wasStopped;
+  final String? path;
+  final Duration? position;
+  final Duration? duration;
+}
+
+/// A drag-reorder. Undo re-applies the inverse move.
+class MovedItemUndo extends QueueUndo {
+  const MovedItemUndo({
+    required super.text,
+    required this.from,
+    required this.to,
+  });
+
+  final int from;
+  final int to;
+}
+
 /// SALU's dedicated playback manager.
 ///
 /// All player logic lives here — UI widgets never talk to `mpv` directly.
@@ -41,8 +115,20 @@ class StopMemory {
 /// SALU owns the queue: [QueueService] holds the ordered paths above the
 /// engine (mpv's own playlist does not survive `stop()`), mpv is handed
 /// the full playlist while an item is loaded (native auto-advance and
-/// gapless audio stay), and after a Stop the queue is re-opened at the
-/// target index with the stop memory carried as `Media(start:)`.
+/// gapless audio stay for list-order playback), and after a Stop the
+/// queue is re-opened at the target index with the stop memory carried
+/// as `Media(start:)`.
+///
+/// Repeat & shuffle (playlist_imp.md §5): repeat maps onto mpv's playlist
+/// modes (`none` / `loop` / `single`). Shuffle NEVER uses mpv's own
+/// `setShuffle` — mpv would reorder the playlist SALU handed it and the
+/// two orders would silently diverge. While SALU drives the advance
+/// (shuffle on, repeat ≠ one, more than one item) the engine is put on
+/// `PlaylistMode.none` with mpv `keep-open=always`, so mpv never drifts
+/// to the next list entry on its own and every end-of-media reaches the
+/// `completed` stream for SALU to answer (playlist_imp.md §5's one
+/// decision table). All other states keep `keep-open=yes`, which still
+/// lets mpv advance natively through every entry but the last.
 class PlayerService {
   PlayerService._internal() {
     _init();
@@ -114,8 +200,17 @@ class PlayerService {
   /// mpv's mute property is not exposed as a dedicated stream here.
   final ValueNotifier<bool> isMuted = ValueNotifier<bool>(false);
 
+  /// Repeat mode — the header's slot-1 control (off → all → one).
+  final ValueNotifier<RepeatMode> repeatMode =
+      ValueNotifier<RepeatMode>(RepeatMode.off);
+
+  /// Shuffle on/off — the header's slot-2 control. SALU drives the
+  /// advance itself; mpv's playlist order is never touched.
+  final ValueNotifier<bool> shuffleOn = ValueNotifier<bool>(false);
+
   StreamSubscription<Playlist>? _playlistSub;
   StreamSubscription<String>? _errorSub;
+  StreamSubscription<bool>? _completedSub;
   StreamSubscription<int?>? _widthSub;
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<Duration>? _positionSub;
@@ -148,6 +243,12 @@ class PlayerService {
   /// True between an open-with-play and the engine confirming — keeps
   /// the optimistic `playing` state from flickering to `paused`.
   bool _openingWithPlay = false;
+
+  /// Whether the viewer is PAUSED by a deliberate pause (not by EOF).
+  /// A natural end must auto-advance with sound; a hand-pause that is
+  /// followed by an end must advance into the next item still paused —
+  /// the automatic answer never starts sound nobody asked for.
+  bool _userPaused = false;
 
   void _init() {
     player = Player(
@@ -268,33 +369,26 @@ class PlayerService {
       debugPrint('[SALU/mpv] error: $message');
     });
 
-    // mpv's default already keeps the file open after the last frame so
-    // the paused end-frame stays visible; make it explicit.
-    unawaited(_ensureKeepOpen());
+    // End-of-item — the one place the "what plays next" question is
+    // answered (playlist_imp.md §5's decision table). While SALU drives
+    // the advance (shuffle) the engine never drifts on its own, so every
+    // end reaches here. In list-order mode mpv's native playlist advance
+    // owns the transition (gapless); this handler only parks the queue
+    // when the LAST item ends with repeat off.
+    _completedSub = player.stream.completed.listen((bool done) {
+      if (done) _onMediaCompleted();
+    });
+
+    // keep-open=yes: pause on the last frame at the end of the playlist
+    // (never quit), while entries before the last still auto-advance.
+    unawaited(_setKeepOpen('yes'));
   }
 
   // ── Path normalization ────────────────────────────────────────────────
 
   /// Canonical map key for resume/queue bookkeeping: forward slashes,
   /// no `file://` scheme, no leading `/` before a drive letter.
-  static String normalizePathKey(String p) {
-    String s = p.replaceAll('\\', '/');
-    const String scheme = 'file://';
-    if (s.startsWith('$scheme/')) {
-      s = s.substring(scheme.length + 1);
-    } else if (s.startsWith(scheme)) {
-      s = s.substring(scheme.length);
-    }
-    // "/C:/x/y.mkv" (URI residue) → "C:/x/y.mkv".
-    if (s.length >= 3 &&
-        s.startsWith('/') &&
-        s.codeUnitAt(1) >= 0x41 &&
-        s.codeUnitAt(1) <= 0x7A &&
-        s.codeUnitAt(2) == 0x3A) {
-      s = s.substring(1);
-    }
-    return s;
-  }
+  static String normalizePathKey(String p) => MediaUtils.canonicalPath(p);
 
   // ── Transport state ───────────────────────────────────────────────────
 
@@ -332,33 +426,174 @@ class PlayerService {
     _ticker = null;
   }
 
-  Future<void> _ensureKeepOpen() async {
+  Future<void> _setKeepOpen(String value) async {
     final PlatformPlayer? platform = player.platform;
     if (platform is NativePlayer) {
       try {
-        await platform.setProperty('keep-open', 'yes');
+        await platform.setProperty('keep-open', value);
       } catch (_) {
-        // Harmless if unavailable — mpv's default is usually `yes` anyway.
+        // Harmless if unavailable — mpv's default is `yes` anyway.
       }
     }
   }
 
-  // ── Opening media ─────────────────────────────────────────────────────
+  // ── Repeat & shuffle (playlist_imp.md §5) ─────────────────────────────
 
-  /// Open a single local file or network URL and start playing.
-  Future<void> openPath(String path, {bool play = true}) async {
-    QueueService.instance.setQueue(<String>[normalizePathKey(path)], 0);
-    await _openQueueAt(0, play: play);
+  /// Whether SALU must drive the advance itself: shuffle on, repeat is
+  /// NOT "one" (which suspends shuffle), and there is more than one item
+  /// (shuffle is meaningless on a single row). While true the engine is
+  /// kept on `PlaylistMode.none` + `keep-open=always` so mpv never
+  /// drifts to the next list entry on its own — SALU answers every
+  /// `completed` event from the shuffle pass instead.
+  bool get _shuffleDriving =>
+      shuffleOn.value &&
+      repeatMode.value != RepeatMode.one &&
+      QueueService.instance.paths.value.length > 1;
+
+  /// The engine mode matching the current repeat × shuffle state
+  /// (playlist_imp.md §5 — one control answers "what plays next"):
+  ///
+  /// | repeat | shuffle | engine |
+  /// |---|---|---|
+  /// | one | any | `single` (mpv loops the current file — repeat-one
+  ///   wins, shuffle is suspended) |
+  /// | all | off | `loop` (mpv restarts the playlist at its end) |
+  /// | off | off | `none` (mpv's native list-order advance) |
+  /// | any | **on** (≠ one) | `none` + `keep-open=always` (SALU answers
+  ///   every end from the shuffle pass) |
+  ///
+  /// `keep-open=yes` (every non-driving state) lets mpv advance through
+  /// every entry but the last; the last entry pauses on its end frame.
+  /// While SALU drives, `keep-open=always` stops ALL native advance so
+  /// the shuffle pick — and only the pick — moves playback.
+  Future<void> _applyPlaylistMode() async {
+    if (!hasMedia.value) return;
+    try {
+      if (_shuffleDriving) {
+        await _setKeepOpen('always');
+        await player.setPlaylistMode(PlaylistMode.none);
+        return;
+      }
+      await _setKeepOpen('yes');
+      final PlaylistMode mode = switch (repeatMode.value) {
+        RepeatMode.off => PlaylistMode.none,
+        RepeatMode.all => PlaylistMode.loop,
+        RepeatMode.one => PlaylistMode.single,
+      };
+      await player.setPlaylistMode(mode);
+    } catch (_) {
+      // Never fatal — the engine keeps its current mode.
+    }
   }
 
-  /// Open several files as a queue; playback starts with the first one.
+  /// Cycles repeat off → all → one → off (the header control).
+  Future<void> cycleRepeat() async {
+    final RepeatMode next = switch (repeatMode.value) {
+      RepeatMode.off => RepeatMode.all,
+      RepeatMode.all => RepeatMode.one,
+      RepeatMode.one => RepeatMode.off,
+    };
+    repeatMode.value = next;
+    await _applyPlaylistMode();
+  }
+
+  /// Toggles shuffle. The state always survives (repeat-one only suspends
+  /// the mark); the engine mode follows immediately.
+  Future<void> toggleShuffle() async {
+    shuffleOn.value = !shuffleOn.value;
+    final QueueService queue = QueueService.instance;
+    queue.resetShuffleState();
+    if (shuffleOn.value && queue.hasCurrent) {
+      queue.recordPlayed(queue.index.value);
+    }
+    await _applyPlaylistMode();
+  }
+
+  /// One media ended — "what plays next?" (playlist_imp.md §5).
+  ///
+  /// While [_shuffleDriving], SALU answers from the shuffle pass: an
+  /// exhausted pass with repeat off parks the queue (Stop semantics),
+  /// with repeat all it starts a fresh pass (whose first pick is never
+  /// the item that just ended).
+  ///
+  /// Otherwise mpv's native advance owns list-order playback. The only
+  /// case SALU still answers here is repeat **off** and the **last**
+  /// item of the queue ending: mpv pauses on the end frame (keep-open)
+  /// with nothing to advance to, so SALU parks the queue Stop-style, per
+  /// the §5 table's off/off row. A short delay lets a real native
+  /// advance (which follows `completed` within milliseconds mid-list)
+  /// win first, so a slow playlist event can never double-park.
+  void _onMediaCompleted() {
+    final QueueService queue = QueueService.instance;
+    if (_shuffleDriving) {
+      int? next = queue.takeNextShuffle();
+      if (next == null) {
+        if (repeatMode.value == RepeatMode.all) {
+          queue.startNewShufflePass();
+          next = queue.takeNextShuffle();
+        }
+      }
+      if (next == null) {
+        // Pass exhausted + repeat off → park the queue, Stop style.
+        unawaited(stop());
+        return;
+      }
+      // The advance inherits the viewer's state: a hand-pause followed
+      // by an end loads the next item paused — never sound nobody asked
+      // for.
+      final bool resumePaused = _userPaused;
+      _userPaused = false;
+      unawaited(_openQueueAt(next, play: !resumePaused));
+      return;
+    }
+
+    if (repeatMode.value != RepeatMode.off || queue.hasNext) return;
+    final TransportState state = transportState.value;
+    if (state != TransportState.playing && state != TransportState.paused) {
+      return;
+    }
+    Timer(const Duration(milliseconds: 300), () {
+      if (!_shuffleDriving &&
+          repeatMode.value == RepeatMode.off &&
+          !queue.hasNext &&
+          hasMedia.value &&
+          (transportState.value == TransportState.playing ||
+              transportState.value == TransportState.paused)) {
+        unawaited(stop());
+      }
+    });
+  }
+
+  // ── Opening media ─────────────────────────────────────────────────────
+
+  /// Open a single local file or network URL and start playing — a FRESH
+  /// load (playlist_imp.md §1 decision 5): the shown playlist is one row,
+  /// playback starts at it from the top. Stored memory is never burned
+  /// (row clicks / Next still resume it later).
+  Future<void> openPath(String path, {bool play = true}) async {
+    final List<String> list = <String>[path];
+    QueueService.instance.setQueue(list, 0);
+    await _openQueueAt(0, play: play, fresh: true);
+  }
+
+  /// Open several files as a queue — a FRESH load: playback starts with
+  /// the first row of the shown list, from the top, never from a
+  /// remembered position or mid-list (playlist_imp.md §1 decision 5).
   Future<void> openPaths(List<String> paths, {bool play = true}) async {
     if (paths.isEmpty) return;
-    QueueService.instance.setQueue(
-      paths.map(normalizePathKey).toList(growable: false),
-      0,
-    );
-    await _openQueueAt(0, play: play);
+    QueueService.instance.setQueue(paths, 0);
+    await _openQueueAt(0, play: play, fresh: true);
+  }
+
+  /// Play a queue row (the playlist panel's click). Resume memory and
+  /// the Resume toast behave exactly as they do for Next.
+  Future<void> playIndex(int i) async {
+    final QueueService queue = QueueService.instance;
+    final List<String> paths = queue.paths.value;
+    if (i < 0 || i >= paths.length) return;
+    stopMemory.value = null;
+    _userPaused = false;
+    await _openQueueAt(i);
   }
 
   /// The one open path: hands mpv the FULL queue (native auto-advance
@@ -368,10 +603,22 @@ class PlayerService {
   /// [start] overrides the disk memory for the target item (zero =
   /// deliberate restart); `null` = consult the disk memory, and when
   /// one exists the Resume toast fires on arrival.
+  ///
+  /// [fresh] = a freshly loaded queue: the target starts from `0:00`,
+  /// its stored memory is left untouched, and no Resume toast fires.
+  ///
+  /// [silent] suppresses the Resume toast for the target even when a
+  /// remembered offset IS applied (Undo restores — "silently").
+  ///
+  /// [keepMemory] stops a `start: Duration.zero` from erasing the item's
+  /// stored memory (a fresh load is not a deliberate restart).
   Future<void> _openQueueAt(
     int index, {
     bool play = true,
     Duration? start,
+    bool fresh = false,
+    bool silent = false,
+    bool keepMemory = false,
   }) async {
     final QueueService queue = QueueService.instance;
     final List<String> paths = queue.paths.value;
@@ -379,10 +626,15 @@ class PlayerService {
     final int idx = index.clamp(0, paths.length - 1).toInt();
     queue.setIndex(idx);
 
-    // Decide the target's offset: explicit > disk memory.
+    // Keep the shuffle bookkeeping honest: whatever opened now was heard.
+    if (_shuffleDriving) queue.recordPlayed(idx);
+
+    // Decide the target's offset: explicit > fresh top > disk memory.
     Duration? targetStart = start;
     bool targetFromDisk = false;
-    if (targetStart == null) {
+    if (fresh) {
+      targetStart = Duration.zero;
+    } else if (targetStart == null) {
       final Duration? saved =
           ResumeService.instance.savedPositionFor(paths[idx]);
       if (saved != null) {
@@ -402,7 +654,9 @@ class PlayerService {
       if (offset != null && offset > Duration.zero) {
         medias.add(Media(p, start: offset));
         final String key = normalizePathKey(p);
-        _pendingResume[key] = offset;
+        if (!(isTarget && (fresh || silent))) {
+          _pendingResume[key] = offset;
+        }
         // Fallback expectation for every item given a start (the target
         // now, auto-advanced items later).
         _expectedStartAfterLoad[key] = offset;
@@ -411,8 +665,12 @@ class PlayerService {
       }
     }
     // A deliberate restart clears the item's stale disk memory so it
-    // cannot resurrect old state on a later open.
-    if (targetFromDisk == false && start == Duration.zero) {
+    // cannot resurrect old state on a later open. Fresh loads and Undo
+    // restores never erase memory.
+    if (!fresh &&
+        !keepMemory &&
+        targetFromDisk == false &&
+        start == Duration.zero) {
       ResumeService.instance.remove(paths[idx]);
     }
 
@@ -421,15 +679,28 @@ class PlayerService {
     hasMedia.value = true;
     _refreshTransportState();
     await player.open(Playlist(medias, index: idx), play: play);
+    if (play) _userPaused = false;
+    await _applyPlaylistMode();
   }
 
   // ── Basic transport ───────────────────────────────────────────────────
 
-  Future<void> playOrPause() => player.playOrPause();
+  Future<void> playOrPause() {
+    // Decide from the pre-action state so _userPaused tracks the viewer's
+    // intent (EOF pauses never count as a hand-pause).
+    _userPaused = isPlaying.value;
+    return player.playOrPause();
+  }
 
-  Future<void> play() => player.play();
+  Future<void> play() {
+    _userPaused = false;
+    return player.play();
+  }
 
-  Future<void> pause() => player.pause();
+  Future<void> pause() {
+    _userPaused = true;
+    return player.pause();
+  }
 
   /// **Stop — the third state.** Parks the queue: the engine releases
   /// the item (canvas → the initial SALU window), the queue stays
@@ -461,6 +732,7 @@ class PlayerService {
     isPlaying.value = false;
     _stopTicker();
     _suppressVolumeEvents = true;
+    _userPaused = false;
     await player.stop();
 
     // 3 · Zero the transport surface; title bar reads SALU again.
@@ -497,6 +769,7 @@ class PlayerService {
     final bool keep =
         mem.duration > Duration.zero && _withinKeepWindow(mem.position, mem.duration);
     stopMemory.value = null; // consumed
+    _userPaused = false;
     await _openQueueAt(idx, start: keep ? mem.position : Duration.zero);
   }
 
@@ -516,35 +789,97 @@ class PlayerService {
     return _withinKeepWindow(mem.position, mem.duration);
   }
 
-  /// Previous item — one rule in every state: position (the stop memory
-  /// while stopped) > 3 s, or first item → plays THIS item from `0:00`;
-  /// otherwise plays the previous item (which follows the normal open
-  /// path — if the disk remembers it, it resumes with the toast).
-  Future<void> previous() async {
+  /// Whether a `>>|` can play something right now. In list order that is
+  /// simply "an item exists after the current one"; while shuffle drives
+  /// the advance there is always a pick (an exhausted pass starts a
+  /// fresh one), so only the single-row queue dims Next.
+  bool get hasNextItem =>
+      _shuffleDriving ? true : QueueService.instance.hasNext;
+
+  /// "Does `|<<` restart THIS item?" — one owner (playlist_imp.md §5),
+  /// read both by [previous] and by the OSD card so the action and the
+  /// card can never disagree. During shuffle with a non-empty heard-log
+  /// the answer is no (it steps back to what was heard before); with an
+  /// empty heard-log the ordinary rule answers: position (the stop
+  /// memory while stopped) > 3 s, or first item → restarts this item.
+  bool get previousRestartsThisItem {
     final QueueService queue = QueueService.instance;
-    if (!queue.hasQueue) return;
-    final int idx = queue.index.value;
+    if (_shuffleDriving && queue.peekPreviousHeard != null) return false;
+    final int from = queue.index.value;
     final StopMemory? mem = stopMemory.value;
     final Duration pos = (transportState.value == TransportState.stopped &&
             mem != null)
         ? mem.position
         : position.value;
-    if (pos > const Duration(seconds: 3) || idx <= 0) {
-      stopMemory.value = null;
-      await _openQueueAt(idx <= 0 ? 0 : idx, start: Duration.zero);
-    } else {
-      stopMemory.value = null;
-      await _openQueueAt(idx - 1);
-    }
+    return pos > const Duration(seconds: 3) || from <= 0;
   }
 
-  /// Next item — dimmed in the UI when there is none; identical in
-  /// every state.
-  Future<void> next() async {
+  /// Previous item — returns the index that ended up playing (`null`
+  /// when nothing happened).
+  ///
+  /// During shuffle, `|<<` returns to the item actually heard before
+  /// (the play-order history), never the raw previous list row; with an
+  /// empty history the ordinary rule answers. Otherwise: position (the
+  /// stop memory while stopped) > 3 s, or first item → plays THIS item
+  /// from `0:00`; else plays the previous item (which follows the
+  /// normal open path — if the disk remembers it, it resumes with the
+  /// toast).
+  Future<int?> previous() async {
     final QueueService queue = QueueService.instance;
-    if (!queue.hasNext) return;
+    if (!queue.hasQueue) return null;
+    final int from = queue.index.value;
+    if (_shuffleDriving) {
+      final int? back = queue.peekPreviousHeard;
+      if (back != null && back >= 0) {
+        stopMemory.value = null;
+        _userPaused = false;
+        await _openQueueAt(back);
+        return back;
+      }
+    }
+    final StopMemory? mem = stopMemory.value;
+    final Duration pos = (transportState.value == TransportState.stopped &&
+            mem != null)
+        ? mem.position
+        : position.value;
+    if (pos > const Duration(seconds: 3) || from <= 0) {
+      stopMemory.value = null;
+      _userPaused = false;
+      await _openQueueAt(from <= 0 ? 0 : from, start: Duration.zero);
+      return from <= 0 ? 0 : from;
+    }
+    final int target = from - 1;
     stopMemory.value = null;
-    await _openQueueAt(queue.index.value + 1);
+    _userPaused = false;
+    await _openQueueAt(target);
+    return target;
+  }
+
+  /// Next item — returns the index that ended up playing (`null` when
+  /// nothing happened). During shuffle it plays the next pick of the
+  /// pass (a fresh pass starts when the current one is exhausted — a
+  /// deliberate step always plays); otherwise the next list row.
+  Future<int?> next() async {
+    final QueueService queue = QueueService.instance;
+    if (queue.paths.value.isEmpty) return null;
+    if (_shuffleDriving) {
+      int? target = queue.takeNextShuffle();
+      if (target == null) {
+        queue.startNewShufflePass();
+        target = queue.takeNextShuffle();
+      }
+      if (target == null) return null;
+      stopMemory.value = null;
+      _userPaused = false;
+      await _openQueueAt(target);
+      return target;
+    }
+    if (!queue.hasNext) return null;
+    final int target = queue.index.value + 1;
+    stopMemory.value = null;
+    _userPaused = false;
+    await _openQueueAt(target);
+    return target;
   }
 
   /// Jump the timeline to an exact position.
@@ -616,6 +951,255 @@ class PlayerService {
     );
   }
 
+  // ── Playlist surgery (playlist_imp.md §5) ─────────────────────────────
+
+  /// Removes row [i] and applies the owner's follow-up rule:
+  /// playing row + a next → play the next (via [playIndex], resume
+  /// memory applies) · no next but a previous → play the previous ·
+  /// the only item → initial state (stopped, empty queue, logo canvas).
+  /// Rows before/after the playing one leave playback untouched.
+  ///
+  /// Returns the Undo token (or `null` when nothing was removed).
+  Future<RemovedItemUndo?> removeFromQueue(int i) async {
+    final QueueService queue = QueueService.instance;
+    final List<String> paths = queue.paths.value;
+    if (i < 0 || i >= paths.length) return null;
+
+    final String removedPath = paths[i];
+    final bool wasCurrent = queue.index.value == i;
+    final bool onlyItem = paths.length == 1;
+
+    // The only item: remove → stop (parks the position for Undo) → the
+    // initial state (queue empty, logo canvas).
+    if (wasCurrent && onlyItem) {
+      final bool live = hasMedia.value;
+      // A removal from the STOPPED state consumes the parked memory; the
+      // Undo token carries it so Undo restores the exact pre-removal state.
+      final StopMemory? parked = live ? null : stopMemory.value;
+      final RemovedItemUndo undo = RemovedItemUndo(
+        text: MediaUtils.displayName(removedPath),
+        path: removedPath,
+        index: i,
+        wasLive: live,
+        wasStopped: !live && parked != null,
+        position: live ? position.value : parked?.position,
+        duration: live ? duration.value : parked?.duration,
+      );
+      queue.removeAt(i);
+      if (live) await stop();
+      stopMemory.value = null;
+      _refreshTransportState();
+      return undo;
+    }
+
+    queue.removeAt(i);
+
+    if (wasCurrent) {
+      if (hasMedia.value) {
+        // Follow-up: next → else previous. Both go through playIndex so
+        // resume memory applies exactly as it does for Next.
+        final List<String> rest = queue.paths.value;
+        if (rest.isEmpty) {
+          stopMemory.value = null;
+        } else if (i < rest.length) {
+          await playIndex(i);
+        } else {
+          await playIndex(rest.length - 1);
+        }
+      } else if (queue.index.value < 0 && queue.hasQueue) {
+        // Stopped/parked: the pointer parks on the row that slid in.
+        queue.setIndex(queue.paths.value.length - 1);
+      }
+    } else if (hasMedia.value) {
+      // A row that is not playing: mirror the removal into the engine.
+      try {
+        await player.remove(i);
+      } catch (_) {
+        // Best-effort mirror; the queue is already authoritative.
+      }
+    }
+
+    return RemovedItemUndo(
+      text: MediaUtils.displayName(removedPath),
+      path: removedPath,
+      index: i,
+      wasLive: false,
+    );
+  }
+
+  /// Restores a removed row (5 s Undo). The list always comes back; when
+  /// the removal had landed SALU in its initial state, the item that was
+  /// playing also re-opens silently at its remembered position.
+  Future<void> undoRemoveFromQueue(RemovedItemUndo undo) async {
+    final QueueService queue = QueueService.instance;
+    queue.insert(undo.index, undo.path);
+    if (hasMedia.value) {
+      // Engine mirror: append at the end, then move into place.
+      try {
+        await player.add(Media(undo.path));
+        final int last = queue.paths.value.length - 1;
+        if (last != undo.index) {
+          await player.move(last, undo.index);
+        }
+      } catch (_) {
+        // Best-effort mirror; the next open rebuilds from the queue.
+      }
+      return;
+    }
+    if (undo.wasLive &&
+        undo.position != null &&
+        undo.duration != null) {
+      final int idx =
+          queue.paths.value.indexOf(MediaUtils.canonicalPath(undo.path));
+      if (idx >= 0) {
+        final bool keep =
+            undo.duration! > Duration.zero &&
+                _withinKeepWindow(undo.position!, undo.duration!);
+        await _openQueueAt(
+          idx,
+          start: keep ? undo.position : Duration.zero,
+          silent: true,
+          keepMemory: true,
+        );
+      }
+    } else if (undo.wasStopped &&
+        undo.position != null &&
+        undo.duration != null) {
+      // The removal had consumed a parked stop memory — re-arm it so Play
+      // resumes the item exactly as before the removal.
+      stopMemory.value = StopMemory(
+        path: undo.path,
+        position: undo.position!,
+        duration: undo.duration!,
+      );
+      _refreshTransportState();
+    }
+  }
+
+  /// Clears the queue — ABSOLUTE (owner): playback stops, the queue
+  /// empties, SALU returns to its initial state. On-disk resume memory
+  /// and the saved URL seven are untouched. Returns the Undo token
+  /// (`null` when there was nothing to clear).
+  Future<ClearedQueueUndo?> clearQueue() async {
+    final QueueService queue = QueueService.instance;
+    if (!queue.hasQueue && !hasMedia.value) return null;
+
+    final List<String> snapshot = List<String>.of(queue.paths.value);
+    final int at = queue.index.value;
+    final bool live = hasMedia.value;
+    final String? playing = live ? currentPath.value : null;
+    final Duration pos = live ? position.value : Duration.zero;
+    final Duration dur = live ? duration.value : Duration.zero;
+    // A clear from the STOPPED state consumes the parked stop memory; the
+    // Undo token carries it so Undo restores the exact pre-clear state.
+    final StopMemory? parked = stopMemory.value;
+    final bool wasStopped = !live && parked != null;
+
+    if (hasMedia.value) await stop();
+    queue.clear();
+    stopMemory.value = null;
+    _refreshTransportState(); // nothing left → idle (the initial state)
+
+    return ClearedQueueUndo(
+      text: 'Playlist cleared',
+      paths: snapshot,
+      index: at,
+      wasLive: live && playing != null,
+      wasStopped: wasStopped,
+      path: live ? playing : parked?.path,
+      position: live ? pos : parked?.position,
+      duration: live ? dur : parked?.duration,
+    );
+  }
+
+  /// Restores a cleared queue (5 s Undo): the whole queue comes back in
+  /// its original order; if the clear had stopped live playback, the
+  /// item that was playing re-opens silently at its remembered position.
+  Future<void> undoClearQueue(ClearedQueueUndo undo) async {
+    final QueueService queue = QueueService.instance;
+    if (undo.paths.isEmpty) return;
+    queue.setQueue(undo.paths, undo.index >= 0 ? undo.index : 0);
+    if (undo.wasLive &&
+        undo.path != null &&
+        undo.position != null &&
+        undo.duration != null) {
+      final int idx = queue.paths.value
+          .indexOf(MediaUtils.canonicalPath(undo.path!));
+      if (idx >= 0) {
+        final bool keep =
+            undo.duration! > Duration.zero &&
+                _withinKeepWindow(undo.position!, undo.duration!);
+        await _openQueueAt(
+          idx,
+          start: keep ? undo.position : Duration.zero,
+          silent: true,
+          keepMemory: true,
+        );
+      }
+    } else if (undo.wasStopped &&
+        undo.path != null &&
+        undo.position != null &&
+        undo.duration != null) {
+      // The clear had consumed a parked stop memory — re-arm it so Play
+      // resumes the item exactly as before the clear.
+      stopMemory.value =
+          StopMemory(path: undo.path!, position: undo.position!, duration: undo.duration!);
+      _refreshTransportState();
+    }
+  }
+
+  /// Reorders row [from] to [to] (final-position semantics) in the queue
+  /// AND the engine; playback does not restart (a drag is a deliberate
+  /// change — only fresh loads start at the top). Returns the Undo token,
+  /// or `null` when nothing moved (no-op / out of range).
+  Future<MovedItemUndo?> moveInQueue(int from, int to) async {
+    if (from == to) return null;
+    final QueueService queue = QueueService.instance;
+    final List<String> paths = queue.paths.value;
+    if (from < 0 || from >= paths.length) return null;
+    final String moved = paths[from];
+    // queue.move itself resets the shuffle bookkeeping — an index-based
+    // heard-log/pass is meaningless once rows have moved under it.
+    if (!queue.move(from, to)) return null;
+    if (hasMedia.value) {
+      try {
+        await player.move(from, to);
+      } catch (_) {
+        // Best-effort mirror; the next open rebuilds from the queue.
+      }
+    }
+    return MovedItemUndo(
+      text: MediaUtils.displayName(moved),
+      from: from,
+      to: to,
+    );
+  }
+
+  /// Restores a drag-reorder (5 s Undo): the inverse move, playback
+  /// untouched, no second toast.
+  Future<void> undoMoveInQueue(MovedItemUndo undo) async {
+    await moveInQueue(undo.to, undo.from);
+  }
+
+  /// Appends a batch of (already boundary-sorted) items. The current
+  /// item is untouched; while the engine holds the playlist the items
+  /// are mirrored into mpv as they are queued.
+  Future<void> appendToQueue(List<String> paths) async {
+    if (paths.isEmpty) return;
+    final List<String> canonical =
+        paths.map(MediaUtils.canonicalPath).toList(growable: false);
+    QueueService.instance.append(canonical);
+    if (hasMedia.value) {
+      for (final String p in canonical) {
+        try {
+          await player.add(Media(p));
+        } catch (_) {
+          // Best-effort mirror.
+        }
+      }
+    }
+  }
+
   // ── Hardware acceleration check (Phase 2 requirement) ────────────────
 
   /// Queries mpv for the decoder that is actually active right now.
@@ -650,6 +1234,7 @@ class PlayerService {
     _stopTicker();
     await _playlistSub?.cancel();
     await _errorSub?.cancel();
+    await _completedSub?.cancel();
     await _widthSub?.cancel();
     await _playingSub?.cancel();
     await _positionSub?.cancel();
