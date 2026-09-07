@@ -4,7 +4,6 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter/services.dart';
 
-import '../../core/drop_handler.dart';
 import '../../core/media_utils.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
