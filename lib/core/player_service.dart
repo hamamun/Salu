@@ -23,6 +23,15 @@ enum TransportState { idle, stopped, paused, playing }
 /// Repeat modes (playlist_imp.md §5): off → all → one per click.
 enum RepeatMode { off, all, one }
 
+/// Why an item is being opened — the input to THE STEP RULE
+/// ([PlayerService.playsOnStep]).
+///
+///   · [deliberate] — the user asked for this item: `|<<`, `>>|`, a row
+///     click, an Open, Play-after-Stop.
+///   · [automatic] — SALU moved on by itself: the end-of-item advance
+///     and the dead-channel failure skip.
+enum StepIntent { deliberate, automatic }
+
 /// The in-session memory taken by Stop: what was playing, where, for
 /// how long. Consumed by Play-again-after-Stop; mirrored to disk the
 /// moment it is taken so closing SALU right after a Stop still resumes.
@@ -618,6 +627,13 @@ class PlayerService {
   /// one exists the Resume toast fires on arrival.
   /// [silenceTargetResume] suppresses the target's Resume toast (the
   /// Undo restore re-opens silently — playlist_imp.md §5).
+  ///
+  /// [play] answers THE STEP RULE for this open — read it off
+  /// [playsOnStep] with the step's intent, never as a bare literal. The
+  /// default is the deliberate answer (`true`), because every remaining
+  /// caller IS a deliberate open. Opening also writes the pause latch:
+  /// an item that arrives playing leaves no pause behind for the next
+  /// automatic advance to inherit.
   Future<void> _openQueueAt(
     int index, {
     bool play = true,
@@ -645,7 +661,7 @@ class PlayerService {
 
     stopMemory.value = null; // opening anything consumes a stop memory
     _openingWithPlay = play;
-    _userPaused = !play;
+    _userPaused = !play; // the step rule's latch, written in one place
     hasMedia.value = true;
     _producedSignal = false;
     _refreshTransportState();
@@ -733,7 +749,8 @@ class PlayerService {
   Future<void> playIndex(int i) async {
     _channelFailStrikes = 0; // a deliberate pick, never part of a cascade
     stopMemory.value = null;
-    await _openQueueAt(i);
+    // A clicked row plays, even from pause (the step rule).
+    await _openQueueAt(i, play: playsOnStep(StepIntent.deliberate));
   }
 
   /// Removes the queue item at [i] and returns a [RowRemoval] describing
@@ -924,7 +941,7 @@ class PlayerService {
     // The advance inherits the viewer's state, it never overrides it:
     // paused at the end of an item → the next one loads PAUSED, exactly
     // like full holdings, where mpv pauses across the file change.
-    unawaited(_openQueueAt(target, play: !_userPaused));
+    unawaited(_openQueueAt(target, play: playsOnStep(StepIntent.automatic)));
   }
 
   /// The item ended: which index now? `-1` = park the queue.
@@ -970,8 +987,29 @@ class PlayerService {
     //    wrap to index 0 — that would risk a silent loop.
     final int next = queue.index.value + 1;
     if (next >= queue.items.value.length) return;
-    unawaited(_openQueueAt(next, play: !_userPaused));
+    unawaited(_openQueueAt(next, play: playsOnStep(StepIntent.automatic)));
   }
+
+  // ── THE STEP RULE (one owner for "does this step arrive playing?") ────
+
+  /// Whether an item opened with this [intent] arrives PLAYING.
+  ///
+  /// **Deliberate steps always play — even from pause.** `|<<`, `>>|`, a
+  /// row click and an Open are a statement of intent: you clicked, you
+  /// want it playing. Opening also clears the pause latch (see
+  /// [_openQueueAt]), so the automatic advance that may follow is not
+  /// answering to a pause the viewer already stepped out of.
+  ///
+  /// **Automatic steps inherit the viewer's state.** The end-of-item
+  /// advance (§5) and the dead-channel failure skip (§10.8a) never yank a
+  /// paused player into playback: paused advances PAUSED, exactly as
+  /// full holdings behave when mpv changes file by itself.
+  ///
+  /// This asymmetry is deliberate and lives HERE, in one function, so it
+  /// is a rule and not an accident of a default argument. Every call site
+  /// names its intent; nothing else decides.
+  bool playsOnStep(StepIntent intent) =>
+      intent == StepIntent.deliberate || !_userPaused;
 
   // ── Basic transport ───────────────────────────────────────────────────
 
@@ -1108,32 +1146,69 @@ class PlayerService {
     if (queue.isChannelList) {
       if (idx <= 0) return;
       stopMemory.value = null;
-      await _openQueueAt(idx - 1);
+      await _openQueueAt(idx - 1, play: playsOnStep(StepIntent.deliberate));
       return;
     }
 
+    // Asked BEFORE the heard-log is consumed, and by the same getter the
+    // deck reads for its card — one predicate, one answer.
+    final bool restart = previousRestartsThisItem;
+
     // Shuffle (and not suspended by repeat one): what was heard before.
-    if (shuffleOn.value && repeatMode.value != RepeatMode.one) {
+    // The predicate already answered `false` whenever such a step exists,
+    // so the two branches can never contradict each other.
+    if (!restart &&
+        shuffleOn.value &&
+        repeatMode.value != RepeatMode.one) {
       final int? heard = queue.previousHeard(idx);
       if (heard != null && heard != idx) {
         stopMemory.value = null;
-        await _openQueueAt(heard);
+        await _openQueueAt(heard, play: playsOnStep(StepIntent.deliberate));
         return;
       }
     }
 
-    final StopMemory? mem = stopMemory.value;
-    final Duration pos = (transportState.value == TransportState.stopped &&
-            mem != null)
-        ? mem.position
-        : position.value;
-    if (pos > const Duration(seconds: 3) || idx <= 0) {
-      stopMemory.value = null;
-      await _openQueueAt(idx <= 0 ? 0 : idx, start: Duration.zero);
+    stopMemory.value = null;
+    if (restart) {
+      await _openQueueAt(
+        idx <= 0 ? 0 : idx,
+        play: playsOnStep(StepIntent.deliberate),
+        start: Duration.zero,
+      );
     } else {
-      stopMemory.value = null;
-      await _openQueueAt(idx - 1);
+      await _openQueueAt(idx - 1, play: playsOnStep(StepIntent.deliberate));
     }
+  }
+
+  /// **Whether `|<<` restarts THIS item** instead of stepping away — the
+  /// Previous rule, owned here and read by everyone (the deck titles its
+  /// card `00:00:00` off this getter instead of re-deriving the rule and
+  /// drifting from it in the corners).
+  ///
+  /// Local: the position (the stop memory while stopped) is past 3 s, or
+  /// the queue is on its first item. Never on a channel list (M36 — a
+  /// live stream has no position to restart from). While shuffle is on
+  /// and not suspended by repeat one, a real "heard before" step wins;
+  /// with an EMPTY heard-log there is nothing to step back to, so the
+  /// position rule answers — the narrow case the deck used to get wrong.
+  ///
+  /// Non-mutating: it peeks the heard-log ([QueueService.peekPreviousHeard]),
+  /// so asking may be done as often as the UI likes.
+  bool get previousRestartsThisItem {
+    final QueueService queue = QueueService.instance;
+    if (!queue.hasQueue) return false;
+    if (queue.isChannelList) return false;
+    final int idx = queue.index.value;
+    if (shuffleOn.value && repeatMode.value != RepeatMode.one) {
+      final int? heard = queue.peekPreviousHeard(idx);
+      if (heard != null && heard != idx) return false;
+    }
+    final StopMemory? mem = stopMemory.value;
+    final Duration pos =
+        (transportState.value == TransportState.stopped && mem != null)
+            ? mem.position
+            : position.value;
+    return pos > const Duration(seconds: 3) || idx <= 0;
   }
 
   /// Next item — LIST order locally and on channel lists (M35: browsing
@@ -1145,20 +1220,22 @@ class PlayerService {
     if (!nextAvailable) return;
     _channelFailStrikes = 0; // a deliberate pick
     stopMemory.value = null;
+    // A hand-pressed `>>|` plays, even from pause (the step rule).
+    final bool play = playsOnStep(StepIntent.deliberate);
 
     if (queue.isChannelList) {
-      await _openQueueAt(queue.index.value + 1);
+      await _openQueueAt(queue.index.value + 1, play: play);
       return;
     }
 
     if (shuffleOn.value && repeatMode.value != RepeatMode.one) {
       final int target = shuffleNextTarget();
       if (target < 0) return;
-      await _openQueueAt(target);
+      await _openQueueAt(target, play: play);
       return;
     }
 
-    await _openQueueAt(queue.index.value + 1);
+    await _openQueueAt(queue.index.value + 1, play: play);
   }
 
   /// The shuffled `>>|` target: an unplayed item of the current pass;

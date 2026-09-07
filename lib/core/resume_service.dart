@@ -30,7 +30,7 @@ class ResumeService {
   /// The one and only resume store for the whole app.
   static final ResumeService instance = ResumeService._internal();
 
-  static const String _key = 'resume_positions';
+  static const String _prefsKey = 'resume_positions';
   static const int _maxEntries = 1000;
   static const Duration _minKeep = Duration(seconds: 5);
   static const Duration _tailMargin = Duration(seconds: 10);
@@ -50,7 +50,7 @@ class ResumeService {
     _loaded = true;
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      final String? raw = prefs.getString(_key);
+      final String? raw = prefs.getString(_prefsKey);
       if (raw == null || raw.isEmpty) return;
       final Object? decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
@@ -59,7 +59,7 @@ class ResumeService {
             final int pos = _toInt(value[0]);
             final int dur = _toInt(value[1]);
             final int stamp = value.length >= 3 ? _toInt(value[2]) : 0;
-            final String key = _key(path);
+            final String key = _pathKey(path);
             // Keys written before the spelling was enforced can arrive
             // twice, once per spelling. Keep the newer visit.
             final List<int>? held = _entries[key];
@@ -108,7 +108,7 @@ class ResumeService {
   /// `file:///C:/media/a.mp4` mpv reports; both land on the same key, so
   /// an entry can never be written under one spelling and looked up under
   /// another. (`MediaUtils.canonicalPath` leaves stream URLs alone.)
-  static String _key(String path) => MediaUtils.canonicalPath(path);
+  static String _pathKey(String path) => MediaUtils.canonicalPath(path);
 
   // ── Reading ────────────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ class ResumeService {
   /// is stored (never stored, pruned, outside the keep-window, or gated
   /// off by the current Resume mode).
   Duration? savedPositionFor(String path) {
-    final String key = _key(path);
+    final String key = _pathKey(path);
     if (!remembersKind(key)) return null;
     final List<int>? entry = _entries[key];
     if (entry == null || entry.length < 2) return null;
@@ -135,7 +135,7 @@ class ResumeService {
   /// to one every 5 s while playing; call [flush] for an immediate write
   /// (pause, Stop, item switch, window close).
   void update(String path, Duration pos, Duration dur) {
-    final String key = _key(path);
+    final String key = _pathKey(path);
     if (key.isEmpty || key.contains('://')) return;
     if (!remembersKind(key)) return;
     if (!shouldKeep(key, pos, dur)) {
@@ -155,7 +155,7 @@ class ResumeService {
   /// Drops any stored position for [path] (e.g. the current item is
   /// being restarted — a finished file must not resurrect old state).
   void remove(String path) {
-    if (_entries.remove(_key(path)) != null) {
+    if (_entries.remove(_pathKey(path)) != null) {
       _maybeWriteDisk(force: true);
     }
   }
@@ -165,7 +165,7 @@ class ResumeService {
     _lastDiskWrite = DateTime.now();
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key, _encode());
+      await prefs.setString(_prefsKey, _encode());
     } catch (_) {
       // Best-effort; the in-memory map stays authoritative.
     }

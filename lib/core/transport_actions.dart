@@ -128,7 +128,10 @@ class TransportActions {
     if (!player.prevAvailable) return;
     resetSeekRamps();
     osd.dismissResumeToast();
-    final bool restart = _previousRestartsThisItem();
+    // The rule lives on PlayerService — the deck reads it, never
+    // re-derives it (they used to disagree when shuffle was on with an
+    // empty heard-log: `previous()` restarted, the card printed a title).
+    final bool restart = player.previousRestartsThisItem;
     _run(player.previous().then((_) {
       final List<QueueItem> items = queue.items.value;
       final int to = queue.index.value;
@@ -137,24 +140,6 @@ class TransportActions {
           : (to >= 0 && to < items.length ? items[to].title : '00:00:00');
       osd.show(OsdTransportCard(mark: OsdMark.previous, text: text));
     }));
-  }
-
-  /// The Previous rule: position (stop memory while stopped) > 3 s, or
-  /// first item → THIS item restarts from `0:00`. Never on channel lists
-  /// (M36: a live stream has no position to restart from) and never a
-  /// "heard before" shuffle step (that rule answers in list order).
-  bool _previousRestartsThisItem() {
-    if (queue.isChannelList) return false;
-    if (player.shuffleOn.value &&
-        player.repeatMode.value != RepeatMode.one) {
-      return false;
-    }
-    final TransportState state = player.transportState.value;
-    final Duration pos =
-        (state == TransportState.stopped && player.stopMemory.value != null)
-            ? player.stopMemory.value!.position
-            : player.position.value;
-    return pos > const Duration(seconds: 3) || queue.index.value <= 0;
   }
 
   /// Next item — dimmed in the UI when there is none.

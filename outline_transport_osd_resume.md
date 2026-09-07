@@ -81,11 +81,28 @@ One facade; buttons, keys and the video tap all call it. Bars call
 |---|---|---|
 | Play / Pause | playing ⇄ paused · **stopped → resumes from the stop memory** | `>` / `II` · after Stop: the Resume toast |
 | Stop | third state — engine releases the item, queue stays, position remembered; canvas → initial window | none (canvas change is the feedback) |
-| Previous | one rule in every state: position (stop memory while stopped) > 3 s, or first item → plays *this* item from `0:00`; else previous item | `\|<<` + title (or `00:00:00` on restart) |
+| Previous | one rule in every state: position (stop memory while stopped) > 3 s, or first item → plays *this* item from `0:00`; else previous item. The rule has ONE owner — `PlayerService.previousRestartsThisItem`; the deck reads it, it never re-derives it | `\|<<` + title (or `00:00:00` on restart) |
 | Next | plays the next item — dimmed when there is none | `>>\|` + title |
 | Seek ± | **seek ramp** (below) | `<<` / `>>` + the step just applied + new time |
 | Volume ± | `setVolumeUI(level ± 5)` (unmutes) | volume card |
 | Mute | `toggleMute()` | mute / unmute card |
+
+### The step rule — a deliberate step plays, an automatic one inherits
+
+One question, one owner: `PlayerService.playsOnStep(StepIntent)`. Every
+open names its intent; nothing else decides.
+
+- **Deliberate** (`|<<`, `>>|`, a **row click**, an Open, Play-after-Stop)
+  → **always arrives playing, even from pause.** You clicked it, you want
+  it playing. The open also clears the pause latch, so an automatic
+  advance later in the same session is not obeying a pause the viewer has
+  already stepped out of.
+- **Automatic** (the end-of-item advance §5, the dead-channel failure
+  skip §10.8a) → **inherits the viewer's state**: a paused player advances
+  **paused**, exactly as mpv's own file change behaves in full holdings.
+
+The asymmetry is deliberate: SALU never *starts* sound the viewer did not
+ask for, and never *withholds* it when they did.
 
 ### Stop — the third state (Stop ≠ Start Over)
 

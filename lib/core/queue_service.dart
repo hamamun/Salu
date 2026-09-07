@@ -265,12 +265,25 @@ class QueueService {
   /// The item actually heard before [current]: drops the current top and
   /// peeks one deeper (the top stays, so the follow-up `notePlayed` of the
   /// stepped-to item does not duplicate it). `null` = nothing heard before.
+  ///
+  /// This CONSUMES history — only the step itself may call it. Anything
+  /// that merely wants to know where `|<<` would land (the restart
+  /// predicate, the OSD card) asks [peekPreviousHeard].
   int? previousHeard(int current) {
+    final int? target = peekPreviousHeard(current);
     if (_history.isNotEmpty && _history.last == current) {
       _history.removeLast();
     }
-    if (_history.isEmpty) return null;
-    return _history.last;
+    return target;
+  }
+
+  /// The non-mutating twin of [previousHeard]: the same answer, with the
+  /// heard-log left untouched — so asking the question can never change
+  /// the answer to it.
+  int? peekPreviousHeard(int current) {
+    final int top = _history.length - 1;
+    final int at = top >= 0 && _history[top] == current ? top - 1 : top;
+    return at < 0 ? null : _history[at];
   }
 
   /// A drag-reorder remaps pass/history indexes WITHOUT resetting the pass.

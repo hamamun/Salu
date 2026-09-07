@@ -698,6 +698,12 @@ them may answer, and the marks must show which one is answering.
 | off | off | the next item in list order | **stop** → the queue parks (Stop ≠ Start Over) |
 | off | **on** | the next unplayed item of the pass | the pass is exhausted → **stop** → the queue parks |
 
+- **The advance inherits the viewer's state; a deliberate step overrides it.**
+  When an item ends while the viewer is PAUSED, the next one loads **paused**
+  — the automatic answer never starts sound nobody asked for. A hand-pressed
+  `|<<` / `>>|` or a **row click** does the opposite: it always plays, even
+  from pause. One owner: `PlayerService.playsOnStep(StepIntent)` (see
+  outline_transport_osd_resume.md · "The step rule").
 - **Suspension is visible, and the setting survives.** While repeat-one is
   active, the shuffle mark drops to the quiet 55 % ink and loses its glow —
   icon-only language for "not in effect right now" — but its *state* is kept.
@@ -712,6 +718,13 @@ them may answer, and the marks must show which one is answering.
   shuffled pick — so keep a small **play-order history** in `QueueService` (a
   stack of visited indexes, reset on a new pass, on clear, and on a fresh open).
   The visible list never reorders.
+  *"Does `|<<` restart THIS item?" has one owner:*
+  `PlayerService.previousRestartsThisItem` — non-mutating (it peeks the
+  heard-log through `QueueService.peekPreviousHeard`), read both by
+  `previous()` itself and by the OSD card, so the action and the card can
+  never disagree. With shuffle on and an **empty** heard-log there is
+  nothing heard before, so the 3-second rule answers — the item restarts
+  and the card reads `00:00:00`.
 - Both must survive Stop: Stop parks the queue, and the parked queue keeps its
   repeat/shuffle mode. Persisting them across app restarts is **out of scope**
   (`shared_preferences` is allowed by §7 of follow.md, but not decided here).
