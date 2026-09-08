@@ -82,10 +82,10 @@ class _StillSoftLightPainter extends CustomPainter {
         center: Offset.zero,
         radius: 1,
         colors: <Color>[
-          Colors.white.withAlpha((peak * 255).round().clamp(0, 255)),
+          Colors.white.withAlpha((peak * 255).round().clamp(0, 255).toInt()),
           Colors.white.withAlpha(0),
         ],
-        stops: <double>[0, fadeStop.clamp(0.01, 1)],
+        stops: <double>[0, fadeStop.clamp(0.01, 1).toDouble()],
       ).createShader(const Rect.fromCircle(
         center: Offset.zero,
         radius: 1,

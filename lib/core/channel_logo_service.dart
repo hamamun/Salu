@@ -166,7 +166,8 @@ class ChannelLogoService {
   }
 
   void _store(String logoUrl, Uint8List bytes) {
-    _cache.remove(logoUrl);
+    final Uint8List? replaced = _cache.remove(logoUrl);
+    if (replaced != null) _cachedBytes -= replaced.length;
     _cache[logoUrl] = bytes;
     _cachedBytes += bytes.length;
     while ((_cache.length > maxEntries || _cachedBytes > maxBytes) &&

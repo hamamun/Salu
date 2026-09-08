@@ -61,7 +61,8 @@ class _ChannelLogoState extends State<ChannelLogo> {
     final int pixels =
         (widget.size * MediaQuery.of(context).devicePixelRatio)
             .round()
-            .clamp(1, 256);
+            .clamp(1, 256)
+            .toInt();
     return SizedBox.square(
       dimension: widget.size,
       child: FutureBuilder<Uint8List?>(
