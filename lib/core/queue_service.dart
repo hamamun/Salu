@@ -160,6 +160,18 @@ class QueueService {
     _resetPass();
   }
 
+  /// Appends parsed channel records as they arrive (progressive load,
+  /// playlist_imp.md §10.10b). The current index is untouched; the list
+  /// is published once per batch. Records are stored as given — URLs are
+  /// never rewritten and the mapper already resolved local paths.
+  void appendItems(List<QueueItem> batch) {
+    if (batch.isEmpty) return;
+    final List<QueueItem> next = List<QueueItem>.of(items.value)
+      ..addAll(batch);
+    items.value = List<QueueItem>.unmodifiable(next);
+    _resetPass();
+  }
+
   /// Inserts one entry at [index] (0-based final position, clamped).
   /// The current index shifts up when the insert lands at or before it.
   void insert(int index, QueueItem item) {
