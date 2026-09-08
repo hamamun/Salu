@@ -371,9 +371,17 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   }
 
   Widget _shuffleButton() {
-    return ValueListenableBuilder<bool>(
-      valueListenable: _player.shuffleOn,
-      builder: (BuildContext context, bool on, Widget? _) {
+    // Listens to BOTH notifiers: the suspend visual answers the repeat
+    // mode as well as the shuffle state (§8 item 18 — cycling repeat to
+    // one must dim this mark immediately, without waiting for a
+    // shuffle toggle or a queue change to rebuild it).
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        _player.shuffleOn,
+        _player.repeatMode,
+      ]),
+      builder: (BuildContext context, Widget? _) {
+        final bool on = _player.shuffleOn.value;
         // Repeat-one suspends shuffle: it keeps its *state* but drops to
         // quiet ink and loses its glow (§5's decision table).
         final bool suspended = on && _player.repeatMode.value == RepeatMode.one;
