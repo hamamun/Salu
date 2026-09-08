@@ -675,8 +675,10 @@ class PlayerService {
       return;
     }
     // The message is never logged in channel mode: mpv quotes the
-    // failing URL and those carry credentials (§10.10e).
-    debugPrint('[SALU] channel failed to load');
+    // failing URL and those carry credentials (§10.10e). What IS logged
+    // is the decision (below), not the arrival of a line: one dead
+    // channel emits several mpv error lines, and a bare line per error
+    // reads like three dead channels when only one failed.
     skipFailedChannel();
   }
 
@@ -692,7 +694,13 @@ class PlayerService {
     final int at = queue.index.value;
     final ChannelSkipAction action =
         _skips.onFailure(index: at, count: queue.length);
-    if (action == ChannelSkipAction.ignore) return;
+    if (action == ChannelSkipAction.ignore) {
+      // A second error line for the channel that already failed (or one
+      // arriving while its skip is still opening) — one failure, one
+      // report, one skip.
+      debugPrint('[SALU] channel error ignored (duplicate report)');
+      return;
+    }
 
     // The toast names the CHANNEL, never its URL (§10.10e). A stop
     // leaves it up longer — it is the only report the viewer gets that
@@ -707,9 +715,11 @@ class PlayerService {
       // A dead provider (or the tail of the list): stop, leave the toast
       // up, wait for the viewer. The list stays loaded and parked, and
       // the next manual pick starts skipping again.
-      debugPrint('[SALU] channel skip stopped (${_skips.strikes} in a row)');
+      debugPrint('[SALU] channel failed to load — staying put '
+          '(${_skips.strikes} in a row)');
       return;
     }
+    debugPrint('[SALU] channel failed to load — skipping to the next');
     _lastOpenWasAuto = true; // the panel must not steal the browsed view
     unawaited(_openQueueAt(at + 1).whenComplete(_skips.settle));
   }

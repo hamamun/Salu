@@ -1109,7 +1109,14 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     // The list + SALU's own thin scrollbar, the sticky group head while
     // one is pinned (§10.5), and the edge chevrons pointing at the
     // playing channel hiding off-screen (§10.6).
+    //
+    // `StackFit.expand` is load-bearing, not decoration: a loose Stack
+    // hands its non-positioned children `constraints.loosen()`, and the
+    // rows view under it would then be free to size itself to nothing.
+    // The local list reaches its scroll view straight from `Expanded`
+    // (tight constraints); this one must hand down the same tightness.
     return Stack(
+      fit: StackFit.expand,
       children: <Widget>[
         _SaluScrollView(controller: _scroll, child: list),
         _stickyHead(items),
@@ -1151,6 +1158,15 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// The pinned head's geometry, or `null` while the real head is still
   /// visible (or the scroll metrics are not ready yet).
   _PinnedHead? _pinnedHead(List<QueueItem> items) {
+    // Flat (and a search, which flattens) has no heads at all — answer
+    // before the scan. The edge chevrons ask this on every scroll tick,
+    // and a full sweep of 50 000 descriptors per frame is exactly the
+    // budget §10.10c exists to protect.
+    if (_query.isNotEmpty ||
+        _groupMode == ChannelGroupMode.flat ||
+        _openGroup == null) {
+      return null;
+    }
     _ensureChannelCache(items);
     int headPos = -1;
     ChannelGroup? group;
@@ -1845,6 +1861,14 @@ class _GroupPillOptionState extends State<_GroupPillOption> {
 /// The thumb is driven off [controller] ([ListenableBuilder]) so it only
 /// repaints on real scroll/geometry changes — never on a scroll
 /// notification during a layout pass.
+///
+/// The scroll view is the Stack's ONE non-positioned child, so it — not
+/// the thumb's zero-sized placeholder — decides this widget's size. With
+/// the list positioned instead, a caller that passes loose constraints
+/// (any `Stack` above us) collapses the whole rows area to 0 × 0 and the
+/// list vanishes behind the Stack's clip: exactly the empty channel
+/// panel §10.2's rows area showed. A viewport fills whatever bounded box
+/// it is given, loose or tight, so this holds in both callers.
 class _SaluScrollView extends StatelessWidget {
   const _SaluScrollView({required this.controller, required this.child});
 
@@ -1860,7 +1884,7 @@ class _SaluScrollView extends StatelessWidget {
           final double h = constraints.maxHeight;
           return Stack(
             children: <Widget>[
-              Positioned.fill(child: child),
+              child,
               // The thumb — a thin rounded rule on a transparent track.
               ListenableBuilder(
                 listenable: controller,
