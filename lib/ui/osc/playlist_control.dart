@@ -24,7 +24,7 @@ class PlaylistControl extends StatelessWidget {
 
     return ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[
-        queue.paths,
+        queue.items,
         queue.index,
         panel.playlistOpen,
       ]),
@@ -40,7 +40,7 @@ class PlaylistControl extends StatelessWidget {
           onTap: panel.togglePlaylist,
           child: NowRowMark(
             size: 20,
-            now: playlistRowOf(queue.index.value, queue.paths.value.length),
+            now: playlistRowOf(queue.index.value, queue.length),
           ),
         );
       },

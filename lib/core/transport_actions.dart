@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import '../ui/osd/osd_controller.dart';
 import 'clock_format.dart';
-import 'media_utils.dart';
 import 'player_service.dart';
 import 'queue_service.dart';
 
@@ -137,11 +136,11 @@ class TransportActions {
       final String text;
       if (restart) {
         text = '00:00:00';
-      } else if (to != null && to >= 0 && to < queue.paths.value.length) {
-        text = MediaUtils.displayName(queue.paths.value[to]);
+      } else if (to != null && to >= 0 && to < queue.length) {
+        text = queue.items.value[to].label;
       } else {
-        text = from > 0 && from <= queue.paths.value.length
-            ? MediaUtils.displayName(queue.paths.value[from - 1])
+        text = from > 0 && from <= queue.length
+            ? queue.items.value[from - 1].label
             : '00:00:00';
       }
       osd.show(OsdTransportCard(mark: OsdMark.previous, text: text));
@@ -157,8 +156,8 @@ class TransportActions {
     osd.dismissResumeToast();
     _run(player.next().then((int? to) {
       final String? text =
-          (to != null && to >= 0 && to < queue.paths.value.length)
-              ? MediaUtils.displayName(queue.paths.value[to])
+          (to != null && to >= 0 && to < queue.length)
+              ? queue.items.value[to].label
               : null;
       osd.show(OsdTransportCard(mark: OsdMark.next, text: text));
     }));

@@ -44,7 +44,7 @@ class TransportCluster extends StatelessWidget {
       listenable: Listenable.merge(<Listenable>[
         player.transportState,
         player.isPlaying,
-        queue.paths,
+        queue.items,
         queue.index,
       ]),
       builder: (BuildContext context, Widget? _) {
