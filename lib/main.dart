@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/channel_favourites_service.dart';
 import 'core/channel_load_service.dart';
 import 'core/folder_autoload_service.dart';
 import 'core/media_utils.dart';
@@ -86,6 +87,7 @@ Future<void> main(List<String> args) async {
   // ── Load persisted settings + resume memory before the first frame. ──
   await SettingsService.instance.load();
   await ResumeService.instance.load();
+  await ChannelFavouritesService.instance.load();
 
   runApp(SaluApp(initialFilePath: extractMediaPathFromArgs(args)));
 }
@@ -120,6 +122,13 @@ class _CloseGuard with WindowListener {
     }
     try {
       await ResumeService.instance.flush().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
+    try {
+      // A bookmark tapped seconds before the × must never be lost.
+      await ChannelFavouritesService.instance.flush().timeout(
         const Duration(seconds: 2),
         onTimeout: () {},
       );

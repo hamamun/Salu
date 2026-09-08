@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../ui/osd/osd_controller.dart';
+import 'channel_favourites_service.dart';
+import 'channel_logo_service.dart';
 import 'm3u/channel_list_loader.dart';
 import 'm3u/channel_source.dart';
 import 'player_service.dart';
@@ -46,6 +48,22 @@ class ChannelLoadService {
   /// asks about the **playlist**, not the first channel.
   final ValueNotifier<bool?> lastLoadOk = ValueNotifier<bool?>(null);
 
+  /// Storage key of the loaded playlist — its **host** for a remote
+  /// source, its own canonical path for a local file — or `null` while
+  /// none is loaded. Drives the favourites store's selection (two
+  /// playlists on one host share favourites; two local files never do,
+  /// §10.3) and is what Undo carries to restore the key. Never the full
+  /// URL: it carries credentials (§10.10e).
+  final ValueNotifier<String?> playlistKey = ValueNotifier<String?>(null);
+
+  /// Counts every channel load (M-6/M-7: the panel's reset signal).
+  /// The panel watches this — not the queue, not the loading flag — and
+  /// every bump means "forget everything": grouping back to Flat,
+  /// search cleared, favourites filter off, accordion closed, scroll to
+  /// the top. Reads stale-while-clearing: Undo restores the rows
+  /// without bumping, so the filters it preserves carry over.
+  final ValueNotifier<int> loadGeneration = ValueNotifier<int>(0);
+
   StreamSubscription<ChannelListEvent>? _sub;
 
   /// Releases the running [load]'s awaiting caller. A cancel must not
@@ -86,6 +104,16 @@ class ChannelLoadService {
     final bool remote = ChannelSource.isRemote(s);
     final String name = ChannelSource.displayName(s);
 
+    // A new playlist starts blank: its favourites key is selected, its
+    // in-flight logos are dropped (§10.4), and the panel resets through
+    // the generation bump (M6/M-7). Even a failed load
+    // keeps this key — an empty channel-less panel has no favourites
+    // surface to misuse it.
+    playlistKey.value =
+        ChannelFavouritesService.playlistKeyForSource(s);
+    ChannelFavouritesService.instance.setPlaylist(playlistKey.value);
+    ChannelLogoService.instance.cancelStale();
+    loadGeneration.value++;
     loading.value = true;
     loadedCount.value = 0;
     lastLoadOk.value = null;
@@ -223,11 +251,14 @@ class ChannelLoadService {
 
   /// Stops a running load (a newer open, a cleared playlist, shutdown).
   /// The worker isolate dies with its buffers; no terminal event fires.
+  /// In-flight logo fetches are dropped with it (§10.4); the key stays
+  /// until the next load (or Undo's restore) selects another.
   void cancel() {
     _generation++;
     unawaited(_sub?.cancel());
     _sub = null;
     if (loading.value) loading.value = false;
+    ChannelLogoService.instance.cancelStale();
     _releaseCurrent?.call();
     _releaseCurrent = null;
   }

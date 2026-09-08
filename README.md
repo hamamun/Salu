@@ -17,6 +17,7 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 | 7 | Advanced Player Tools & Search Logic | ⏳ Not started |
 | 8 | Android Remote Server | ⏳ Not started |
 | 9 | Branding & About Section | ⏳ Not started |
+| Playlist B | m3u channel lists (`playlist_imp.md` §10) | ✅ Implemented — §10.13 checklist + M-10 measurements pending on a Windows build |
 
 ## What works right now (Phase 1 + 2 + transport pass)
 
@@ -41,6 +42,12 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 - **Resume memory** — files pick up where you stopped (per-kind modes in
   Settings → General → Resume), resumed silently with no visible jump;
   closing after a Stop still remembers.
+- **Channel lists (IPTV)** — open an m3u URL or `.m3u`/`.m3u8` file to
+  browse its channels: logo rows, favourites saved per provider, a
+  group-by pill (Flat / Category / Language / Country) with sticky
+  accordion heads, edge chevrons that point at the playing channel
+  hiding off-screen, an inert timeline carrying a soft live light while
+  data arrives, and silent dead-channel skip behind a 3-strike guard.
 - **Silent keyboard set** — Space, ←→ (ramp seek), ↑↓, M, S, PageUp/PageDown;
   none of it is ever printed in the UI.
 

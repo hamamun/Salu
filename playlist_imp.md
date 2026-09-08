@@ -1558,14 +1558,13 @@ adds the channel-list behaviour behind it. Do not interleave them.
 | **M-10** | **Progressive load** (M41) + fetch indicator (M42, the §10.8a soft light) + failed-channel toast (M37). Measure peak/retained RAM with 50 000 channels, raw-buffer release, viewport row count, bounded logo cache/concurrency and cancellation — **re-measure parse timings on `m3u_xmltv`** (§10.10). | large lists stay responsive within measured memory budgets |
 | **M-11** | **Docs — point 12 FINAL (owner, 2026-09-08)** — pass §10.13's checklist, flip this section's status, update `follow.md` §1.6 with any new marks, README phase table. | shipped |
 
-#### Build progress — M-1 … M-4b shipped (engineering record, 2026-09-08)
+#### Build progress — M-1 … M-11 shipped (engineering record, 2026-09-08)
 
 Code-level status only; **nothing here is an owner sign-off**, and §10.13's
 acceptance checklist has not been run against a build (there is no Flutter
 engine in the build sandbox — verification is the analyzer plus the pure-Dart
-suites in `test/`). The channel **UI** (M-5 … M-9) is still Phase A's local
-panel: rows still show a grip and a bin, the header still shows repeat and
-shuffle, and there is no grouping, favourites or logo yet.
+suites in `test/`). M-10's measurements in particular are pending on a real
+Windows build: the budgets are implemented, the numbers are not yet taken.
 
 | Step | State | Where |
 |---|---|---|
@@ -1574,6 +1573,13 @@ shuffle, and there is no grouping, favourites or logo yet.
 | **M-3** | shipped | `channel_source.dart`, `channel_load_service.dart`, `open_media_service.dart`, `drop_handler.dart`, `main.dart`, `home_screen.dart` |
 | **M-4** | shipped | `player_service.dart::_openQueueAt` |
 | **M-4b** | shipped | `channel_skip_policy.dart`, `player_service.dart::_onEngineError` |
+| **M-5** | shipped | `playlist_panel.dart` (channel header + rows), `channel_logo_service.dart`, `widgets/channel_logo.dart` |
+| **M-6** | shipped | `channel_favourites_service.dart`, `playlist_panel.dart`, `player_service.dart` (Undo key), `main.dart` (load + close-guard flush) |
+| **M-7** | shipped | `channel_grouping.dart`, `test/channel_grouping_test.dart`, `playlist_panel.dart` (pill + accordion + sticky head), `channel_load_service.dart` (reset signal) |
+| **M-8** | shipped | `player_service.dart` (`lastOpenWasAuto`), `playlist_panel.dart` (reveal + head/edge chevrons) |
+| **M-9** | shipped | `player_service.dart` (`isBuffering`, `isLiveReceiving`, seek guard), `widgets/live_light.dart`, `media_timeline.dart`, `home_screen.dart` (hairline), `transport_cluster.dart`, `transport_actions.dart` |
+| **M-10** | shipped, measurements pending | progressive load in M-3 (`channel_list_loader.dart`), fetch light + failed-playlist toast in M-3/M-5; budgets below implemented, numbers untaken |
+| **M-11** | shipped | this section, `follow.md` §1.6, README phase table |
 
 What M-3 routes, and what it deliberately does not:
 
@@ -1617,10 +1623,49 @@ M-4 / M-4b, and the Phase A behaviour they must not disturb:
   the tail never wraps, and a burst of mpv error lines for one dead channel
   fires exactly one skip.
 
-Still open before Phase B can be called done: M-5 … M-11, and the whole of
-§10.13 on a real Windows build — including the Phase A regression sweep
-(check 31) and the failure-cascade checks (24, 24b, 24c) against a live
-provider.
+M-5 … M-9, and what they must not disturb:
+
+- The panel is one widget with two headers: channel mode shows the
+  group-by + favourites pair, a total-only search and 38 px rows
+  (`[chevron · 24-px logo · name · hover bookmark]`); the local header
+  (repeat/shuffle, `shown / total`) and local rows (grip, trash, drag)
+  are untouched below the branch.
+- Logos fetch lazily into a bounded RAM-only LRU (200 entries / 32 MB,
+  512 KB + 10 s per image, 6 concurrent, ≤5 redirects); a miss is an
+  empty slot — never a spinner, never the failure toast. In-flight
+  fetches die with the load (`cancelStale`).
+- Favourites key ID-first (`tvg-id` → `tvg-name` → name) per playlist
+  host (local files by their own path — never a shared bucket, never a
+  credentialed URL), persist in `shared_preferences` with 500 ms
+  debounced writes plus a close-guard flush, are never pruned, and
+  survive the bin (Undo reselects the restored list's key).
+- Grouping is a pure model (`channel_grouping.dart` + its suite): Flat
+  on every fresh load (the `loadGeneration` reset — mode, query,
+  favourites filter, accordion, scroll), a four-option pill with dimmed
+  unavailable modes, one stable group-by mark (never four morphing
+  glyphs), accordion + sticky head, `Unknown` last, and a search that
+  flattens while suspending — never clearing — the mode.
+- Reveal answers deliberate vs automatic (`lastOpenWasAuto`): a zap
+  force-reveals and opens a collapsed destination group; a failure skip
+  into an unbrowsed group never steals the view — the toast, title bar
+  and head/edge chevrons say where it landed. Edge chevrons never clear
+  filters. The descriptor cache rebuilds only when its key changes, so a
+  scroll tick never regroups the list.
+- Live chrome: the timeline is empty and inert (no fill, no readouts —
+  not even zeros — no hover, no pointer response) with the still soft
+  light while data arrives, fading on stall (`player.stream.buffering`);
+  the 2 px hairline carries the brighter variant while the chrome hides
+  and the signal hands off, never duplicates. Seeks dim, the facade and
+  `seekTo` stay silent, Prev/Next walk list order.
+
+Still open before Phase B can be called done: the whole of §10.13 on a
+real Windows build — including the M-10 measurements (peak/retained RAM
+at 50 000 channels, parse timings on the in-repo parser, logo-cache and
+scroll behaviour), the Phase A regression sweep (check 31) and the
+failure-cascade checks (24, 24b, 24c) against a live provider. No Flutter
+engine exists in the build sandbox, so the analyzer plus the pure-Dart
+suites in `test/` (now including `channel_grouping_test.dart`) are the
+verification so far.
 
 **Two traps, both already paid for once in §5:** every action must act on the
 **real** channel list, never on the filtered view; and the group index is a view

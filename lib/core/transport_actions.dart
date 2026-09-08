@@ -180,6 +180,10 @@ class TransportActions {
   }
 
   bool get _seekable {
+    // Channel mode: seek is dimmed and silent (§10.8a) — the timeline
+    // is inert, the marks dim, and the ←/→ keys land here and stop: no
+    // seek, no card, no ramp advance. A live stream has no position.
+    if (queue.isChannelList) return false;
     switch (player.transportState.value) {
       case TransportState.playing:
       case TransportState.paused:

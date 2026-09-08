@@ -10,10 +10,12 @@ import '../../core/folder_autoload_service.dart';
 import '../../core/open_media_service.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
+import '../../core/queue_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/live_light.dart';
 import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
 import '../osc/open_url_dialog.dart';
 import '../osd/osd_controller.dart';
@@ -507,12 +509,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// The hairline progress bar shown at the window's bottom edge while the
-/// chrome is auto-hidden. Hidden entirely while STOPPED (and while idle)
-/// — a parked queue has no progress to draw.
+/// The hairline shown at the window's bottom edge while the chrome is
+/// auto-hidden. Hidden entirely while STOPPED (and while idle) — a parked
+/// queue has no progress to draw.
 ///
-/// Purely informational: renders only the filled progress (edge to edge),
-/// never receives pointer events, and offers no hover/tooltip/click action.
+/// Local mode renders the filled progress (edge to edge). Channel mode
+/// renders the still soft light instead — the same [StillSoftLight] as
+/// the timeline, brighter (2 px needs the contrast), and the only hairline
+/// that ever shows while live: the timeline exists only while the chrome
+/// is shown and the hairline only while it is hidden, so the signal hands
+/// off and is never duplicated (§10.8c).
+///
+/// Purely informational: never receives pointer events, and offers no
+/// hover/tooltip/click action.
 class _AutoHideProgress extends StatelessWidget {
   const _AutoHideProgress({required this.chromeHidden});
 
@@ -540,8 +549,21 @@ class _AutoHideProgress extends StatelessWidget {
               player.position,
               player.duration,
               player.transportState,
+              player.isBuffering,
+              QueueService.instance.items,
             ]),
             builder: (BuildContext context, Widget? _) {
+              // Channel mode: the light, never a progress fill — a live
+              // stream has no position (§10.8a–c).
+              if (player.isLiveMode) {
+                return StillSoftLight(
+                  visible: player.isLiveReceiving,
+                  peak: 0.5,
+                  radiusX: 0.30,
+                  radiusY: 4.0,
+                  fadeStop: 0.80,
+                );
+              }
               final Duration dur = player.duration.value;
               final double frac = dur > Duration.zero
                   ? (player.position.value.inMilliseconds /
