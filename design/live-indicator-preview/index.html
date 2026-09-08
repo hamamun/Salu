@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU — live playback indicator options (preview)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #101013;
+    color: #c9c9cc;
+    font: 13px/1.5 "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 20px 40px;
+  }
+  .head { width: 980px; max-width: 100%; display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+  .head h1 { font-size: 16px; font-weight: 600; color: #eee; }
+  .head .note { color: #7c7c80; font-size: 12px; }
+  .layout { display: flex; gap: 16px; width: 980px; max-width: 100%; align-items: flex-start; }
+
+  /* ── picker ─────────────────────────────────────────── */
+  .picker { width: 300px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+  .picker h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #7c7c80; margin: 2px 0 2px; }
+  .opt {
+    background: #17171b;
+    border: 1px solid #26262c;
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .opt:hover { border-color: #3a3a42; }
+  .opt.sel { border-color: rgba(255,255,255,.55); background: #1c1c21; }
+  .opt .row { display: flex; align-items: center; gap: 8px; }
+  .opt .letter {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px; color: #0e0e10;
+    background: #4c4c54; flex: none;
+  }
+  .opt.sel .letter { background: #ffffff; }
+  .opt .name { font-weight: 600; color: #e8e8ea; font-size: 13px; }
+  .opt .chip {
+    margin-left: auto; font-size: 10px; color: #0d2415; background: #7ee0a3;
+    border-radius: 9px; padding: 1px 7px; font-weight: 700; letter-spacing: .03em;
+  }
+  .opt .desc { margin-top: 5px; color: #9a9aa0; font-size: 12px; }
+  .opt .demo { margin-top: 8px; height: 12px; border-radius: 6px; background: #232327; overflow: hidden; position: relative; }
+  .opt .demo .sw { position: absolute; inset: 0; }
+  .controls { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #b9b9be; }
+  .ctl input[type=range] { flex: 1; }
+  .sliders { display: none; flex-direction: column; gap: 6px; border-top: 1px dashed #2a2a31; padding-top: 8px; }
+  .sliders.show { display: flex; }
+  .sliderRow { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8a8a90; }
+  .sliderRow input { flex: 1; }
+  .hint { font-size: 11px; color: #6c6c72; }
+
+  /* ── player stage ────────────────────────────────────── */
+  .stage { flex: 1; min-width: 0; }
+  .win {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 10px 40px rgba(0,0,0,.55);
+    aspect-ratio: 16 / 9;
+    min-height: 380px;
+  }
+  .video { position: absolute; inset: 0; }
+  .scene {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(120% 90% at 18% 18%, rgba(120,140,190,.35), transparent 55%),
+      radial-gradient(130% 100% at 85% 75%, rgba(190,140,90,.28), transparent 55%),
+      linear-gradient(160deg, #223044, #0c1018 70%);
+  }
+  .scene::before, .scene::after {
+    content: ""; position: absolute; border-radius: 50%;
+    filter: blur(30px); opacity: .35;
+  }
+  .scene::before { width: 260px; height: 120px; background: #7a8fb8; left: 8%; top: 22%; transform: rotate(-14deg); }
+  .scene::after  { width: 200px; height: 100px; background: #a9895e; right: 10%; bottom: 14%; transform: rotate(10deg); }
+
+  /* chrome (glass) */
+  .chrome {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(180deg, rgba(24,24,28,.55), rgba(24,24,28,.92));
+    backdrop-filter: blur(10px);
+    padding: 10px 16px 8px;
+    transition: opacity .25s ease;
+  }
+  .titlebar { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 13px; margin-bottom: 4px; }
+  .chdot { width: 14px; height: 14px; border-radius: 4px; background: linear-gradient(135deg,#6f87c4,#8f5fc0); }
+  .controls { display: flex; align-items: center; gap: 2px; margin: 2px 0 8px; }
+  .ic { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #c9c9cc; }
+  .ic svg { width: 15px; height: 15px; fill: currentColor; }
+  .ic.dim { color: #58585e; }
+  .spacer { flex: 1; }
+
+  /* timeline: Row 1 — full width, 26px */
+  .tlrow { display: flex; align-items: center; gap: 12px; }
+  .timeline {
+    position: relative; flex: 1; height: 26px;
+    border-radius: 13px;
+    background: #1b1b1f;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+    overflow: hidden;
+  }
+  .tlread { flex: none; width: 118px; text-align: right; font-size: 10px; color: #7c7c80; font-variant-numeric: tabular-nums; }
+
+  .fx { position: absolute; inset: 0; pointer-events: none; }
+
+  /* hairline: window bottom, 2px, only when chrome hidden */
+  .hairline {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+    background: rgba(255,255,255,.03);
+    opacity: 0; transition: opacity .25s ease; pointer-events: none;
+  }
+  .hairline .fx { overflow: hidden; }
+  body.hc .hairline { opacity: 1; }
+
+  /* ── option looks (timeline) ───────────────────────── */
+  /* A — static soft center glow */
+  .fx.ab {
+    background: radial-gradient(ellipse 52% 120% at 50% 50%,
+                rgba(255,255,255,.16), rgba(255,255,255,0) 72%);
+    opacity: 1; transition: opacity .6s ease;
+  }
+  .fx.ab.stall { opacity: 0; }
+  /* B — same glow, slow breath */
+  .fx.br { animation: breath 7s ease-in-out infinite; }
+  .fx.br.stall { animation: none; opacity: 0; transition: opacity .6s ease; }
+  @keyframes breath {
+    0%   { opacity: .35; }
+    11%  { opacity: 1; }
+    22%  { opacity: 1; }
+    34%  { opacity: .35; }
+    100% { opacity: .35; }
+  }
+  /* C — nothing at all */
+  /* D — drifting soft blob */
+  .fx .blob {
+    position: absolute; left: 0; top: 0; height: 100%; width: 20%;
+    background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.5), rgba(255,255,255,0));
+    transform: translateX(-110%);
+    animation: drift 2.8s linear infinite;
+  }
+  .fx.d .blob { opacity: .55; }
+  .fx.d.stall .blob { animation-play-state: paused; }
+  @keyframes drift { to { transform: translateX(620%); } }
+
+  /* hairline variants — brighter (2px needs contrast) */
+  .hairline .fx.ab {
+    background: radial-gradient(ellipse 30% 400% at 50% 50%,
+                rgba(255,255,255,.5), rgba(255,255,255,0) 80%);
+    opacity: 1; transition: opacity .6s ease;
+  }
+  .hairline .fx.ab.stall { opacity: 0; }
+  .hairline .fx.br { animation: breathH 7s ease-in-out infinite; }
+  .hairline .fx.br.stall { animation: none; opacity: 0; transition: opacity .6s ease; }
+  @keyframes breathH {
+    0%   { opacity: .30; }
+    11%  { opacity: 1; }
+    22%  { opacity: 1; }
+    34%  { opacity: .30; }
+    100% { opacity: .30; }
+  }
+  .hairline .fx .blob {
+    width: 14%; opacity: 1;
+    background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.9), rgba(255,255,255,0));
+  }
+  .foot { width: 980px; max-width: 100%; margin-top: 10px; font-size: 11px; color: #6c6c72; }
+  .foot b { color: #9a9aa0; font-weight: 600; }
+</style>
+</head>
+<body>
+
+  <div class="head">
+    <h1>Live playback — indicator options</h1>
+    <span class="note">owner preview · 2026-09-08 · point 9 · study only, not SALU UI</span>
+  </div>
+
+  <div class="layout">
+    <div class="picker">
+      <h2>Indicator</h2>
+      <div class="opt sel" data-opt="A">
+        <div class="row">
+          <div class="letter">A</div><div class="name">Static soft light</div><div class="chip">recommended</div>
+        </div>
+        <div class="desc">Still center glow — no movement. Fades away quietly when the stream stalls.</div>
+        <div class="demo"><div class="sw fx ab"></div></div>
+      </div>
+      <div class="opt" data-opt="B">
+        <div class="row"><div class="letter">B</div><div class="name">Very slow breath</div></div>
+        <div class="desc">Gentle pulse with long quiet pauses, like a heartbeat. Dims out on stall.</div>
+        <div class="demo"><div class="sw fx ab br"></div></div>
+      </div>
+      <div class="opt" data-opt="C">
+        <div class="row"><div class="letter">C</div><div class="name">Plain empty track</div></div>
+        <div class="desc">Nothing added. The inert track, dimmed seek marks and the title say “live” alone.</div>
+        <div class="demo"></div>
+      </div>
+      <div class="opt" data-opt="D">
+        <div class="row"><div class="letter">D</div><div class="name">Quieter shimmer</div></div>
+        <div class="desc">Today’s drifting light, tuned down — use the sliders to find a level that feels calm.</div>
+        <div class="demo"><div class="sw fx d"><div class="blob"></div></div></div>
+      </div>
+
+      <div class="controls">
+        <h2>Simulation</h2>
+        <label class="ctl"><input type="checkbox" id="stall"> Stream stalled / buffering</label>
+        <label class="ctl"><input type="checkbox" id="autohide" checked> Auto-hide chrome after 3 s</label>
+        <div class="sliders" id="sliders">
+          <div class="sliderRow"><label>speed</label><input type="range" id="spd" min="0.3" max="3.2" step="0.1" value="1.0"><span id="spdV">1.0×</span></div>
+          <div class="sliderRow"><label>light</label><input type="range" id="bri" min="8" max="100" step="1" value="45"><span id="briV">45</span></div>
+        </div>
+        <div class="hint">Move the mouse to wake the chrome. Wait 3 s to see the bottom hairline take over.</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="win" id="win">
+        <div class="video"><div class="scene"></div></div>
+        <div class="chrome" id="chrome">
+          <div class="titlebar"><span class="chdot"></span><span>BBC News HD</span></div>
+          <div class="controls">
+            <span class="ic" title="previous">
+              <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM20 6l-9 6 9 6z"/></svg>
+            </span>
+            <span class="ic" title="next">
+              <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
+            </span>
+            <span class="ic" title="play">
+              <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </span>
+            <span class="ic" title="stop">
+              <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+            </span>
+            <span class="spacer"></span>
+            <span class="ic dim" title="seek back (dimmed on live)">
+              <svg viewBox="0 0 24 24"><path d="M12 6l-7 6 7 6zM19 6l-7 6 7 6z"/></svg>
+            </span>
+            <span class="ic dim" title="seek forward (dimmed on live)">
+              <svg viewBox="0 0 24 24"><path d="M12 6l7 6-7 6zM5 6l7 6-7 6z"/></svg>
+            </span>
+            <span class="ic" title="mute">
+              <svg viewBox="0 0 24 24"><path d="M3 10v4h4l5 4V6L7 10H3zM16 9l2 2-2 2M19 7a7 7 0 0 1 0 10"/></svg>
+            </span>
+          </div>
+          <div class="tlrow">
+            <div class="timeline" id="timeline"><div class="fx"></div></div>
+            <div class="tlread" id="tlread">live · no position</div>
+          </div>
+        </div>
+        <div class="hairline"><div class="fx"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>What to compare:</b> A and C are the completely calm choices (A still shows buffering by the light fading). B keeps a soft pulse. D is today’s
+    default made quieter. Whatever you pick appears on the timeline when the chrome is up, and hands off to the 2&nbsp;px bottom hairline when it auto-hides.
+  </div>
+
+<script>
+  const fxT = document.querySelector('#timeline .fx');
+  const fxH = document.querySelector('.hairline .fx');
+  const body = document.body;
+  const win = document.getElementById('win');
+  let opt = 'A', stalled = false, autohide = true, timer = null;
+
+  function demoOf(letter, sw) {
+    sw.className = 'sw';
+    if (letter === 'A') sw.classList.add('fx', 'ab');
+    else if (letter === 'B') sw.classList.add('fx', 'ab', 'br');
+    else if (letter === 'D') { sw.classList.add('fx', 'd'); sw.innerHTML = '<div class="blob"></div>'; }
+    else sw.className = 'sw';
+  }
+  function applyFx(el) {
+    if (opt === 'D') { el.innerHTML = '<div class="blob"></div>'; el.className = 'fx d'; }
+    else { el.innerHTML = ''; el.className = 'fx' + (opt === 'A' ? ' ab' : opt === 'B' ? ' ab br' : ''); }
+    if (stalled) el.classList.add('stall');
+    syncD();
+  }
+  function syncD() {
+    const spd = parseFloat(document.getElementById('spd').value);
+    const bri = parseInt(document.getElementById('bri').value, 10);
+    document.getElementById('spdV').textContent = spd.toFixed(1) + '×';
+    document.getElementById('briV').textContent = bri;
+    document.querySelectorAll('.fx.d .blob').forEach(b => {
+      b.style.animationDuration = (2.8 / spd) + 's';
+      b.style.opacity = (bri / 100).toFixed(2);
+    });
+    document.getElementById('sliders').classList.toggle('show', opt === 'D');
+  }
+  function setOpt(o) {
+    opt = o;
+    document.querySelectorAll('.opt').forEach(el => el.classList.toggle('sel', el.dataset.opt === o));
+    document.querySelectorAll('.opt .sw').forEach(sw => demoOf(sw.closest('.opt').dataset.opt, sw));
+    applyFx(fxT); applyFx(fxH);
+  }
+  document.querySelectorAll('.opt').forEach(el => el.addEventListener('click', () => setOpt(el.dataset.opt)));
+  document.getElementById('stall').addEventListener('change', e => {
+    stalled = e.target.checked;
+    document.querySelectorAll('.fx').forEach(f => f.classList.toggle('stall', stalled));
+  });
+  document.getElementById('autohide').addEventListener('change', e => {
+    autohide = e.target.checked;
+    if (!autohide) { body.classList.remove('hc'); clearTimeout(timer); }
+    else arm();
+  });
+  document.getElementById('spd').addEventListener('input', syncD);
+  document.getElementById('bri').addEventListener('input', syncD);
+
+  function arm() { clearTimeout(timer); timer = setTimeout(() => { if (autohide) body.classList.add('hc'); }, 3000); }
+  win.addEventListener('mousemove', () => { body.classList.remove('hc'); if (autohide) arm(); });
+  arm();
+  setOpt('A');
+</script>
+</body>
+</html>
