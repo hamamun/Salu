@@ -234,7 +234,10 @@ Map<String, String> _build(List<List<String>> table) {
     final String canonical = row.first;
     out[canonical.toLowerCase()] = canonical;
     for (int i = 1; i < row.length; i++) {
-      out[row[i]] = canonical;
+      // Lowercased here — not by table discipline — so a future alias
+      // with capitals can never silently miss (`_normalise` looks up the
+      // lowercased value).
+      out[row[i].toLowerCase()] = canonical;
     }
   }
   return out;

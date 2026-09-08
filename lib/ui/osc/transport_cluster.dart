@@ -44,6 +44,12 @@ class TransportCluster extends StatelessWidget {
       listenable: Listenable.merge(<Listenable>[
         player.transportState,
         player.isPlaying,
+        // Next's enable state also answers the repeat × shuffle mode
+        // (`_shuffleDriving` keeps it live at the end of the queue), so
+        // both notifiers join the merge — otherwise toggling shuffle
+        // while parked on the last row leaves Next stale.
+        player.shuffleOn,
+        player.repeatMode,
         queue.items,
         queue.index,
       ]),

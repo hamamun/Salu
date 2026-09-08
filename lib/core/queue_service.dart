@@ -261,10 +261,6 @@ class QueueService {
   /// Play-order history — the last element is what is playing now.
   final List<int> _heard = <int>[];
 
-  /// Whether shuffle semantics apply at all (on AND more than one item).
-  bool get shuffleActive =>
-      items.value.length > 1;
-
   void _resetPass() {
     _pass.clear();
     _passSeeded = false;

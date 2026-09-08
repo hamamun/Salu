@@ -184,11 +184,12 @@ class ChannelLoadService {
     // The caller waits only for the DECISION, never for the tail: a
     // 50 000-channel list is watchable long before its last row lands.
     // The cap matches the URL library's own health window — past it the
-    // load simply keeps going in the background.
-    await Future<void>.any(<Future<void>>[
-      decided.future,
-      Future<void>.delayed(const Duration(seconds: 20)),
-    ]);
+    // load simply keeps going in the background (the timeout is not an
+    // error, so `onTimeout` just ends the wait).
+    await decided.future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {},
+    );
   }
 
   /// Opens a **batch** the way Open File… / a multi-file drop delivers
