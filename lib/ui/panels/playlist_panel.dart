@@ -1863,12 +1863,16 @@ class _GroupPillOptionState extends State<_GroupPillOption> {
 /// notification during a layout pass.
 ///
 /// The scroll view is the Stack's ONE non-positioned child, so it — not
-/// the thumb's zero-sized placeholder — decides this widget's size. With
-/// the list positioned instead, a caller that passes loose constraints
-/// (any `Stack` above us) collapses the whole rows area to 0 × 0 and the
-/// list vanishes behind the Stack's clip: exactly the empty channel
-/// panel §10.2's rows area showed. A viewport fills whatever bounded box
-/// it is given, loose or tight, so this holds in both callers.
+/// the thumb's zero-sized placeholder — decides this widget's size.
+/// `RenderStack` measures itself over its non-positioned children only,
+/// so with the list positioned instead, a caller that passes loose
+/// constraints (any `Stack` above us) leaves `minHeight == 0` and the
+/// whole rows area measures 0 × 0; `Positioned.fill` then lays the list
+/// out at `tightFor(0, 0)` and it paints nothing at all. That was the
+/// empty channel list §10.2's rows area showed. A viewport is
+/// `sizedByParent` with `size == constraints.biggest`, so as the
+/// non-positioned child it fills any bounded box, loose or tight — the
+/// local (tight) caller measures exactly as it did before.
 class _SaluScrollView extends StatelessWidget {
   const _SaluScrollView({required this.controller, required this.child});
 

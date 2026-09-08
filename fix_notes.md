@@ -74,8 +74,8 @@ scroll* should suppress the reveal, and only briefly.
 rows area below it is blank — the channel list that the M-3/M-4 build listed
 "just fine" is gone. No exception, no red box, nothing in the terminal.
 
-**Root cause (layout, not data).** The queue was correct the whole time; the
-list was painted into a zero-sized box and clipped away.
+**Root cause (layout, not data).** The queue held every channel the whole
+time; the list was laid out at zero size, so it painted nothing.
 
 - Local mode: `Expanded → _rowsArea → _SaluScrollView`. `Expanded` passes
   **tight** constraints, so the scroll view's inner `Stack`
@@ -87,22 +87,41 @@ list was painted into a zero-sized box and clipped away.
   default `StackFit.loose` lays out its non-positioned children with
   `constraints.loosen()` → `minHeight` becomes **0**.
 - `RenderStack` sizes itself to `Size(max(minWidth, …), max(minHeight, …))`
-  over its **non-positioned** children only. Inside `_SaluScrollView` the list
-  was `Positioned.fill` and the *only* non-positioned child was the thumb's
-  `SizedBox.shrink()` placeholder (0 × 0) whenever the thumb was not drawn — so
-  with loosened constraints the inner Stack measured **0 × 0**, the
-  `Positioned.fill` list was laid out at 0 × 0, and `Clip.hardEdge` removed it
-  from the picture. The `ListView` still existed and still had clients, which
-  is why the reveal, the scrollbar and the edge chevrons all silently did
-  nothing too (`viewportDimension == 0`).
+  over its **non-positioned** children only (`rendering/stack.dart`,
+  `_computeSize`). Inside `_SaluScrollView` the list was `Positioned.fill`, so
+  the *only* non-positioned child was the thumb's `SizedBox.shrink()`
+  placeholder (0 × 0) whenever the thumb was not drawn. With a loosened
+  `minHeight` the inner Stack therefore measured **0 × 0**, and
+  `StackParentData.positionedChildConstraints` handed the list
+  `BoxConstraints.tightFor(width: 0, height: 0)`. The `ListView` was laid out
+  at zero size and painted nothing — no exception, no overflow stripe, and not
+  even the Stack's clip (`_hasVisualOverflow` stays false when the child is
+  zero-sized). `LayoutBuilder` passes its constraints straight down and takes
+  `constraints.constrain(child.size)`, so the collapse propagated up unchanged.
+- The `ListView` still existed with clients, at `viewportDimension == 0`. That
+  is why the scrollbar drew nothing (`viewport <= 0` guard) and why the edge
+  chevron chip (§10.6) sat there pointing at a list nobody could see: with a
+  zero-height viewport the playing row is always "off screen".
 
 **Fix.** Two independent guards, so the collapse cannot come back through a
 future wrapper:
 1. `_channelRowsArea` builds its Stack with `fit: StackFit.expand` — the rows
    view gets the same tight box the local list gets from `Expanded`.
 2. `_SaluScrollView` makes the scroll view itself the Stack's non-positioned
-   child (the thumb stays positioned). A viewport fills any bounded box, loose
-   or tight, so the scroll view now measures the Stack in both callers.
+   child (the thumb stays positioned). `RenderViewport` is `sizedByParent`
+   with `size == constraints.biggest`, so it fills any bounded box, loose or
+   tight: the local (tight) caller measures exactly as before, and the channel
+   caller can no longer collapse.
+
+**Verified against the framework source** (`flutter/flutter@stable`):
+`RenderStack._computeSize` (non-positioned-only measurement,
+`StackFit.loose → constraints.loosen()`, `StackFit.expand →
+BoxConstraints.tight(constraints.biggest)`),
+`StackParentData.positionedChildConstraints`, `_RenderLayoutBuilder.performLayout`,
+`RenderViewport.computeDryLayout`, `RenderFlex._constraintsForFlexChild`
+(`Expanded` + `stretch` = tight on both axes — why local mode never collapsed),
+and `RenderBox.hitTestSelf == false` for the childless `SizedBox` that
+`StackFit.expand` now stretches (it cannot swallow a row click).
 
 **Not the cause (checked and cleared):** the parser and the progressive batches
 (ported and exercised over CRLF/BOM/tiny-chunk inputs — every channel is
