@@ -73,9 +73,11 @@ class TransportCluster extends StatelessWidget {
             // ── Group 2 · items: previous + next ───────────────────────
             SaluIconButton(
               tooltip: 'Previous',
-              // `|<<` never dims while a queue exists — it can always
-              // restart the item.
-              enabled: queue.hasQueue,
+              // `|<<` never dims while a LOCAL queue exists — it can
+              // always restart the item. In channel mode there is no
+              // restart (§10.8b), so it dims at the head of the list,
+              // exactly as Next dims at its tail.
+              enabled: player.hasPreviousItem,
               onTap: TransportActions.instance.previous,
               child: const PreviousMark(),
             ),

@@ -127,7 +127,7 @@ class TransportActions {
   /// reads the index [PlayerService.previous] returns — never a
   /// list-order guess.
   void previous() {
-    if (!queue.hasQueue) return;
+    if (!player.hasPreviousItem) return;
     resetSeekRamps();
     osd.dismissResumeToast();
     final bool restart = player.previousRestartsThisItem;

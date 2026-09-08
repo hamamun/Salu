@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'channel_load_service.dart';
 import 'folder_autoload_service.dart';
+import 'm3u/channel_source.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
 
@@ -46,16 +48,23 @@ class DropHandler {
       return subtitles.isNotEmpty ? 'Subtitle loaded' : null;
     }
 
-    // 3. Play: single file plays directly, multiple files become a queue.
+    // 3. Play. A dropped .m3u / .m3u8 file lists as CHANNELS through
+    //    SALU's own parser, exactly like an m3u URL (playlist_imp.md
+    //    M55) — never handed whole to mpv, and never mixed into a media
+    //    queue (`openBatch`: media wins). Otherwise: a single file plays
+    //    directly, several become a queue.
+    final bool channels =
+        await ChannelLoadService.instance.openBatch(mediaPaths);
+    if (channels) {
+      debugPrint('[SALU] opened a channel directory via drop');
+      return 'Loading channels';
+    }
     if (mediaPaths.length == 1) {
-      await service.openPath(mediaPaths.first);
       // Folder auto-load (autoload_imp.md §2): a single dropped file may
       // grow its own folder queue behind the playing file. Never fires
       // on a batch, and never on the append path (panel-open drops).
       unawaited(FolderAutoloadService.instance
           .maybeExpand(mediaPaths.first));
-    } else {
-      await service.openPaths(mediaPaths);
     }
     debugPrint('[SALU] opened ${mediaPaths.length} media file(s) via drop');
     return mediaPaths.length == 1
@@ -123,8 +132,15 @@ class DropHandler {
       }
     }
 
-    // 2. Expand folders and collect playable media files.
-    final List<String> mediaPaths = collectPlayable(paths);
+    // 2. Expand folders and collect playable media files. A dropped
+    //    .m3u / .m3u8 is a channel DIRECTORY, not a row: appending its
+    //    URL to the queue is the "handed whole to mpv" behaviour M55
+    //    removes, so playlist files are dropped from an append batch.
+    //    (Loading one is a replace, not an append — that is the
+    //    non-append drop path.)
+    final List<String> mediaPaths = collectPlayable(paths)
+        .where((String p) => !ChannelSource.looksLikeDirectory(p))
+        .toList(growable: false);
     if (mediaPaths.isEmpty) return subtitles.isNotEmpty;
     await PlayerService.instance.appendToQueue(mediaPaths);
     debugPrint('[SALU] appended ${mediaPaths.length} file(s) to the queue');

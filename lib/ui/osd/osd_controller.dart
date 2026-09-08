@@ -83,6 +83,25 @@ class OsdAutoloadCard extends OsdCard {
   final String folder;
 }
 
+/// The "Failed to load" card (playlist_imp.md §10.8 · §10.10b): the
+/// wording is fixed and the [name] is the **channel's** display label or
+/// the **playlist's** name — never a URL, which would carry credentials
+/// (§10.10e). Pure display; the skip (or the absence of one, for a
+/// failed playlist load) is decided by the caller.
+class OsdFailedCard extends OsdCard {
+  const OsdFailedCard({required this.name})
+      : super(ttl: const Duration(milliseconds: 2200));
+
+  /// The cascade-guard variant (§10.8a-ii): SALU stopped skipping and is
+  /// waiting for the viewer, so the card **stays up longer** — it is the
+  /// only report that the provider, not one channel, is the problem.
+  const OsdFailedCard.lingering({required this.name})
+      : super(ttl: const Duration(seconds: 6));
+
+  /// Channel label or playlist name. Never a URL.
+  final String name;
+}
+
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {
   OsdController._internal();
