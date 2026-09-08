@@ -12,8 +12,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/clock_format.dart';
 import '../../core/player_service.dart';
+import '../../core/queue_service.dart';
 import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/live_light.dart';
 import 'hover_chip.dart';
 
 /// Formats live in `lib/core/clock_format.dart` (formatClock here,
@@ -34,6 +36,12 @@ import 'hover_chip.dart';
 ///   · mouse wheel over the bar  → ±1 second per notch (fine scrub)
 ///   · hover                     → faint minute-rule ticks + a time chip
 ///                                below the bar showing the target time
+///
+/// Channel mode (§10.8a): the bar is EMPTY and inert — no fill, no
+/// readouts (not even zeros), no hover, no chip, no pointer response at
+/// all. A live stream has no position. Its only content is the still
+/// soft light ([StillSoftLight], point 9 Final option A): present while
+/// data arrives, quietly fading away when the stream stalls.
 class MediaTimeline extends StatefulWidget {
   const MediaTimeline({super.key});
 
@@ -75,6 +83,8 @@ class _MediaTimelineState extends State<MediaTimeline> {
       _player.position,
       _player.duration,
       _player.transportState,
+      _player.isBuffering,
+      QueueService.instance.items,
     ]);
   }
 
@@ -82,11 +92,15 @@ class _MediaTimelineState extends State<MediaTimeline> {
 
   Duration get _duration => _player.duration.value;
 
+  /// A live channel is loaded — the empty inert light state (§10.8a).
+  bool get _live => _player.isLiveMode;
+
   /// The bar is live only while the engine actually holds an item —
   /// while STOPPED it is inert and reads zeros (the parked queue has no
-  /// timeline), and while idle there is simply nothing to show.
+  /// timeline), and while idle there is simply nothing to show. Channel
+  /// mode is never usable: the light bar below takes over instead.
   bool get _usable =>
-      _duration > Duration.zero && _player.hasMedia.value;
+      _duration > Duration.zero && _player.hasMedia.value && !_live;
 
   // ── Seek helpers ──────────────────────────────────────────────────────
 
@@ -216,6 +230,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
   }
 
   Widget _buildBody(double w, bool usable) {
+    final bool live = _live;
     final Duration pos = _player.position.value;
     final Duration dur = usable ? _duration : Duration.zero;
     final int durMs = dur.inMilliseconds;
@@ -273,8 +288,19 @@ class _MediaTimelineState extends State<MediaTimeline> {
                 const Positioned.fill(
                   child: ColoredBox(color: AppColors.barTrack),
                 ),
+                // Channel mode: only the still soft light (§10.8a) — no
+                // fill, no thumb, no ruler, no readouts (not even zeros).
+                // The `!live` gates below are belt-and-braces: `_usable`
+                // is already false while live, but the light state must
+                // never degrade into the stopped-zeros state.
+                if (live)
+                  Positioned.fill(
+                    child: StillSoftLight(
+                      visible: _player.isLiveReceiving,
+                    ),
+                  ),
                 // Paste-window style fill.
-                if (boundaryX > 0)
+                if (!live && boundaryX > 0)
                   Positioned(
                     top: 0,
                     bottom: 0,
@@ -311,33 +337,36 @@ class _MediaTimelineState extends State<MediaTimeline> {
                       ),
                     ),
                   ),
-                // Time readouts — inside the bar, all one tone.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(
-                        children: <Widget>[
-                          Text(
-                            usable ? formatClock(shown) : '00:00:00',
-                            style: labelStyle,
-                          ),
-                          const Spacer(),
-                          if (w > 560)
+                // Time readouts — inside the bar, all one tone. Absent
+                // entirely in channel mode: the light bar carries no
+                // numbers at all (§10.8a).
+                if (!live)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: <Widget>[
                             Text(
-                              usable ? '-${formatClock(remaining)}' : '',
+                              usable ? formatClock(shown) : '00:00:00',
                               style: labelStyle,
                             ),
-                          const Spacer(),
-                          Text(
-                            usable ? formatClock(dur) : '00:00:00',
-                            style: labelStyle,
-                          ),
-                        ],
+                            const Spacer(),
+                            if (w > 560)
+                              Text(
+                                usable ? '-${formatClock(remaining)}' : '',
+                                style: labelStyle,
+                              ),
+                            const Spacer(),
+                            Text(
+                              usable ? formatClock(dur) : '00:00:00',
+                              style: labelStyle,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

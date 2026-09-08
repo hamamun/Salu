@@ -7,6 +7,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../ui/osd/osd_controller.dart';
+import 'channel_favourites_service.dart';
 import 'channel_load_service.dart';
 import 'm3u/channel_skip_policy.dart';
 import 'media_utils.dart';
@@ -87,6 +88,7 @@ class ClearedQueueUndo extends QueueUndo {
     this.path,
     this.position,
     this.duration,
+    this.playlistKey,
   });
 
   /// The cleared entries — an immutable in-memory snapshot (playlist_imp.md
@@ -98,6 +100,11 @@ class ClearedQueueUndo extends QueueUndo {
   final String? path;
   final Duration? position;
   final Duration? duration;
+
+  /// Favourites key of the cleared channel list (`null` for a local
+  /// queue) — Undo reselects it so the restored rows show their
+  /// bookmarks (§10.9: the favourites store survives the bin).
+  final String? playlistKey;
 }
 
 /// A drag-reorder. Undo re-applies the inverse move.
@@ -206,6 +213,11 @@ class PlayerService {
   /// mpv's mute property is not exposed as a dedicated stream here.
   final ValueNotifier<bool> isMuted = ValueNotifier<bool>(false);
 
+  /// Whether mpv is currently buffering (stalled — no data arriving).
+  /// Drives the live light's quiet fade (§10.8a): the still soft light
+  /// is present while data arrives and fades while this is true.
+  final ValueNotifier<bool> isBuffering = ValueNotifier<bool>(false);
+
   /// Repeat mode — the header's slot-1 control (off → all → one).
   final ValueNotifier<RepeatMode> repeatMode =
       ValueNotifier<RepeatMode>(RepeatMode.off);
@@ -222,6 +234,7 @@ class PlayerService {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<double>? _volumeSub;
+  StreamSubscription<bool>? _bufferingSub;
 
   // ── Smooth position interpolation ─────────────────────────────────────
   Timer? _ticker;
@@ -261,6 +274,17 @@ class PlayerService {
   /// The skip / cascade-guard bookkeeping (§10.8a-ii), kept as its own
   /// pure object so the locked rule is testable without an engine.
   final ChannelSkipPolicy _skips = ChannelSkipPolicy();
+
+  /// Whether the latest channel open was an automatic failure skip
+  /// rather than a deliberate pick (playlist_imp.md §10.6 M54). The
+  /// panel reads it on every index change: a deliberate zap always
+  /// reveals (opening a collapsed destination group), while an
+  /// automatic skip into an unbrowsed group never steals the view — the
+  /// toast, title bar and head/edge chevrons say where it landed.
+  bool _lastOpenWasAuto = false;
+
+  /// See [_lastOpenWasAuto].
+  bool get lastOpenWasAuto => _lastOpenWasAuto;
 
   void _init() {
     player = Player(
@@ -407,6 +431,11 @@ class PlayerService {
       if (width != null && width > 0) {
         unawaited(_refreshHwdecStatus());
       }
+    });
+
+    // Buffering — the live light fades while the stream stalls (§10.8a).
+    _bufferingSub = player.stream.buffering.listen((bool buffering) {
+      isBuffering.value = buffering;
     });
 
     _errorSub = player.stream.error.listen(_onEngineError);
@@ -681,6 +710,7 @@ class PlayerService {
       debugPrint('[SALU] channel skip stopped (${_skips.strikes} in a row)');
       return;
     }
+    _lastOpenWasAuto = true; // the panel must not steal the browsed view
     unawaited(_openQueueAt(at + 1).whenComplete(_skips.settle));
   }
 
@@ -696,6 +726,7 @@ class PlayerService {
   /// (row clicks / Next still resume it later).
   Future<void> openPath(String path, {bool play = true}) async {
     _skips.reset(); // a fresh load is never part of a cascade
+    _lastOpenWasAuto = false;
     final List<String> list = <String>[path];
     QueueService.instance.setQueue(list, 0);
     await _openQueueAt(0, play: play, fresh: true);
@@ -707,6 +738,7 @@ class PlayerService {
   Future<void> openPaths(List<String> paths, {bool play = true}) async {
     if (paths.isEmpty) return;
     _skips.reset(); // a fresh load is never part of a cascade
+    _lastOpenWasAuto = false;
     QueueService.instance.setQueue(paths, 0);
     await _openQueueAt(0, play: play, fresh: true);
   }
@@ -721,6 +753,7 @@ class PlayerService {
     final QueueService queue = QueueService.instance;
     if (i < 0 || i >= queue.length) return;
     _skips.recordManualPick();
+    _lastOpenWasAuto = false;
     stopMemory.value = null;
     _userPaused = false;
     await _openQueueAt(i, play: play);
@@ -892,6 +925,7 @@ class PlayerService {
     //    stale last frame immediately.
     hasMedia.value = false;
     isPlaying.value = false;
+    isBuffering.value = false;
     _stopTicker();
     _suppressVolumeEvents = true;
     _userPaused = false;
@@ -924,6 +958,7 @@ class PlayerService {
   Future<void> playFromStop() async {
     final StopMemory? mem = stopMemory.value;
     if (mem == null) return;
+    _lastOpenWasAuto = false;
     final QueueService queue = QueueService.instance;
     int idx = queue.indexOfUrl(mem.path);
     if (idx < 0) idx = queue.hasCurrent ? queue.index.value : 0;
@@ -961,6 +996,24 @@ class PlayerService {
   /// for.
   bool get hasNextItem =>
       _shuffleDriving ? true : QueueService.instance.hasNext;
+
+  /// Whether a live channel is loaded right now (channel mode + the
+  /// engine holds a channel). The timeline's empty inert state (§10.8a).
+  bool get isLiveMode =>
+      QueueService.instance.isChannelList && hasMedia.value;
+
+  /// Whether live data is arriving — the one flag driving the still
+  /// soft light on both the timeline and the hairline (§10.8a–c). False
+  /// while buffering (the stall fade), while stopped/idle, and
+  /// everywhere outside channel mode. Paused keeps the light: paused is
+  /// not stalled.
+  bool get isLiveReceiving {
+    if (!isLiveMode) return false;
+    if (isBuffering.value) return false;
+    final TransportState state = transportState.value;
+    return state == TransportState.playing ||
+        state == TransportState.paused;
+  }
 
   /// Whether `|<<` can do anything right now. Local mode: any queue —
   /// Previous can always restart the item. Channel mode (§10.8b): only
@@ -1010,6 +1063,7 @@ class PlayerService {
     final int from = queue.index.value;
     // A deliberate step ends any failure cascade (§10.8a-ii).
     _skips.recordManualPick();
+    _lastOpenWasAuto = false;
     // Channel mode (§10.8b): Previous ALWAYS steps back a channel — a
     // live stream has no position to restart from, so the 3-second rule
     // does not apply. At the head it parks (never wraps), exactly as
@@ -1057,6 +1111,7 @@ class PlayerService {
     if (!queue.hasQueue) return null;
     // A deliberate step ends any failure cascade (§10.8a-ii).
     _skips.recordManualPick();
+    _lastOpenWasAuto = false;
     // Channel mode (§10.8b): plain list order, no shuffle, no wrap.
     // Past the last PARSED channel it behaves like end-of-list and
     // parks — the progressive-load frontier rule (M56).
@@ -1095,6 +1150,10 @@ class PlayerService {
   /// milliseconds). Seeking never pauses playback.
   Future<void> seekTo(Duration target) async {
     if (!hasMedia.value) return;
+    // Channel mode: seek is dimmed and silent (§10.8a) — the timeline is
+    // inert and the marks/keys never call here, but a stray call must
+    // still be a silent no-op rather than a live-stream seek.
+    if (QueueService.instance.isChannelList) return;
     final Duration dur = duration.value;
     Duration t = target;
     if (t < Duration.zero) t = Duration.zero;
@@ -1240,6 +1299,7 @@ class PlayerService {
   /// playing also re-opens silently at its remembered position.
   Future<void> undoRemoveFromQueue(RemovedItemUndo undo) async {
     final QueueService queue = QueueService.instance;
+    _lastOpenWasAuto = false; // a restore is a deliberate pick
     queue.insert(undo.index, undo.item);
     if (hasMedia.value && !queue.isChannelList) {
       // Engine mirror: append at the end, then move into place. Channel
@@ -1326,6 +1386,9 @@ class PlayerService {
       path: live ? playing : parked?.path,
       position: live ? pos : parked?.position,
       duration: live ? dur : parked?.duration,
+      playlistKey: (snapshot.isNotEmpty && snapshot.first.isChannel)
+          ? ChannelLoadService.instance.playlistKey.value
+          : null,
     );
   }
 
@@ -1335,7 +1398,14 @@ class PlayerService {
   Future<void> undoClearQueue(ClearedQueueUndo undo) async {
     final QueueService queue = QueueService.instance;
     if (undo.items.isEmpty) return;
+    _lastOpenWasAuto = false; // a restore is a deliberate pick
     queue.setItems(undo.items, undo.index >= 0 ? undo.index : 0);
+    // §10.9: the bin unloads the channels but never their favourites —
+    // reselect the restored list's key so the rows show their bookmarks.
+    if (undo.playlistKey != null) {
+      ChannelLoadService.instance.playlistKey.value = undo.playlistKey;
+      ChannelFavouritesService.instance.setPlaylist(undo.playlistKey);
+    }
     if (undo.wasLive &&
         undo.path != null &&
         undo.position != null &&
@@ -1535,6 +1605,7 @@ class PlayerService {
     await _positionSub?.cancel();
     await _durationSub?.cancel();
     await _volumeSub?.cancel();
+    await _bufferingSub?.cancel();
     await player.dispose();
   }
 }

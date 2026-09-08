@@ -38,6 +38,12 @@
      Next) · double chevron only = skip time (Seek back / forward) ·
      speaker + arcs = sound (1 arc < 50 %, 2 arcs ≥ 50 %, slash at muted /
      0 %) · ¾ arc + arrowhead = Restart (toast only)
+   - **channel line** (§10): stem + rungs = Group by (ONE stable mark; the
+     four-option pill names the mode — the mark never morphs) · three
+     rules = Flat · brackets = Category · speech bubble = Language · globe
+     = Country · bookmark = Favourite (solid + always visible = saved,
+     outline on hover = unsaved — never a star) · chevron = reveal (list
+     edges) / group twist (heads, rotating 90° open)
    **No text buttons for actions.** An action is a mark plus a hover-delay
    tooltip; emphasis is carried by the mark itself (solid = primary,
    hollow = secondary), never by a filled button behind it. **One

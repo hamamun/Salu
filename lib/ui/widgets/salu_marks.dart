@@ -25,6 +25,13 @@ import 'package:flutter/material.dart';
 ///   · ¾ arc + arrow  — Repeat              [RepeatMark] (arc: RestartMark's)
 ///   · crossing rules — Shuffle             [ShuffleMark]
 ///   · circle + stem  — Search (magnifier)  [MagnifierMark]
+///   · stem + rungs   — Group by            [GroupByMark] (stable — never morphs)
+///   · three rules    — Flat grouping       [FlatMark]
+///   · brackets       — Category grouping   [CategoryMark]
+///   · speech bubble  — Language grouping   [LanguageMark]
+///   · globe          — Country grouping    [CountryMark]
+///   · bookmark       — Favourite           [BookmarkMark] (outline / [filled])
+///   · chevron        — Reveal / twist      [RevealChevronMark] · [GroupTwistMark]
 
 /// Shared stroke weight so the whole family reads as one hand (public so
 /// the transport marks share it — see transport_marks.dart).
@@ -876,5 +883,435 @@ class _MagnifierPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MagnifierPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Group by — the channel header's slot-1 mark (playlist_imp.md §10.2).
+///
+/// One STABLE mark plus a four-option pill below it: the mark never
+/// morphs into four different glyphs (the family's grammar is *one
+/// mark, modified*). A stem with a bead and two pairs of rungs. While a
+/// search flattens the list [quiet] drops it to the quiet ink — the
+/// grouping is suspended, not forgotten (§10.3).
+class GroupByMark extends StatelessWidget {
+  const GroupByMark({super.key, this.size = 18, this.quiet = false});
+
+  final double size;
+
+  /// Suspended state — the mark sits at the quiet ink (still hoverable).
+  final bool quiet;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color ink = markInk(context);
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _GroupByPainter(
+        quiet ? ink.withAlpha(140) : ink,
+        markStrokeFor(size),
+      ),
+    );
+  }
+}
+
+class _GroupByPainter extends CustomPainter {
+  const _GroupByPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    // Stem + rungs.
+    canvas.drawLine(p(5, 4), p(5, 18), paint);
+    canvas.drawLine(p(5, 7), p(10, 7), paint);
+    canvas.drawLine(p(5, 17), p(10, 17), paint);
+    canvas.drawLine(p(13, 7), p(19, 7), paint);
+    canvas.drawLine(p(13, 17), p(17, 17), paint);
+    // Bead crowning the stem.
+    canvas.drawCircle(
+      p(5, 4),
+      s * 1.4 / 24,
+      Paint()
+        ..color = ink
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GroupByPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Flat — the pill's "no grouping" option: three plain rules.
+class FlatMark extends StatelessWidget {
+  const FlatMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _FlatPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _FlatPainter extends CustomPainter {
+  const _FlatPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(p(4, 6), p(20, 6), paint);
+    canvas.drawLine(p(4, 12), p(15, 12), paint);
+    canvas.drawLine(p(4, 18), p(18, 18), paint);
+  }
+
+  @override
+  bool shouldRepaint(_FlatPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Category — the pill's category option: two brackets joined by a rung.
+class CategoryMark extends StatelessWidget {
+  const CategoryMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _CategoryPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _CategoryPainter extends CustomPainter {
+  const _CategoryPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(p(4, 5), p(10, 5), paint);
+    canvas.drawLine(p(4, 19), p(10, 19), paint);
+    canvas.drawLine(p(7, 5), p(7, 19), paint);
+    canvas.drawLine(p(7, 12), p(15, 12), paint);
+    canvas.drawLine(p(15, 7), p(20, 7), paint);
+    canvas.drawLine(p(15, 17), p(20, 17), paint);
+    canvas.drawLine(p(15, 7), p(15, 17), paint);
+  }
+
+  @override
+  bool shouldRepaint(_CategoryPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Language — the pill's language option: a speech bubble with two
+/// quiet rules inside.
+class LanguageMark extends StatelessWidget {
+  const LanguageMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _LanguagePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _LanguagePainter extends CustomPainter {
+  const _LanguagePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    // Bubble: a rounded rect with a tail falling from its lower edge.
+    final Path bubble = Path()
+      ..moveTo(s * 5 / 24, s * 5 / 24)
+      ..lineTo(s * 19 / 24, s * 5 / 24)
+      ..arcToPoint(p(21, 7), radius: Radius.circular(s * 2 / 24))
+      ..lineTo(s * 21 / 24, s * 14 / 24)
+      ..arcToPoint(p(19, 16), radius: Radius.circular(s * 2 / 24))
+      ..lineTo(s * 11 / 24, s * 16 / 24)
+      ..lineTo(s * 6 / 24, s * 20 / 24)
+      ..lineTo(s * 6 / 24, s * 16 / 24)
+      ..lineTo(s * 5 / 24, s * 16 / 24)
+      ..arcToPoint(p(3, 14), radius: Radius.circular(s * 2 / 24))
+      ..lineTo(s * 3 / 24, s * 7 / 24)
+      ..arcToPoint(p(5, 5), radius: Radius.circular(s * 2 / 24))
+      ..close();
+    canvas.drawPath(bubble, paint);
+    // Two quiet rules inside.
+    final Paint quiet = Paint()
+      ..color = ink.withAlpha(153) // ~60% — the bubble's own text lines.
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(p(7, 9), p(17, 9), quiet);
+    canvas.drawLine(p(7, 13), p(13, 13), quiet);
+  }
+
+  @override
+  bool shouldRepaint(_LanguagePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Country — the pill's country option: a globe (ring + meridian + equator).
+class CountryMark extends StatelessWidget {
+  const CountryMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _CountryPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _CountryPainter extends CustomPainter {
+  const _CountryPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..style = PaintingStyle.stroke;
+    final Offset c = Offset(s * 12 / 24, s * 12 / 24);
+    canvas.drawCircle(c, s * 9 / 24, paint);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: c,
+        width: s * 8 / 24,
+        height: s * 18 / 24,
+      ),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(s * 3 / 24, s * 12 / 24),
+      Offset(s * 21 / 24, s * 12 / 24),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CountryPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Favourite — the bookmark, not a star (playlist_imp.md §10.3). A
+/// five-point star at 15 px turns to mush; a bookmark is two verticals
+/// and a notch. [filled] + always visible = saved; outline + hover-only
+/// = one tap away from saved.
+class BookmarkMark extends StatelessWidget {
+  const BookmarkMark({super.key, this.size = 15, this.filled = false});
+
+  final double size;
+
+  /// Saved state — solid, always visible.
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _BookmarkPainter(
+        markInk(context),
+        markStrokeFor(size),
+        filled,
+      ),
+    );
+  }
+}
+
+class _BookmarkPainter extends CustomPainter {
+  const _BookmarkPainter(this.ink, this.stroke, this.filled);
+
+  final Color ink;
+  final double stroke;
+  final bool filled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Path tag = Path()
+      ..moveTo(s * 7 / 24, s * 4 / 24)
+      ..lineTo(s * 17 / 24, s * 4 / 24)
+      ..lineTo(s * 17 / 24, s * 20 / 24)
+      ..lineTo(s * 12 / 24, s * 16.5 / 24)
+      ..lineTo(s * 7 / 24, s * 20 / 24)
+      ..close();
+    if (filled) {
+      canvas.drawPath(
+        tag,
+        Paint()
+          ..color = ink
+          ..style = PaintingStyle.fill,
+      );
+    }
+    // Same path stroked with round joins — rounds the corners, as
+    // PlayMark does (and draws the outline when not filled).
+    canvas.drawPath(
+      tag,
+      Paint()
+        ..color = ink
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BookmarkPainter old) =>
+      old.ink != ink || old.stroke != stroke || old.filled != filled;
+}
+
+/// Reveal chevron — the list-edge mark pointing at the playing channel
+/// hiding above ([up]) or below it (playlist_imp.md §10.6).
+class RevealChevronMark extends StatelessWidget {
+  const RevealChevronMark({super.key, this.size = 15, this.up = true});
+
+  final double size;
+
+  /// Points up (the channel hides above) or down (it hides below).
+  final bool up;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _RevealChevronPainter(markInk(context), markStrokeFor(size), up),
+    );
+  }
+}
+
+class _RevealChevronPainter extends CustomPainter {
+  const _RevealChevronPainter(this.ink, this.stroke, this.up);
+
+  final Color ink;
+  final double stroke;
+  final bool up;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    final Path chevron = up
+        ? (Path()
+          ..moveTo(s * 7 / 24, s * 15 / 24)
+          ..lineTo(s * 12 / 24, s * 10 / 24)
+          ..lineTo(s * 17 / 24, s * 15 / 24))
+        : (Path()
+          ..moveTo(s * 7 / 24, s * 9 / 24)
+          ..lineTo(s * 12 / 24, s * 14 / 24)
+          ..lineTo(s * 17 / 24, s * 9 / 24));
+    canvas.drawPath(chevron, paint);
+  }
+
+  @override
+  bool shouldRepaint(_RevealChevronPainter old) =>
+      old.ink != ink || old.stroke != stroke || old.up != up;
+}
+
+/// Group twist — the accordion head's chevron: right when collapsed,
+/// rotating 90° down as the group opens (160 ms, the preview's motion).
+class GroupTwistMark extends StatelessWidget {
+  const GroupTwistMark({super.key, this.size = 14, this.expanded = false});
+
+  final double size;
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedRotation(
+      turns: expanded ? 0.25 : 0,
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      child: CustomPaint(
+        size: Size.square(size),
+        painter:
+            _GroupTwistPainter(markInk(context), markStrokeFor(size)),
+      ),
+    );
+  }
+}
+
+class _GroupTwistPainter extends CustomPainter {
+  const _GroupTwistPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    canvas.drawPath(
+      Path()
+        ..moveTo(s * 9 / 24, s * 7 / 24)
+        ..lineTo(s * 14 / 24, s * 12 / 24)
+        ..lineTo(s * 9 / 24, s * 17 / 24),
+      Paint()
+        ..color = ink
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GroupTwistPainter old) =>
       old.ink != ink || old.stroke != stroke;
 }

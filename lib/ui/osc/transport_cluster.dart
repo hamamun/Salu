@@ -57,6 +57,11 @@ class TransportCluster extends StatelessWidget {
         final TransportState state = player.transportState.value;
         final bool engineLive = state == TransportState.playing ||
             state == TransportState.paused;
+        // Channel mode: the timeline is inert (§10.8a), so the seeks dim
+        // exactly as they do with nothing to seek into — a still mark,
+        // a dead gesture, a silent key (the facade's guard answers keys).
+        final bool seeksLive =
+            engineLive && !queue.isChannelList;
 
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -104,8 +109,9 @@ class TransportCluster extends StatelessWidget {
             // ── Group 3 · time: seek backward + forward ────────────────
             SaluIconButton(
               tooltip: 'Seek backward',
-              // Seeks dim while stopped (nothing to seek into) and idle.
-              enabled: engineLive,
+              // Seeks dim while stopped (nothing to seek into) and idle —
+              // and throughout channel mode, which has no position.
+              enabled: seeksLive,
               onTap: () {}, // hold-repeat drives the ramp
               onHoldRepeat: TransportActions.instance.seekBackward,
               child: const SeekBackMark(),
@@ -113,7 +119,7 @@ class TransportCluster extends StatelessWidget {
             const SizedBox(width: _inGroup),
             SaluIconButton(
               tooltip: 'Seek forward',
-              enabled: engineLive,
+              enabled: seeksLive,
               onTap: () {}, // hold-repeat drives the ramp
               onHoldRepeat: TransportActions.instance.seekForward,
               child: const SeekForwardMark(),
