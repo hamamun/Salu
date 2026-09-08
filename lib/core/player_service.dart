@@ -52,7 +52,7 @@ sealed class QueueUndo {
 class RemovedItemUndo extends QueueUndo {
   const RemovedItemUndo({
     required super.text,
-    required this.path,
+    required this.item,
     required this.index,
     required this.wasLive,
     this.wasStopped = false,
@@ -60,7 +60,9 @@ class RemovedItemUndo extends QueueUndo {
     this.duration,
   });
 
-  final String path;
+  /// The removed entry (its URL is already canonical).
+  final QueueItem item;
+  String get path => item.url;
   final int index;
   final bool wasLive;
   final bool wasStopped;
@@ -76,7 +78,7 @@ class RemovedItemUndo extends QueueUndo {
 class ClearedQueueUndo extends QueueUndo {
   const ClearedQueueUndo({
     required super.text,
-    required this.paths,
+    required this.items,
     required this.index,
     required this.wasLive,
     this.wasStopped = false,
@@ -85,7 +87,9 @@ class ClearedQueueUndo extends QueueUndo {
     this.duration,
   });
 
-  final List<String> paths;
+  /// The cleared entries — an immutable in-memory snapshot (playlist_imp.md
+  /// §10.9: Undo never re-fetches), released with the toast.
+  final List<QueueItem> items;
   final int index;
   final bool wasLive;
   final bool wasStopped;
@@ -275,7 +279,7 @@ class PlayerService {
       final String key = normalizePathKey(uri);
       currentPath.value = key;
       final QueueService queue = QueueService.instance;
-      if (queue.paths.value.length == playlist.medias.length) {
+      if (queue.length == playlist.medias.length) {
         queue.setIndex(index);
       }
 
@@ -448,7 +452,7 @@ class PlayerService {
   bool get _shuffleDriving =>
       shuffleOn.value &&
       repeatMode.value != RepeatMode.one &&
-      QueueService.instance.paths.value.length > 1;
+      QueueService.instance.length > 1;
 
   /// The engine mode matching the current repeat × shuffle state
   /// (playlist_imp.md §5 — one control answers "what plays next"):
@@ -589,8 +593,7 @@ class PlayerService {
   /// the Resume toast behave exactly as they do for Next.
   Future<void> playIndex(int i) async {
     final QueueService queue = QueueService.instance;
-    final List<String> paths = queue.paths.value;
-    if (i < 0 || i >= paths.length) return;
+    if (i < 0 || i >= queue.length) return;
     stopMemory.value = null;
     _userPaused = false;
     await _openQueueAt(i);
@@ -621,7 +624,7 @@ class PlayerService {
     bool keepMemory = false,
   }) async {
     final QueueService queue = QueueService.instance;
-    final List<String> paths = queue.paths.value;
+    final List<String> paths = queue.paths;
     if (paths.isEmpty) return;
     final int idx = index.clamp(0, paths.length - 1).toInt();
     queue.setIndex(idx);
@@ -763,7 +766,7 @@ class PlayerService {
     final StopMemory? mem = stopMemory.value;
     if (mem == null) return;
     final QueueService queue = QueueService.instance;
-    int idx = queue.paths.value.indexOf(mem.path);
+    int idx = queue.indexOfUrl(mem.path);
     if (idx < 0) idx = queue.hasCurrent ? queue.index.value : 0;
 
     final bool keep =
@@ -861,7 +864,7 @@ class PlayerService {
   /// deliberate step always plays); otherwise the next list row.
   Future<int?> next() async {
     final QueueService queue = QueueService.instance;
-    if (queue.paths.value.isEmpty) return null;
+    if (!queue.hasQueue) return null;
     if (_shuffleDriving) {
       int? target = queue.takeNextShuffle();
       if (target == null) {
@@ -962,12 +965,12 @@ class PlayerService {
   /// Returns the Undo token (or `null` when nothing was removed).
   Future<RemovedItemUndo?> removeFromQueue(int i) async {
     final QueueService queue = QueueService.instance;
-    final List<String> paths = queue.paths.value;
-    if (i < 0 || i >= paths.length) return null;
+    final List<QueueItem> items = queue.items.value;
+    if (i < 0 || i >= items.length) return null;
 
-    final String removedPath = paths[i];
+    final QueueItem removed = items[i];
     final bool wasCurrent = queue.index.value == i;
-    final bool onlyItem = paths.length == 1;
+    final bool onlyItem = items.length == 1;
 
     // The only item: remove → stop (parks the position for Undo) → the
     // initial state (queue empty, logo canvas).
@@ -977,8 +980,8 @@ class PlayerService {
       // Undo token carries it so Undo restores the exact pre-removal state.
       final StopMemory? parked = live ? null : stopMemory.value;
       final RemovedItemUndo undo = RemovedItemUndo(
-        text: MediaUtils.displayName(removedPath),
-        path: removedPath,
+        text: removed.label,
+        item: removed,
         index: i,
         wasLive: live,
         wasStopped: !live && parked != null,
@@ -998,17 +1001,17 @@ class PlayerService {
       if (hasMedia.value) {
         // Follow-up: next → else previous. Both go through playIndex so
         // resume memory applies exactly as it does for Next.
-        final List<String> rest = queue.paths.value;
-        if (rest.isEmpty) {
+        final int rest = queue.length;
+        if (rest == 0) {
           stopMemory.value = null;
-        } else if (i < rest.length) {
+        } else if (i < rest) {
           await playIndex(i);
         } else {
-          await playIndex(rest.length - 1);
+          await playIndex(rest - 1);
         }
       } else if (queue.index.value < 0 && queue.hasQueue) {
         // Stopped/parked: the pointer parks on the row that slid in.
-        queue.setIndex(queue.paths.value.length - 1);
+        queue.setIndex(queue.length - 1);
       }
     } else if (hasMedia.value) {
       // A row that is not playing: mirror the removal into the engine.
@@ -1020,8 +1023,8 @@ class PlayerService {
     }
 
     return RemovedItemUndo(
-      text: MediaUtils.displayName(removedPath),
-      path: removedPath,
+      text: removed.label,
+      item: removed,
       index: i,
       wasLive: false,
     );
@@ -1032,12 +1035,12 @@ class PlayerService {
   /// playing also re-opens silently at its remembered position.
   Future<void> undoRemoveFromQueue(RemovedItemUndo undo) async {
     final QueueService queue = QueueService.instance;
-    queue.insert(undo.index, undo.path);
+    queue.insert(undo.index, undo.item);
     if (hasMedia.value) {
       // Engine mirror: append at the end, then move into place.
       try {
         await player.add(Media(undo.path));
-        final int last = queue.paths.value.length - 1;
+        final int last = queue.length - 1;
         if (last != undo.index) {
           await player.move(last, undo.index);
         }
@@ -1049,8 +1052,7 @@ class PlayerService {
     if (undo.wasLive &&
         undo.position != null &&
         undo.duration != null) {
-      final int idx =
-          queue.paths.value.indexOf(MediaUtils.canonicalPath(undo.path));
+      final int idx = queue.indexOfUrl(undo.path);
       if (idx >= 0) {
         final bool keep =
             undo.duration! > Duration.zero &&
@@ -1084,7 +1086,9 @@ class PlayerService {
     final QueueService queue = QueueService.instance;
     if (!queue.hasQueue && !hasMedia.value) return null;
 
-    final List<String> snapshot = List<String>.of(queue.paths.value);
+    // The published list is already unmodifiable — the snapshot IS the
+    // list, no copy (a 50 000-row clear must not duplicate the queue).
+    final List<QueueItem> snapshot = queue.items.value;
     final int at = queue.index.value;
     final bool live = hasMedia.value;
     final String? playing = live ? currentPath.value : null;
@@ -1102,7 +1106,7 @@ class PlayerService {
 
     return ClearedQueueUndo(
       text: 'Playlist cleared',
-      paths: snapshot,
+      items: snapshot,
       index: at,
       wasLive: live && playing != null,
       wasStopped: wasStopped,
@@ -1117,14 +1121,13 @@ class PlayerService {
   /// item that was playing re-opens silently at its remembered position.
   Future<void> undoClearQueue(ClearedQueueUndo undo) async {
     final QueueService queue = QueueService.instance;
-    if (undo.paths.isEmpty) return;
-    queue.setQueue(undo.paths, undo.index >= 0 ? undo.index : 0);
+    if (undo.items.isEmpty) return;
+    queue.setItems(undo.items, undo.index >= 0 ? undo.index : 0);
     if (undo.wasLive &&
         undo.path != null &&
         undo.position != null &&
         undo.duration != null) {
-      final int idx = queue.paths.value
-          .indexOf(MediaUtils.canonicalPath(undo.path!));
+      final int idx = queue.indexOfUrl(undo.path!);
       if (idx >= 0) {
         final bool keep =
             undo.duration! > Duration.zero &&
@@ -1155,9 +1158,8 @@ class PlayerService {
   Future<MovedItemUndo?> moveInQueue(int from, int to) async {
     if (from == to) return null;
     final QueueService queue = QueueService.instance;
-    final List<String> paths = queue.paths.value;
-    if (from < 0 || from >= paths.length) return null;
-    final String moved = paths[from];
+    final QueueItem? moved = queue.itemAt(from);
+    if (moved == null) return null;
     // queue.move itself resets the shuffle bookkeeping — an index-based
     // heard-log/pass is meaningless once rows have moved under it.
     if (!queue.move(from, to)) return null;
@@ -1169,7 +1171,7 @@ class PlayerService {
       }
     }
     return MovedItemUndo(
-      text: MediaUtils.displayName(moved),
+      text: moved.label,
       from: from,
       to: to,
     );
@@ -1219,7 +1221,7 @@ class PlayerService {
   }) async {
     if (before.isEmpty && after.isEmpty) return false;
     final QueueService queue = QueueService.instance;
-    final List<String> paths = queue.paths.value;
+    final List<String> paths = queue.paths;
     // The caller's contract: exactly the freshly loaded item, playing.
     if (paths.length != 1 || queue.index.value != 0 || !hasMedia.value) {
       return false;
@@ -1232,7 +1234,7 @@ class PlayerService {
 
     // Engine mirror. The queue is still the singleton while the engine
     // playlist grows, so the playlist stream's length guard
-    // (`queue.paths.value.length == playlist.medias.length`) blocks any
+    // (`queue.length == playlist.medias.length`) blocks any
     // mid-surgery setIndex from clobbering the row the queue lands on
     // below; mpv keeps the CURRENT entry through every add/move, so
     // title and path never leave the picked file either.
@@ -1256,7 +1258,7 @@ class PlayerService {
     }
 
     // The queue lands in its final shape only after the engine is done:
-    // one paths.value fire, the panel fills in a single pass, and the
+    // one items.value fire, the panel fills in a single pass, and the
     // picked file sits at its natural row.
     queue.setQueue(
       <String>[...beforeC, paths.first, ...afterC],

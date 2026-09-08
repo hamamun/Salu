@@ -4,7 +4,6 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter/services.dart';
 
-import '../../core/media_utils.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
@@ -75,14 +74,14 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _queue.index.addListener(_onIndexChanged);
     _scroll.addListener(_onScroll);
     // Keep the panel reflecting the freshly opened (or cleared) queue.
-    _queue.paths.addListener(_onPathsChanged);
+    _queue.items.addListener(_onItemsChanged);
   }
 
   @override
   void dispose() {
     _panel.playlistOpen.removeListener(_onOpenChanged);
     _queue.index.removeListener(_onIndexChanged);
-    _queue.paths.removeListener(_onPathsChanged);
+    _queue.items.removeListener(_onItemsChanged);
     _scroll.removeListener(_onScroll);
     _userScrollTimer?.cancel();
     _search.dispose();
@@ -103,7 +102,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     setState(() {});
   }
 
-  void _onPathsChanged() => setState(() {});
+  void _onItemsChanged() => setState(() {});
 
   void _onIndexChanged() {
     setState(() {});
@@ -134,26 +133,16 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   /// Real queue indexes shown by the current filter (the view only —
   /// the queue itself is never reordered by a search, §4.5).
-  List<int> _visibleRows(List<String> paths) {
+  List<int> _visibleRows(List<QueueItem> items) {
     if (_query.isEmpty) {
-      return List<int>.generate(paths.length, (int i) => i);
+      return List<int>.generate(items.length, (int i) => i);
     }
     final String needle = _query.toLowerCase();
     final List<int> out = <int>[];
-    for (int i = 0; i < paths.length; i++) {
-      if (MediaUtils.displayName(paths[i])
-          .toLowerCase()
-          .contains(needle)) {
-        out.add(i);
-      }
+    for (int i = 0; i < items.length; i++) {
+      if (items[i].searchText.contains(needle)) out.add(i);
     }
     return out;
-  }
-
-  String _rowName(String path) {
-    // Local file → name without extension. A URL falls back to the last
-    // path segment (this phase is local-first; displayName tolerates it).
-    return MediaUtils.displayName(path);
   }
 
   /// Scrolls so the playing row is visible. A *deliberate* step (auto-advance,
@@ -165,7 +154,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
       final int current = _queue.index.value;
-      final int pos = _visibleRows(_queue.paths.value).indexOf(current);
+      final int pos = _visibleRows(_queue.items.value).indexOf(current);
       if (pos < 0) return;
       final ScrollPosition p = _scroll.position;
       // Skip until content metrics exist — reading them earlier throws a
@@ -296,16 +285,16 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   }
 
   Widget _body() {
-    final List<String> paths = _queue.paths.value;
-    final bool hasQueue = paths.isNotEmpty;
+    final List<QueueItem> items = _queue.items.value;
+    final bool hasQueue = items.isNotEmpty;
     if (!hasQueue) return _emptyState();
 
-    final int count = paths.length;
+    final int count = items.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _header(count),
-        Expanded(child: _rowsArea(paths)),
+        Expanded(child: _rowsArea(items)),
       ],
     );
   }
@@ -323,7 +312,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   // ── Header (only while the queue is non-empty, §4.4) ────────────────
 
   Widget _header(int count) {
-    final int shown = _visibleRows(_queue.paths.value).length;
+    final int shown = _visibleRows(_queue.items.value).length;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       decoration: const BoxDecoration(
@@ -520,8 +509,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   // ── Rows ────────────────────────────────────────────────────────────
 
-  Widget _rowsArea(List<String> paths) {
-    final List<int> visible = _visibleRows(paths);
+  Widget _rowsArea(List<QueueItem> items) {
+    final List<int> visible = _visibleRows(items);
     if (visible.isEmpty) {
       // No match — the magnifier alone, ~30 % ink, centred (§4.5).
       return Center(
@@ -540,7 +529,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         padding: const EdgeInsets.symmetric(vertical: 2),
         itemCount: visible.length,
         itemBuilder: (BuildContext context, int i) =>
-            _row(paths, visible[i], canDrag: false),
+            _row(items, visible[i], canDrag: false),
       );
     } else {
       list = ReorderableListView.builder(
@@ -552,7 +541,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           unawaited(_move(oldIndex, newIndex));
         },
         itemBuilder: (BuildContext context, int i) =>
-            _row(paths, visible[i], canDrag: true),
+            _row(items, visible[i], canDrag: true),
       );
     }
 
@@ -561,18 +550,18 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     return _SaluScrollView(controller: _scroll, child: list);
   }
 
-  Widget _row(List<String> paths, int index, {required bool canDrag}) {
-    final String path = paths[index];
+  Widget _row(List<QueueItem> items, int index, {required bool canDrag}) {
+    final QueueItem item = items[index];
     final bool isNow = index == _queue.index.value;
     final Widget grip = IconTheme.merge(
       data: const IconThemeData(color: AppColors.iconIdle),
       child: const GripMark(size: 16),
     );
     return _RowTile(
-      key: ValueKey<String>('$index:$path'),
+      key: ValueKey<String>('$index:${item.url}'),
       index: index,
       isNow: isNow,
-      name: _rowName(path),
+      name: item.label,
       canDrag: canDrag,
       dragHandle: grip,
       onPlay: () => _play(index),

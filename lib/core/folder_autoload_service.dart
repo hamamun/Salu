@@ -102,7 +102,7 @@ class FolderAutoloadService {
   /// True when the queue is no longer the untouched singleton the
   /// single-file load of [canon] installed.
   static bool _queueMovedOn(QueueService queue, String canon) =>
-      queue.paths.value.length != 1 || queue.paths.value.first != canon;
+      queue.length != 1 || queue.items.value.first.url != canon;
 
   /// The name shape two files must share to count as "the same series"
   /// (autoload_imp.md §3.2): case-folded, separators (`space . _ -`)
