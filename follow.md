@@ -46,6 +46,10 @@
 7. **Colors/typography:** deep dark grays (#121212/#1E1E1E, never pure
    black), Segoe UI Variable only, monochrome icons. All colors come from
    `AppColors` in `lib/theme/app_theme.dart`.
+   **IPTV artwork exception (owner, 2026-09-08):** playlist-supplied channel
+   logos may retain their native colours in the row's logo slot, before the
+   name (`playlist_imp.md` §10.4, point 2 FINAL). They are display-only media
+   artwork, not controls; every SALU action mark stays custom and monochrome.
 8. **Modal vs panel:** focus tasks (e.g. the Open-URL window) = centered
    glass modal, dimmed barrier, open→act→gone. Live tasks used *while*
    watching (EQ, subtitles, playlist) = slide-out panels. Never mix.
@@ -191,3 +195,7 @@ must not auto-hide.
   edit and delete.
 - No hardware media key support. Single instance only. Windows 10/11.
 - Storage is `shared_preferences` only — no databases.
+- **IPTV grouping/favourites — FINAL (owner, 2026-09-08).** Points 5 and 6
+  must match the approved `design/iptv-channel-preview/` appearance and
+  interactions exactly (`playlist_imp.md` §10.15); no silent redesign. This
+  locks the design, not production implementation, and excludes study-only UI.
