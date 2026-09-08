@@ -1,10 +1,14 @@
 # Playlist control & slide-out panel — implementation brief
 
-> **Status:** **NOT IMPLEMENTED** (updated 2026-09-07). No playlist code
-> exists in the tree yet. Work order is locked by the owner (2026-09-07):
-> **we implement the LOCAL playlist section first** — §§1–9, i.e. §7's
-> steps 1–12 (Phase A). §10 (m3u / IPTV channel mode) is a **later** phase,
-> built only after Phase A ships and never interleaved with it.
+> **Status:** **Phase A complete (owner-confirmed); Phase B NOT IMPLEMENTED**
+> (updated 2026-09-08). Phase A is the local playlist — §§1–9, §7 steps 1–12.
+> Phase B is §10 (m3u / IPTV channel mode). **Points 1–7 are FINAL design
+> decisions**; failed-channel handling is approved. **Points 5 and 6 must be
+> implemented exactly as the approved grouping/favourites preview (§10.15)**,
+> including Flat on load and the same-file missing-category fallback. None of
+> this marks Phase B production code as implemented. Build order stays local first.
+> Point 2 now includes RAM-only queue storage and provider logos **instead of
+> channel numbers**; the search field shows only the total channel count.
 >
 > **New session? Read this box, then §1.** Two owner reversals of the
 > 2026-09-06 draft are already recorded in the body — do not re-introduce
@@ -23,14 +27,15 @@
 > Phase A in brief: a playlist mark and toggle in the control row (§§2–3), a
 > slide-out glass panel over the video (§4), queue/repeat/shuffle service work
 > (§5) and silent keyboard (§6), built in §7's steps 1–12 and verified against
-> §8's checklist. §10 in brief (read in full only when Phase A ships): the
+> §8's checklist. §10 in brief (the pending Phase B): the
 > header's first two slots swap to group-by and favourite, repeat and shuffle
 > are dropped, rows lose drag and delete, groups are an accordion, a dead
 > channel toasts **"Failed to load"** and **skips to the next** (3 strikes stop
 > the cascade), the timeline goes inert with a live shimmer, and the engine
 > holds one media instead of the whole list. §10.0's blocker stands: SALU
 > currently hands the whole `.m3u` URL to mpv, so no channel metadata ever
-> reaches the app; nothing in §10 can be built before that parser.
+> reaches the app; prepare the queue model first, then the parser, before
+> building the channel UI.
 >
 > This is the binding spec for SALU's playlist control and its slide-out
 > panel. Placement, mark and state semantics were chosen by the owner in the
@@ -699,8 +704,9 @@ first file of the playlist the panel is showing.
     timings, and a pass over R2/R3 (pill coexistence, glow visibility from a
     distance).
 12. **Docs** — README phase table (Phase 4 → in progress), add the new marks to
-    `follow.md` §1.6's family list, and flip this file's status line to
-    *FINAL & IMPLEMENTED* with the date and commit.
+    `follow.md` §1.6's family list, and record Phase A as
+    *FINAL & IMPLEMENTED* with the date and commit. Keep Phase B's separate
+    implementation status honest; a finalized design is not shipped code.
 
 **Out of scope here:** the Video / Audio / Subtitle views — **the four-tab strip
 is removed from this panel** (§4.4) and, per the owner (2026-09-06), those three
@@ -844,9 +850,10 @@ it is specified in §10 and is its own build phase, starting with the parser
 
 ## 10. m3u mode — the IPTV playlist (owner's brief, 2026-09-06)
 
-> **Status:** **NOT IMPLEMENTED — LATER PHASE** (updated 2026-09-07). Per the
-> owner (2026-09-07) **Phase A — the local playlist (§§1–9, §7 steps 1–12) is
-> built first**; this m3u section ships after it and is never interleaved. This
+> **Status:** **PHASE B — NOT IMPLEMENTED** (updated 2026-09-08). The owner
+> confirms Phase A — the local playlist (§§1–9, §7 steps 1–12) — is complete.
+> **Points 1–7 are FINAL as design decisions, not production code.** The
+> owner approved points 5 and 6 exactly as previewed (§10.15, 2026-09-08). This
 > section replaces the earlier "out of scope: IPTV grouping … the owner takes
 > that next". Everything in §§1–9 still governs; this section states only what
 > **changes when the loaded playlist is an m3u URL**. Entries marked *(default)*
@@ -854,6 +861,22 @@ it is specified in §10 and is its own build phase, starting with the parser
 > referred to an undocked window the reference is void; there is one playlist
 > surface, the docked panel, and header slot 5 is its **Close ✕** (local and m3u
 > modes alike).
+
+### Owner review status — 2026-09-08
+
+These point numbers refer to the owner's plain-language review, **not** the
+M-1…M-11 implementation steps. "Final" below means design approval only.
+
+| Point | Review state | Decision |
+|---|---|---|
+| **1** | **FINAL** | SALU reads the M3U channel directory; mpv plays the selected stream (§10.0). |
+| **2** | **FINAL** | One efficient RAM-only queue; ID-first/name-fallback identity; missing grouping information is `Unknown`; logos replace individual numbers; only the total count appears inside search (§§10.0, 10.4, 10.9). |
+| **3** | **FINAL — owner, 2026-09-08** | mpv receives only the selected channel. Prev/Next follow the original channel list, never a grouped/filtered view. Stop keeps that list parked (§§10.8b, 10.10a). |
+| **4** | **FINAL — owner, 2026-09-08** | Channel names and logos (no individual numbers), correct channel title; no row drag/delete; group-by/favourites replace repeat/shuffle (§§10.1, 10.4, 10.7). |
+| **5** | **FINAL — owner, 2026-09-08; preview approved exactly** | Flat on every fresh load; category/language/country, the one-open-group accordion, dimmed unavailable modes, `Unknown` last and the same-file `group-title` → `#EXTGRP` fallback. Match the approved preview's appearance and interactions (§§10.2–10.2a, 10.5, 10.15). |
+| **6** | **FINAL — owner, 2026-09-08; preview approved exactly** | Bookmark marks and hover/filled states, saved favourites across reloads/restarts, and favourites-only filtering that retains grouping. Match the approved preview's appearance and interactions (§§10.3, 10.15). |
+| **7** | **FINAL — owner, 2026-09-08** | Search names/groups only; temporarily flatten groups; preserve the total-only count; collapsed-group and off-screen markers reveal the playing channel without overriding filters (§§10.6, 10.9). |
+| **8 · failures** | **APPROVED — owner, 2026-09-08** | “Failed to load” + channel name, then next channel; stop after 3 consecutive failures, never wrap past the last channel (§10.8). |
 
 ### 10.0 The blocker — SALU must parse the m3u itself
 
@@ -866,54 +889,114 @@ Verified in the code (2026-09-06):
 | The index mirror is gated on `queue.paths.length == playlist.medias.length` → `1 != 24`, so **it is skipped** and SALU never learns which channel plays | `player_service.dart:177` |
 | `currentTitle` = `MediaUtils.displayName(uri)` → a stream URL `…/live/user/pass/1234.ts` titles the window **"1234"** | `player_service.dart:169` |
 
-**Therefore: SALU fetches and parses the m3u, then hands mpv a resolved list of
-channel URLs.** Without a parser there is no `group-title`, no `tvg-language`,
-no `tvg-country`, no `tvg-chno` and no display name — i.e. none of §§10.1–10.6
-can exist. This parser is step 1 of the build order and nothing else starts
-before it.
+**Point 1 — FINAL (owner, 2026-09-08): SALU reads the channel directory;
+mpv plays the selected channel.** This is design approval, **not an
+implementation-complete mark**; Phase B implementation remains pending.
 
-**Data model — settled (owner's challenge, 2026-09-06).** An earlier draft
-proposed a **parallel `List<ChannelMeta>?`** alongside `paths`. The owner
-rejected it — *"how does the user switch between local and m3u, and is it not
-complicated?"* — and the code agrees: `paths` has **6 read sites and 3 mutation
-sites**, so a parallel list would force every one of them to keep two
-collections in lockstep forever. One missed mutation and every row shows the
-wrong channel's name. Switching local → m3u → local would mean nulling and
-rebuilding a second list each time, with two things to keep honest instead of
-one.
+SALU fetches and parses the provider's M3U channel directory, keeping each
+channel's available details and stream URL in SALU. mpv receives **only the
+selected channel's URL**, never the whole channel list (§10.10a), and handles
+streaming, buffering, decoding, video and audio playback. A channel's **HLS
+`.m3u8` manifest of video segments stays mpv's responsibility** — SALU's parser
+is for the channel directory, not the stream's segment playlist.
 
-**Decision: one list of objects, no parallel table, no mode flag.**
+Without a parser SALU has no `group-title`, no `tvg-language`, no `tvg-country`,
+no `tvg-logo` and no display name for its channel UI — i.e. none of
+§§10.1–10.6 can exist. The parser is the first channel-loading dependency
+(after the queue-model preparation in M-1); the channel UI comes after it.
+
+**Point 2 — FINAL (owner, 2026-09-08): upgrade the queue, RAM only.**
+Store channel identifiers, names, groups, languages, countries and **logo
+addresses** alongside stream URLs in one in-memory queue, while keeping local
+playlists working unchanged. **Channel numbers are removed from this phase**:
+logos appear before channel names, and the **only channel count** is the total
+inside the search field (§10.9). This is design approval; implementation is
+still pending.
+
+**Data model — one list of objects, no parallel metadata table, no manual mode
+flag.** The earlier parallel `List<ChannelMeta>?` alongside `paths` was rejected
+(owner, 2026-09-06): every reader and mutation would have to keep two lists in
+lockstep. Keep an entry's details with its URL instead. The old draft's call-site
+counts predate Phase A; migrate the current notifier-based callers, not those
+historical counts.
 
 ```dart
-/// One queue entry. Local files fill `url` only; m3u channels fill the rest.
+/// One queue entry. Local files fill `url` only; m3u channels add details.
 class QueueItem {
-  const QueueItem(this.url, {this.name, this.group, this.language,
-                             this.country, this.chno, this.tvgId});
-  final String url;        // what mpv is handed — the only field local mode needs
-  final String? name;      // m3u display name; null → derive from the path
-  final String? group, language, country, chno, tvgId;
+  const QueueItem(this.url, {this.name, this.tvgId, this.tvgName,
+                             this.group, this.language, this.country,
+                             this.logoUrl});
+  final String url;        // what mpv receives; local mode only needs this
+  final String? name;      // channel display label; null for local files
+  final String? tvgId, tvgName;
+  final String? group, language, country;
+  final String? logoUrl;   // image address, NOT downloaded image bytes
 }
 ```
 
-- Local mode builds `QueueItem(path)` with every other field null, so local
-  playback is **byte-identical to today**.
-- m3u mode fills the metadata. **Switching sources is just `setQueue(...)` with
-  a different list** — exactly the mechanism that exists now. No second list, no
-  null-and-rebuild, no possible desync.
-- The header swap reads off the data, not a flag:
+- Local mode builds `QueueItem(path)` with every other field null. Natural
+  ordering, canonical paths, resume, repeat/shuffle, queue mutations and Undo
+  keep their Phase A behaviour.
+- m3u mode fills the optional details. **Switching sources is just
+  `setQueue(...)` with a different list**, not a second playlist system.
+- Channel identity is **ID first, then name**: `tvg-id` → `tvg-name` → display
+  name. This is an identification/matching key, not a claim that an ID encodes
+  a category, language or country. Never use the row number or stream URL as
+  the stable channel identity (§10.3).
+- Category comes from that M3U entry's `group-title`, falling back to its
+  `#EXTGRP` value only when `group-title` is absent/blank (point 5 FINAL,
+  §10.2a). Language and country use `tvg-language` and `tvg-country`. Use only
+  information available in the playlist; no outside metadata service,
+  provider API or bulk stream probing.
+  Do not invent values from an ambiguous ID/name. Missing or blank fields stay
+  `null`; their group is displayed as **`Unknown`**, last in the selected
+  grouping. This is a missing-data label, not a stored fake category. Missing
+  details never prevent a valid stream from playing.
+- Normalise recognised country/language codes and names (§10.2). An entire
+  playlist missing a field dims that grouping option; flat view still works.
+- The visible channel label uses the supplied display name, then `tvg-name`,
+  then `tvg-id`, otherwise `Unknown` — never a credential-bearing URL. Each
+  parsed channel therefore has a non-null `name`, even when all tags are absent.
+  The header still derives its mode from the data:
   `bool get isChannelList => items.any((QueueItem i) => i.name != null);`
-- Transitional keeper so the 6 existing call sites keep compiling and can be
-  migrated one at a time:
-  `List<String> get paths => items.map((QueueItem i) => i.url).toList();`
+- Migrate Phase A's `paths.value` readers/listeners to the item notifier (or a
+  compatibility view over it). Do **not** retain a second stored URL list or
+  repeatedly materialise all URLs for channel changes. Only local playback
+  needs to construct the engine's full playlist (§10.10a).
+
+**RAM storage contract — final:**
+
+- The loaded queue, its indexes and search keys live **only in RAM**. No queue
+  database, disk-backed list, compressed archive or queue persistence in
+  `shared_preferences`. Stop parks it; closing the app loses the loaded queue.
+  Existing saved URLs, favourites and local resume storage remain separate and
+  unchanged; this decision does not make those persistent features temporary.
+- One immutable item record per channel. Search/group views refer to item
+  indexes, not duplicated channel objects. The 5 s Undo may retain the required
+  immutable snapshot; release it when it expires or is replaced.
+- **Share repeated text**: intern group/language/country values within the
+  loaded playlist. The intern pool must not retain every past playlist forever.
+  Precompute one lowercase name+group search key per channel (§10.10c).
+- Parse progressively in batches off the UI isolate. Release raw download
+  buffers, original M3U text and temporary parser data once no longer needed,
+  including on failure/cancellation. Do not retain the source text as a cache.
+- **Build only visible rows** with `ListView.builder`. Logo image data is
+  separate from queue records, fetched lazily into a **bounded RAM cache**
+  (§10.4); never download/cache all channel logos eagerly.
+- Measure actual peak and retained memory with a large playlist, including
+  decoded logos. A playlist's download size is not its RAM footprint; no
+  unmeasured promise of a fixed memory cost.
 
 Attribute reference: `#EXTINF:-1 tvg-id tvg-name tvg-logo tvg-language
-tvg-country tvg-chno group-title,Display Name`.
+tvg-country group-title,Display Name`.
+`tvg-chno` may exist in input but is ignored in this phase: no `chno` field,
+no row number and no replacement `0`/`LIVE` label.
 
-### 10.1 The header swaps two slots, and only two
+### 10.1 The header swaps two slots, and only two — point 4 FINAL
 
-Slots 3 · 4 · 5 (search · clear · **Close ✕**) are **identical to local mode**
-(2026-09-07: slot 5 is Close in both modes — the undock/dock slot is gone, §4.8).
-Slots 1 · 2 swap:
+Slots 3 · 4 · 5 retain **search · clear · Close ✕**, as in local mode; search
+has the channel-specific scope and total-only count of §10.9. Slot 5 is Close
+in both modes — the undock/dock slot is gone (§4.8). Only slots 1 · 2 swap:
 
 | # | local mode | **m3u mode** |
 |---|---|---|
@@ -932,7 +1015,11 @@ pair (2026-09-07: slot 5 is the Close ✕ — the old `[undock]` slot is gone,
 about 4 px from the **🗑 (clear the whole playlist)**. Destructive controls do
 not get 2 px.
 
-### 10.2 Slot 1 — Group by *(default, except the four modes)*
+### 10.2 Slot 1 — Group by (point 5 FINAL, preview approved 2026-09-08)
+
+**Implement the grouping appearance and interactions exactly as the approved
+preview**, including its stable mark, four-option pill and accordion (§10.15).
+No alternate glyphs, layout, default mode or added labels without owner approval.
 
 - **One stable mark plus a pill below it** — the `+` → pill pattern the app
   already teaches. The mark **never morphs** into four different glyphs: the
@@ -940,14 +1027,17 @@ not get 2 px.
   states). Four unrelated glyphs can never be learned.
 - **The mark does not report the mode; the list does it better** — grouping on
   = named group heads on screen, flat = none. No 18 px glyph beats that.
-- **Auto-pick on load:** if more than ~60 % of entries carry `group-title` →
-  category, else flat. Remembered per playlist. The default is then right with
-  no click.
+- **Default on load — FINAL (owner, 2026-09-08): always Flat.** This
+  supersedes the old ~60 % category auto-pick and remembered-on-reload mode.
+  Every fresh playlist load starts in the provider's flat order, even if every
+  channel has complete tags. Grouping changes only when the viewer chooses it.
+  The chosen mode survives panel close/reopen and temporary search/favourites
+  filtering within that load; it does not override Flat on the next fresh load.
 - **A mode the file has no tags for is dimmed, never hidden** — a vanishing
   option reads as a broken app.
 - **Group order:** category keeps the playlist's own **first-appearance** order
   (providers order deliberately); language and country are alphabetical;
-  `Uncategorized` always last.
+  **`Unknown` always last** (point 2, final — replaces `Uncategorized`).
 - **Normalise country and language.** `tvg-country` is usually a code (`UK`,
   `GB`, `US`), `tvg-language` a word. Without a small ISO-3166 / ISO-639 map the
   heads fragment into `UK` / `GB` / `United Kingdom`.
@@ -956,16 +1046,48 @@ not get 2 px.
   two groups and breaks "one row = one channel index". Treat the whole string
   as one key.
 
-### 10.3 Slot 2 — Favourites
+### 10.2a Missing-information logic — point 5 FINAL (2026-09-08)
+
+Keep the already-final point-2 rules: no outside metadata discovery, no
+fabricated country/language/category from a channel ID or ambiguous name,
+missing fields stay null, and `Unknown` comes last when grouping is available.
+
+Implement the approved preview's **metadata-aware options, not automatic grouping**:
+
+1. A dimension with usable information is available; a dimension with none is
+   dimmed but remains visible in the four-option pill. Availability reads the
+   underlying playlist, not the current search/favourites subset.
+2. Partial information keeps known groups useful and puts the rest in
+   `Unknown`. With no grouping information at all, stay in Flat rather than
+   manufacturing a meaningless single group or blocking playback.
+3. Recognised aliases share one group (`UK` / `GB` / `United Kingdom`, `en` /
+   `English`). Multi-value fields stay whole; do not silently split rows.
+4. **Same-file category fallback — FINAL with the approved preview:** if
+   `group-title` is absent or blank, accept that entry's `#EXTGRP` category.
+   An explicit `group-title` wins; if both are missing/blank, the category stays
+   unknown. This reads another tag in the supplied M3U, not a provider API or
+   outside lookup. No comparable country/language guessing is added.
+
+See §10.15 for the three approved interactive sample scenarios. The previous category
+coverage threshold must not reappear as a so-called smart default.
+
+### 10.3 Slot 2 — Favourites (point 6 FINAL, preview approved 2026-09-08)
+
+**Implement the favourites appearance and interactions exactly as the approved
+preview** (§10.15): bookmark marks, hover-to-add/filled-visible saved states,
+persistence across reloads/restarts and favourites-only grouped browsing.
+Visual and behavioural sign-off is complete; no silent redesign or simplification.
+Production persistence remains `shared_preferences`, not the browser mock's
+`localStorage`; the approved user-visible result must be the same.
 
 - **Mark: the bookmark, not a star.** A five-point star at 15 px with a 1.4 px
   round-join stroke turns to mush; a bookmark is two verticals and a notch.
-- **The row bookmark's visibility is the whole design** *(strong
-  recommendation)*: **filled + full ink and always visible when the channel IS
+- **The row bookmark's visibility is the whole design** *(point 6 FINAL)*: **filled + full ink and always visible when the channel IS
   a favourite; invisible until the row is hovered when it is not.** A
   3000-channel list carrying 3000 outline bookmarks destroys the exact signal
   favourites exist to give. Hover-to-add is already the local rows' grammar.
-- **Keying a channel:** `tvg-id` → `tvg-name` → display name, in that order.
+- **Keying a channel — FINAL (point 2):** `tvg-id` → `tvg-name` → display
+  name, in that order (ID first, then name).
   Never the index (order changes) and never the stream URL (it rotates).
   Display name alone is not enough: duplicate names are rampant in IPTV lists
   (same channel at several qualities), so one click would light four rows.
@@ -981,51 +1103,86 @@ not get 2 px.
   flattens the list; favourites-only is a **browse** mode. Only the search
   suspends grouping (and only then does the group mark drop to quiet ink).
 
-### 10.4 Rows — no reorder, no delete
+### 10.4 Rows — no reorder, no delete (point 4 FINAL, 2026-09-08)
 
 - **No `≡` grip, no drag, no up/down** (owner): the order is the provider's.
 - **No per-row bin** (owner). The only row action is the favourite bookmark.
-- Anatomy: `[chevron if playing] · name · channel no. · favourite`.
-- The channel number rides the local list's **duration** slot — live duration is
-  `-1`, so the slot is free. **No `tvg-chno` → the slot stays empty**, never `0`,
-  never the word "LIVE".
-- Click a row = play that channel. Hover wash and the now-row treatment are
-  §4.3's, unchanged.
+- **Anatomy — FINAL (point 2):**
+  `[chevron if playing] · logo · name · favourite`.
+- **No channel number anywhere in a row** — neither a provider's `tvg-chno`
+  nor a generated row number. The old number-in-duration-slot proposal is
+  superseded. The only channel count is the total inside search (§10.9).
+- The **logo is before the name**, not an action or a new header mark. Reserve
+  a small, fixed slot (default: 24 × 24 px in the existing 38 px row) so names
+  never jump as images arrive. Fit the artwork without stretching. The playing
+  chevron and favourite bookmark stay separate and unchanged.
+- **Provider logos are allowed channel artwork**, including their native
+  colours; this is the owner's narrow exception to the old logo exclusion,
+  not permission to replace SALU's monochrome action marks with stock icons.
+- Click a row = play that channel, including its logo area. The image is not
+  independently focusable/clickable. Hover wash and now-row treatment stay
+  §4.3's.
 
-### 10.5 Grouping and the accordion
+**Logo loading — included in point 2, final (previously out of scope):**
+
+- Read `tvg-logo` from the same M3U entry. Fetch only a playlist-supplied image
+  address (resolve a relative address against the playlist URL); no outside
+  logo directory, name search or guessed logo service. Permit HTTP(S) image
+  requests only. The referenced host may differ from the playlist's host:
+  this is an explicit image download, not external metadata discovery.
+- Load only visible rows and a small nearby buffer, with a small, fixed maximum
+  number of concurrent requests. Playlist loading, scrolling and channel
+  playback **never wait for logos**. Cancel stale work on source changes and
+  bind results to the requested logo URL, never a recycled row index.
+- Decode at the required display pixel size, accounting for display scale.
+  Share identical logo requests/images; use a logo-specific bounded **RAM-only
+  cache** that evicts least-recently-used images. Bound per-image transfer size
+  and request time too; the cache must not become an unbounded second playlist.
+  Numeric resource budgets are implementation defaults to verify in M-10.
+- Missing, invalid or failed logo → the reserved slot stays empty. No spinner,
+  error icon, instruction text or repeated retry loop. A logo failure is **not
+  a failed channel**: it must never trigger the failure toast or channel skip.
+- Do not persist downloaded logos to disk. An evicted logo may be fetched again
+  when needed; this must not block restoring the channel list from Undo.
+
+### 10.5 Grouping and the accordion — point 5 FINAL (2026-09-08)
 
 - **Flat** → one plain list.
 - **Category / language / country** → collapsible heads, **accordion: exactly
   one group open at a time** (owner).
-- **All collapsed by default; only the playing channel's group is open**
-  (owner). With **nothing playing, nothing is open** — an all-collapsed list is
-  the map of the playlist, which is the point of grouping. *(This overrides the
-  preview's earlier "open the first group".)*
-- **An auto-advance must not steal the view** *(default)*: the open group
+- **After the viewer selects a grouped mode:** all collapsed except the
+  playing channel's group (owner). A fresh load itself is **Flat** (§10.2),
+  not an accordion. With **nothing playing, nothing is open** — a collapsed list is
+  the map of the playlist, which is the point of grouping. This continues to
+  reject the superseded "open the first group" idea; the approved preview agrees.
+- **An auto-advance must not steal the view** *(point 5 FINAL)*: the open group
   follows the playing channel **only while the open group is already the
   playing one**. Deliberately opening "Movies" while News plays must survive an
   advance inside News (follow.md — never fight the user).
 - **Collapsing a group above the viewport must not yank the list** — compensate
   the scroll offset so rows under the cursor stay put.
-- **Sticky group head** while a long group is scrolled *(default)*.
-- Empty groups vanish under a filter; the head count reflects what is shown.
+- **Sticky group head** while a long group is scrolled *(point 5 FINAL)*.
+- Empty groups vanish under a filter. **No group-head counts**: point 2
+  reserves channel counts for the single total inside search (§10.9).
 
-### 10.6 Keeping the playing channel visible
+### 10.6 Keeping the playing channel visible — point 7 FINAL (2026-09-08)
 
-§4.3's reveal rule applies, plus the two cases the accordion creates:
+§4.3's reveal rule applies, plus the two cases the accordion creates. A search
+or favourites filter that hides the channel is never cleared or overridden by
+an indicator; reveal only when the current view contains that channel/group.
 
 - **The playing channel sits inside a COLLAPSED group** → its group head
   carries the play chevron, so "where am I" survives the accordion.
-- **The playing row is scrolled off-screen** *(default, innovative)* → a small
+- **The playing row is scrolled off-screen** *(point 7, FINAL)* → a small
   quiet chevron fades in at the list edge it is hiding behind, pointing toward
   it; click = expand its group if needed, then reveal. It exists only while the
   signal is actually lost, costs no permanent control and no words. At 12 000
   channels this matters far more than at 14 files.
 
-### 10.7 Title bar
+### 10.7 Title bar — point 4 FINAL (2026-09-08)
 
 The title bar shows the **playing channel's name**, exactly as local files show
-their file name. One rule to lock: **the playlist's display name wins — mpv's
+their file name. **The channel's playlist-supplied display name wins — mpv's
 ICY / HLS stream metadata must never overwrite it**, or the title flickers
 between "BBC News HD" and whatever the stream announces mid-programme.
 
@@ -1039,7 +1196,7 @@ channels — and they can see in the title bar what is playing."* Correct: with 
 hand-click past each one is the worse failure mode. The title bar (M22) is what
 makes the skip safe — you always know where you landed.
 
-**The behaviour**
+**The behaviour — reaffirmed by the owner, 2026-09-08 (review point 8)**
 
 1. A channel fails to load → the toast reads **"Failed to load"** with the
    channel's name, in the deck's existing card shape (the same slot that already
@@ -1062,7 +1219,7 @@ SALU gets the identical behaviour for free, because the hook already exists:
 currently only `debugPrint`s). In channel mode that listener fires the toast and
 calls the next channel. Same outcome, no engine list, no stall.
 
-**10.8a-ii The cascade guard — mandatory** *(default)*
+**10.8a-ii The cascade guard — mandatory; owner-approved 2026-09-08**
 
 Auto-advance creates a failure mode the old "stay put" rule did not have: when a
 provider's credentials expire **every** channel fails, so a naive advance
@@ -1109,7 +1266,7 @@ of data it **stops when the stream stalls** — so buffering gets an honest,
 wordless indicator for free. Amplitude stays under the volume bar's hover
 brightening: this is a status, not a control.
 
-### 10.8b Transport in m3u mode (owner, 2026-09-06)
+### 10.8b Transport in m3u mode (point 3 FINAL, owner, 2026-09-08)
 
 Everything here already exists; m3u mode only changes *which* rules apply.
 
@@ -1171,17 +1328,29 @@ on screen still reporting that data is arriving.
 
 ### 10.9 Search, clear, close in m3u mode
 
+**Search + playing-channel reveal are FINAL (point 7, owner, 2026-09-08).**
+Search temporarily flattens groups; clearing it restores the selected grouping
+mode and the browsed group. It never mutates the original queue or makes
+Prev/Next follow visible results. The point-2 total-only count remains final.
+
 - **Search matches name + group, never the URL** — matching the URL would
   surface credentials. Precompute one lowercase key per channel at parse time;
   never `toLowerCase()` 12 000 strings per keystroke.
-- **The count needs room:** `9 / 14` fits, `1284 / 12750` is eleven characters
-  at 10 px. In m3u mode §4.4's collapsing-field escape hatch stops being
-  optional.
+- **Count — FINAL (point 2): total channels only, inside the search field.**
+  A 12 750-channel list shows `12750`, including while search or favourites hide
+  rows — never `1284 / 12750`, a filtered-result count, per-row numbering or a
+  group-head count. During progressive loading it reflects the total loaded so
+  far; once parsing completes it is the full channel total. Local mode retains
+  its existing `shown / total` behaviour unchanged. Keep the channel-mode
+  collapsing field and enough room for the total without crowding the text ✕
+  or the playlist bin.
 - **The bin unloads the channels only.** Playback stops, the list empties, SALU
   returns to the logo canvas — and the **saved URL seven (`UrlLibraryService`)
   is untouched**, as is the favourites store. 5 s Undo restores **from an
   in-memory snapshot, never a re-fetch**: an Undo that stalls 10 s on a slow
-  provider is not an Undo.
+  provider is not an Undo. This restores channel records (including logo URLs),
+  not an unlimited collection of images; evicted logos may load lazily without
+  delaying Undo.
 - **Close ✕ (slot 5) closes the panel only** — the channel list stays loaded
   and keeps playing, exactly as in local mode. Undock does not exist (§4.8), so
   there is no cross-window/cross-isolate bridge to design for m3u mode; Phase 8
@@ -1205,6 +1374,11 @@ generated **50 000-channel, 12.9 MB** playlist with the real attribute set
 | One keystroke, worst case (full rescan) | **3.5 ms** — inside one 60 Hz frame |
 | Naive search (`toLowerCase` per row per keystroke) | 40.8 ms — **a dropped frame; banned** |
 
+These historical timings cover playlist text, **not logo downloads or image
+memory**. The fixture included `tvg-chno`; point 2 now ignores channel numbers.
+Profile the final queue and bounded logo cache separately before claiming a RAM
+budget or a combined loading time.
+
 Parsing is not the problem. **The engine is.**
 
 #### 10.10a The real bottleneck — never hand mpv the whole list
@@ -1218,7 +1392,11 @@ boundary **on every zap**, which mpv is documented to handle badly:
 (mpv-player/mpv#6162), with a further regression reported at 200 000 (#15264).
 Local playback never exposed this because a folder queue is tens of items.
 
-**The rule: in channel-list mode the engine holds ONE media, never the list.**
+**Point 3 — FINAL (owner, 2026-09-08): in channel-list mode the engine holds
+ONE media, never the list.** SALU selects each channel in the original provider
+order, including Prev/Next while search, favourites or grouping change the view.
+Stop leaves the same list and channel index parked (§10.8b). Local playback's
+existing full-queue engine path is unchanged.
 
 - SALU owns the list (`List<QueueItem>`, §10.0) and is the only thing that
   knows about channels 0…49 999.
@@ -1269,6 +1447,12 @@ there is no text to show anyway.
    index cheap enough to rebuild on a mode switch (8.9 ms) instead of caching
    four of them.
 
+These three rules are part of point 2's finalized RAM contract (§10.0), not
+optional shortcuts. Keep the original M3U text only while parsing needs it;
+release temporary buffers and expired Undo snapshots. Group/search views hold
+indexes over the one queue. Apply §10.4's lazy, size-limited RAM cache to logos
+so artwork does not erase the savings made on channel metadata.
+
 Also: the grouping index is rebuilt in SALU only — **switching group mode never
 touches the engine**, so it cannot interrupt playback.
 
@@ -1286,13 +1470,21 @@ ever telling a legitimate 50 000-channel user "no".
   — they carry credentials.
 - Search matches name and group only, never the URL (§10.9) — otherwise a
   typed token could surface a credential as a "match".
+- Logo URLs may also contain credentials: do not render them in tooltips or
+  errors, or log them. Image requests must not forward playlist credentials to
+  an unrelated host. No outside metadata/logo lookup service is used.
 
 ### 10.11 Out of scope, explicitly
 
-`tvg-logo` (colour art per row fights rule 6, plus thousands of fetches),
-EPG / `tvg-id` guide data, catch-up, Xtream APIs, editing or saving a modified
-m3u, and per-channel resume (`resume_service.dart:92` already skips anything
-containing `://`).
+EPG / `tvg-id` guide data, catch-up, Xtream APIs, external metadata/logo
+lookup services, editing or saving a modified m3u, disk-backed queue/logo
+storage, and per-channel resume (`resume_service.dart:92` already skips
+anything containing `://`).
+
+**Superseded exclusion (owner, 2026-09-08, point 2): `tvg-logo` is now IN
+SCOPE.** Provider logos replace per-channel numbers before the name (§10.4),
+with viewport-only loading and a bounded RAM cache. This does not add EPG or
+any other external enrichment source.
 
 ### 10.12 Build steps — m3u mode (each leaves the app runnable)
 
@@ -1302,17 +1494,17 @@ adds the channel-list behaviour behind it. Do not interleave them.
 
 | # | Step | Leaves the app |
 |---|---|---|
-| **M-1** | **`QueueItem` + `QueueService`** (§10.0). Turn `paths` into `List<QueueItem>`, keep `List<String> get paths` as the transitional getter so the 6 existing read sites compile untouched. Add `isChannelList`. | identical behaviour, local only |
-| **M-2** | **The parser** — fetch, `#EXTINF` attribute regex, display name after the comma, intern group/language/country (M44), precompute the lowercase search key (M43), byte ceiling (M46). **Off the UI isolate.** Pure Dart, unit-testable with no UI. | unused, but tested |
+| **M-1** | **`QueueItem` + `QueueService` — point 2 FINAL** (§10.0). One RAM-only list of item records, including optional IDs/names/group/language/country/logo URL, no channel number. Migrate current Phase A notifier readers and mutations without a second stored URL list; add data-derived `isChannelList`. | identical behaviour, local only |
+| **M-2** | **The parser** — fetch, `#EXTINF` attributes and display name, ID-first/name-fallback identity, optional `tvg-logo`, `group-title` → `#EXTGRP` category fallback (point 5 FINAL), nullable grouping details with `Unknown` in the view. Intern group/language/country (M44), precompute the search key (M43), enforce the byte ceiling (M46), release raw text/buffers. **Off the UI isolate.** Pure Dart, unit-testable with no UI. | unused, but tested |
 | **M-3** | **Route m3u URLs to the parser** instead of to mpv (`open_media_service.playUrl`). Build the queue from the parsed channels. Fix the index mirror, which is gated on `paths.length == medias.length` (`player_service.dart:177`). | m3u loads, plain list, no grouping |
 | **M-4** | **The engine path (M40)** — in channel mode `_openQueueAt` opens **one** media, never the list. Local mode keeps the existing full-queue path untouched. | channel changes are constant-time |
 | **M-4b** | **Failure skip (§10.8)** — extend the existing `stream.error` listener (`player_service.dart:267`, currently a `debugPrint`): toast "Failed to load" + name, advance to the next channel, and enforce the 3-strike cascade guard. | dead channels self-skip |
-| **M-5** | **Title bar + rows** — channel name (M22), channel number in the duration slot, no grip, no bin, favourite only (M14/M15). | list is usable |
-| **M-6** | **Favourites** — the store keyed by host → `tvg-id`/`tvg-name`/name (M11/M12), debounced writes, the filter toggle, hover-vs-filled visibility (M10). | favourites work |
-| **M-7** | **Grouping + accordion** — the group index, the four modes, auto-pick (M6), the pill, dimming unavailable modes, the accordion rules of §10.5, sticky heads. | grouping works |
+| **M-5** | **Title bar + rows** — channel name (M22), logo before the name instead of numbers (M16), lazy bounded RAM image loading (§10.4), total-only count inside search (§10.9), no grip/bin, favourite as the only row action (M14/M15). | list is usable |
+| **M-6** | **Favourites — point 6 FINAL** — match the approved preview exactly (§10.15): host → `tvg-id`/`tvg-name`/name store (M11/M12), debounced writes, filter toggle, hover-vs-filled visibility (M10). Use production `shared_preferences`; no browser study controls/data. | favourites match the approved reference |
+| **M-7** | **Grouping + accordion — point 5 FINAL** — match the approved preview exactly (§10.15): group index, four modes with **Flat on every fresh load** (M6), the pill, dimmed unavailable modes, accordion/sticky heads, `Unknown` last and the approved same-file fallback (§10.2a). | grouping matches the approved reference |
 | **M-8** | **Reveal** — chevron on a collapsed playing group, the off-screen edge chevron (§10.6). | never lose the playing channel |
 | **M-9** | **Live chrome** — the inert timeline, the shimmer, the hairline handoff, dimmed+silent seek, Prev/Next rules (§10.8a–c). | live playback reads correctly |
-| **M-10** | **Progressive load** (M41) + the fetch shimmer (M42) + the failed-channel toast (M37). | 50 000 channels feel instant |
+| **M-10** | **Progressive load** (M41) + fetch shimmer (M42) + failed-channel toast (M37). Measure peak/retained RAM with 50 000 channels, raw-buffer release, viewport row count, bounded logo cache/concurrency and cancellation. | large lists stay responsive within measured memory budgets |
 | **M-11** | **Docs** — flip this section's status, update `follow.md` §1.6 with any new marks, README phase table. | shipped |
 
 **Two traps, both already paid for once in §5:** every action must act on the
@@ -1329,13 +1521,22 @@ over the list, so a mode switch must never touch the engine (M45).
    **absent**. Load a local folder → repeat and shuffle are back, unchanged.
 4. Header pitch: the field's ✕ is nowhere near the bin. `[group·fav] 14
    [search] 14 [bin] 14 [close]` (slot 5 is the Close ✕ — no undock slot, §4.8).
-5. Group-by opens a pill with four modes, the active one glowing; the mark
-   itself never changes shape. A playlist carrying only `group-title` dims
-   language and country instead of hiding them.
+5. A fresh playlist load starts **Flat**, regardless of tag coverage or the
+   last load's grouping mode. Group-by opens a four-mode pill; the chosen option
+   glows and the main mark never changes shape. A category-only playlist dims
+   language and country instead of hiding them. No automatic category choice.
+5b. At equivalent desktop sizes, grouping/favourites match the approved
+    preview's marks, spacing, material, motion and interaction states (§10.15).
+    No new labels, alternate controls, row numbers or study-only UI are added.
 6. Category keeps the provider's first-appearance order; language and country
-   are alphabetical; `Uncategorized` is last.
-7. All groups collapsed by default, only the playing channel's group open. With
-   nothing playing, **nothing** is open.
+   are alphabetical; **`Unknown` is last** for missing values. Recognised
+   country/language aliases share a group; missing fields never block playback.
+6b. Missing/blank `group-title` + an entry's `#EXTGRP` → use that category.
+    Both present → `group-title` wins. Both missing/blank → `Unknown` when
+    grouping is available. Never infer country/language from an ID or URL.
+7. When a grouped mode is chosen, only the playing channel's group opens;
+   the rest stay collapsed. With nothing playing, **nothing** is open. Fresh
+   loads are Flat, so they have no group heads until the viewer asks for them.
 8. Exactly one group open at a time; opening another closes the first.
 9. Open "Movies" while a News channel plays, let it advance → **Movies stays
    open** and the News group head carries the chevron.
@@ -1352,8 +1553,17 @@ over the list, so a mode switch must never touch the engine (M45).
     as a match.
 16. Rows have no grip and no bin; drag does nothing; the only row action is the
     bookmark.
-17. Channel number sits in the duration slot; a channel with no `tvg-chno`
-    leaves it **empty** — never `0`, never "LIVE".
+17. A provider logo appears **before the channel name**; no channel or row
+    number is rendered anywhere, even if input includes `tvg-chno`. There is
+    no `0` or "LIVE" substitute and no group-head count.
+17b. Missing/broken logo → a quiet empty slot, stable name alignment, no toast
+    and no channel skip. Loading a channel or Undo never waits for its image.
+17c. A large list downloads logos only around the viewport, decodes at display
+    size and respects its bounded RAM cache and concurrency limits. Fast scroll
+    or source switching cannot attach an old image to a different row.
+17d. The search field shows **only the total loaded channel count**: a finished
+    12 750-channel list reads `12750` before and after search/favourites filtering,
+    never `shown / total`. Local playlist counts keep their Phase A behaviour.
 18. While a live channel plays: the timeline is **present, full size, empty and
     inert** — no fill, no thumb, no readouts, no hover chip, and clicking or
     dragging it does nothing.
@@ -1382,6 +1592,16 @@ over the list, so a mode switch must never touch the engine (M45).
     immediately.
 28. No instruction text, no placeholder, no "LIVE" badge, no red dot, no
     spinner, no confirmation dialog anywhere in m3u mode.
+29. Point 2 identity uses `tvg-id` first, then `tvg-name`/display name. Optional
+    metadata is playlist-provided only; unknown details stay null and group as
+    `Unknown`. No external enrichment requests or URL-based guesses occur.
+30. A 50 000-channel memory profile shows one queue, shared repeated grouping
+    text, index-based views, viewport-only widgets and a bounded logo cache.
+    Raw source buffers are released after parsing; old loads and expired Undo
+    snapshots are not retained. Neither the queue nor logos are persisted.
+31. Open local → IPTV → local: the same queue service changes entries, with no
+    parallel metadata list. Local ordering, resume, repeat/shuffle and Undo
+    continue to pass Phase A's checks; saved URLs/favourites remain persistent.
 
 ### 10.14 Decision record — m3u
 
@@ -1392,33 +1612,37 @@ over the list, so a mode switch must never touch the engine (M45).
 | M3 | Dead channel | ~~stay on it, never auto-advance~~ → **REVERSED (M3b)** | superseded |
 | M3b | Dead channel | toast **"Failed to load"** + name, then **auto-advance to the next channel and play it** — the viewer never hand-clicks past dead entries | **owner**, 2026-09-06, §10.8 |
 | M3c | Who drives the skip | **SALU, off `stream.error`** — never mpv's native advance, which would require handing mpv the whole list and cost ~1–2 s per change (M40). The listener already exists at `player_service.dart:267` | forced by M40, §10.8a-i |
-| M3d | Cascade guard | **stop after 3 consecutive failures**; reset on any success or manual pick; never wrap past the end of the list | default, §10.8a-ii |
+| M3d | Cascade guard | **APPROVED — stop after 3 consecutive failures**; reset on any success or manual pick; never wrap past the end of the list | **owner**, 2026-09-08, §10.8a-ii |
 | M3e | Skip trigger | **failure only** — `completed` never advances in channel mode (a live channel does not end) | default, §10.8a-ii |
 | M4 | Group modes | flat · category · language · country | **owner** |
-| M5 | Group-by UI | one stable mark + pill, never a morphing glyph | default, §10.2 |
-| M6 | Group-by default | auto-pick from tag coverage, remembered per playlist | default, §10.2 |
-| M7 | Missing-tag modes | dimmed, not hidden | default, §10.2 |
+| M5 | Group-by UI | **FINAL (point 5)** — approved preview's stable mark + four-option pill exactly; never a morphing glyph or added labels | **owner**, 2026-09-08, §§10.2, 10.15 |
+| M6 | Group-by default | **FINAL — always Flat on every fresh load**; manual grouping only, retained during this load's panel/search/filter changes, never auto-picked from coverage or restored over Flat on reload | **owner**, 2026-09-08, §10.2 |
+| M7 | Missing-tag modes | **FINAL (point 5)** — dimmed, not hidden; availability uses the underlying playlist, not filtered results | **owner**, 2026-09-08, §§10.2–10.2a |
 | M8 | Multi-value tags | not split this phase | default, §10.2 |
-| M9 | Favourite mark | bookmark, not star | default, §10.3 |
-| M10 | Row bookmark visibility | filled+visible when favourite; hover-only when not | default, §10.3 |
-| M11 | Channel key | `tvg-id` → `tvg-name` → name | default, §10.3 |
+| M9 | Favourite mark | **FINAL (point 6)** — the approved preview's bookmark, not a star | **owner**, 2026-09-08, §§10.3, 10.15 |
+| M10 | Row bookmark visibility | **FINAL (point 6)** — filled + always visible when favourite; hover-only when not; match approved preview exactly | **owner**, 2026-09-08, §§10.3, 10.15 |
+| M11 | Channel key | **FINAL (point 2)** — ID first, then name: `tvg-id` → `tvg-name` → display name; never row number or stream URL | **owner**, 2026-09-08, §§10.0, 10.3 |
 | M12 | Playlist key | **host**, not full URL | default, §10.3 |
-| M13 | Favourites + grouping | favourites keep groups; only search flattens | default, §10.3 |
+| M13 | Favourites + grouping | **FINAL (point 6)** — favourites keep groups; only search temporarily flattens; approved preview is binding | **owner**, 2026-09-08, §§10.3, 10.15 |
 | M14 | Rows | no drag, no reorder, no per-row delete | **owner** |
 | M15 | Row action | favourite only | **owner** |
-| M16 | Channel number | in the duration slot; empty when absent | default, §10.4 |
-| M17 | Accordion | one group open; all collapsed by default; playing group open | **owner** |
-| M18 | Nothing playing | nothing open | default, §10.5 |
-| M19 | Auto-advance vs the open group | the view is not stolen | default, §10.5 |
-| M20 | Playing channel in a collapsed group | chevron on the group head | default, §10.6 |
-| M21 | Playing row off-screen | edge chevron, click = reveal | default, §10.6 |
-| M22 | Title bar | channel name; playlist name beats stream metadata | **owner** + default |
-| M23 | Search scope | name + group, never the URL | default, §10.9 |
+| M16 | Channel numbers / logos | **FINAL (point 2), supersedes number slot** — no channel/row numbers; provider logo **before the name**; missing/broken image leaves an empty, fixed slot | **owner**, 2026-09-08, §10.4 |
+| M16b | Logo source / memory | **FINAL (point 2)** — M3U `tvg-logo` only, viewport-first, display-sized decoding, limited concurrent fetches, bounded RAM-only cache; no logo lookup service or blocking playback | **owner**, 2026-09-08, §10.4 |
+| M17 | Accordion | **FINAL (point 5)** — Flat on load; selecting grouping opens only the playing group; at most one group open, and all may be collapsed | **owner**, 2026-09-08, §§10.5, 10.15 |
+| M18 | Nothing playing | **FINAL (point 5)** — nothing open in a grouped view | **owner**, 2026-09-08, §10.5 |
+| M19 | Auto-advance vs the open group | **FINAL (point 5)** — the view is not stolen; preserve a group deliberately browsed by the viewer | **owner**, 2026-09-08, §10.5 |
+| M20 | Playing channel in a collapsed group | **FINAL (point 7)** — chevron on the group head; never override a filter | **owner**, 2026-09-08, §10.6 |
+| M21 | Playing row off-screen | **FINAL (point 7)** — edge chevron, click = expand if needed and reveal; no filter override | **owner**, 2026-09-08, §10.6 |
+| M22 | Title bar | **FINAL (point 4)** — channel's playlist-supplied name, never overwritten by stream metadata; logos not channel numbers in rows | **owner**, 2026-09-08, §§10.4, 10.7 |
+| M23 | Search scope | **FINAL (point 7)** — name + group, never URL; temporarily flatten then restore the chosen grouping/browsed group; original queue untouched | **owner**, 2026-09-08, §10.9 |
+| M23b | Channel count | **FINAL (point 2)** — total loaded channels only, inside search; unchanged by filtering; no per-row or group-head counts. Local count behaviour untouched | **owner**, 2026-09-08, §10.9 |
 | M24 | Bin | unloads channels only; saved seven and favourites survive | default, §10.9 |
 | M25 | Undo | in-memory snapshot, never a re-fetch | default, §10.9 |
 | M26 | Bridge | **void** — undock was removed (2026-09-07, §4.8), so no cross-isolate `PlaylistBridge` will be built | ~~default~~ §10.9 |
-| M27 | Parser | SALU parses the m3u; mpv gets resolved URLs | forced by §10.0 |
-| M28 | Data model | **one `List<QueueItem>`** — the parallel metadata list is **rejected** (desync across 9 call sites; a source switch would rebuild two collections) | **owner** (challenge) + §10.0 |
+| M27 | Parser / playback split | **FINAL (point 1)** — SALU reads the channel directory and retains channel details + URLs; mpv plays only the selected channel URL and handles its HLS segment manifests. Design approved; implementation pending | **owner**, 2026-09-08, §10.0 |
+| M28 | Queue upgrade | **FINAL (point 2)** — one RAM-only `List<QueueItem>`; URL + optional IDs/name/group/language/country/logo URL, no channel number, no parallel metadata table; local behaviour unchanged | **owner**, 2026-09-08, §10.0 |
+| M28b | RAM efficiency | **FINAL (point 2)** — share repeated grouping text, use index-based views and visible rows only, release raw input/temporary data and expired snapshots; bounded RAM logo cache, no queue/logo disk store | **owner**, 2026-09-08, §§10.0, 10.4, 10.10c |
+| M28c | Missing information | **FINAL (point 2)** — playlist data only; identity uses ID then name, not guessed geography/categories. Missing details stay null, shown under `Unknown` last; unavailable grouping modes dim | **owner**, 2026-09-08, §§10.0, 10.2 |
 | M29 | Timeline when live | stays, exact size, **inert and empty** — never hidden (rule 5), never greyed (that is icon-disabled language) | **owner** (raised) + default, §10.8a |
 | M30 | Live shimmer | slow quiet left→right drift on the empty track; stops when the stream stalls = free buffering signal | default, §10.8a |
 | M31 | Bottom hairline when live | **carries the same shimmer** while the chrome is auto-hidden — the two surfaces hand off and never both show; fixes a hairline that currently renders empty on live (`frac = 0`) | **owner**, 2026-09-06, §10.8c |
@@ -1432,13 +1656,102 @@ over the list, so a mode switch must never touch the engine (M45).
 | M37 | Failed-channel toast | the existing card shape, wording **"Failed to load"** + the channel name (a toast may carry words; follow.md §1.6 allows it — controls may not) | **owner**, 2026-09-06 |
 | M38 | Volume / mute OSD | unchanged from local | **owner**, 2026-09-06 |
 | M39 | **Channel cap** | **none** — a cap turns "slow" into "refused"; 50 000 parses in 149 ms | **owner** ("stay responsive at 50k"), §10.10 |
-| M40 | **Engine holds ONE media in channel mode** | never hand mpv the list — `playlist-pos` costs ~1 s at 40k, ~2 s at 80k (mpv#6162). Local mode keeps the full-queue path | forced by §10.10a |
+| M40 | **Engine holds ONE media in channel mode** | **FINAL (point 3)** — only the selected channel reaches mpv; SALU owns Prev/Next in original order and keeps the list on Stop. Local mode keeps the full-queue path | **owner**, 2026-09-08, §10.10a |
 | M41 | Progressive load | first ~200 rows at 0.9 ms, tail at 149 ms; a channel is playable before the parse ends | default, §10.10b |
 | M42 | Loading state | only for the network fetch; reuse the §10.8a shimmer, no spinner, no words | default, §10.10b |
 | M43 | Search keys | precomputed at parse time; narrowing while typing. Naive per-keystroke lowercasing is **banned** (40.8 ms = dropped frame) | default, §10.10c |
-| M44 | String interning | intern group / language / country — 28 unique values instead of 150 000 strings | default, §10.10c |
+| M44 | String interning | **FINAL (point 2)** — share repeated group/language/country strings within the loaded playlist; release old pools instead of retaining past loads forever | **owner**, 2026-09-08, §§10.0, 10.10c |
 | M45 | Group-mode switch | re-index in SALU only, never an engine call — cannot interrupt playback | default, §10.10c |
 | M46 | Download ceiling | abort past ~64 MB and fail with the M37 toast — the limit belongs on bytes, not channels | default, §10.10d |
+| M47 | Same-file category fallback | **FINAL (point 5)** — use the entry's `#EXTGRP` only if `group-title` is absent/blank; neither available means unknown; no outside enrichment | **owner**, 2026-09-08, §10.2a |
+| M48 | Preview implementation fidelity | **FINAL (points 5 & 6)** — implement grouping/favourites appearance and behaviour exactly as the approved preview committed with this sign-off; no silent redesign | **owner**, 2026-09-08, §10.15 |
+
+### 10.15 Approved grouping / favourites preview — points 5 & 6 FINAL (2026-09-08)
+
+**Owner sign-off: “as shown the preview will be implemented exactly.”** The
+version of `design/iptv-channel-preview/` committed with this approval is the
+**binding visual and interaction reference** for points 5 and 6, not an optional
+inspiration. Visual sign-off is complete; production Flutter implementation
+remains pending.
+
+**Implementation fidelity contract:**
+
+- Match the approved grouping/favourites marks, layout, spacing, glass material,
+  hover/press/active states, motion, pill, accordion/sticky heads and bookmark
+  interactions exactly at equivalent desktop sizes. No redesign, substitute
+  glyphs, extra labels or simplified states without the owner's approval.
+- The reference files are `index.html` / `style.css` (layout/material),
+  `marks.mjs` (glyphs), `app.mjs` (interaction) and `model.mjs` (grouping,
+  fallback, filtering and favourites semantics). Preserve this approved
+  reference; future reference changes also require explicit owner approval.
+- Port these approved behaviours into SALU's Flutter services/widgets. Browser
+  `localStorage` is only a stand-in for production `shared_preferences`;
+  simulated playback is not a replacement for `media_kit` / mpv. This approval
+  does not mark any production Phase B code as implemented.
+- Do **not** copy the study heading/footer, fixture-selector marks, reload-sample
+  shortcut, fictional channels/logos, seeded favourites or illustrative still
+  into the production app. They are explicitly preview-only scaffolding, not
+  part of the approved grouping/favourites product UI.
+
+**Runnable reference:** `design/iptv-channel-preview/index.html`.
+Run from the repository root:
+
+```sh
+python3 -m http.server 8123 --bind 0.0.0.0 --directory design/iptv-channel-preview
+```
+
+- Default sample: 48 fictional channels, Flat view, fictional provider logos,
+  a few seeded favourites, partial metadata and an `Unknown` group.
+- The three **study-only** marks above the player select mixed metadata,
+  category-only, or no grouping metadata. They are not new SALU app controls.
+- Group pill: Flat / category / language / country, unavailable options dimmed,
+  one expanded group, sticky heads and a chevron on a collapsed playing group.
+- Row bookmark: hover-to-add, filled/always visible when saved; header bookmark
+  filters favourites without flattening groups. The browser study uses
+  `localStorage` to simulate saved favourites; production still uses
+  `shared_preferences`. The queue is recreated in RAM, not persisted.
+- Search, total-only count, reveal indicators, original-order Prev/Next,
+  Stop/Play, clear + 5 s Undo and panel close/reopen are interactive simulations.
+- `?sample=large` generates 50 000 synthetic records to exercise viewport-only
+  DOM rows. **This is not a Dart/mpv performance or RAM benchmark.** Production
+  image-cache byte limits, progressive M3U parsing and actual playback remain
+  unimplemented. The backdrop is an AI-generated still, not a live channel.
+- The preview's same-file `#EXTGRP` fallback is now **FINAL with point 5**
+  (§10.2a); it is part of the approved implementation, not an outstanding proposal.
+- See the study README for repeatable model/browser checks. **Points 5 and 6
+  are approved in full as previewed**; only their production implementation
+  remains pending. Validate the Flutter result against this committed reference.
+
+### 10.16 Flutter / Dart M3U research — checked 2026-09-08
+
+**Finding:** Dart has community playlist-parsing packages; Flutter's documented
+video solution is a playback plugin, not a built-in IPTV directory/grouping/
+favourites feature. The Flutter guide demonstrates `video_player` for playback;
+it does not replace SALU's channel-list work. [1](https://docs.flutter.dev/cookbook/plugins/play-video)
+
+- **`m3u_nullsafe`** is a Dart M3U/M3U-Plus parser with custom entry attributes
+  and a `sortedCategories` helper. Its API takes the complete document as a
+  `String` and returns a `Future<List<...>>`; that is not a progressive channel
+  stream. The package README also explicitly lists streaming input as missing.
+  [3](https://pub.dev/documentation/m3u_nullsafe/latest/m3u/)
+  [5](https://pub.dev/documentation/m3u_nullsafe/latest/m3u/M3uParser-class.html)
+- **`flutter_hls_parser`** handles HLS master/media `.m3u8` manifests. That is
+  different from SALU's IPTV channel directory; the selected channel's HLS
+  playback remains mpv's job. [1](https://pub.dev/packages/flutter_hls_parser/versions)
+- **Keep `media_kit` / mpv for playback.** `media_kit` supports Windows and can
+  open one `Media` or a `Playlist`; SALU already depends on it. No second player
+  package is needed for this plan. [1](https://pub.dev/packages/media_kit)
+  [4](https://pub.dev/documentation/media_kit/latest/)
+
+**Recommendation, not a dependency change:** keep a small, tested, pure-Dart
+channel-directory parser behind SALU's own interface, running off the UI
+isolate. Evaluate an existing package against real fixtures before adopting it;
+a `Future` alone does not move parsing off the UI thread. The required checks
+include quoted/blank/missing attributes, names containing commas, BOM/CRLF,
+relative URLs, HLS-vs-directory detection, cancellation, byte limits,
+progressive batches, normalisation and shared strings. Existing packages can
+be useful references, but do not assume they satisfy SALU's large-list and
+privacy requirements without tests. **No dependency was added in this review.**
 
 ---
 

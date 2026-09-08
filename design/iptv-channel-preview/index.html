@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>SALU — Channel playlist study</title>
+  <link rel="icon" type="image/png" href="assets/salu.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="study-shell">
+    <header class="study-heading" aria-label="Design study, not application chrome">
+      <div class="study-name">SALU <span>CHANNEL PLAYLIST</span></div>
+      <div class="sample-picker" aria-label="Preview sample playlists">
+        <span id="sample-label">Mixed metadata</span>
+        <button class="icon-button sample-button" data-sample="mixed" data-tip="Mixed metadata" aria-label="Mixed metadata" aria-pressed="true"><span data-icon="dots"></span></button>
+        <button class="icon-button sample-button" data-sample="partial" data-tip="Category only" aria-label="Category only" aria-pressed="false"><span data-icon="partial"></span></button>
+        <button class="icon-button sample-button" data-sample="missing" data-tip="No grouping metadata" aria-label="No grouping metadata" aria-pressed="false"><span data-icon="missing"></span></button>
+      </div>
+    </header>
+    <main id="player" class="player" aria-label="SALU channel interaction preview">
+      <div id="video" class="video-canvas" aria-label="Illustrative still, not live playback">
+        <div class="scene"></div><div class="scene-shade"></div>
+        <img class="idle-logo" src="assets/salu.png" alt="SALU" draggable="false">
+      </div>
+      <div class="chrome" id="chrome">
+        <div class="titlebar">
+          <img class="title-logo" src="assets/salu.png" alt="" draggable="false">
+          <span id="channel-title">Atlas Earth</span>
+          <div class="window-actions">
+            <button id="minimise" class="icon-button caption-button" data-tip="Minimise preview" aria-label="Minimise preview"><span data-icon="minimise"></span></button>
+            <button id="maximise" class="icon-button caption-button" data-tip="Maximise preview" aria-label="Maximise preview"><span data-icon="maximise"></span></button>
+            <button id="window-close" class="icon-button caption-button" data-tip="Close preview" aria-label="Close preview"><span data-icon="close"></span></button>
+          </div>
+        </div>
+        <div class="controller">
+          <div id="timeline" class="timeline" aria-label="Live timeline, seeking unavailable"><i></i></div>
+          <div class="control-row">
+            <div class="view-controls">
+              <button id="reload" class="icon-button control-button" data-tip="Reload sample playlist" aria-label="Reload sample playlist"><span data-icon="plus"></span></button>
+              <button id="playlist-toggle" class="icon-button control-button is-active" data-tip="Hide playlist" aria-label="Hide playlist" aria-expanded="true"></button>
+            </div>
+            <div class="transport">
+              <div class="transport-group">
+                <button id="play" class="icon-button control-button" data-tip="Pause" aria-label="Pause"><span data-icon="pause"></span></button>
+                <button id="stop" class="icon-button control-button" data-tip="Stop" aria-label="Stop"><span data-icon="stop"></span></button>
+              </div>
+              <div class="transport-group">
+                <button id="previous" class="icon-button control-button" data-tip="Previous channel" aria-label="Previous channel"><span data-icon="previous"></span></button>
+                <button id="next" class="icon-button control-button" data-tip="Next channel" aria-label="Next channel"><span data-icon="next"></span></button>
+              </div>
+              <div class="transport-group">
+                <button class="icon-button control-button" disabled data-tip="Seek backward" aria-label="Seek backward"><span data-icon="back"></span></button>
+                <button class="icon-button control-button" disabled data-tip="Seek forward" aria-label="Seek forward"><span data-icon="forward"></span></button>
+              </div>
+              <div class="sound-group">
+                <button id="mute" class="icon-button control-button" data-tip="Mute" aria-label="Mute"><span data-icon="volume"></span></button>
+                <div class="volume-wrap" data-tip="Volume">
+                  <input id="volume" aria-label="Volume" type="range" min="0" max="100" value="62">
+                  <span id="volume-value" aria-hidden="true">62%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <aside id="playlist-panel" class="playlist-panel" aria-label="Playlist">
+        <div id="panel-header" class="panel-header">
+          <div class="mode-pair">
+            <button id="group-by" class="icon-button header-button" data-tip="Group by" aria-label="Group by" aria-haspopup="menu" aria-expanded="false"><span data-icon="group"></span></button>
+            <button id="favourites" class="icon-button header-button" data-tip="Favourites" aria-label="Favourites" aria-pressed="false"><span data-icon="bookmark"></span></button>
+          </div>
+          <div class="search-slot">
+            <div class="search-field">
+              <span class="search-symbol" data-icon="search" aria-hidden="true"></span>
+              <input id="search" type="text" autocomplete="off" spellcheck="false" aria-label="Search channels" title="Search channels">
+              <span id="channel-count" class="channel-count" aria-label="Total channels">48</span>
+              <button id="search-clear" class="icon-button search-clear" data-tip="Clear search" aria-label="Clear search" hidden><span data-icon="close"></span></button>
+            </div>
+          </div>
+          <button id="clear-playlist" class="icon-button header-button" data-tip="Clear playlist" aria-label="Clear playlist"><span data-icon="trash"></span></button>
+          <button id="panel-close" class="icon-button header-button" data-tip="Close playlist" aria-label="Close playlist"><span data-icon="close"></span></button>
+        </div>
+        <div id="list-area" class="list-area">
+          <div id="viewport" class="list-viewport" role="list" aria-label="Channels" tabindex="-1"><div id="list-height" class="list-height"></div><div id="list-rows" class="list-rows"></div></div>
+          <div id="sticky-head" class="sticky-head" hidden></div>
+          <button id="reveal-up" class="icon-button edge-reveal edge-up" data-tip="Reveal playing channel" aria-label="Reveal playing channel above" hidden><span data-icon="up"></span></button>
+          <button id="reveal-down" class="icon-button edge-reveal edge-down" data-tip="Reveal playing channel" aria-label="Reveal playing channel below" hidden><span data-icon="down"></span></button>
+          <div id="empty-state" class="empty-state" hidden aria-label="No matching channels"></div>
+          <div id="scrollbar" class="salu-scrollbar" aria-hidden="true"><div id="scroll-thumb"></div></div>
+        </div>
+      </aside>
+      <div id="osd" class="osd" role="status" hidden></div>
+      <div class="hairline" aria-hidden="true"><i></i></div>
+      <button id="reopen-preview" class="icon-button reopen-preview" aria-label="Reopen preview" data-tip="Reopen preview" hidden><span data-icon="play"></span></button>
+    </main>
+    <footer class="study-footer"><span>INTERACTION STUDY <i>·</i> Simulated playback</span><span id="sample-description">Fictional channels · local artwork</span></footer>
+  </div>
+  <div id="menu-shield" class="menu-shield" hidden></div>
+  <div id="group-menu" class="group-menu" role="menu" aria-label="Group by" hidden>
+    <button class="icon-button menu-option" data-mode="flat" role="menuitemradio" aria-checked="true" aria-label="Flat" data-tip="Flat"><span data-icon="flat"></span></button>
+    <button class="icon-button menu-option" data-mode="category" role="menuitemradio" aria-checked="false" aria-label="Category" data-tip="Category"><span data-icon="category"></span></button>
+    <button class="icon-button menu-option" data-mode="language" role="menuitemradio" aria-checked="false" aria-label="Language" data-tip="Language"><span data-icon="language"></span></button>
+    <button class="icon-button menu-option" data-mode="country" role="menuitemradio" aria-checked="false" aria-label="Country" data-tip="Country"><span data-icon="country"></span></button>
+  </div>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
