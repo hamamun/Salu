@@ -1558,6 +1558,70 @@ adds the channel-list behaviour behind it. Do not interleave them.
 | **M-10** | **Progressive load** (M41) + fetch indicator (M42, the §10.8a soft light) + failed-channel toast (M37). Measure peak/retained RAM with 50 000 channels, raw-buffer release, viewport row count, bounded logo cache/concurrency and cancellation — **re-measure parse timings on `m3u_xmltv`** (§10.10). | large lists stay responsive within measured memory budgets |
 | **M-11** | **Docs — point 12 FINAL (owner, 2026-09-08)** — pass §10.13's checklist, flip this section's status, update `follow.md` §1.6 with any new marks, README phase table. | shipped |
 
+#### Build progress — M-1 … M-4b shipped (engineering record, 2026-09-08)
+
+Code-level status only; **nothing here is an owner sign-off**, and §10.13's
+acceptance checklist has not been run against a build (there is no Flutter
+engine in the build sandbox — verification is the analyzer plus the pure-Dart
+suites in `test/`). The channel **UI** (M-5 … M-9) is still Phase A's local
+panel: rows still show a grip and a bin, the header still shows repeat and
+shuffle, and there is no grouping, favourites or logo yet.
+
+| Step | State | Where |
+|---|---|---|
+| **M-1** | shipped | `queue_item.dart`, `queue_service.dart` |
+| **M-2** | shipped — in-repo pure-Dart parser behind SALU's own interface, **not** `m3u_xmltv` (see the deviation note under M49/§10.16) | `lib/core/m3u/` |
+| **M-3** | shipped | `channel_source.dart`, `channel_load_service.dart`, `open_media_service.dart`, `drop_handler.dart`, `main.dart`, `home_screen.dart` |
+| **M-4** | shipped | `player_service.dart::_openQueueAt` |
+| **M-4b** | shipped | `channel_skip_policy.dart`, `player_service.dart::_onEngineError` |
+
+What M-3 routes, and what it deliberately does not:
+
+- Every open verb — Open File…, Open URL, drop, Explorer open-with, the launch
+  argument — funnels through `ChannelLoadService.openSource` / `openBatch`. An
+  m3u **URL** and a local **`.m3u` / `.m3u8` file** both reach SALU's parser;
+  only the fetch differs (M55). mpv never receives a channel list.
+- A source that *looks* like a directory but turns out to be an **HLS manifest**
+  or not M3U text at all is handed straight back to the engine
+  (`ChannelListHls` / `ChannelListNotPlaylist`) — a false positive costs one
+  sniffed request, never a broken open.
+- **Media wins in a mixed batch**: a multi-select of videos plus an `.m3u`
+  plays the videos and ignores the playlist file, because a channel list can
+  never share a queue with local files. Dropping an `.m3u` onto the *open
+  panel* (the append gesture) ignores it for the same reason.
+- The failed-**playlist** toast names the playlist, never its URL: a local file
+  name, a remote **host** (§10.10e). It is not a failed channel and never
+  triggers the M3b skip.
+- The URL library's health dot asks the honest question for a directory — *did
+  the playlist load?* — instead of watching the first channel's stream.
+- The index mirror's `paths.length == medias.length` gate is fixed: in channel
+  mode SALU keeps its own index (mpv's is always 0 and says nothing), and the
+  title bar reads the **channel's** label, never `1234` off a stream URL.
+
+M-4 / M-4b, and the Phase A behaviour they must not disturb:
+
+- `_openQueueAt` opens **one** `Media` in channel mode and returns; the local
+  full-queue path (native advance, gapless, `Media(start:)` resume) is
+  untouched below it.
+- Repeat and shuffle are inert in channel mode (`_shuffleDriving` is false, the
+  engine is put on `PlaylistMode.none`), so a shuffle left on by a local
+  session can never drive channel zapping. `completed` is not an advance
+  trigger there — skipping is failure-only.
+- Prev/Next walk the channel list in list order, never wrap, and park at both
+  ends: at the head, and at the **progressive-load frontier** (M56) because
+  `hasNext` is honestly false until more rows land. Previous never "restarts" a
+  live stream (§10.8b), and it dims on the first channel.
+- The skip rule lives in `ChannelSkipPolicy` as pure bookkeeping so the locked
+  behaviour is testable without an engine: toast + next channel, **3**
+  consecutive failures stop the cascade, any success or manual pick resets it,
+  the tail never wraps, and a burst of mpv error lines for one dead channel
+  fires exactly one skip.
+
+Still open before Phase B can be called done: M-5 … M-11, and the whole of
+§10.13 on a real Windows build — including the Phase A regression sweep
+(check 31) and the failure-cascade checks (24, 24b, 24c) against a live
+provider.
+
 **Two traps, both already paid for once in §5:** every action must act on the
 **real** channel list, never on the filtered view; and the group index is a view
 over the list, so a mode switch must never touch the engine (M45).

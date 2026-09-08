@@ -134,7 +134,41 @@ class _OsdDeckState extends State<OsdDeck>
       OsdResumeCard c => _ResumeToast(card: c),
       OsdUndoCard c => _UndoToast(card: c),
       OsdAutoloadCard c => _TransientCard(child: _autoloadBody(c)),
+      OsdFailedCard c => _TransientCard(child: _failedBody(c)),
     };
+  }
+
+  /// "Failed to load" + the name of what failed (playlist_imp.md §10.8 ·
+  /// §10.10b) — the deck's existing card shape, the same slot that names
+  /// the item on Next. The playlist family's quiet mark carries it (no
+  /// chevron: nothing is claimed to be playing here) and **no new mark
+  /// is invented**. The [OsdFailedCard.name] is a channel label or a
+  /// playlist name — never a URL (§10.10e).
+  Widget _failedBody(OsdFailedCard card) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconTheme.merge(
+          data: const IconThemeData(color: AppColors.textPrimary),
+          child: const NowRowMark(size: 16, now: -1),
+        ),
+        const SizedBox(width: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: Text(
+            'Failed to load — ${card.name}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   /// The auto-load whisper (autoload_imp.md §4): the playlist's quiet

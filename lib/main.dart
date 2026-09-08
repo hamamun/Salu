@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/channel_load_service.dart';
 import 'core/folder_autoload_service.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
@@ -37,11 +38,17 @@ Future<void> main(List<String> args) async {
         await windowManager.focus();
         final String? path = extractMediaPathFromArgs(secondArgs);
         if (path != null) {
-          await PlayerService.instance.openPath(path);
-          // Single-file open-with — folder auto-load may kick in
-          // (autoload_imp.md §2; the mode setting and exclusions gate
-          // everything inside).
-          unawaited(FolderAutoloadService.instance.maybeExpand(path));
+          // A `.m3u` / `.m3u8` argument is a channel directory SALU
+          // reads itself (playlist_imp.md M55); anything else opens as
+          // before.
+          final bool channels =
+              await ChannelLoadService.instance.openSource(path);
+          if (!channels) {
+            // Single-file open-with — folder auto-load may kick in
+            // (autoload_imp.md §2; the mode setting and exclusions gate
+            // everything inside).
+            unawaited(FolderAutoloadService.instance.maybeExpand(path));
+          }
         }
       },
     );

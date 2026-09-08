@@ -124,6 +124,60 @@ void main() {
       expect(q.isChannelList, isFalse);
       expect(q.current!.label, 'stream');
     });
+
+    test('progressive batches append behind the playing channel (M-3)', () {
+      // Batch 1 installs the list and row 0 starts playing (§10.10b).
+      q.setItems(<QueueItem>[
+        const QueueItem('http://h/0', name: 'Ch 0'),
+        const QueueItem('http://h/1', name: 'Ch 1'),
+      ], 0);
+      int fires = 0;
+      void count() => fires++;
+      q.items.addListener(count);
+
+      // The tail arrives while channel 0 plays: the index never moves and
+      // the list is published exactly once per batch.
+      q.appendItems(<QueueItem>[
+        const QueueItem('http://h/2', name: 'Ch 2'),
+        const QueueItem('http://h/3', name: 'Ch 3'),
+      ]);
+      expect(fires, 1);
+      expect(q.index.value, 0);
+      expect(q.length, 4);
+      expect(q.isChannelList, isTrue);
+
+      // An empty batch is not a publish.
+      q.appendItems(const <QueueItem>[]);
+      expect(fires, 1);
+
+      // Next becomes possible only as rows land — the M56 frontier park.
+      expect(q.hasNext, isTrue);
+      q.setIndex(3);
+      expect(q.hasNext, isFalse);
+      q.appendItems(<QueueItem>[const QueueItem('http://h/4', name: 'Ch 4')]);
+      expect(q.hasNext, isTrue);
+      expect(q.index.value, 3);
+
+      q.items.removeListener(count);
+    });
+
+    test('appended rows get the same canonical spelling as the first batch',
+        () {
+      q.setItems(<QueueItem>[
+        const QueueItem(r'C:\Lists\media\a.mkv', name: 'A'),
+      ], 0);
+      q.appendItems(<QueueItem>[
+        // A local path inside a local .m3u (the mapper resolved it
+        // already); a stream URL keeps its exact spelling.
+        const QueueItem(r'C:\Lists\media\b.mkv', name: 'B'),
+        const QueueItem('http://h/live/1?a=1', name: 'C'),
+      ]);
+      expect(q.items.value[0].url, 'C:/Lists/media/a.mkv');
+      expect(q.items.value[1].url, 'C:/Lists/media/b.mkv');
+      expect(q.items.value[2].url, 'http://h/live/1?a=1');
+      // Channel details survive the canonical rewrite.
+      expect(q.items.value[1].name, 'B');
+    });
   });
 
   group('playlistRowOf', () {

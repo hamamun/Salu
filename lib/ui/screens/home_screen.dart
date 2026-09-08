@@ -4,6 +4,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/channel_load_service.dart';
 import '../../core/drop_handler.dart';
 import '../../core/folder_autoload_service.dart';
 import '../../core/open_media_service.dart';
@@ -110,10 +111,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? initial = widget.initialFilePath;
     if (initial != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _player.openPath(initial);
-        // Single-file open-with — folder auto-load may kick in
-        // (autoload_imp.md §2).
-        unawaited(FolderAutoloadService.instance.maybeExpand(initial));
+        // A `.m3u` / `.m3u8` launch argument lists as channels through
+        // SALU's own parser (playlist_imp.md M55).
+        unawaited(
+            ChannelLoadService.instance.openSource(initial).then((bool ch) {
+          if (ch) return;
+          // Single-file open-with — folder auto-load may kick in
+          // (autoload_imp.md §2).
+          unawaited(FolderAutoloadService.instance.maybeExpand(initial));
+        }));
       });
     }
   }

@@ -161,13 +161,17 @@ class QueueService {
   }
 
   /// Appends parsed channel records as they arrive (progressive load,
-  /// playlist_imp.md §10.10b). The current index is untouched; the list
-  /// is published once per batch. Records are stored as given — URLs are
-  /// never rewritten and the mapper already resolved local paths.
+  /// playlist_imp.md §10.10b). The current index is untouched and the
+  /// list is published exactly once per batch, so a channel keeps
+  /// playing while its list grows behind it.
+  ///
+  /// URLs go through the same canonical spelling [setItems] applies, so
+  /// batch 1 and batch 400 of one load can never disagree (a stream URL
+  /// is returned untouched — its spelling is its key, §5).
   void appendItems(List<QueueItem> batch) {
     if (batch.isEmpty) return;
     final List<QueueItem> next = List<QueueItem>.of(items.value)
-      ..addAll(batch);
+      ..addAll(_canonicalize(batch));
     items.value = List<QueueItem>.unmodifiable(next);
     _resetPass();
   }

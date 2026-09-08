@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:file_selector/file_selector.dart' as fs;
 import 'package:flutter/foundation.dart';
 
+import 'channel_load_service.dart';
 import 'drop_handler.dart';
 import 'folder_autoload_service.dart';
+import 'm3u/channel_source.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
 import 'url_library_service.dart';
@@ -50,15 +52,19 @@ class OpenMediaService {
     // into the folder's own natural order (playlist_imp.md §5) so a fresh
     // load always starts from row 0 of the shown list.
     paths.sort(MediaUtils.naturalPathCompare);
-    final PlayerService player = PlayerService.instance;
+    // A local .m3u / .m3u8 file is a CHANNEL DIRECTORY, read by SALU
+    // through the same parser and channel UI as an m3u URL — only the
+    // fetch differs (playlist_imp.md M55). It is never handed whole to
+    // mpv again, and it never shares a queue with media files
+    // (`openBatch`: media wins).
+    final bool channels = await ChannelLoadService.instance.openBatch(paths);
+    if (channels) return;
     if (paths.length == 1) {
-      await player.openPath(paths.first);
       // Folder auto-load (autoload_imp.md §2): a single pick may grow
       // its own folder queue behind the playing file — behind, never
-      // blocking, and never for a multi-pick batch.
+      // blocking, and never for a multi-pick batch. A playlist file
+      // never reaches here (autoload_imp.md §1 lock 3).
       unawaited(FolderAutoloadService.instance.maybeExpand(paths.first));
-    } else {
-      await player.openPaths(paths);
     }
   }
 
@@ -83,6 +89,23 @@ class OpenMediaService {
   static Future<void> playUrl(String url) async {
     final String target = url.trim();
     if (target.isEmpty) return;
+    // An m3u channel directory is read by SALU; mpv only ever receives
+    // the selected channel's URL (playlist_imp.md §10.0, M-3).
+    if (ChannelSource.looksLikeDirectory(target)) {
+      // For a directory the honest health question is "did the PLAYLIST
+      // load?" — a provider whose first channel happens to be dead is
+      // not a dead saved URL, and the engine's error would answer the
+      // wrong question (§10.10b: a failed playlist is not a failed
+      // channel).
+      final ChannelLoadService loader = ChannelLoadService.instance;
+      await loader.openSource(target);
+      final bool? ok = loader.lastLoadOk.value;
+      if (ok != null) {
+        UrlLibraryService.instance
+            .markHealth(target, ok ? UrlHealth.alive : UrlHealth.dead);
+      }
+      return;
+    }
     _watchHealth(target);
     await PlayerService.instance.openPath(target);
   }

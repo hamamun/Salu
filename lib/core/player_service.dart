@@ -7,6 +7,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../ui/osd/osd_controller.dart';
+import 'channel_load_service.dart';
+import 'm3u/channel_skip_policy.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
 import 'resume_service.dart';
@@ -254,6 +256,12 @@ class PlayerService {
   /// the automatic answer never starts sound nobody asked for.
   bool _userPaused = false;
 
+  // ── Failure skip · channel mode (playlist_imp.md §10.8, M-4b) ─────
+
+  /// The skip / cascade-guard bookkeeping (§10.8a-ii), kept as its own
+  /// pure object so the locked rule is testable without an engine.
+  final ChannelSkipPolicy _skips = ChannelSkipPolicy();
+
   void _init() {
     player = Player(
       configuration: const PlayerConfiguration(
@@ -270,18 +278,48 @@ class PlayerService {
       final int index =
           playlist.index.clamp(0, playlist.medias.length - 1).toInt();
       final String uri = playlist.medias[index].uri;
-      final String title = MediaUtils.displayName(uri);
+      final String key = normalizePathKey(uri);
+      final QueueService queue = QueueService.instance;
+
+      // ── The index mirror (playlist_imp.md §10.12 M-3) ───────────────
+      //
+      // Local mode: mpv holds OUR whole queue, so its index IS ours —
+      // the length check is what proves it (a mid-surgery playlist must
+      // never move the pointer).
+      //
+      // Channel mode: mpv holds ONE media (§10.10a) and its index is
+      // always 0, which says nothing. SALU is the only thing that knows
+      // which channel that media is, so the queue keeps its own index
+      // and the row is looked up by URL only as a safety net — never
+      // taken from mpv. This is the `1 != 24` gate that used to leave
+      // SALU blind to the playing channel.
+      final bool channelMode = queue.isChannelList;
+      if (!channelMode && queue.length == playlist.medias.length) {
+        queue.setIndex(index);
+      } else if (channelMode && playlist.medias.length == 1) {
+        final QueueItem? at = queue.current;
+        if (at == null || normalizePathKey(at.url) != key) {
+          // Queue URLs are stored in the same canonical spelling, so the
+          // key is what matches.
+          final int row = queue.indexOfUrl(key);
+          if (row >= 0) queue.setIndex(row);
+        }
+      }
+
+      // The title is the CHANNEL's display name in channel mode — never
+      // `1234` derived from a stream URL (§10.13 check 2) and never the
+      // URL itself (§10.10e). `MediaUtils.displayName` is a FILE name
+      // rule, so it is only ever applied to local playback; an unmatched
+      // channel keeps the title it had rather than exposing a URL stem.
+      final QueueItem? playing = channelMode ? queue.current : null;
+      final String? title = channelMode
+          ? (playing?.label ?? currentTitle.value)
+          : MediaUtils.displayName(uri);
       currentTitle.value = title;
       hasMedia.value = true;
-      unawaited(_setWindowTitle('$title — SALU'));
+      unawaited(_setWindowTitle(title == null ? 'SALU' : '$title — SALU'));
 
-      // Path + queue mirror (only when mpv holds OUR queue).
-      final String key = normalizePathKey(uri);
       currentPath.value = key;
-      final QueueService queue = QueueService.instance;
-      if (queue.length == playlist.medias.length) {
-        queue.setIndex(index);
-      }
 
       // A different item is loading — flush the previous one's resume
       // state to disk immediately (switch flush).
@@ -304,6 +342,8 @@ class PlayerService {
       isPlaying.value = playing;
       if (playing) {
         _openingWithPlay = false;
+        // Successful playback ends any failure cascade (§10.8a-ii).
+        _skips.recordSuccess();
         // Re-anchor the glide: the stopwatch must not include the
         // paused time, or the bar would leap forward on resume.
         _watch
@@ -369,9 +409,7 @@ class PlayerService {
       }
     });
 
-    _errorSub = player.stream.error.listen((String message) {
-      debugPrint('[SALU/mpv] error: $message');
-    });
+    _errorSub = player.stream.error.listen(_onEngineError);
 
     // End-of-item — the one place the "what plays next" question is
     // answered (playlist_imp.md §5's decision table). While SALU drives
@@ -449,10 +487,16 @@ class PlayerService {
   /// kept on `PlaylistMode.none` + `keep-open=always` so mpv never
   /// drifts to the next list entry on its own — SALU answers every
   /// `completed` event from the shuffle pass instead.
+  ///
+  /// Never in channel mode: repeat and shuffle are **dropped** there
+  /// (M2 · §10.1), and the engine holds one media, so there is no list
+  /// for either to act on. A shuffle left on by a previous local
+  /// session must not silently drive channel zapping.
   bool get _shuffleDriving =>
       shuffleOn.value &&
       repeatMode.value != RepeatMode.one &&
-      QueueService.instance.length > 1;
+      QueueService.instance.length > 1 &&
+      !QueueService.instance.isChannelList;
 
   /// The engine mode matching the current repeat × shuffle state
   /// (playlist_imp.md §5 — one control answers "what plays next"):
@@ -473,6 +517,15 @@ class PlayerService {
   Future<void> _applyPlaylistMode() async {
     if (!hasMedia.value) return;
     try {
+      // Channel mode: repeat and shuffle are dropped (M2) and the engine
+      // holds one media, so the only correct engine state is "play this
+      // one thing". A repeat mode left over from a local session must
+      // never make a channel loop instead of reporting its failure.
+      if (QueueService.instance.isChannelList) {
+        await _setKeepOpen('yes');
+        await player.setPlaylistMode(PlaylistMode.none);
+        return;
+      }
       if (_shuffleDriving) {
         await _setKeepOpen('always');
         await player.setPlaylistMode(PlaylistMode.none);
@@ -529,6 +582,10 @@ class PlayerService {
   /// win first, so a slow playlist event can never double-park.
   void _onMediaCompleted() {
     final QueueService queue = QueueService.instance;
+    // Channel mode: skipping is failure-only (§10.8a-ii). A live
+    // channel never "ends", and the engine holds one media, so there is
+    // nothing here to advance to or to park.
+    if (queue.isChannelList) return;
     if (_shuffleDriving) {
       int? next = queue.takeNextShuffle();
       if (next == null) {
@@ -568,6 +625,69 @@ class PlayerService {
     });
   }
 
+  // ── Failure skip (playlist_imp.md §10.8 · M-4b) ──────────────────
+
+  /// Every mpv error line lands here.
+  ///
+  /// **Local mode is unchanged** — the line is printed and nothing else
+  /// happens (Phase A behaviour is not touched).
+  ///
+  /// **Channel mode (§10.8):** the channel failed — toast
+  /// **"Failed to load"** with the channel's name, then open the **next
+  /// channel in list order** and play it. Three consecutive failures
+  /// stop the cascade (§10.8a-ii): expired credentials make every
+  /// channel fail, and stampeding 50 000 entries with a toast each is
+  /// the worse failure mode. The list is **never wrapped** — a failing
+  /// tail stops, it does not loop back to index 0.
+  void _onEngineError(String message) {
+    final QueueService queue = QueueService.instance;
+    if (!queue.isChannelList) {
+      debugPrint('[SALU/mpv] error: $message');
+      return;
+    }
+    // The message is never logged in channel mode: mpv quotes the
+    // failing URL and those carry credentials (§10.10e).
+    debugPrint('[SALU] channel failed to load');
+    skipFailedChannel();
+  }
+
+  /// The failure skip itself — separated from the engine stream so it
+  /// can be exercised without one. [ChannelSkipPolicy] owns the rule;
+  /// this only carries out its verdict.
+  void skipFailedChannel() {
+    final QueueService queue = QueueService.instance;
+    if (!queue.isChannelList || !queue.hasCurrent) return;
+    // A late error from a channel the viewer already left behind (Stop
+    // parks the list — §10.8b) must not resurrect playback.
+    if (!hasMedia.value) return;
+    final int at = queue.index.value;
+    final ChannelSkipAction action =
+        _skips.onFailure(index: at, count: queue.length);
+    if (action == ChannelSkipAction.ignore) return;
+
+    // The toast names the CHANNEL, never its URL (§10.10e). A stop
+    // leaves it up longer — it is the only report the viewer gets that
+    // SALU is waiting rather than skipping.
+    final QueueItem? failed = queue.itemAt(at);
+    final String label = failed?.label ?? 'Channel';
+    OsdController.instance.show(action == ChannelSkipAction.stop
+        ? OsdFailedCard.lingering(name: label)
+        : OsdFailedCard(name: label));
+
+    if (action == ChannelSkipAction.stop) {
+      // A dead provider (or the tail of the list): stop, leave the toast
+      // up, wait for the viewer. The list stays loaded and parked, and
+      // the next manual pick starts skipping again.
+      debugPrint('[SALU] channel skip stopped (${_skips.strikes} in a row)');
+      return;
+    }
+    unawaited(_openQueueAt(at + 1).whenComplete(_skips.settle));
+  }
+
+  /// Consecutive channel failures counted so far (§10.8a-ii). The UI
+  /// never shows a number — this is for tests and diagnostics.
+  int get failureStrikes => _skips.strikes;
+
   // ── Opening media ─────────────────────────────────────────────────────
 
   /// Open a single local file or network URL and start playing — a FRESH
@@ -575,6 +695,7 @@ class PlayerService {
   /// playback starts at it from the top. Stored memory is never burned
   /// (row clicks / Next still resume it later).
   Future<void> openPath(String path, {bool play = true}) async {
+    _skips.reset(); // a fresh load is never part of a cascade
     final List<String> list = <String>[path];
     QueueService.instance.setQueue(list, 0);
     await _openQueueAt(0, play: play, fresh: true);
@@ -585,18 +706,24 @@ class PlayerService {
   /// remembered position or mid-list (playlist_imp.md §1 decision 5).
   Future<void> openPaths(List<String> paths, {bool play = true}) async {
     if (paths.isEmpty) return;
+    _skips.reset(); // a fresh load is never part of a cascade
     QueueService.instance.setQueue(paths, 0);
     await _openQueueAt(0, play: play, fresh: true);
   }
 
   /// Play a queue row (the playlist panel's click). Resume memory and
   /// the Resume toast behave exactly as they do for Next.
-  Future<void> playIndex(int i) async {
+  ///
+  /// A row click is a **deliberate** pick, so in channel mode it resets
+  /// the failure-cascade counter (§10.8a-ii) — a manual choice is never
+  /// treated as part of a stampede.
+  Future<void> playIndex(int i, {bool play = true}) async {
     final QueueService queue = QueueService.instance;
     if (i < 0 || i >= queue.length) return;
+    _skips.recordManualPick();
     stopMemory.value = null;
     _userPaused = false;
-    await _openQueueAt(i);
+    await _openQueueAt(i, play: play);
   }
 
   /// The one open path: hands mpv the FULL queue (native auto-advance
@@ -624,6 +751,38 @@ class PlayerService {
     bool keepMemory = false,
   }) async {
     final QueueService queue = QueueService.instance;
+
+    // ── Channel mode: ONE media, never the list (M40 · §10.10a) ───
+    //
+    // SALU owns the channel list; the engine is handed only the channel
+    // being watched, so a zap costs one `open` whether the list holds 24
+    // channels or 50 000 (mpv#6162: a `playlist-pos` change costs ~1 s
+    // at 40 k entries, ~2 s at 80 k). Nothing is lost: a live stream has
+    // no resume memory to carry (`resume_service.dart` skips anything
+    // with `://`), and the advance that matters in this mode is the
+    // failure skip, which SALU drives from `stream.error` (§10.8).
+    // Local playback below keeps the full-queue path exactly as it is.
+    if (queue.isChannelList) {
+      final int count = queue.length;
+      if (count == 0) return;
+      final int at = index.clamp(0, count - 1).toInt();
+      queue.setIndex(at);
+      final QueueItem? channel = queue.itemAt(at);
+      if (channel == null) return;
+      stopMemory.value = null; // opening anything consumes a stop memory
+      _openingWithPlay = play;
+      hasMedia.value = true;
+      _refreshTransportState();
+      await player.open(Media(channel.url), play: play);
+      if (play) _userPaused = false;
+      // A live stream carries no remembered offset (`resume_service`
+      // skips anything with `://`), so [start], [fresh], [silent] and
+      // [keepMemory] have nothing to act on here — the resume machinery
+      // is deliberately not run for a channel.
+      await _applyPlaylistMode();
+      return;
+    }
+
     final List<String> paths = queue.paths;
     if (paths.isEmpty) return;
     final int idx = index.clamp(0, paths.length - 1).toInt();
@@ -796,8 +955,23 @@ class PlayerService {
   /// simply "an item exists after the current one"; while shuffle drives
   /// the advance there is always a pick (an exhausted pass starts a
   /// fresh one), so only the single-row queue dims Next.
+  /// In channel mode this is plain list order — and at the
+  /// progressive-load frontier it is honestly `false` until more rows
+  /// arrive (M56), which is exactly the end-of-list park the spec asks
+  /// for.
   bool get hasNextItem =>
       _shuffleDriving ? true : QueueService.instance.hasNext;
+
+  /// Whether `|<<` can do anything right now. Local mode: any queue —
+  /// Previous can always restart the item. Channel mode (§10.8b): only
+  /// when a previous channel exists, since there is no restart to fall
+  /// back on (a one-channel list dims it, exactly as local dims Next).
+  bool get hasPreviousItem {
+    final QueueService queue = QueueService.instance;
+    if (!queue.hasQueue) return false;
+    if (!queue.isChannelList) return true;
+    return queue.index.value > 0;
+  }
 
   /// "Does `|<<` restart THIS item?" — one owner (playlist_imp.md §5),
   /// read both by [previous] and by the OSD card so the action and the
@@ -807,6 +981,9 @@ class PlayerService {
   /// memory while stopped) > 3 s, or first item → restarts this item.
   bool get previousRestartsThisItem {
     final QueueService queue = QueueService.instance;
+    // Channel mode (§10.8b): Previous never "restarts" a live stream —
+    // it always steps back a channel.
+    if (queue.isChannelList) return false;
     if (_shuffleDriving && queue.peekPreviousHeard != null) return false;
     final int from = queue.index.value;
     final StopMemory? mem = stopMemory.value;
@@ -831,6 +1008,19 @@ class PlayerService {
     final QueueService queue = QueueService.instance;
     if (!queue.hasQueue) return null;
     final int from = queue.index.value;
+    // A deliberate step ends any failure cascade (§10.8a-ii).
+    _skips.recordManualPick();
+    // Channel mode (§10.8b): Previous ALWAYS steps back a channel — a
+    // live stream has no position to restart from, so the 3-second rule
+    // does not apply. At the head it parks (never wraps), exactly as
+    // the frontier rule parks at the tail (M56).
+    if (queue.isChannelList) {
+      if (from <= 0) return null;
+      stopMemory.value = null;
+      _userPaused = false;
+      await _openQueueAt(from - 1);
+      return from - 1;
+    }
     if (_shuffleDriving) {
       final int? back = queue.peekPreviousHeard;
       if (back != null && back >= 0) {
@@ -865,6 +1055,19 @@ class PlayerService {
   Future<int?> next() async {
     final QueueService queue = QueueService.instance;
     if (!queue.hasQueue) return null;
+    // A deliberate step ends any failure cascade (§10.8a-ii).
+    _skips.recordManualPick();
+    // Channel mode (§10.8b): plain list order, no shuffle, no wrap.
+    // Past the last PARSED channel it behaves like end-of-list and
+    // parks — the progressive-load frontier rule (M56).
+    if (queue.isChannelList) {
+      if (!queue.hasNext) return null;
+      final int target = queue.index.value + 1;
+      stopMemory.value = null;
+      _userPaused = false;
+      await _openQueueAt(target);
+      return target;
+    }
     if (_shuffleDriving) {
       int? target = queue.takeNextShuffle();
       if (target == null) {
@@ -1013,8 +1216,10 @@ class PlayerService {
         // Stopped/parked: the pointer parks on the row that slid in.
         queue.setIndex(queue.length - 1);
       }
-    } else if (hasMedia.value) {
+    } else if (hasMedia.value && !queue.isChannelList) {
       // A row that is not playing: mirror the removal into the engine.
+      // Channel mode has nothing to mirror — the engine holds only the
+      // channel being watched (§10.10a).
       try {
         await player.remove(i);
       } catch (_) {
@@ -1036,8 +1241,9 @@ class PlayerService {
   Future<void> undoRemoveFromQueue(RemovedItemUndo undo) async {
     final QueueService queue = QueueService.instance;
     queue.insert(undo.index, undo.item);
-    if (hasMedia.value) {
-      // Engine mirror: append at the end, then move into place.
+    if (hasMedia.value && !queue.isChannelList) {
+      // Engine mirror: append at the end, then move into place. Channel
+      // mode holds one media, so there is nothing to mirror.
       try {
         await player.add(Media(undo.path));
         final int last = queue.length - 1;
@@ -1085,6 +1291,13 @@ class PlayerService {
   Future<ClearedQueueUndo?> clearQueue() async {
     final QueueService queue = QueueService.instance;
     if (!queue.hasQueue && !hasMedia.value) return null;
+    // The bin unloads the channels (§10.9): a progressive load still
+    // arriving must not append into the emptied list — cancelling kills
+    // the worker isolate with its buffers. Saved URLs and favourites are
+    // untouched, and Undo restores from the in-memory snapshot below,
+    // never a re-fetch.
+    ChannelLoadService.instance.cancel();
+    _skips.reset();
 
     // The published list is already unmodifiable — the snapshot IS the
     // list, no copy (a 50 000-row clear must not duplicate the queue).
@@ -1158,6 +1371,9 @@ class PlayerService {
   Future<MovedItemUndo?> moveInQueue(int from, int to) async {
     if (from == to) return null;
     final QueueService queue = QueueService.instance;
+    // Rows have no drag in channel mode (M-4 · §10.4) and the engine
+    // holds one media — nothing to reorder on either side.
+    if (queue.isChannelList) return null;
     final QueueItem? moved = queue.itemAt(from);
     if (moved == null) return null;
     // queue.move itself resets the shuffle bookkeeping — an index-based
@@ -1188,6 +1404,10 @@ class PlayerService {
   /// are mirrored into mpv as they are queued.
   Future<void> appendToQueue(List<String> paths) async {
     if (paths.isEmpty) return;
+    // A channel list is not a local queue: local files never join it
+    // (§10.4 — the channel panel has no append gesture), and the engine
+    // holds one media there, so there is no playlist to mirror into.
+    if (QueueService.instance.isChannelList) return;
     final List<String> canonical =
         paths.map(MediaUtils.canonicalPath).toList(growable: false);
     QueueService.instance.append(canonical);

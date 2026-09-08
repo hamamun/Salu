@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/m3u/channel_list_loader.dart';
@@ -528,6 +529,50 @@ http://h/c.ts
       ).toList();
       expect(events, hasLength(1));
       expect(events.single, isA<ChannelListFailed>());
+    });
+
+    test('a real local .m3u file streams channels through the worker (M55)',
+        () async {
+      // M55: a local playlist takes the SAME route as an m3u URL — only
+      // the fetch differs. This drives the real isolate over a real file.
+      final Directory dir =
+          await Directory.systemTemp.createTemp('salu_m3u_test');
+      addTearDown(() => dir.delete(recursive: true));
+      final File file = File('${dir.path}/tv.m3u');
+      await file.writeAsString('''
+#EXTM3U
+#EXTINF:-1 tvg-id="one" tvg-logo="logos/one.png" group-title="News",One
+http://h/one.ts
+#EXTINF:-1 group-title="News",Two
+http://h/two.ts
+#EXTINF:-1,Three
+media/three.mkv
+''');
+
+      final List<QueueItem> channels = <QueueItem>[];
+      ChannelListEvent? terminal;
+      await for (final ChannelListEvent e
+          in ChannelListLoader.open(file.path, isFile: true)) {
+        if (e is ChannelBatch) {
+          channels.addAll(e.items);
+        } else {
+          terminal = e;
+        }
+      }
+
+      expect(terminal, isA<ChannelListDone>());
+      expect((terminal! as ChannelListDone).total, 3);
+      expect(channels.map((QueueItem c) => c.name).toList(),
+          <String>['One', 'Two', 'Three']);
+      expect(channels[0].tvgId, 'one');
+      expect(channels[0].group, 'News');
+      // Relative entries resolve against the playlist's own folder.
+      // The mapper spells a resolved file path Windows-style, so
+      // normalise before comparing (this suite runs on the CI host).
+      expect(channels[2].url.replaceAll('\\', '/'),
+          endsWith('/media/three.mkv'));
+      // Every parsed channel carries a label, so this IS a channel list.
+      expect(channels.every((QueueItem c) => c.name != null), isTrue);
     });
   });
 }
