@@ -15,13 +15,13 @@ import '../../core/settings_service.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
-import '../widgets/live_light.dart';
 import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
 import '../osc/open_url_dialog.dart';
 import '../osd/osd_controller.dart';
 import '../osd/osd_deck.dart';
 import '../panels/playlist_panel.dart';
 import '../widgets/custom_title_bar.dart';
+import '../widgets/live_light.dart';
 import '../widgets/settings_dialog.dart';
 import 'video_screen.dart';
 
