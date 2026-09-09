@@ -108,16 +108,15 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   bool _pillOpen = false;
   Timer? _pillHideTimer;
 
-  /// Cached channel view: the filtered indexes + the descriptor list the
-  /// rows paint. Rebuilt only when its key changes — a scroll tick must
-  /// never regroup 50 000 rows (§10.10c).
+  /// Cached channel view: the descriptor list the rows paint. Rebuilt
+  /// only when its key changes — a scroll tick must never regroup
+  /// 50 000 rows (§10.10c).
   List<QueueItem>? _cacheItems;
   String _cacheQuery = '';
   bool _cacheFavOnly = false;
   ChannelGroupMode _cacheMode = ChannelGroupMode.flat;
   String? _cacheOpen;
   Set<String>? _cacheFavs;
-  List<int> _cachedFiltered = const <int>[];
   List<ChannelDescriptor> _cachedDescriptors = const <ChannelDescriptor>[];
 
   /// Cached reveal target (see [_revealTargetPos]) — the edge chevrons
@@ -322,7 +321,6 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _cacheMode = _view.groupMode.value;
     _cacheOpen = _view.openGroup.value;
     _cacheFavs = favs;
-    _cachedFiltered = filtered;
     // A search flattens the list whatever the mode is (§10.3) — the
     // grouping is suspended, not forgotten.
     _cachedDescriptors = ChannelGrouping.descriptors(
@@ -1718,10 +1716,13 @@ class _GroupPillOverlay extends StatelessWidget {
 }
 
 /// The pill's four options — Flat, Category, Language, Country (§10.2).
-/// The selected mode sits bright (never a checkmark — the family's
-/// grammar is *one mark, modified*); a mode the playlist cannot offer is
-/// dimmed and dead. Availability answers the live queue, so a mode can
-/// light up mid-load if a late batch brings the metadata.
+/// ONE horizontal row of icon-only marks, exactly the approved preview's
+/// `.group-menu` (`display: flex`, 30 px buttons, 18 px marks, 6 px gap,
+/// 22 px pill radius): the mode names live in the options' tooltips, not
+/// on the glass. The selected mark sits bright (never a checkmark — the
+/// family's grammar is *one mark, modified*); a mode the playlist cannot
+/// offer is dimmed and dead. Availability answers the live queue, so a
+/// mode can light up mid-load if a late batch brings the metadata.
 class _GroupPillBody extends StatelessWidget {
   const _GroupPillBody({required this.mode, required this.onChoose});
 
@@ -1735,27 +1736,28 @@ class _GroupPillBody extends StatelessWidget {
       builder: (BuildContext context, List<QueueItem> items, Widget? _) {
         final Map<ChannelGroupMode, bool> available =
             ChannelGrouping.availability(items);
+        const List<ChannelGroupMode> modes = <ChannelGroupMode>[
+          ChannelGroupMode.flat,
+          ChannelGroupMode.category,
+          ChannelGroupMode.language,
+          ChannelGroupMode.country,
+        ];
+        final List<Widget> options = <Widget>[];
+        for (int i = 0; i < modes.length; i++) {
+          if (i > 0) options.add(const SizedBox(width: 6));
+          options.add(_GroupPillOption(
+            mode: modes[i],
+            selected: modes[i] == mode,
+            available: available[modes[i]] ?? false,
+            onChoose: onChoose,
+          ));
+        }
         return GlassCapsule(
-          radius: 12,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: SizedBox(
-            width: 172,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <ChannelGroupMode>[
-                ChannelGroupMode.flat,
-                ChannelGroupMode.category,
-                ChannelGroupMode.language,
-                ChannelGroupMode.country,
-              ]
-                  .map((ChannelGroupMode m) => _GroupPillOption(
-                        mode: m,
-                        selected: m == mode,
-                        available: available[m] ?? false,
-                        onChoose: onChoose,
-                      ))
-                  .toList(growable: false),
-            ),
+          radius: 22,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: options,
           ),
         );
       },
@@ -1763,9 +1765,11 @@ class _GroupPillBody extends StatelessWidget {
   }
 }
 
-/// One pill option: the mode's mark + its name. Selected sits bright;
-/// unavailable sits dimmed and dead.
-class _GroupPillOption extends StatefulWidget {
+/// One pill option: a 30 px icon-only mark named by its tooltip. The
+/// selected mark sits bright with the active state's faint static glow;
+/// an unavailable mode drops to [SaluIconButton]'s disabled state —
+/// dimmed and dead, never hidden or boxed out (§10.2).
+class _GroupPillOption extends StatelessWidget {
   const _GroupPillOption({
     required this.mode,
     required this.selected,
@@ -1779,76 +1783,26 @@ class _GroupPillOption extends StatefulWidget {
   final ValueChanged<ChannelGroupMode> onChoose;
 
   @override
-  State<_GroupPillOption> createState() => _GroupPillOptionState();
-}
-
-class _GroupPillOptionState extends State<_GroupPillOption> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final bool enabled = widget.available;
-    final bool bright = widget.selected;
-    final Widget mark = switch (widget.mode) {
+    final Widget mark = switch (mode) {
       ChannelGroupMode.flat => const FlatMark(size: 18),
       ChannelGroupMode.category => const CategoryMark(size: 18),
       ChannelGroupMode.language => const LanguageMark(size: 18),
       ChannelGroupMode.country => const CountryMark(size: 18),
     };
-    final String label = switch (widget.mode) {
+    final String label = switch (mode) {
       ChannelGroupMode.flat => 'Flat',
       ChannelGroupMode.category => 'Category',
       ChannelGroupMode.language => 'Language',
       ChannelGroupMode.country => 'Country',
     };
-    return IgnorePointer(
-      ignoring: !enabled,
-      child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: enabled ? () => widget.onChoose(widget.mode) : null,
-          child: Opacity(
-            opacity: enabled ? 1 : 0.35,
-            child: Container(
-              height: 32,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: (bright || (enabled && _hovered)) && enabled
-                    ? const Color(0x0EFFFFFF)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: <Widget>[
-                  IconTheme.merge(
-                    data: IconThemeData(
-                      color: bright
-                          ? AppColors.textPrimary
-                          : AppColors.iconIdle,
-                    ),
-                    child: mark,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: bright
-                          ? AppColors.textPrimary
-                          : const Color(0xFFC9C9CC),
-                      fontSize: 12.5,
-                      fontWeight:
-                          bright ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    return SaluIconButton(
+      tooltip: label,
+      size: 30,
+      active: selected,
+      enabled: available,
+      onTap: () => onChoose(mode),
+      child: mark,
     );
   }
 }
@@ -1859,9 +1813,11 @@ class _GroupPillOptionState extends State<_GroupPillOption> {
 /// over a transparent track (§4.3) — never the Material / platform
 /// scrollbar, which is suppressed via [_NoScrollbars].
 ///
-/// The thumb is driven off [controller] ([ListenableBuilder]) so it only
-/// repaints on real scroll/geometry changes — never on a scroll
-/// notification during a layout pass.
+/// The thumb is driven off [controller] so it only repaints on real
+/// scroll/geometry changes — never on a scroll notification during a
+/// layout pass — and it is **draggable**: grabbing it with the mouse and
+/// dragging scrolls the list proportionally, exactly the approved
+/// preview's `#scroll-thumb` pointer-drag (§4.3 / app.mjs).
 ///
 /// The scroll view is the Stack's ONE non-positioned child, so it — not
 /// the thumb's zero-sized placeholder — decides this widget's size.
@@ -1886,49 +1842,12 @@ class _SaluScrollView extends StatelessWidget {
       behavior: const _NoScrollbars(),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
-          final double h = constraints.maxHeight;
           return Stack(
             children: <Widget>[
               child,
-              // The thumb — a thin rounded rule on a transparent track.
-              ListenableBuilder(
-                listenable: controller,
-                builder: (BuildContext context, Widget? _) {
-                  // A freshly attached (or mid-layout) scroll position can
-                  // report clients before its pixels/content dimensions
-                  // exist — sampling them then throws a null check. So wait
-                  // until every metric is present before drawing the thumb.
-                  if (!controller.hasClients) return const SizedBox.shrink();
-                  final ScrollPosition p = controller.position;
-                  if (!p.hasPixels ||
-                      !p.hasViewportDimension ||
-                      !p.hasContentDimensions) {
-                    return const SizedBox.shrink();
-                  }
-                  final double viewport = p.viewportDimension;
-                  final double max = p.maxScrollExtent;
-                  if (max <= 0 || viewport <= 0) {
-                    return const SizedBox.shrink();
-                  }
-                  double thumbH = h * (viewport / (viewport + max));
-                  if (thumbH < 24) thumbH = 24;
-                  final double travel = h - thumbH;
-                  double y = travel > 0 ? travel * (p.pixels / max) : 0;
-                  if (y < 0) y = 0;
-                  if (y > travel) y = travel;
-                  return Positioned(
-                    right: 2,
-                    top: y,
-                    height: thumbH,
-                    child: Container(
-                      width: 5,
-                      decoration: BoxDecoration(
-                        color: const Color(0x29FFFFFF), // ~ .16
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  );
-                },
+              _SaluScrollbar(
+                controller: controller,
+                trackHeight: constraints.maxHeight,
               ),
             ],
           );
@@ -1936,6 +1855,170 @@ class _SaluScrollView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// SALU's own draggable scrollbar: a thin rounded thumb on a transparent
+/// track. The thumb repaints only on real scroll/geometry changes, and a
+/// pointer-down on it captures the pointer and maps the drag's travel
+/// across the track onto the scroll extent — the approved preview's
+/// `#scroll-thumb` interaction, ported to Flutter.
+///
+/// The grab area is a few pixels wider than the 5 px paint so the thumb
+/// is easy to catch, while the painted rule stays exactly 5 px.
+class _SaluScrollbar extends StatefulWidget {
+  const _SaluScrollbar({
+    required this.controller,
+    required this.trackHeight,
+  });
+
+  final ScrollController controller;
+
+  /// The full track height — the scroll view's viewport height.
+  final double trackHeight;
+
+  @override
+  State<_SaluScrollbar> createState() => _SaluScrollbarState();
+}
+
+class _SaluScrollbarState extends State<_SaluScrollbar> {
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(_SaluScrollbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onScroll);
+      widget.controller.addListener(_onScroll);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (mounted) setState(() {});
+  }
+
+  /// The thumb's geometry for the current scroll metrics, or `null` while
+  /// the metrics are not ready yet — a freshly attached (or mid-layout)
+  /// scroll position reports clients before its pixels/content dimensions
+  /// exist, so sampling them then throws a null check.
+  _ThumbGeometry? _geometry() {
+    final ScrollController c = widget.controller;
+    if (!c.hasClients) return null;
+    final ScrollPosition p = c.position;
+    if (!p.hasPixels || !p.hasViewportDimension || !p.hasContentDimensions) {
+      return null;
+    }
+    final double viewport = p.viewportDimension;
+    final double max = p.maxScrollExtent;
+    final double h = widget.trackHeight;
+    if (max <= 0 || viewport <= 0 || h <= 0) return null;
+    double thumbH = h * (viewport / (viewport + max));
+    if (thumbH < 24) thumbH = 24;
+    if (thumbH > h) thumbH = h;
+    final double travel = h - thumbH;
+    double top = travel > 0 ? travel * (p.pixels / max) : 0;
+    if (top < 0) top = 0;
+    if (top > travel) top = travel;
+    return _ThumbGeometry(top: top, height: thumbH, travel: travel, max: max);
+  }
+
+  void _onDragStart(DragStartDetails details) {
+    if (_geometry() == null) return;
+    setState(() => _dragging = true);
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    final _ThumbGeometry? g = _geometry();
+    if (g == null || !_dragging) return;
+    if (g.travel <= 0) return;
+    // The pointer's vertical travel maps onto the scroll extent in the
+    // same proportion the thumb's travel maps onto the track.
+    final double target =
+        widget.controller.offset + details.delta.dy * (g.max / g.travel);
+    widget.controller.jumpTo(target.clamp(0.0, g.max).toDouble());
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    if (_dragging) setState(() => _dragging = false);
+  }
+
+  void _onDragCancel() {
+    if (_dragging) setState(() => _dragging = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final _ThumbGeometry? g = _geometry();
+    if (g == null) {
+      // Keep a positioned (zero-size) child so the list stays the Stack's
+      // ONE non-positioned child — see _SaluScrollView's note.
+      return const Positioned(
+        right: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        child: SizedBox.shrink(),
+      );
+    }
+    // The drag surface is the thumb's box only (10 px wide for a
+    // comfortable grab, with the 5 px rule painted at its right edge):
+    // the empty track above/below stays click-transparent, so row clicks
+    // near the panel's right edge still land on the rows.
+    return Positioned(
+      right: 0,
+      top: g.top,
+      height: g.height,
+      width: 10,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragStart: _onDragStart,
+        onVerticalDragUpdate: _onDragUpdate,
+        onVerticalDragEnd: _onDragEnd,
+        onVerticalDragCancel: _onDragCancel,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Container(
+              width: 5,
+              decoration: BoxDecoration(
+                color: _dragging
+                    ? const Color(0x4DFFFFFF) // ~ .30 while held
+                    : const Color(0x29FFFFFF), // ~ .16 at rest
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The thumb's geometry for one scroll position.
+class _ThumbGeometry {
+  const _ThumbGeometry({
+    required this.top,
+    required this.height,
+    required this.travel,
+    required this.max,
+  });
+
+  final double top;
+  final double height;
+  final double travel;
+  final double max;
 }
 
 /// A [ScrollBehavior] that adds no automatic scrollbar — SALU's own thin
