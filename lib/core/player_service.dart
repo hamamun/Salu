@@ -286,6 +286,16 @@ class PlayerService {
   /// See [_lastOpenWasAuto].
   bool get lastOpenWasAuto => _lastOpenWasAuto;
 
+  /// Whether the current channel has PROVEN itself — the first video frame
+  /// arrived (width > 0) or the engine is still confirmed playing the same
+  /// channel 5 s after its open (covers audio-only streams, which never
+  /// report a width). Reset on every channel open. Once proven, mpv error
+  /// lines are buffering stalls, not load failures, and never skip.
+  bool _channelProven = false;
+
+  /// Stability timer backing [_channelProven] for audio-only channels.
+  Timer? _channelProveTimer;
+
   void _init() {
     player = Player(
       configuration: const PlayerConfiguration(
@@ -366,8 +376,14 @@ class PlayerService {
       isPlaying.value = playing;
       if (playing) {
         _openingWithPlay = false;
-        // Successful playback ends any failure cascade (§10.8a-ii).
-        _skips.recordSuccess();
+        // Local mode: playing IS success. Channel mode proves itself
+        // separately (first frame / 5 s stable — see [_markChannelProven]):
+        // `playing` fires before the first picture, so resetting the
+        // cascade here would let every briefly-starting channel wipe the
+        // counter and the stop-after-3 guard would never trip.
+        if (!QueueService.instance.isChannelList) {
+          _skips.recordSuccess();
+        }
         // Re-anchor the glide: the stopwatch must not include the
         // paused time, or the bar would leap forward on resume.
         _watch
@@ -426,10 +442,13 @@ class PlayerService {
       if (!isMuted.value && v > 0) _volumeBeforeMute = v;
     });
 
-    // Once real frames arrive, ask mpv which hardware decoder kicked in.
+    // Once real frames arrive, ask mpv which hardware decoder kicked in —
+    // and prove the channel: a picture means the link is alive, so later
+    // error lines are stalls, never load failures.
     _widthSub = player.stream.width.listen((int? width) {
       if (width != null && width > 0) {
         unawaited(_refreshHwdecStatus());
+        if (QueueService.instance.isChannelList) _markChannelProven();
       }
     });
 
@@ -656,6 +675,35 @@ class PlayerService {
 
   // ── Failure skip (playlist_imp.md §10.8 · M-4b) ──────────────────
 
+  /// Marks the current channel proven (first frame, or 5 s stable for
+  /// audio-only) and ends any failure cascade (§10.8a-ii).
+  void _markChannelProven() {
+    if (_channelProven) return;
+    _channelProven = true;
+    _channelProveTimer?.cancel();
+    _channelProveTimer = null;
+    _skips.recordSuccess();
+  }
+
+  /// Resets the proof for a fresh channel open and arms the 5 s stability
+  /// timer that proves audio-only channels (no width ever arrives).
+  void _resetChannelProof(int index) {
+    _channelProven = false;
+    _channelProveTimer?.cancel();
+    _channelProveTimer = Timer(const Duration(seconds: 5), () {
+      // Still on the same channel with the engine confirmed playing → it
+      // plays; error lines from here on are stalls, not failures. A
+      // channel the engine never got going stays unproven and keeps the
+      // auto-skip.
+      if (QueueService.instance.isChannelList &&
+          QueueService.instance.index.value == index &&
+          hasMedia.value &&
+          isPlaying.value) {
+        _markChannelProven();
+      }
+    });
+  }
+
   /// Every mpv error line lands here.
   ///
   /// **Local mode is unchanged** — the line is printed and nothing else
@@ -668,6 +716,11 @@ class PlayerService {
   /// channel fail, and stampeding 50 000 entries with a toast each is
   /// the worse failure mode. The list is **never wrapped** — a failing
   /// tail stops, it does not loop back to index 0.
+  ///
+  /// Only a channel that never proved itself counts as failed: once the
+  /// first frame showed (or 5 s passed for audio-only), or while mpv is
+  /// buffering, error lines are stalls — SALU keeps waiting, never skips
+  /// (see [skipFailedChannel]).
   void _onEngineError(String message) {
     final QueueService queue = QueueService.instance;
     if (!queue.isChannelList) {
@@ -685,12 +738,29 @@ class PlayerService {
   /// The failure skip itself — separated from the engine stream so it
   /// can be exercised without one. [ChannelSkipPolicy] owns the rule;
   /// this only carries out its verdict.
+  ///
+  /// Two gates: a channel that already proved itself (first frame shown,
+  /// or 5 s stable for audio-only) is buffering, not dead — and an error
+  /// arriving mid-stall is the stall talking, not a dead link. Both are
+  /// ignored: SALU keeps waiting on the same channel instead of skipping.
+  /// Only a channel that never showed anything AND is not stalled right
+  /// now counts as "failed to load".
   void skipFailedChannel() {
     final QueueService queue = QueueService.instance;
     if (!queue.isChannelList || !queue.hasCurrent) return;
     // A late error from a channel the viewer already left behind (Stop
     // parks the list — §10.8b) must not resurrect playback.
     if (!hasMedia.value) return;
+    if (_channelProven) {
+      debugPrint(
+          '[SALU] channel error ignored (already playing — buffering stall)');
+      return;
+    }
+    if (isBuffering.value) {
+      debugPrint(
+          '[SALU] channel error ignored (buffering — still waiting for data)');
+      return;
+    }
     final int at = queue.index.value;
     final ChannelSkipAction action =
         _skips.onFailure(index: at, count: queue.length);
@@ -815,6 +885,7 @@ class PlayerService {
       stopMemory.value = null; // opening anything consumes a stop memory
       _openingWithPlay = play;
       hasMedia.value = true;
+      _resetChannelProof(at);
       _refreshTransportState();
       await player.open(Media(channel.url), play: play);
       if (play) _userPaused = false;
@@ -825,6 +896,11 @@ class PlayerService {
       await _applyPlaylistMode();
       return;
     }
+
+    // Leaving channel mode (or staying local): no channel to prove.
+    _channelProveTimer?.cancel();
+    _channelProveTimer = null;
+    _channelProven = false;
 
     final List<String> paths = queue.paths;
     if (paths.isEmpty) return;
@@ -937,6 +1013,9 @@ class PlayerService {
     isPlaying.value = false;
     isBuffering.value = false;
     _stopTicker();
+    _channelProveTimer?.cancel();
+    _channelProveTimer = null;
+    _channelProven = false;
     _suppressVolumeEvents = true;
     _userPaused = false;
     await player.stop();
@@ -1368,6 +1447,9 @@ class PlayerService {
     // never a re-fetch.
     ChannelLoadService.instance.cancel();
     _skips.reset();
+    _channelProveTimer?.cancel();
+    _channelProveTimer = null;
+    _channelProven = false;
 
     // The published list is already unmodifiable — the snapshot IS the
     // list, no copy (a 50 000-row clear must not duplicate the queue).
@@ -1607,6 +1689,8 @@ class PlayerService {
   /// for programmatic shutdown (tests, embedded use).
   Future<void> dispose() async {
     _stopTicker();
+    _channelProveTimer?.cancel();
+    _channelProveTimer = null;
     await _playlistSub?.cancel();
     await _errorSub?.cancel();
     await _completedSub?.cancel();
