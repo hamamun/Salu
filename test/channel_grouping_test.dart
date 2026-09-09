@@ -332,6 +332,32 @@ void main() {
           <int>[0, 2]);
     });
 
+    test('language, country and the Unknown bucket group the same way', () {
+      final List<QueueItem> items = <QueueItem>[
+        _ch('u0', 'A', language: 'English', country: 'US'),
+        _ch('u1', 'B', language: 'Urdu', country: 'PK'),
+        _ch('u2', 'C', language: 'English'),
+        _ch('u3', 'D'),
+      ];
+      final String? english =
+          ChannelGrouping.keyFor(items, 0, ChannelGroupMode.language);
+      expect(
+          ChannelGrouping.membersOf(items, ChannelGroupMode.language, english!),
+          <int>[0, 2]);
+      final String? pk =
+          ChannelGrouping.keyFor(items, 1, ChannelGroupMode.country);
+      expect(
+          ChannelGrouping.membersOf(items, ChannelGroupMode.country, pk!),
+          <int>[1]);
+      // The missing-data bucket is a group like any other.
+      final String? unknownCountry =
+          ChannelGrouping.keyFor(items, 3, ChannelGroupMode.country);
+      expect(
+          ChannelGrouping.membersOf(
+              items, ChannelGroupMode.country, unknownCountry!),
+          <int>[2, 3]);
+    });
+
     test('flat and stale keys yield no members (raw stepping resumes)', () {
       expect(
           ChannelGrouping.membersOf(items, ChannelGroupMode.flat, 'x'),

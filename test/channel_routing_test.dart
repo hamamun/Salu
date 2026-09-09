@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/m3u/channel_source.dart';
 
-/// M-3 / M-4b unit cover (playlist_imp.md §10.12): what counts as a
+/// M-3 unit cover (playlist_imp.md §10.12): what counts as a
 /// channel directory and what such a source is called in a toast.
 /// (A failed channel only toasts — there is no auto-advance to cover.)
 void main() {
