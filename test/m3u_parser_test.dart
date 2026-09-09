@@ -302,7 +302,8 @@ http://user:pass@h/live/1234.ts
       expect(c[0].searchText.contains('1234'), isFalse);
     });
 
-    test('language / country aliases normalise, whole values stay whole', () {
+    test('language / country aliases normalise, a compound tag takes its '
+        'primary value', () {
       final List<QueueItem> c = mapAll('''
 #EXTINF:-1 tvg-language="en" tvg-country="UK",A
 http://h/a
@@ -320,8 +321,10 @@ http://h/f
       expect(c.take(3).map((QueueItem i) => i.language).toSet(), <String>{'English'});
       expect(c.take(3).map((QueueItem i) => i.country).toSet(),
           <String>{'United Kingdom'});
-      expect(c[3].language, 'English;Spanish');
-      expect(c[3].country, 'US;CA');
+      // One channel sits in one group, so a multi-value tag groups by its
+      // first value instead of fragmenting into `US;CA` (§10.2a rev. M8).
+      expect(c[3].language, 'English');
+      expect(c[3].country, 'United States');
       expect(c[4].language, 'Klingon');
       expect(c[4].country, 'Atlantis');
       expect(c[5].language, 'Bangla');

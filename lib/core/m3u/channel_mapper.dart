@@ -1,5 +1,5 @@
 import '../queue_item.dart';
-import 'm3u_aliases.dart';
+import 'channel_metadata.dart';
 import 'm3u_parser.dart';
 
 /// Turns raw [M3uEntry]s into SALU's [QueueItem] channel records
@@ -14,7 +14,10 @@ import 'm3u_parser.dart';
 /// - category = `group-title` when non-blank, else that entry's `#EXTGRP`
 ///   when non-blank, else `null`;
 /// - label = title → `tvg-name` → `tvg-id` → `Unknown` (never the URL);
-/// - language/country pass through the alias tables, whole (no splitting);
+/// - language/country pass through the alias tables and, when the entry
+///   left them blank, through the same-file evidence pass
+///   (`channel_metadata.dart`) — a multi-value tag groups by its primary
+///   value;
 /// - a relative stream / logo URL resolves against the playlist's base;
 /// - the lowercase `name + group` search key is computed once, here.
 class ChannelMapper {
@@ -54,8 +57,19 @@ class ChannelMapper {
     // absent one falls back to the same entry's #EXTGRP.
     final String? group =
         _intern(_clean(entry['group-title']) ?? _clean(entry.extgrp));
-    final String? language = _intern(normaliseLanguage(entry['tvg-language']));
-    final String? country = _intern(normaliseCountry(entry['tvg-country']));
+
+    // Grouping metadata: the entry's own tags first, then the rest of the
+    // same entry (§10.2a rev. 2026-09-09). A playlist that only writes
+    // group-title still groups by language and country.
+    final ChannelMetadata meta = inferChannelMetadata(
+      tvgCountry: entry['tvg-country'],
+      tvgLanguage: entry['tvg-language'],
+      group: group,
+      name: name,
+      url: url,
+    );
+    final String? language = _intern(meta.language);
+    final String? country = _intern(meta.country);
 
     final String? logoRaw = _clean(entry['tvg-logo']);
     final String? logoUrl = logoRaw == null ? null : _resolve(logoRaw);
