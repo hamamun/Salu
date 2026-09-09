@@ -23,6 +23,7 @@ List<QueueItem> mapAll(String text, {Uri? base}) {
 ChannelMetadata infer({
   String? tvgCountry,
   String? tvgLanguage,
+  String? tvgId,
   String? group,
   String? name,
   String url = 'http://h/stream.m3u8',
@@ -31,6 +32,7 @@ ChannelMetadata infer({
     inferChannelMetadata(
       tvgCountry: tvgCountry,
       tvgLanguage: tvgLanguage,
+      tvgId: tvgId,
       group: group,
       name: name,
       url: url,
@@ -255,6 +257,67 @@ void main() {
     });
   });
 
+  group('the tvg-id region suffix', () {
+    // iptv-org's generated playlists carry no tvg-country at all — the id
+    // suffix is the only country in the file (`ATNBangla.bd@SD`).
+    test('a code suffix is the country, with or without an @variant', () {
+      expect(countryFromChannelId('ATNBangla.bd@SD'), 'Bangladesh');
+      expect(countryFromChannelId('AamarBangla.in@SD'), 'India');
+      expect(countryFromChannelId('BBCNews.uk'), 'United Kingdom');
+      expect(countryFromChannelId('3sat.de@SD'), 'Germany');
+      expect(countryFromChannelId('RUV.is'), 'Iceland');
+      expect(countryFromChannelId('TVCG1.me'), 'Montenegro');
+      expect(countryFromChannelId('BrianTV.la'), 'Laos');
+    });
+
+    test('a generic TLD suffix is never a country', () {
+      // Measured: every `.tv` id in the wild was a stream site — Toronto360
+      // is Canada, Las Estrellas Mexico, Taiwan+ Taiwan.
+      expect(countryFromChannelId('Toronto360.tv'), isNull);
+      expect(countryFromChannelId('Lasestrellas.tv'), isNull);
+      expect(countryFromChannelId('TaiwanPlus.tv'), isNull);
+    });
+
+    test('an id without a code suffix says nothing', () {
+      expect(countryFromChannelId('Discovery'), isNull);
+      expect(countryFromChannelId('X.com'), isNull);
+      expect(countryFromChannelId('a.'), isNull);
+      expect(countryFromChannelId(''), isNull);
+      expect(countryFromChannelId(null), isNull);
+    });
+
+    test('the tag and the group both outrank the id', () {
+      expect(
+          infer(tvgCountry: 'CA', tvgId: 'Toronto360.tv', name: 'Toronto 360')
+              .country,
+          'Canada');
+      expect(infer(group: 'Bangladesh', tvgId: 'X.in', name: 'X').country,
+          'Bangladesh');
+      expect(
+          infer(tvgId: 'ATNBangla.bd@SD', group: 'General', name: 'ATN Bangla')
+              .countrySource,
+          MetadataSource.channelId);
+    });
+  });
+
+  group('a country taken out of the category', () {
+    test('a separated head or tail leaves the genre behind', () {
+      expect(infer(group: 'US | News', name: 'X').groupWithoutCountry, 'News');
+      expect(infer(group: 'News | UK', name: 'X').groupWithoutCountry, 'News');
+      expect(infer(group: 'BD - News', name: 'X').groupWithoutCountry, 'News');
+    });
+
+    test('a whole-label country keeps its category', () {
+      // `Albania` and `Bangladeshi` *are* the category — stripping them
+      // would drop the row into Unknown.
+      expect(infer(group: 'Albania', name: 'X').groupWithoutCountry, isNull);
+      expect(
+          infer(group: 'Bangladeshi', name: 'X').groupWithoutCountry, isNull);
+      expect(infer(group: 'Bangla News', name: 'X').groupWithoutCountry, isNull);
+      expect(infer(name: 'Eye 95 America (US)').groupWithoutCountry, isNull);
+    });
+  });
+
   group('the stream URL\'s query string', () {
     test('a country and a language parameter are read', () {
       final ChannelMetadata m =
@@ -404,6 +467,48 @@ https://h/ntv.m3u8
             null,
           ]);
       expect(items[4].searchKey, 'eye 95 america news');
+    });
+
+    test('an iptv-org shaped list groups by country and language', () {
+      // The real shape (countries/bd.m3u): no tvg-country, no tvg-language,
+      // a category and a `Name.cc@Variant` id.
+      final List<QueueItem> items = mapAll('''
+#EXTM3U
+#EXTINF:-1 tvg-id="AamarBangla.in@SD" tvg-logo="https://x/a.png" group-title="Entertainment",Aamar Bangla (720p)
+https://h/a.m3u8
+#EXTINF:-1 tvg-id="ATNBangla.bd@SD" tvg-logo="https://x/b.png" group-title="General",ATN Bangla (720p)
+http://h/b.m3u8
+#EXTINF:-1 tvg-id="BBCNews.uk" group-title="News",BBC News (1080p)
+http://h/c.m3u8
+#EXTINF:-1 tvg-id="Toronto360.tv" group-title="News",Toronto 360
+http://h/d.m3u8
+''');
+      expect(items, hasLength(4));
+      expect(items.map((QueueItem i) => i.country).toList(),
+          <String?>['India', 'Bangladesh', 'United Kingdom', null]);
+      expect(items.map((QueueItem i) => i.language).toList(),
+          <String?>['Bangla', 'Bangla', 'English', null]);
+      // The category is the provider's own word — nothing to strip here.
+      expect(items.map((QueueItem i) => i.group).toList(),
+          <String?>['Entertainment', 'General', 'News', 'News']);
+      final Map<ChannelGroupMode, bool> available =
+          ChannelGrouping.availability(items);
+      expect(available[ChannelGroupMode.language], isTrue);
+      expect(available[ChannelGroupMode.country], isTrue);
+    });
+
+    test('a country head leaves the category', () {
+      final List<QueueItem> items = mapAll('''
+#EXTINF:-1 tvg-id="X.us" group-title="US | News",NBC
+http://h/a.m3u8
+#EXTINF:-1 tvg-id="Y.bd" group-title="Bangladeshi",ATN News
+http://h/b.m3u8
+''');
+      expect(items[0].group, 'News');
+      expect(items[0].country, 'United States');
+      expect(items[0].searchKey, 'nbc news');
+      expect(items[1].group, 'Bangladeshi');
+      expect(items[1].country, 'Bangladesh');
     });
 
     test('shared country/language strings are interned per load', () {

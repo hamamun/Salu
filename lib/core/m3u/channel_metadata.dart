@@ -4,22 +4,27 @@
 /// A playlist that only carries `group-title` used to leave Language and
 /// Country dimmed and dead: the two modes read `tvg-language` /
 /// `tvg-country`, and a great many real lists never write them. This pass
-/// reads the *rest of the same entry* — the group text, the channel's own
-/// label, the stream URL's query string — in a fixed order of decreasing
-/// trust, and only ever fills a field the playlist left blank:
+/// reads the *rest of the same entry* — the group text, the `tvg-id`'s
+/// region suffix, the channel's own label, the stream URL's query string —
+/// in a fixed order of decreasing trust, and only ever fills a field the
+/// playlist left blank:
 ///
 /// 1. the entry's own `tvg-country` / `tvg-language` (unchanged behaviour);
 /// 2. the entry's `group-title` / `#EXTGRP` (`Bangladeshi`, `US | News`,
 ///    `Hindi Movies`, `News | UK`);
-/// 3. the channel's label (`IN: SONY TEN 2`, `Eye 95 America (US)`,
+/// 3. the `tvg-id`'s region suffix (`ATNBangla.bd@SD` → Bangladesh) — the
+///    only country iptv-org's generated playlists carry;
+/// 4. the channel's label (`IN: SONY TEN 2`, `Eye 95 America (US)`,
 ///    `Madani TV Bangla`, `India Today`);
-/// 4. the stream URL's query string (`?country=bd`, `?lang=hi`);
-/// 5. a country with one dominant broadcast language → that language.
+/// 5. the stream URL's query string (`?country=bd`, `?lang=hi`);
+/// 6. a country with one dominant broadcast language → that language.
 ///
 /// Every rule reads text the playlist supplied. Nothing here calls a
-/// provider API, an EPG or the network, and no channel ID is decoded into a
-/// country: a two-letter `tvg-id` suffix is a TLD guess, not evidence, so
-/// `ZeeTV.in` stays `Unknown` rather than becoming India (§10.2a).
+/// provider API, an EPG or the network. Rule 3 is the one place a channel
+/// ID is read — and only its ISO suffix, never its name: iptv-org's
+/// 14 000+ ids are `Name.cc` / `Name.cc@Variant` and carry no other
+/// country, while `.tv` is measured as a stream-site TLD rather than
+/// Tuvalu (see [_tldAmbiguousCodes]).
 ///
 /// Pure Dart, no I/O, unit-testable — see `test/channel_metadata_test.dart`.
 library;
@@ -35,13 +40,16 @@ enum MetadataSource {
   /// Read from the entry's `group-title` / `#EXTGRP`.
   group,
 
+  /// Read from the `tvg-id`'s ISO region suffix (`ATNBangla.bd@SD`).
+  channelId,
+
   /// Read from the channel's own label.
   name,
 
   /// Read from the stream URL's query string.
   url,
 
-  /// The country's one dominant language — the weakest rule (§10.2a rule 5).
+  /// The country's one dominant language — the weakest rule (§10.2a rule 6).
   countryLanguage,
 }
 
@@ -53,6 +61,7 @@ class ChannelMetadata {
     this.countrySource,
     this.language,
     this.languageSource,
+    this.groupWithoutCountry,
   });
 
   /// Canonical country name, or `null` when nothing in the entry says.
@@ -67,6 +76,12 @@ class ChannelMetadata {
   /// Which rule produced [language] (`null` with a `null` language).
   final MetadataSource? languageSource;
 
+  /// The group text with a `US |` / `| UK` country part removed, when the
+  /// country came from that group (`US | News` → `News`). `null` when there
+  /// is nothing to strip — a whole-label country (`Albania`, `Bangladeshi`)
+  /// keeps its category exactly as the provider wrote it.
+  final String? groupWithoutCountry;
+
   /// No grouping metadata at all — both modes stay dimmed for this channel.
   static const ChannelMetadata none = ChannelMetadata();
 
@@ -75,7 +90,8 @@ class ChannelMetadata {
       'country: ${country ?? '-'}'
       '${countrySource == null ? '' : '/${countrySource!.name}'}, '
       'language: ${language ?? '-'}'
-      '${languageSource == null ? '' : '/${languageSource!.name}'})';
+      '${languageSource == null ? '' : '/${languageSource!.name}'}'
+      '${groupWithoutCountry == null ? '' : ', group: $groupWithoutCountry'})';
 }
 
 /// Rule 5 (country → its one dominant language) is on by default: for a
@@ -126,6 +142,43 @@ const Set<int> _separatorChars = <int>{
 
 final RegExp _spacedHyphen = RegExp(r'\s+-\s+');
 
+/// Two-letter codes better known as a generic TLD than as a country inside
+/// a channel ID. Measured on 16 021 real `tvg-id`s (iptv-org + Free-TV,
+/// 2026-09-09): **every** `.tv` suffix in the wild was a stream-site TLD —
+/// `Toronto360.tv` is Canada, `Lasestrellas.tv` Mexico, `TaiwanPlus.tv`
+/// Taiwan — never Tuvalu, so `.tv` must not group them there. `.is`,
+/// `.me`, `.la`, `.ws`, `.mq`, `.sx`, `.gp` and `.cw` were checked the same
+/// way and *are* the country (`RUV.is` Iceland, `TVCG1.me` Montenegro,
+/// `BrianTV.la` Laos), so they stay. Codes the country table does not carry
+/// (`io`, `fm`…) never match anyway; listing them keeps the rule honest if
+/// a country is added later.
+const Set<String> _tldAmbiguousCodes = <String>{
+  'tv', 'to', 'io', 'fm', 'cc', 'cx', 'sh', 'ms', 'pn', 'tk', 'nu',
+  'gs', 'hm', 'tf', 'bv', 'sj', 'aq', 'um', 'su',
+};
+
+/// The country of a `tvg-id`'s ISO region suffix: `ATNBangla.bd@SD` →
+/// Bangladesh, `AamarBangla.in@SD` → India, `BBCNews.uk` → United Kingdom.
+///
+/// Only the suffix is read, and only when it is a two-letter country code
+/// that is not also a common TLD ([_tldAmbiguousCodes]). The name part of
+/// an ID is never decoded — `ZeeCinema` says nothing about a country — and
+/// an ID with no code suffix (`Discovery`, `X123`) yields nothing.
+String? countryFromChannelId(String? tvgId) {
+  if (tvgId == null) return null;
+  String id = tvgId.trim();
+  if (id.isEmpty) return null;
+  final int at = id.indexOf('@');
+  if (at >= 0) id = id.substring(0, at);
+  final int dot = id.lastIndexOf('.');
+  if (dot < 0 || dot == id.length - 1) return null;
+  final String tail = id.substring(dot + 1);
+  if (!_isCode(tail)) return null;
+  final String code = tail.toLowerCase();
+  if (_tldAmbiguousCodes.contains(code)) return null;
+  return countryForToken(code);
+}
+
 /// A bracketed tag: `(US)`, `[Bangladesh]`, `{UK}` — at most 32 chars.
 final RegExp _brackets = RegExp(r'[\(\[\{]([^\)\]\}]{1,32})[\)\]\}]');
 
@@ -138,6 +191,7 @@ final RegExp _brackets = RegExp(r'[\(\[\{]([^\)\]\}]{1,32})[\)\]\}]');
 ChannelMetadata inferChannelMetadata({
   required String? tvgCountry,
   required String? tvgLanguage,
+  required String? tvgId,
   required String? group,
   required String? name,
   required String url,
@@ -147,6 +201,7 @@ ChannelMetadata inferChannelMetadata({
   MetadataSource? countrySource;
   String? language;
   MetadataSource? languageSource;
+  String? groupWithoutCountry;
 
   // 1 · The playlist's own tags — unchanged §10.2 behaviour, except that a
   //     multi-value tag now groups by its primary value (`US;CA` → United
@@ -163,11 +218,18 @@ ChannelMetadata inferChannelMetadata({
   }
 
   // 2 · The same entry's group text — the tag the #EXTGRP fallback already
-  //     taught SALU to read (§10.2a rule 4).
+  //     taught SALU to read (§10.2a rule 4). When the country came out of a
+  //     separated head or tail (`US | News`), that part leaves the category:
+  //     it is a country, not a genre, and the Country mode now owns it.
   if (group != null && group.isNotEmpty) {
     if (country == null) {
-      country = countryFromLabel(group, wholeAllowed: true);
-      if (country != null) countrySource = MetadataSource.group;
+      final ({String value, String? remainder})? hit =
+          _countryHit(group, wholeAllowed: true);
+      if (hit != null) {
+        country = hit.value;
+        countrySource = MetadataSource.group;
+        groupWithoutCountry = hit.remainder;
+      }
     }
     if (language == null) {
       language = languageFromLabel(group, wholeAllowed: true);
@@ -175,7 +237,14 @@ ChannelMetadata inferChannelMetadata({
     }
   }
 
-  // 3 · The channel's own label. A whole label is never read as a *code* —
+  // 3 · The `tvg-id`'s ISO region suffix — the only country an iptv-org
+  //     playlist carries (`ATNBangla.bd@SD`). Never the name part of the ID.
+  if (country == null) {
+    country = countryFromChannelId(tvgId);
+    if (country != null) countrySource = MetadataSource.channelId;
+  }
+
+  // 4 · The channel's own label. A whole label is never read as a *code* —
   //     a channel named `IN` or `BD` is not a country — but a country name
   //     inside it still counts (`India Today`, `Eye 95 America (US)`).
   if (name != null && name.isNotEmpty) {
@@ -189,7 +258,7 @@ ChannelMetadata inferChannelMetadata({
     }
   }
 
-  // 4 · The stream URL's query string — the provider wrote it, so it is
+  // 5 · The stream URL's query string — the provider wrote it, so it is
   //     still same-file evidence. Only ever a *known* code or name.
   if (country == null || language == null) {
     final ({String? country, String? language}) hints = _urlHints(url);
@@ -203,7 +272,7 @@ ChannelMetadata inferChannelMetadata({
     }
   }
 
-  // 5 · The last resort: a country with one dominant broadcast language.
+  // 6 · The last resort: a country with one dominant broadcast language.
   if (language == null && languageFromCountry && country != null) {
     language = primaryLanguageOf(country);
     if (language != null) languageSource = MetadataSource.countryLanguage;
@@ -215,6 +284,7 @@ ChannelMetadata inferChannelMetadata({
     countrySource: countrySource,
     language: language,
     languageSource: languageSource,
+    groupWithoutCountry: country == null ? null : groupWithoutCountry,
   );
 }
 
@@ -223,11 +293,7 @@ ChannelMetadata inferChannelMetadata({
 /// country **code**: `group-title="BD"` is Bangladesh, a channel merely
 /// named `BD` is not evidence. Country names count in both.
 String? countryFromLabel(String? label, {required bool wholeAllowed}) =>
-    _fromLabel(label,
-        wholeAllowed: wholeAllowed,
-        codesInLabel: true,
-        of: _countryOf,
-        inText: countryInText);
+    _countryHit(label, wholeAllowed: wholeAllowed)?.value;
 
 /// Language evidence in a group title or a channel label — same shapes as
 /// [countryFromLabel], but a two-letter code in a label counts only when it
@@ -239,12 +305,13 @@ String? countryFromLabel(String? label, {required bool wholeAllowed}) =>
 /// `(Urdu)`, `Hindi Movies`, `العربية`.
 String? languageFromLabel(String? label, {required bool wholeAllowed}) =>
     _fromLabel(label,
-        wholeAllowed: wholeAllowed,
-        codesInLabel: true,
-        of: _languageOf,
-        inText: languageInText);
+            wholeAllowed: wholeAllowed,
+            codesInLabel: true,
+            of: _languageOf,
+            inText: languageInText)
+        ?.value;
 
-String? _fromLabel(
+({String value, String? remainder})? _fromLabel(
   String? label, {
   required bool wholeAllowed,
   required bool codesInLabel,
@@ -261,36 +328,57 @@ String? _fromLabel(
 
   // (a) A bracketed tag — `(US)`, `[Bangladesh]`. Inside brackets a bare
   //     country code is deliberate, but only as the bracket's whole
-  //     content: `(in HD)` must not become India.
+  //     content: `(in HD)` must not become India. The rest of the label is
+  //     untouched: a bracket is a tag, not a category of its own.
   for (final RegExpMatch match in _brackets.allMatches(text)) {
     final String inner = match.group(1) ?? '';
     final String? exact = of(inner, allowCodes: codesInLabel);
-    if (exact != null) return exact;
+    if (exact != null) return (value: exact, remainder: null);
     final String? scanned = inText(inner);
-    if (scanned != null) return scanned;
+    if (scanned != null) return (value: scanned, remainder: null);
   }
 
   // (b) A head or a tail around a separator — `US | News`, `IN: SONY TEN 2`,
   //     `News | UK`, `Hindi Movies | HD`. With one separator the head and the
   //     tail are the two halves; with several, the outermost pair is read.
+  //     What is left of the label comes back as `remainder`.
   final int first = _firstSeparator(text);
   if (first >= 0) {
     final String? head = of(text.substring(0, first), allowCodes: codesInLabel);
-    if (head != null) return head;
-    final String? tail =
-        of(text.substring(_lastSeparator(text) + 1), allowCodes: codesInLabel);
-    if (tail != null) return tail;
+    if (head != null) {
+      return (
+        value: head,
+        remainder: text.substring(first + 1).trim(),
+      );
+    }
+    final int last = _lastSeparator(text);
+    final String? tail = of(text.substring(last + 1), allowCodes: codesInLabel);
+    if (tail != null) {
+      return (value: tail, remainder: text.substring(0, last).trim());
+    }
   }
 
-  // (c) The whole label — a group title that *is* the country.
+  // (c) The whole label — a group title that *is* the country. Nothing is
+  //     left to keep, so the caller keeps the original.
   if (wholeAllowed) {
     final String? whole = of(text, allowCodes: codesInLabel);
-    if (whole != null) return whole;
+    if (whole != null) return (value: whole, remainder: null);
   }
 
   // (d) A name anywhere in the text — `Bangladeshi`, `Hindi Movies`.
-  return inText(text);
+  final String? scanned = inText(text);
+  return scanned == null ? null : (value: scanned, remainder: null);
 }
+
+/// [countryFromLabel] with the leftover label — what the category becomes
+/// once a `US |` / `| UK` country part is taken out.
+({String value, String? remainder})? _countryHit(String? label,
+        {required bool wholeAllowed}) =>
+    _fromLabel(label,
+        wholeAllowed: wholeAllowed,
+        codesInLabel: true,
+        of: _countryOf,
+        inText: countryInText);
 
 String? _countryOf(String? candidate, {required bool allowCodes}) {
   if (candidate == null) return null;
