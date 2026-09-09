@@ -142,3 +142,48 @@ the log lied, and it read like three dead channels. The line now reports the
 stores and then calls `exit(0)`. The VM service socket dies with the process,
 so `flutter run` reports "Lost connection to device." on every normal window
 close. Nothing crashed in the pasted log.
+
+## 5 · Failed channel: drop the guard + the auto-advance, toast only
+**Status:** FIXED 2026-09-09 — `PlayerService.reportChannelFailure`,
+deleted `lib/core/m3u/channel_skip_policy.dart`.
+
+**Symptom:** a dead channel showed the same buffering spinner as a slow one,
+the terminal said `channel error ignored (already playing — buffering stall)`,
+and no toast appeared — the proven/buffering guard swallowed the real failure.
+Separately, the failure auto-advance (skip-to-next + 3-strike cascade) fought
+the guard and surprised the viewer.
+
+**Fix:** removed the guard (`_channelProven`, the 5 s prove timer, the
+`isBuffering` gate), removed the whole auto-advance (`ChannelSkipPolicy`,
+strikes, `_lastOpenWasAuto`, `OsdFailedCard.lingering`). Every engine error in
+channel mode now toasts `Failed to load` + the channel's name and stays put.
+One dead channel still reports once (per-index dedup; every fresh open
+resets it, so zapping back re-reports). Local-mode errors unchanged (log only),
+post-Stop errors stay silent (`hasMedia` gate). Panel reveal simplified to the
+deliberate path only — the auto branch could never trigger again.
+
+## 6 · Prev/Next in grouped mode jumped back to the old category
+**Status:** FIXED 2026-09-09 — new `lib/core/channel_view_service.dart`,
+`ChannelGrouping.membersOf`/`stepTarget`, panel state moved into the service.
+
+**Symptom:** grouped by Category, playing news `aaa`, then zapping to a Music
+channel — Prev/Next landed back in news `aaa`'s neighbourhood instead of
+stepping through Music. Flat mode felt fine.
+
+**Cause (confirmed in code + by owner check: the music zap DID switch video
+and title):** Prev/Next stepped raw playlist order (`queue.index ± 1`) and
+knew nothing about grouping, which was display-only panel state. In Flat the
+shown order IS the raw order, so it felt right; grouped, the raw neighbour of
+a music channel is usually another group's channel (in a small list, literally
+`aaa` itself), and the deliberate-zap reveal then snapped the accordion back to
+News — looking like the music pick was forgotten.
+
+**Fix:** Prev/Next now walk the open group in list order and park at its edges
+(no wrap, matching the channel no-wrap rule); from outside the open group they
+step INTO it (Next → first, Previous → last); Flat / collapsed accordion /
+active search (grouping suspended, §10.3) / stale key fall back to raw order.
+The favourites filter does not affect stepping. Grouping state moved from the
+panel widget into `ChannelViewService` so keyboard steps and closed-panel steps
+follow the same shown order; the transport buttons listen to it so their dim
+states refresh on grouping changes. Member list is cached per
+(list, mode, group, search) so dim reads never rescan 50 000 rows (§10.10c).

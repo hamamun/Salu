@@ -309,4 +309,124 @@ void main() {
       expect(flat, hasLength(50000));
     });
   });
+
+  group('ChannelGrouping.membersOf', () {
+    final List<QueueItem> items = <QueueItem>[
+      _ch('u0', 'AAA', group: 'News'),
+      _ch('u1', 'M1', group: 'Music'),
+      _ch('u2', 'N2', group: 'News'),
+      _ch('u3', 'M2', group: 'Music'),
+      _ch('u4', 'M3', group: 'Music'),
+    ];
+
+    test('returns the open group in raw list order', () {
+      final String? music =
+          ChannelGrouping.keyFor(items, 1, ChannelGroupMode.category);
+      expect(
+          ChannelGrouping.membersOf(items, ChannelGroupMode.category, music!),
+          <int>[1, 3, 4]);
+      final String? news =
+          ChannelGrouping.keyFor(items, 0, ChannelGroupMode.category);
+      expect(
+          ChannelGrouping.membersOf(items, ChannelGroupMode.category, news!),
+          <int>[0, 2]);
+    });
+
+    test('language, country and the Unknown bucket group the same way', () {
+      final List<QueueItem> items = <QueueItem>[
+        _ch('u0', 'A', language: 'English', country: 'US'),
+        _ch('u1', 'B', language: 'Urdu', country: 'PK'),
+        _ch('u2', 'C', language: 'English'),
+        _ch('u3', 'D'),
+      ];
+      final String? english =
+          ChannelGrouping.keyFor(items, 0, ChannelGroupMode.language);
+      expect(
+          ChannelGrouping.membersOf(items, ChannelGroupMode.language, english!),
+          <int>[0, 2]);
+      final String? pk =
+          ChannelGrouping.keyFor(items, 1, ChannelGroupMode.country);
+      expect(
+          ChannelGrouping.membersOf(items, ChannelGroupMode.country, pk!),
+          <int>[1]);
+      // The missing-data bucket is a group like any other.
+      final String? unknownCountry =
+          ChannelGrouping.keyFor(items, 3, ChannelGroupMode.country);
+      expect(
+          ChannelGrouping.membersOf(
+              items, ChannelGroupMode.country, unknownCountry!),
+          <int>[2, 3]);
+    });
+
+    test('flat and stale keys yield no members (raw stepping resumes)', () {
+      expect(
+          ChannelGrouping.membersOf(items, ChannelGroupMode.flat, 'x'),
+          isEmpty);
+      expect(
+          ChannelGrouping.membersOf(
+              items, ChannelGroupMode.category, 'category\u0000Nope'),
+          isEmpty);
+    });
+  });
+
+  group('ChannelGrouping.stepTarget', () {
+    // Raw order: News AAA(0), Music M1(1), News N2(2), Music M2(3).
+    const List<int> music = <int>[1, 3];
+    const int count = 4;
+
+    test('steps within the open group, never leaving it', () {
+      expect(
+          ChannelGrouping.stepTarget(
+              members: music, from: 1, direction: 1, count: count),
+          3);
+      expect(
+          ChannelGrouping.stepTarget(
+              members: music, from: 3, direction: -1, count: count),
+          1);
+    });
+
+    test('group edges park — they never wrap or escape the group', () {
+      expect(
+          ChannelGrouping.stepTarget(
+              members: music, from: 3, direction: 1, count: count),
+          isNull);
+      expect(
+          ChannelGrouping.stepTarget(
+              members: music, from: 1, direction: -1, count: count),
+          isNull);
+    });
+
+    test('from outside the group, Next takes its first, Prev its last', () {
+      // Playing news AAA(0) while browsing Music: Next enters at M1.
+      expect(
+          ChannelGrouping.stepTarget(
+              members: music, from: 0, direction: 1, count: count),
+          1);
+      // Previous enters from the other edge, at M2.
+      expect(
+          ChannelGrouping.stepTarget(
+              members: music, from: 0, direction: -1, count: count),
+          3);
+    });
+
+    test('no open group steps plain raw order (flat behaviour)', () {
+      expect(
+          ChannelGrouping.stepTarget(
+              members: const <int>[], from: 1, direction: 1, count: count),
+          2);
+      expect(
+          ChannelGrouping.stepTarget(
+              members: const <int>[], from: 1, direction: -1, count: count),
+          0);
+      // Head and tail park, never wrap.
+      expect(
+          ChannelGrouping.stepTarget(
+              members: const <int>[], from: 3, direction: 1, count: count),
+          isNull);
+      expect(
+          ChannelGrouping.stepTarget(
+              members: const <int>[], from: 0, direction: -1, count: count),
+          isNull);
+    });
+  });
 }

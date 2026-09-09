@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/channel_view_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
 import '../../core/transport_actions.dart';
@@ -39,6 +40,7 @@ class TransportCluster extends StatelessWidget {
   Widget build(BuildContext context) {
     final PlayerService player = PlayerService.instance;
     final QueueService queue = QueueService.instance;
+    final ChannelViewService view = ChannelViewService.instance;
 
     return ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[
@@ -52,6 +54,12 @@ class TransportCluster extends StatelessWidget {
         player.repeatMode,
         queue.items,
         queue.index,
+        // In channel mode Prev/Next dim states follow the open group, so
+        // the view choices join the merge — otherwise opening a group
+        // the playing channel sits at the edge of leaves them stale.
+        view.groupMode,
+        view.openGroup,
+        view.searching,
       ]),
       builder: (BuildContext context, Widget? _) {
         final TransportState state = player.transportState.value;
@@ -86,8 +94,9 @@ class TransportCluster extends StatelessWidget {
               tooltip: 'Previous',
               // `|<<` never dims while a LOCAL queue exists — it can
               // always restart the item. In channel mode there is no
-              // restart (§10.8b), so it dims at the head of the list,
-              // exactly as Next dims at its tail.
+              // restart (§10.8b), so it dims at the head of the list (of
+              // the open group while grouped), exactly as Next dims at
+              // its tail.
               enabled: player.hasPreviousItem,
               onTap: TransportActions.instance.previous,
               child: const PreviousMark(),

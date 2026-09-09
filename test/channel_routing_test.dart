@@ -1,10 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:salu/core/m3u/channel_skip_policy.dart';
 import 'package:salu/core/m3u/channel_source.dart';
 
-/// M-3 / M-4b unit cover (playlist_imp.md §10.12): what counts as a
-/// channel directory, what such a source is called in a toast, and the
-/// failure-skip rule with its cascade guard.
+/// M-3 unit cover (playlist_imp.md §10.12): what counts as a
+/// channel directory and what such a source is called in a toast.
+/// (A failed channel only toasts — there is no auto-advance to cover.)
 void main() {
   group('ChannelSource — what SALU parses itself (M-3 · M55)', () {
     test('local .m3u / .m3u8 files are directories, media files are not', () {
@@ -80,91 +79,6 @@ void main() {
       expect(shown, 'provider.example');
       expect(shown.contains('pass'), isFalse);
       expect(shown.contains('/'), isFalse);
-    });
-  });
-
-  group('ChannelSkipPolicy — the failure skip (§10.8 · §10.8a-ii)', () {
-    test('a failed channel skips to the next one', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      expect(p.onFailure(index: 0, count: 10), ChannelSkipAction.skip);
-      expect(p.strikes, 1);
-    });
-
-    test('three consecutive failures stop the cascade', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      expect(p.onFailure(index: 0, count: 50000), ChannelSkipAction.skip);
-      p.settle();
-      expect(p.onFailure(index: 1, count: 50000), ChannelSkipAction.skip);
-      p.settle();
-      expect(p.onFailure(index: 2, count: 50000), ChannelSkipAction.stop);
-      expect(p.stopped, isTrue);
-      // And it stays stopped — no stampede past the third.
-      p.settle();
-      expect(p.onFailure(index: 3, count: 50000), ChannelSkipAction.stop);
-    });
-
-    test('successful playback resets the counter', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      p.onFailure(index: 0, count: 10);
-      p.settle();
-      p.onFailure(index: 1, count: 10);
-      p.settle();
-      expect(p.strikes, 2);
-      p.recordSuccess();
-      expect(p.strikes, 0);
-      expect(p.onFailure(index: 2, count: 10), ChannelSkipAction.skip);
-    });
-
-    test('a manual pick resets the counter, so skipping works again', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      for (int i = 0; i < 3; i++) {
-        p.onFailure(index: i, count: 10);
-        p.settle();
-      }
-      expect(p.stopped, isTrue);
-      p.recordManualPick();
-      expect(p.strikes, 0);
-      expect(p.onFailure(index: 7, count: 10), ChannelSkipAction.skip);
-    });
-
-    test('the last channel failing stops — it never wraps to index 0', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      expect(p.onFailure(index: 9, count: 10), ChannelSkipAction.stop);
-      expect(p.strikes, 1); // it WAS a failure, it just has nowhere to go
-    });
-
-    test('a burst of error lines for one dead channel fires one skip', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      expect(p.onFailure(index: 4, count: 10), ChannelSkipAction.skip);
-      // More mpv lines for the same channel, and lines arriving while the
-      // skip's own open is still in flight.
-      expect(p.onFailure(index: 4, count: 10), ChannelSkipAction.ignore);
-      expect(p.onFailure(index: 5, count: 10), ChannelSkipAction.ignore);
-      expect(p.strikes, 1);
-      p.settle();
-      expect(p.onFailure(index: 5, count: 10), ChannelSkipAction.skip);
-      expect(p.strikes, 2);
-    });
-
-    test('an out-of-range report is ignored', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      expect(p.onFailure(index: -1, count: 10), ChannelSkipAction.ignore);
-      expect(p.onFailure(index: 10, count: 10), ChannelSkipAction.ignore);
-      expect(p.onFailure(index: 0, count: 0), ChannelSkipAction.ignore);
-      expect(p.strikes, 0);
-    });
-
-    test('reset forgets everything (a fresh list, a clear)', () {
-      final ChannelSkipPolicy p = ChannelSkipPolicy();
-      p.onFailure(index: 0, count: 10);
-      p.reset();
-      expect(p.strikes, 0);
-      expect(p.stopped, isFalse);
-      expect(p.onFailure(index: 0, count: 10), ChannelSkipAction.skip);
-    });
-
-    test('the strike limit is the locked 3', () {
-      expect(ChannelSkipPolicy.strikeLimit, 3);
     });
   });
 }
