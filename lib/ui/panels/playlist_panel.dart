@@ -73,7 +73,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   final FocusNode _searchFocus = FocusNode();
   String _query = '';
 
-  final ScrollController _scroll = ScrollController();
+  /// One controller per list — Flutter forbids a single ScrollController
+  /// driving two scroll views at once, and swapping between the local
+  /// queue and a channel list briefly attaches both. Separate controllers
+  /// keep the two lists from ever fighting over one.
+  final ScrollController _localScroll = ScrollController();
+  final ScrollController _channelScroll = ScrollController();
   bool _programmatic = false;
   bool _userScrolled = false;
   Timer? _userScrollTimer;
@@ -141,7 +146,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     );
     _panel.playlistOpen.addListener(_onOpenChanged);
     _queue.index.addListener(_onIndexChanged);
-    _scroll.addListener(_onScroll);
+    _localScroll.addListener(_onScroll);
+    _channelScroll.addListener(_onScroll);
     // Keep the panel reflecting the freshly opened (or cleared) queue.
     _queue.items.addListener(_onItemsChanged);
     _searchFocus.addListener(_onSearchFocusChanged);
@@ -159,13 +165,15 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.removeListener(_onFavouritesChanged);
     _loads.loadGeneration.removeListener(_onLoadGeneration);
     _loads.loading.removeListener(_onLoadingChanged);
-    _scroll.removeListener(_onScroll);
+    _localScroll.removeListener(_onScroll);
+    _channelScroll.removeListener(_onScroll);
     _userScrollTimer?.cancel();
     _pillHideTimer?.cancel();
     if (_pillOpen) ChromeLock.instance.release();
     _search.dispose();
     _searchFocus.dispose();
-    _scroll.dispose();
+    _localScroll.dispose();
+    _channelScroll.dispose();
     _open.dispose();
     _pillAnim.dispose();
     super.dispose();
@@ -226,10 +234,10 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _userScrollTimer?.cancel();
     _userScrolled = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
+      if (!mounted || !_channelScroll.hasClients) return;
       _programmatic = true;
       try {
-        _scroll.jumpTo(0);
+        _channelScroll.jumpTo(0);
       } catch (_) {
         // No content yet — the jump is meaningless, not an error.
       }
@@ -380,11 +388,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   void _revealPlaying({required bool animate, bool force = false}) {
     if (_userScrolled && !force) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
+      if (!mounted || !_localScroll.hasClients) return;
       final int current = _queue.index.value;
       final int pos = _visibleRows(_queue.items.value).indexOf(current);
       if (pos < 0) return;
-      final ScrollPosition p = _scroll.position;
+      final ScrollPosition p = _localScroll.position;
       // Skip until content metrics exist — reading them earlier throws a
       // null check on the very frame a list is added to / resized.
       if (!p.hasPixels ||
@@ -401,13 +409,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       if (target >= top + 6 && target + _rowExtent <= bottom - 6) return;
       _programmatic = true;
       if (animate) {
-        _scroll
+        _localScroll
             .animateTo(target,
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic)
             .whenComplete(() => _programmatic = false);
       } else {
-        _scroll.jumpTo(target);
+        _localScroll.jumpTo(target);
         _programmatic = false;
       }
     });
@@ -423,8 +431,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     final int? pos = _revealTargetPos(items);
     if (pos == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      final ScrollPosition p = _scroll.position;
+      if (!mounted || !_channelScroll.hasClients) return;
+      final ScrollPosition p = _channelScroll.position;
       if (!p.hasPixels ||
           !p.hasViewportDimension ||
           !p.hasContentDimensions) {
@@ -442,13 +450,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       }
       _programmatic = true;
       if (animate) {
-        _scroll
+        _channelScroll
             .animateTo(target,
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic)
             .whenComplete(() => _programmatic = false);
       } else {
-        _scroll.jumpTo(target);
+        _channelScroll.jumpTo(target);
         _programmatic = false;
       }
     });
@@ -1010,7 +1018,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     if (filterActive) {
       // A filter is a VIEW — drag reorder is disabled while it is active.
       list = ListView.builder(
-        controller: _scroll,
+        controller: _localScroll,
         padding: const EdgeInsets.symmetric(vertical: 2),
         itemCount: visible.length,
         itemBuilder: (BuildContext context, int i) =>
@@ -1018,7 +1026,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       );
     } else {
       list = ReorderableListView.builder(
-        scrollController: _scroll,
+        scrollController: _localScroll,
         buildDefaultDragHandles: false,
         padding: const EdgeInsets.symmetric(vertical: 2),
         itemCount: visible.length,
@@ -1032,7 +1040,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
     // SALU's own thin scrollbar over a transparent track (§4.3) — never
     // the platform / Material one.
-    return _SaluScrollView(controller: _scroll, child: list);
+    return _SaluScrollView(controller: _localScroll, child: list);
   }
 
   Widget _row(List<QueueItem> items, int index, {required bool canDrag}) {
@@ -1075,7 +1083,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     final int now = _queue.index.value;
     final Set<String> favs = _favourites.favourites.value;
     final Widget list = ListView.builder(
-      controller: _scroll,
+      controller: _channelScroll,
       padding: const EdgeInsets.symmetric(vertical: 2),
       itemCount: descs.length,
       itemExtent: _channelRowExtent,
@@ -1118,7 +1126,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        _SaluScrollView(controller: _scroll, child: list),
+        _SaluScrollView(controller: _channelScroll, child: list),
         _stickyHead(items),
         _edgeChevrons(items),
       ],
@@ -1136,7 +1144,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       return const SizedBox.shrink();
     }
     return ListenableBuilder(
-      listenable: _scroll,
+      listenable: _channelScroll,
       builder: (BuildContext context, Widget? _) {
         final _PinnedHead? pinned = _pinnedHead(items);
         if (pinned == null) return const SizedBox.shrink();
@@ -1179,8 +1187,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       }
     }
     if (headPos < 0 || group == null) return null;
-    if (!_scroll.hasClients) return null;
-    final ScrollPosition p = _scroll.position;
+    if (!_channelScroll.hasClients) return null;
+    final ScrollPosition p = _channelScroll.position;
     if (!p.hasPixels || !p.hasViewportDimension || !p.hasContentDimensions) {
       return null;
     }
@@ -1199,12 +1207,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// filters (the chevrons never clear anything).
   Widget _edgeChevrons(List<QueueItem> items) {
     return ListenableBuilder(
-      listenable: _scroll,
+      listenable: _channelScroll,
       builder: (BuildContext context, Widget? _) {
         final int? target = _revealTargetPos(items);
         if (target == null) return const SizedBox.shrink();
-        if (!_scroll.hasClients) return const SizedBox.shrink();
-        final ScrollPosition p = _scroll.position;
+        if (!_channelScroll.hasClients) return const SizedBox.shrink();
+        final ScrollPosition p = _channelScroll.position;
         if (!p.hasPixels ||
             !p.hasViewportDimension ||
             !p.hasContentDimensions) {
