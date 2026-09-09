@@ -295,14 +295,19 @@ http://h/d
 http://user:pass@h/live/1234.ts
 ''');
       expect(c[0].channelKey, 'bbc.uk');
-      expect(c[0].searchKey, 'bbc one hd uk | news');
+      // The `UK |` part became the channel's country (§10.2a rev. 2026-09-09),
+      // so the category — and the search key built from it — reads `News`.
+      expect(c[0].group, 'News');
+      expect(c[0].country, 'United Kingdom');
+      expect(c[0].searchKey, 'bbc one hd news');
       // The URL never leaks into the label or the search text (§10.10e).
       expect(c[0].label, 'BBC One HD');
       expect(c[0].searchText.contains('pass'), isFalse);
       expect(c[0].searchText.contains('1234'), isFalse);
     });
 
-    test('language / country aliases normalise, whole values stay whole', () {
+    test('language / country aliases normalise, a compound tag takes its '
+        'primary value', () {
       final List<QueueItem> c = mapAll('''
 #EXTINF:-1 tvg-language="en" tvg-country="UK",A
 http://h/a
@@ -320,8 +325,10 @@ http://h/f
       expect(c.take(3).map((QueueItem i) => i.language).toSet(), <String>{'English'});
       expect(c.take(3).map((QueueItem i) => i.country).toSet(),
           <String>{'United Kingdom'});
-      expect(c[3].language, 'English;Spanish');
-      expect(c[3].country, 'US;CA');
+      // One channel sits in one group, so a multi-value tag groups by its
+      // first value instead of fragmenting into `US;CA` (§10.2a rev. M8).
+      expect(c[3].language, 'English');
+      expect(c[3].country, 'United States');
       expect(c[4].language, 'Klingon');
       expect(c[4].country, 'Atlantis');
       expect(c[5].language, 'Bangla');

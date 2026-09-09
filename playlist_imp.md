@@ -956,7 +956,10 @@ class QueueItem {
   the stable channel identity (§10.3).
 - Category comes from that M3U entry's `group-title`, falling back to its
   `#EXTGRP` value only when `group-title` is absent/blank (point 5 FINAL,
-  §10.2a). Language and country use `tvg-language` and `tvg-country`. Use only
+  §10.2a). Language and country use `tvg-language` and `tvg-country`, and —
+  when those are absent or blank — the rest of **the same entry** through the
+  evidence pass of §10.2a rev. 2026-09-09 (group text, the `tvg-id`'s ISO
+  region suffix, channel label, stream query string). Use only
   information available in the playlist; no outside metadata service,
   provider API or bulk stream probing.
   Do not invent values from an ambiguous ID/name. Missing or blank fields stay
@@ -1052,16 +1055,80 @@ No alternate glyphs, layout, default mode or added labels without owner approval
 - **Normalise country and language.** `tvg-country` is usually a code (`UK`,
   `GB`, `US`), `tvg-language` a word. Without a small ISO-3166 / ISO-639 map the
   heads fragment into `UK` / `GB` / `United Kingdom`.
-- **Multi-value fields are NOT split this phase.** `group-title="UK | News"`
-  and `tvg-language="English;Spanish"` are real. Splitting puts one channel in
-  two groups and breaks "one row = one channel index". Treat the whole string
-  as one key.
+- **Multi-value fields are never split across groups — amended 2026-09-09
+  (M8).** `group-title="UK | News"` and `tvg-language="English;Spanish"` are
+  real. Splitting puts one channel in two groups and breaks "one row = one
+  channel index", so that stays forbidden. What changed: a multi-value
+  **tag** now groups by its **first value** (`English;Spanish` → English,
+  `US;CA` → United States) instead of becoming its own `English;Spanish`
+  head. One channel, one group, no fragmentation.
 
 ### 10.2a Missing-information logic — point 5 FINAL (2026-09-08)
 
 Keep the already-final point-2 rules: no outside metadata discovery, no
-fabricated country/language/category from a channel ID or ambiguous name,
-missing fields stay null, and `Unknown` comes last when grouping is available.
+fabricated country/language/category **from a channel ID**, missing fields stay
+null, and `Unknown` comes last when grouping is available.
+
+**Amended 2026-09-09 (M58, owner):** reading *more of the supplied M3U* is not
+outside discovery — the `#EXTGRP` fallback of rule 4 already established that.
+Language and country now get the same treatment, in a fixed order of decreasing
+trust (`lib/core/m3u/channel_metadata.dart`):
+
+| # | Read | Example |
+|---|---|---|
+| 1 | the entry's own `tvg-country` / `tvg-language` (primary value of a compound tag) | `tvg-country="UK"`, `tvg-language="English;Spanish"` → English |
+| 2 | the entry's `group-title` / `#EXTGRP` | `Bangladeshi` · `US | News` · `News | UK` · `Hindi Movies` · `Albania` |
+| 3 | the `tvg-id`'s **ISO region suffix** | `ATNBangla.bd@SD` → Bangladesh · `BBCNews.uk` → United Kingdom |
+| 4 | the channel's own label | `IN: SONY TEN 2` · `Eye 95 America (US)` · `Madani TV Bangla` · `India Today` |
+| 5 | the stream URL's **query string** | `?country=bd`, `?lang=hi` |
+| 6 | a country with **one** dominant broadcast language → that language | Bangladesh → Bangla, Japan → Japanese |
+
+Rule 3 exists because the owner's own list — **iptv-org's generated playlists** —
+carries only `tvg-id`, `tvg-logo` and `group-title`: no `tvg-country`, no
+`tvg-language`, so the id suffix is the only country in the file. This is the
+one deliberate reversal of point 2's "nothing from a channel ID": what is read
+is an **ISO code in a fixed position**, never a name decoded from an id
+(`ZeeCinema` still says nothing about a country).
+
+Guards, all tested in `test/channel_metadata_test.dart`:
+
+- **A generic TLD suffix is not a country.** Measured on 16 021 real
+  `tvg-id`s (iptv-org + Free-TV, 2026-09-09): *every* `.tv` in the wild was a
+  stream site — `Toronto360.tv` is Canada, `Lasestrellas.tv` Mexico,
+  `TaiwanPlus.tv` Taiwan — so `tv`, `to`, `io`, `fm`, `cc`, `ms` and the other
+  generic TLDs are excluded (`_tldAmbiguousCodes`). `.is`, `.me`, `.la`,
+  `.ws`, `.mq`, `.sx`, `.gp`, `.cw` were checked the same way and *are* the
+  country (`RUV.is` Iceland, `TVCG1.me` Montenegro, `BrianTV.la` Laos), so
+  they stay.
+- **Never a bare code in free text.** A word scan matches names and demonyms
+  only, so `Sony TV (in HD)` is not India and `24/7 News in HD` has no
+  language. Codes are believed only in a structured position: a tag value, an
+  id suffix, a bracket, a `XX |` head/tail, a query parameter.
+- **A code in a label is a country first.** `Sky News (UK)` is the United
+  Kingdom and never Ukrainian, `Eawaz TV (CA)` is Canada and never Catalan,
+  `MY | News` is Malaysia and never Burmese. A two-letter code counts as a
+  language in a label only when no country claims it (`(EN)`, `(HI)`, `(ZH)`)
+  — the safe set is computed from the two tables, not hand-listed.
+- **A hyphen inside a word is not a separator** — `Al-Jazeera` yields nothing;
+  `BD - News` yields Bangladesh.
+- **A country taken out of a category leaves the genre behind** (owner,
+  2026-09-09): `group-title="US | News"` stores category `News` and country
+  United States. Only a *separated* head or tail is removed — a whole-label
+  country (`Albania`, `Bangladeshi`) keeps its category exactly as written,
+  or those rows would fall into `Unknown`.
+- **Rule 6 is the weakest link and is opt-out.** It only ever fills a blank,
+  it only covers countries with one dominant broadcast language (never India,
+  Canada, Switzerland, Belgium, South Africa, Sri Lanka, Singapore, Spain…),
+  and `defaultLanguageFromCountry` in `channel_metadata.dart` switches it off.
+  Multilingual countries leave language `Unknown` rather than guessing.
+- **Measured on real public lists** (2026-09-09, 16 021 ids / 17 564 channels):
+  **iptv-org** — 14 435 channels over all 188 `countries/*.m3u` go from 0 % →
+  **87.1 %** country and 0 % → **72.5 %** language (178 country buckets, 71
+  language buckets); Free-TV's 2 068-channel `playlist.m3u8` goes 86.9 % →
+  **98.7 %** country and 0 % → **91.7 %** language. A bare 1 031-channel list
+  with no tags and almost no `group-title` still reaches only 2.8 % / 9.2 %,
+  because there is genuinely nothing in the file to read. Inference is not
+  enrichment: an entry with no evidence stays `Unknown`.
 
 Implement the approved preview's **metadata-aware options, not automatic grouping**:
 
@@ -1077,7 +1144,11 @@ Implement the approved preview's **metadata-aware options, not automatic groupin
    `group-title` is absent or blank, accept that entry's `#EXTGRP` category.
    An explicit `group-title` wins; if both are missing/blank, the category stays
    unknown. This reads another tag in the supplied M3U, not a provider API or
-   outside lookup. No comparable country/language guessing is added.
+   outside lookup. **Country and language now follow the same principle** —
+   see the amendment above (M58). Nothing is fetched from outside the file;
+   the single exception to point 2's "never an ID" is rule 3, which reads the
+   `tvg-id`'s ISO **region suffix** (never its name), because iptv-org's
+   playlists carry no other country.
 
 See §10.15 for the three approved interactive sample scenarios. The previous category
 coverage threshold must not reappear as a so-called smart default.
@@ -1814,7 +1885,7 @@ over the list, so a mode switch must never touch the engine (M45).
 | M5 | Group-by UI | **FINAL (point 5)** — approved preview's stable mark + four-option pill exactly; never a morphing glyph or added labels | **owner**, 2026-09-08, §§10.2, 10.15 |
 | M6 | Group-by default | **FINAL — always Flat on every fresh load**; manual grouping only, retained during this load's panel/search/filter changes, never auto-picked from coverage or restored over Flat on reload | **owner**, 2026-09-08, §10.2 |
 | M7 | Missing-tag modes | **FINAL (point 5)** — dimmed, not hidden; availability uses the underlying playlist, not filtered results | **owner**, 2026-09-08, §§10.2–10.2a |
-| M8 | Multi-value tags | not split this phase | default, §10.2 |
+| M8 | Multi-value tags | **AMENDED (owner, 2026-09-09)** — never split across groups (one row = one channel index), but a multi-value **tag** now groups by its **first value**: `English;Spanish` → English, `US;CA` → United States. Supersedes "not split this phase" | **owner**, 2026-09-09, §10.2 |
 | M9 | Favourite mark | **FINAL (point 6)** — the approved preview's bookmark, not a star | **owner**, 2026-09-08, §§10.3, 10.15 |
 | M10 | Row bookmark visibility | **FINAL (point 6)** — filled + always visible when favourite; hover-only when not; match approved preview exactly | **owner**, 2026-09-08, §§10.3, 10.15 |
 | M11 | Channel key | **FINAL (point 2)** — ID first, then name: `tvg-id` → `tvg-name` → display name; never row number or stream URL | **owner**, 2026-09-08, §§10.0, 10.3 |
@@ -1870,6 +1941,7 @@ over the list, so a mode switch must never touch the engine (M45).
 | M55 | **Local `.m3u` / `.m3u8` files** | **FINAL (owner, 2026-09-08)** — a local playlist file opened via Open File…/drop routes through the same parser and channel UI as an m3u URL; only the fetch differs (file read vs HTTP stream); same HLS-vs-directory detection, byte ceiling, progressive batches, cancellation and buffer release. Never handed whole to mpv after Phase B. Favourites keying for a local file uses its canonical path as its own key *(default)* — two local files must never share a "no-host" favourites bucket | **owner**, 2026-09-08, §10.12 |
 | M56 | **Prev/Next at the load frontier** | **FINAL (owner, 2026-09-08)** — while rows are still arriving, stepping past the last parsed channel parks/dims like end-of-list: never wraps, never interrupts the load. Rare in practice (streaming parse), but mandatory for slow networks / the byte ceiling | **owner**, 2026-09-08, §10.12 |
 | M57 | **Radio / audio-only channels** | **FINAL (owner, 2026-09-08)** — radio is a stream exactly like a video channel, just without video: the same playback path and the same rows/favourites/grouping/search. Nothing new is built — no radio UI, artwork or station-logo-by-name lookup | **owner**, 2026-09-08, §10.12 |
+| M58 | **Language/country from the same entry** | **FINAL (owner, 2026-09-09)** — a playlist that omits `tvg-language`/`tvg-country` no longer loses two grouping modes: both are filled from the entry's own text in the order tag → group → **`tvg-id` region suffix** → label → URL query → single-dominant-language country (`channel_metadata.dart`). The id rule is the one reversal of point 2's "nothing from an ID": iptv-org's playlists carry no other country, and only the ISO suffix is read — never a name, and never a generic TLD (`.tv`, `.to`, `io`, `fm`…), measured on 16 021 real ids. A country taken out of a category leaves the genre behind (`US | News` → `News`); a whole-label country keeps its category. Rule 6 is opt-out via `defaultLanguageFromCountry`. Measured: iptv-org 0 % → 87.1 % country / 72.5 % language; Free-TV 86.9 % → 98.7 % / 91.7 % | **owner**, 2026-09-09, §10.2a |
 
 ### 10.15 Approved grouping / favourites preview — points 5 & 6 FINAL (2026-09-08)
 

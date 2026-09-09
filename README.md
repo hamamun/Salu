@@ -48,6 +48,17 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
   accordion heads, edge chevrons that point at the playing channel
   hiding off-screen, an inert timeline carrying a soft live light while
   data arrives, and silent dead-channel skip behind a 3-strike guard.
+- **Language & country grouping survive a bare playlist** — when a list
+  omits `tvg-language` / `tvg-country` (iptv-org's generated playlists
+  do), both are still read out of the entry itself: the `group-title`
+  (`Bangladeshi`, `US | News`, `Hindi Movies`), the `tvg-id`'s ISO
+  region suffix (`ATNBangla.bd@SD` → Bangladesh), the channel name
+  (`IN: SONY TEN 2`, `Eye 95 America (US)`, `Madani TV Bangla`) and the
+  stream's query string (`?country=bd`), falling back to a
+  single-dominant-language country. A generic TLD suffix (`.tv`) is never
+  read as a country, and a country taken out of a category leaves the
+  genre behind (`US | News` → Category `News`, Country `United States`).
+  Nothing is fetched from outside the file.
 - **Silent keyboard set** — Space, ←→ (ramp seek), ↑↓, M, S, PageUp/PageDown;
   none of it is ever printed in the UI.
 

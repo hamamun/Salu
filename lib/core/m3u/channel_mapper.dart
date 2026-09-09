@@ -1,5 +1,5 @@
 import '../queue_item.dart';
-import 'm3u_aliases.dart';
+import 'channel_metadata.dart';
 import 'm3u_parser.dart';
 
 /// Turns raw [M3uEntry]s into SALU's [QueueItem] channel records
@@ -14,7 +14,10 @@ import 'm3u_parser.dart';
 /// - category = `group-title` when non-blank, else that entry's `#EXTGRP`
 ///   when non-blank, else `null`;
 /// - label = title → `tvg-name` → `tvg-id` → `Unknown` (never the URL);
-/// - language/country pass through the alias tables, whole (no splitting);
+/// - language/country pass through the alias tables and, when the entry
+///   left them blank, through the same-file evidence pass
+///   (`channel_metadata.dart`) — a multi-value tag groups by its primary
+///   value;
 /// - a relative stream / logo URL resolves against the playlist's base;
 /// - the lowercase `name + group` search key is computed once, here.
 class ChannelMapper {
@@ -52,10 +55,29 @@ class ChannelMapper {
 
     // Point 5 FINAL: an explicit non-blank group-title wins; a blank or
     // absent one falls back to the same entry's #EXTGRP.
+    final String? rawGroup =
+        _clean(entry['group-title']) ?? _clean(entry.extgrp);
+
+    // Grouping metadata: the entry's own tags first, then the rest of the
+    // same entry — group text, the tvg-id's region suffix, the label, the
+    // stream query (§10.2a rev. 2026-09-09, M58). A playlist that writes
+    // only group-title and tvg-id still groups by language and country.
+    final ChannelMetadata meta = inferChannelMetadata(
+      tvgCountry: entry['tvg-country'],
+      tvgLanguage: entry['tvg-language'],
+      tvgId: tvgId,
+      group: rawGroup,
+      name: name,
+      url: url,
+    );
+    final String? language = _intern(meta.language);
+    final String? country = _intern(meta.country);
+
+    // A country that came out of the category text (`US | News`) leaves it:
+    // the Country mode owns that part now, so the category reads `News`.
+    // A whole-label country (`Albania`) keeps its category untouched.
     final String? group =
-        _intern(_clean(entry['group-title']) ?? _clean(entry.extgrp));
-    final String? language = _intern(normaliseLanguage(entry['tvg-language']));
-    final String? country = _intern(normaliseCountry(entry['tvg-country']));
+        _intern(_clean(meta.groupWithoutCountry) ?? rawGroup);
 
     final String? logoRaw = _clean(entry['tvg-logo']);
     final String? logoUrl = logoRaw == null ? null : _resolve(logoRaw);
