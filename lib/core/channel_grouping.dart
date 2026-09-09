@@ -219,4 +219,56 @@ class ChannelGrouping {
     final bool unknown = value == null;
     return '${mode.name}\u0000${unknown ? '\u0000' : value}';
   }
+
+  /// Real queue indexes of the group [groupKey] in [mode], in list order
+  /// — what Prev/Next walk while a group is open. Empty in Flat and for
+  /// a stale/unknown key (a key whose group vanished simply steps raw
+  /// list order again).
+  static List<int> membersOf(
+    List<QueueItem> items,
+    ChannelGroupMode mode,
+    String groupKey,
+  ) {
+    if (mode == ChannelGroupMode.flat) return const <int>[];
+    final List<int> out = <int>[];
+    for (int i = 0; i < items.length; i++) {
+      if (keyFor(items, i, mode) == groupKey) out.add(i);
+    }
+    return out;
+  }
+
+  /// The Prev/Next landing index for a channel list.
+  ///
+  /// [members] is the open group's channels ([membersOf]) — empty in
+  /// Flat, while the accordion is collapsed, while a search flattens the
+  /// list, or for a stale key, in which case stepping is plain raw list
+  /// order. [direction] is +1 for Next, −1 for Previous. `null` parks
+  /// (edges never wrap):
+  ///
+  /// - inside the open group, steps to the neighbouring member; at the
+  ///   group's edges it parks instead of leaving the group;
+  /// - from OUTSIDE the open group (the viewer is browsing a group that
+  ///   is not the playing one), steps INTO it — Next takes its first
+  ///   channel, Previous its last.
+  ///
+  /// The favourites filter never affects stepping — only the open group
+  /// does.
+  static int? stepTarget({
+    required List<int> members,
+    required int from,
+    required int direction,
+    required int count,
+  }) {
+    if (members.isEmpty) {
+      if (direction > 0) {
+        return (from >= 0 && from < count - 1) ? from + 1 : null;
+      }
+      final int to = from - 1;
+      return (from > 0 && to < count) ? to : null;
+    }
+    final int pos = members.indexOf(from);
+    if (pos < 0) return direction > 0 ? members.first : members.last;
+    final int at = pos + direction;
+    return (at >= 0 && at < members.length) ? members[at] : null;
+  }
 }

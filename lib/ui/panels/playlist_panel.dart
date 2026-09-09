@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../core/channel_favourites_service.dart';
 import '../../core/channel_grouping.dart';
 import '../../core/channel_load_service.dart';
+import '../../core/channel_view_service.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
@@ -58,6 +59,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   final ChannelFavouritesService _favourites =
       ChannelFavouritesService.instance;
   final ChannelLoadService _loads = ChannelLoadService.instance;
+  final ChannelViewService _view = ChannelViewService.instance;
 
   /// Fixed pitch of a playlist row (drag reorder needs exact extents).
   static const double _rowExtent = 40;
@@ -85,17 +87,15 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   // ── Channel view state (playlist_imp.md §10.2–§10.6) ────────────────
 
-  /// The grouping the viewer chose — Flat until they say otherwise (M6).
-  /// A pure view choice: it never touches the queue (M45).
-  ChannelGroupMode _groupMode = ChannelGroupMode.flat;
+  // The grouping the viewer chose and the accordion's open group live in
+  // [ChannelViewService] (Flat until they say otherwise — M6): Prev/Next
+  // step the same order this panel shows even when it is closed, so the
+  // view choices outlive the widget. A pure view choice: they never touch
+  // the queue (M45).
 
   /// Favourites-only filter (the header bookmark) — groups stay, rows
   /// thin to bookmarks; combined with a search, search wins (§10.3).
   bool _favOnly = false;
-
-  /// The accordion's one open group (its stable key), or `null` while
-  /// every group is collapsed. A stale key simply opens nothing.
-  String? _openGroup;
 
   /// Whether the search field holds focus — while it does, the channel
   /// header's mode pair steps aside so the field can breathe (§10.3).
@@ -229,8 +229,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _search.clear();
     _query = '';
     _favOnly = false;
-    _groupMode = ChannelGroupMode.flat;
-    _openGroup = null;
+    _view.reset();
     _userScrollTimer?.cancel();
     _userScrolled = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -301,8 +300,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     if (identical(items, _cacheItems) &&
         _cacheQuery == _query &&
         _cacheFavOnly == _favOnly &&
-        _cacheMode == _groupMode &&
-        _cacheOpen == _openGroup &&
+        _cacheMode == _view.groupMode.value &&
+        _cacheOpen == _view.openGroup.value &&
         identical(favs, _cacheFavs)) {
       return;
     }
@@ -320,8 +319,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _cacheItems = items;
     _cacheQuery = _query;
     _cacheFavOnly = _favOnly;
-    _cacheMode = _groupMode;
-    _cacheOpen = _openGroup;
+    _cacheMode = _view.groupMode.value;
+    _cacheOpen = _view.openGroup.value;
     _cacheFavs = favs;
     _cachedFiltered = filtered;
     // A search flattens the list whatever the mode is (§10.3) — the
@@ -329,8 +328,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _cachedDescriptors = ChannelGrouping.descriptors(
       items: items,
       filtered: filtered,
-      mode: _groupMode,
-      openGroupKey: _openGroup,
+      mode: _view.groupMode.value,
+      openGroupKey: _view.openGroup.value,
       flattened: _query.isNotEmpty,
     );
   }
@@ -362,9 +361,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     }
     if (target == null &&
         _query.isEmpty &&
-        _groupMode != ChannelGroupMode.flat) {
+        _view.groupMode.value != ChannelGroupMode.flat) {
       final String? dest =
-          ChannelGrouping.keyFor(items, current, _groupMode);
+          ChannelGrouping.keyFor(items, current, _view.groupMode.value);
       if (dest != null) {
         for (int i = 0; i < _cachedDescriptors.length; i++) {
           final ChannelDescriptor d = _cachedDescriptors[i];
@@ -462,41 +461,27 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     });
   }
 
-  /// Answers a channel index change (playlist_imp.md §10.6 M54): a
-  /// deliberate zap always reveals — opening a collapsed destination
-  /// group — while an automatic failure skip into an unbrowsed group
-  /// never steals the view. The toast, the title bar and the head/edge
-  /// chevrons say where it landed instead.
+  /// Answers a channel index change: every zap is deliberate, so it always
+  /// reveals — opening a collapsed destination group. A filter that hides
+  /// the channel hides the reveal too (there is nothing to scroll to).
   void _revealOnChannelIndex(List<QueueItem> items) {
     final int current = _queue.index.value;
-    final bool auto = _player.lastOpenWasAuto;
+    final ChannelGroupMode mode = _view.groupMode.value;
     final bool grouped =
-        _query.isEmpty && _groupMode != ChannelGroupMode.flat;
+        _query.isEmpty && mode != ChannelGroupMode.flat;
     if (grouped) {
-      final String? dest =
-          ChannelGrouping.keyFor(items, current, _groupMode);
-      if (auto) {
-        if (dest != null && dest == _openGroup) {
-          _ensureChannelCache(items);
-          if (_cachedFiltered.contains(current)) {
-            _revealChannel(items, animate: true);
-          }
-        }
-        return;
-      }
-      if (dest != null && dest != _openGroup) {
-        setState(() => _openGroup = dest);
+      final String? dest = ChannelGrouping.keyFor(items, current, mode);
+      if (dest != null && dest != _view.openGroup.value) {
+        setState(() => _view.openGroup.value = dest);
       }
       _userScrollTimer?.cancel();
       _userScrolled = false;
       _revealChannel(items, animate: true, force: true);
       return;
     }
-    if (!auto) {
-      _userScrollTimer?.cancel();
-      _userScrolled = false;
-    }
-    _revealChannel(items, animate: true, force: !auto);
+    _userScrollTimer?.cancel();
+    _userScrolled = false;
+    _revealChannel(items, animate: true, force: true);
   }
 
   // ── Group-by pill ────────────────────────────────────────────────────
@@ -544,11 +529,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// A pure view change — the queue is never touched (M45).
   void _chooseMode(ChannelGroupMode mode) {
     _closePill();
-    if (mode == _groupMode) return;
+    if (mode == _view.groupMode.value) return;
     final List<QueueItem> items = _queue.items.value;
     setState(() {
-      _groupMode = mode;
-      _openGroup = mode == ChannelGroupMode.flat
+      _view.groupMode.value = mode;
+      _view.openGroup.value = mode == ChannelGroupMode.flat
           ? null
           : ChannelGrouping.keyFor(items, _queue.index.value, mode);
     });
@@ -605,7 +590,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   void _clearQuery() {
     if (_query.isEmpty) return;
     _search.clear();
-    setState(() => _query = '');
+    setState(() {
+      _query = '';
+      // Grouping (and grouped stepping) unsuspends with the list (§10.3).
+      _view.searching.value = false;
+    });
   }
 
   // ── Build ────────────────────────────────────────────────────────────
@@ -809,7 +798,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           childPaintTransform: info.childPaintTransform,
           childSize: info.childSize,
           animation: _pillAnim,
-          mode: _groupMode,
+          mode: _view.groupMode.value,
           onDismiss: _closePill,
           onChoose: _chooseMode,
         );
@@ -933,8 +922,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 8),
                 ),
-                onChanged: (String value) =>
-                    setState(() => _query = value.trim()),
+                onChanged: (String value) => setState(() {
+                  _query = value.trim();
+                  // A search suspends the grouping (§10.3) — and grouped
+                  // stepping with it, until the search clears.
+                  _view.searching.value = _query.isNotEmpty;
+                }),
               ),
             ),
             Text(
@@ -1096,7 +1089,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
             count: d.group.indexes.length,
             expanded: d.expanded,
             onTap: () => setState(() {
-              _openGroup = d.expanded ? null : d.key;
+              _view.openGroup.value = d.expanded ? null : d.key;
             }),
           );
         }
@@ -1139,8 +1132,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// approved preview's motion. Occludes with the panel's own glass.
   Widget _stickyHead(List<QueueItem> items) {
     if (_query.isNotEmpty ||
-        _groupMode == ChannelGroupMode.flat ||
-        _openGroup == null) {
+        _view.groupMode.value == ChannelGroupMode.flat ||
+        _view.openGroup.value == null) {
       return const SizedBox.shrink();
     }
     return ListenableBuilder(
@@ -1156,7 +1149,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           child: _PinnedHeadTile(
             label: pinned.group.label,
             count: pinned.group.indexes.length,
-            onTap: () => setState(() => _openGroup = null),
+            onTap: () => setState(() => _view.openGroup.value = null),
           ),
         );
       },
@@ -1171,8 +1164,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     // and a full sweep of 50 000 descriptors per frame is exactly the
     // budget §10.10c exists to protect.
     if (_query.isNotEmpty ||
-        _groupMode == ChannelGroupMode.flat ||
-        _openGroup == null) {
+        _view.groupMode.value == ChannelGroupMode.flat ||
+        _view.openGroup.value == null) {
       return null;
     }
     _ensureChannelCache(items);
@@ -1180,7 +1173,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     ChannelGroup? group;
     for (int i = 0; i < _cachedDescriptors.length; i++) {
       final ChannelDescriptor d = _cachedDescriptors[i];
-      if (d is GroupHeadDescriptor && d.key == _openGroup) {
+      if (d is GroupHeadDescriptor && d.key == _view.openGroup.value) {
         headPos = i;
         group = d.group;
         break;
