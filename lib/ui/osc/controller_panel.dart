@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/custom_title_bar.dart';
+import 'fullscreen_control.dart';
 import 'media_timeline.dart';
 import 'open_media_control.dart';
 import 'playlist_control.dart';
@@ -63,9 +64,13 @@ class ControllerPanel extends StatelessWidget {
                   ),
                 ),
                 // Center zone · the transport cluster + sound group.
-                // The row's right edge stays free for the future
-                // tracks / PiP / fullscreen controls.
                 Center(child: TransportCluster()),
+                // Right zone · fullscreen is a direct, one-click action at
+                // the outermost edge.
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FullscreenControl(),
+                ),
               ],
             ),
           ),
