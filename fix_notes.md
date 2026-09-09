@@ -64,3 +64,81 @@ after a scroll.
 **Fix direction (extends #1):** on a deliberate index change (auto-advance, Next,
 Previous, row click) force the reveal regardless of `_userScrolled`; only a *manual
 scroll* should suppress the reveal, and only briefly.
+
+## 4 · Channel list renders empty — the rows area collapses to 0 × 0
+**Status:** FIXED 2026-09-08 — `_channelRowsArea` (`fit: StackFit.expand`) and
+`_SaluScrollView` (the list is the Stack's non-positioned child) in
+`lib/ui/panels/playlist_panel.dart`.
+**Symptom (owner, Phase B):** an m3u loads and plays, the channel header shows
+(group-by · favourites · search with the channel count · bin · close), but the
+rows area below it is blank — the channel list that the M-3/M-4 build listed
+"just fine" is gone. No exception, no red box, nothing in the terminal.
+
+**Root cause (layout, not data).** The queue held every channel the whole
+time; the list was laid out at zero size, so it painted nothing.
+
+- Local mode: `Expanded → _rowsArea → _SaluScrollView`. `Expanded` passes
+  **tight** constraints, so the scroll view's inner `Stack`
+  (`Positioned.fill(list)` + the thumb) inherited `minHeight == maxHeight` and
+  filled the panel. That is why Phase A — and Phase B before the channel UI —
+  always looked right.
+- Channel mode (M-5): `_channelRowsArea` wrapped the same scroll view in a new
+  `Stack` (for the sticky head and the edge chevrons). A `Stack` with the
+  default `StackFit.loose` lays out its non-positioned children with
+  `constraints.loosen()` → `minHeight` becomes **0**.
+- `RenderStack` sizes itself to `Size(max(minWidth, …), max(minHeight, …))`
+  over its **non-positioned** children only (`rendering/stack.dart`,
+  `_computeSize`). Inside `_SaluScrollView` the list was `Positioned.fill`, so
+  the *only* non-positioned child was the thumb's `SizedBox.shrink()`
+  placeholder (0 × 0) whenever the thumb was not drawn. With a loosened
+  `minHeight` the inner Stack therefore measured **0 × 0**, and
+  `StackParentData.positionedChildConstraints` handed the list
+  `BoxConstraints.tightFor(width: 0, height: 0)`. The `ListView` was laid out
+  at zero size and painted nothing — no exception, no overflow stripe, and not
+  even the Stack's clip (`_hasVisualOverflow` stays false when the child is
+  zero-sized). `LayoutBuilder` passes its constraints straight down and takes
+  `constraints.constrain(child.size)`, so the collapse propagated up unchanged.
+- The `ListView` still existed with clients, at `viewportDimension == 0`. That
+  is why the scrollbar drew nothing (`viewport <= 0` guard) and why the edge
+  chevron chip (§10.6) sat there pointing at a list nobody could see: with a
+  zero-height viewport the playing row is always "off screen".
+
+**Fix.** Two independent guards, so the collapse cannot come back through a
+future wrapper:
+1. `_channelRowsArea` builds its Stack with `fit: StackFit.expand` — the rows
+   view gets the same tight box the local list gets from `Expanded`.
+2. `_SaluScrollView` makes the scroll view itself the Stack's non-positioned
+   child (the thumb stays positioned). `RenderViewport` is `sizedByParent`
+   with `size == constraints.biggest`, so it fills any bounded box, loose or
+   tight: the local (tight) caller measures exactly as before, and the channel
+   caller can no longer collapse.
+
+**Verified against the framework source** (`flutter/flutter@stable`):
+`RenderStack._computeSize` (non-positioned-only measurement,
+`StackFit.loose → constraints.loosen()`, `StackFit.expand →
+BoxConstraints.tight(constraints.biggest)`),
+`StackParentData.positionedChildConstraints`, `_RenderLayoutBuilder.performLayout`,
+`RenderViewport.computeDryLayout`, `RenderFlex._constraintsForFlexChild`
+(`Expanded` + `stretch` = tight on both axes — why local mode never collapsed),
+and `RenderBox.hitTestSelf == false` for the childless `SizedBox` that
+`StackFit.expand` now stretches (it cannot swallow a row click).
+
+**Not the cause (checked and cleared):** the parser and the progressive batches
+(ported and exercised over CRLF/BOM/tiny-chunk inputs — every channel is
+emitted), `QueueService.setItems`/`appendItems` notification, the descriptor
+cache and `ChannelGrouping.descriptors` (Flat returns one row per filtered
+index), and the isolate batch typing.
+
+### 4a · Three "channel failed to load" lines for one dead channel
+Same session, same log. `_onEngineError` printed one line per **mpv error
+line**, before `ChannelSkipPolicy` decided anything — and one dead stream emits
+several. The policy was already correct (one strike, one toast, one skip); only
+the log lied, and it read like three dead channels. The line now reports the
+*decision* — `skipping to the next` / `staying put (n in a row)` /
+`channel error ignored (duplicate report)`.
+
+### 4b · "Lost connection to device." is not a crash
+`_CloseGuard.onWindowClose` (lib/main.dart) flushes the resume + favourites
+stores and then calls `exit(0)`. The VM service socket dies with the process,
+so `flutter run` reports "Lost connection to device." on every normal window
+close. Nothing crashed in the pasted log.
