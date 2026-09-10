@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU — D14 Fetch button · interactive preview</title>
+<style>
+  /* ── SALU palette (lib/theme/app_theme.dart · AppColors) ───────────── */
+  :root {
+    --bg: #1E1E1E;          /* background            */
+    --video: #121212;       /* videoBackdrop         */
+    --surface: #252526;     /* surface               */
+    --surface-hi: #2D2D30;  /* surfaceHighlight      */
+    --text: #EDEDED;        /* textPrimary           */
+    --icon-idle: #A6A6A6;   /* iconIdle              */
+    --text-sec: #9A9A9A;    /* textSecondary         */
+    --divider: #3A3A3C;     /* divider               */
+    --outline: #333336;     /* surfaceOutline        */
+    --chip: rgba(44,44,49,.94); /* chipBackground    */
+    --bar-track: #35353C;   /* barTrack              */
+    --bar-fill: rgba(255,255,255,.5); /* barFill     */
+    --bar-thumb: #F2F2F2;   /* barThumb              */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #101013;
+    color: var(--text);
+    font: 13px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 22px 20px 60px;
+  }
+
+  /* ── demo chrome (this bar is review tooling, not SALU UI) ─────────── */
+  .demo-bar {
+    width: 980px; max-width: 100%;
+    display: flex; align-items: center; gap: 14px; margin-bottom: 14px;
+  }
+  .demo-bar .tag {
+    font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: #7c7c80;
+  }
+  .seg { display: flex; border: 1px solid #26262c; border-radius: 9px; overflow: hidden; background: #17171b; }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: #9a9aa0;
+    font: 600 11.5px/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    padding: 7px 13px; cursor: pointer; transition: color .12s ease, background .12s ease;
+  }
+  .seg button + button { border-left: 1px solid #26262c; }
+  .seg button:hover { color: #e8e8ea; }
+  .seg button.on { color: #101013; background: #e8e8ea; }
+  .demo-bar .note { margin-left: auto; font-size: 11px; color: #7c7c80; }
+
+  /* ── the app window ────────────────────────────────────────────────── */
+  .window {
+    position: relative; width: 980px; max-width: 100%; height: 604px;
+    background: var(--bg); border: 1px solid var(--outline); border-radius: 12px;
+    overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.55);
+    user-select: none;
+  }
+
+  /* ── title bar ─────────────────────────────────────────────────────── */
+  .titlebar {
+    height: 36px; display: flex; align-items: center; padding: 0 0 0 14px;
+    position: relative; z-index: 6;
+  }
+  .titlebar .brand { display: flex; align-items: center; gap: 9px; }
+  .titlebar .word { font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--text); }
+  .titlebar .file {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-size: 11.5px; color: var(--text-sec); white-space: nowrap;
+  }
+  .caption-group { margin-left: auto; display: flex; height: 100%; }
+  .caption-btn {
+    width: 44px; height: 100%; display: flex; align-items: center; justify-content: center;
+    color: var(--icon-idle); cursor: pointer; transition: background .12s ease, color .12s ease;
+  }
+  .caption-btn:hover { background: rgba(255,255,255,.1); color: var(--text); }
+  .caption-btn.close:hover { background: #E81123; color: #fff; }
+
+  /* ── controller panel (timeline + control row) ─────────────────────── */
+  .controller { position: relative; z-index: 5; padding: 4px 18px 12px; }
+  .controller::after {  /* scrim melt into the video below */
+    content: ""; position: absolute; left: 0; right: 0; bottom: -42px; height: 42px;
+    background: linear-gradient(180deg, rgba(30,30,30,.85), rgba(30,30,30,0));
+    pointer-events: none; z-index: 4;
+  }
+  .timeline {
+    position: relative; height: 22px; display: flex; align-items: center; cursor: default;
+  }
+  .timeline .track { position: relative; flex: 1; height: 4px; border-radius: 2px; background: var(--bar-track); transition: height .12s ease; }
+  .timeline:hover .track { height: 6px; }
+  .timeline .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 62%; background: var(--bar-fill); border-radius: 2px; }
+  .timeline .thumb { position: absolute; left: 62%; top: -4px; width: 2px; height: calc(100% + 8px); background: var(--bar-thumb); }
+
+  .control-row { height: 36px; display: flex; align-items: center; margin-top: 8px; }
+  .zone-left { display: flex; align-items: center; }
+  .cluster { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; }
+  .g1 { display: flex; gap: 6px; }
+  .g2 { display: flex; gap: 6px; margin-left: 14px; }
+  .g3 { display: flex; gap: 6px; margin-left: 14px; }
+  .sound { display: flex; align-items: center; gap: 8px; margin-left: 26px; }
+  .zone-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+  /* the one icon recipe (follow.md §2): light + motion, never shapes */
+  .mark {
+    appearance: none; border: 0; background: transparent; padding: 0;
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    color: var(--icon-idle); cursor: pointer;
+    transition: color .12s ease, transform .12s ease, opacity .12s ease, text-shadow .12s ease;
+  }
+  .mark svg { display: block; }
+  .mark:hover { color: var(--text); transform: scale(1.06); }
+  .mark:active { transform: scale(.90); }
+  .mark.active { color: var(--text); text-shadow: 0 0 9px rgba(255,255,255,.28); }
+  /* greyed out + inert — the button keeps its slot, never vanishes (§6.1) */
+  .mark.gone { opacity: .28; pointer-events: none; }
+
+  /* volume bar — horizontal, value inside, pinned to the fill's right edge */
+  .vol { position: relative; width: 96px; height: 4px; border-radius: 2px; background: var(--bar-track); transition: height .12s ease; }
+  .sound:hover .vol { height: 6px; }
+  .vol .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 62%; background: var(--bar-fill); border-radius: 2px; }
+  .vol .num { position: absolute; left: 62%; top: -5px; transform: translateX(-5px); font-size: 9px; line-height: 1.4; color: var(--text); }
+
+  /* ── video area ────────────────────────────────────────────────────── */
+  .video-area { position: relative; height: 456px; background: var(--video); }
+  .picture { position: absolute; left: 0; right: 0; top: 17.5%; bottom: 17.5%; overflow: hidden; }
+  .scene { position: absolute; inset: 0; transition: opacity .35s ease; }
+  .scene.space {
+    background:
+      radial-gradient(120% 90% at 24% 18%, #16304a 0%, rgba(10,16,28,0) 55%),
+      radial-gradient(90% 120% at 78% 84%, #241a2e 0%, rgba(8,10,18,0) 60%),
+      linear-gradient(180deg, #0a0e18 0%, #0d1220 55%, #070910 100%);
+  }
+  .scene.desert {
+    background:
+      radial-gradient(130% 100% at 30% 12%, rgba(255,196,120,.32) 0%, rgba(255,196,120,0) 55%),
+      linear-gradient(180deg, #6e4a2a 0%, #8a5c33 45%, #b07a42 78%, #c98f52 100%);
+  }
+  .stars { position: absolute; inset: 0; }
+  .stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #cfd8ea; }
+  .dunes { position: absolute; inset: 0; }
+  .dunes i { position: absolute; bottom: -24%; border-radius: 50%; }
+  .dunes i:nth-child(1) { left: -12%; width: 68%; height: 58%; background: #7a4e27; }
+  .dunes i:nth-child(2) { right: -18%; width: 78%; height: 52%; background: #8f5c2f; }
+  .dunes i:nth-child(3) { left: 16%; width: 60%; height: 40%; background: #a06a37; }
+
+  /* mpv-native subtitle: plain text riding in the bottom black bar */
+  .subtitle {
+    position: absolute; left: 0; right: 0; bottom: 26px; text-align: center;
+    font-size: 17px; color: #F2F2F2; letter-spacing: .01em;
+    text-shadow: 0 0 3px rgba(0,0,0,.9), 0 1px 2px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.55);
+    pointer-events: none; transition: opacity .15s ease;
+  }
+  .subtitle:dir(rtl) { font-size: 18px; }
+
+  .mode-canvas { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; color: var(--text-sec); font-size: 13px; letter-spacing: .02em; }
+
+  /* ── OSD deck (top center of the video area) ───────────────────────── */
+  .osd-deck { position: absolute; top: 12px; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; z-index: 9; }
+  .osd-card {
+    margin-top: 6px; background: var(--chip); border: 1px solid var(--outline);
+    border-radius: 9px; padding: 7px 15px; font-size: 12px; color: var(--text);
+    box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    animation: card-in .18s cubic-bezier(.22,1,.36,1);
+  }
+  .osd-card.bye { animation: card-out .22s ease-in forwards; }
+  @keyframes card-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+  @keyframes card-out { to { opacity: 0; transform: translateY(-4px) scale(.98); } }
+
+  /* ── the track panel (D14 · §6.2–6.3) ──────────────────────────────── */
+  .track-panel {
+    position: absolute; top: 6px; right: 16px; width: 302px; z-index: 8;
+    max-height: calc(100% - 12px); overflow-y: auto;
+    background: rgba(37,37,38,.97); border: 1px solid var(--outline); border-radius: 11px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.5);
+    padding: 8px 6px 6px;
+    transform-origin: top right;
+    animation: panel-in .2s cubic-bezier(.22,1,.36,1);
+  }
+  .track-panel::-webkit-scrollbar { width: 4px; }
+  .track-panel::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 2px; }
+  .track-panel::-webkit-scrollbar-track { background: transparent; }
+  .track-panel.bye { animation: panel-out .16s ease-in forwards; }
+  @keyframes panel-in  { from { opacity: 0; transform: translateY(-8px) scale(.96); } }
+  @keyframes panel-out { to   { opacity: 0; transform: translateY(-6px) scale(.97); } }
+
+  .part-label {
+    font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--text-sec); padding: 7px 12px 3px;
+  }
+  .rows { display: flex; flex-direction: column; }
+  .rows.scrollable { max-height: 140px; overflow-y: auto; padding-right: 2px; }
+  .rows::-webkit-scrollbar { width: 4px; }
+  .rows::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 2px; }
+  .rows::-webkit-scrollbar-track { background: transparent; }
+
+  .row {
+    display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px;
+    border-radius: 7px; cursor: pointer; color: var(--icon-idle);
+    transition: color .12s ease, background .12s ease;
+  }
+  .row:hover { color: var(--text); background: var(--surface-hi); }
+  .row .lbl { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .sub { font-size: 10.5px; color: var(--text-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .tick { margin-left: auto; opacity: 0; color: var(--text); flex: none; transition: opacity .12s ease; }
+  .row.sel { color: var(--text); }
+  .row.sel .tick { opacity: 1; }
+  .row .spacer { margin-left: auto; }
+
+  .hairline { height: 1px; background: var(--divider); margin: 7px 12px; }
+
+  .panel-actions { display: flex; align-items: center; gap: 20px; padding: 2px 12px 4px; }
+
+  /* ── the search window (D14 · §6.5) — centered glass modal ─────────── */
+  .barrier {
+    position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    animation: fade-in .16s ease-out;
+  }
+  .barrier.bye { animation: fade-out .14s ease-in forwards; }
+  @keyframes fade-in  { from { opacity: 0; } }
+  @keyframes fade-out { to   { opacity: 0; } }
+
+  .modal {
+    width: 470px; max-height: 428px; display: flex; flex-direction: column;
+    background: rgba(37,37,38,.98); border: 1px solid var(--outline); border-radius: 13px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
+    padding: 18px 18px 14px;
+    animation: modal-in .19s cubic-bezier(.22,1,.36,1);
+  }
+  @keyframes modal-in { from { opacity: 0; transform: scale(.96); } }
+
+  .name-field {
+    width: 100%; background: var(--bg); border: 1px solid var(--divider); border-radius: 9px;
+    color: var(--text); font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    padding: 9px 13px; outline: none; transition: border-color .12s ease;
+  }
+  .name-field:focus { border-color: rgba(255,255,255,.32); }
+
+  .modal-actions { display: flex; align-items: center; gap: 22px; margin: 12px 2px 4px; }
+  .modal-actions .close-slot { margin-left: auto; }
+  .mark.dim { opacity: .32; pointer-events: none; }
+
+  .results { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 6px; }
+  .results .wait { flex: 1; display: flex; align-items: center; justify-content: center; }
+  .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--divider); border-top-color: var(--text); animation: rot .7s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .res-groups { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; animation: fade-in .18s ease-out; }
+  .res-groups::-webkit-scrollbar { width: 4px; }
+  .res-groups::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 2px; }
+  .res-row .lines { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+  .res-row { height: 40px; }
+  .res-row .lang { margin-left: auto; font-size: 11px; color: var(--text-sec); flex: none; }
+  .res-row.sel .lang { color: var(--text); }
+
+  /* ── tooltip (names a control, hover-delayed — follow.md rule 1) ────── */
+  .tip {
+    position: fixed; z-index: 99; background: var(--chip); border: 1px solid var(--outline);
+    border-radius: 7px; padding: 5px 10px; font-size: 11px; color: var(--text);
+    pointer-events: none; opacity: 0; transform: translateY(2px);
+    transition: opacity .12s ease, transform .12s ease; white-space: nowrap;
+  }
+  .tip.show { opacity: 1; transform: translateY(0); }
+
+  /* ── guide below the window (review tooling) ───────────────────────── */
+  .guide { width: 980px; max-width: 100%; margin-top: 18px; color: #9a9aa0; font-size: 12px; }
+  .guide h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #7c7c80; margin-bottom: 8px; }
+  .guide ol { margin-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+  .guide li b { color: #e8e8ea; font-weight: 600; }
+  .guide .fine { margin-top: 10px; color: #7c7c80; font-size: 11px; }
+</style>
+</head>
+<body>
+
+  <!-- if scripts are blocked (e.g. a static file viewer), say so —
+       otherwise the preview looks fine but every click does nothing -->
+  <noscript>
+    <div style="width:980px;max-width:100%;margin-bottom:14px;padding:12px 16px;border:1px solid #5a3a3a;border-radius:10px;background:#241416;color:#e8b0b0;font-size:12.5px;">
+      <b>Scripts are off in this view</b> — the interactive preview needs the live server
+      (the &ldquo;D14 design preview&rdquo; card, port 8531), not a static render.
+    </div>
+  </noscript>
+
+  <!-- demo switcher — review tooling, not SALU UI -->
+  <div class="demo-bar">
+    <span class="tag">D14 preview</span>
+    <div class="seg" id="modeSeg">
+      <button data-mode="video" class="on">Local video</button>
+      <button data-mode="audio">Audio file</button>
+      <button data-mode="channel">Channel list</button>
+    </div>
+    <span class="note" id="modeNote">Fetch button visible — local video (D6)</span>
+  </div>
+
+  <div class="window" id="win">
+
+    <!-- ── title bar ─────────────────────────────────────────────────── -->
+    <div class="titlebar">
+      <div class="brand">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+          <circle cx="3" cy="4" r="1.35"/><circle cx="7" cy="4" r="1.35"/><circle cx="11" cy="4" r="1.35"/>
+          <circle cx="3" cy="10" r="1.35"/><circle cx="7" cy="10" r="1.35"/><circle cx="11" cy="10" r="1.35"/>
+        </svg>
+        <span class="word">SALU</span>
+      </div>
+      <span class="file" id="titleFile">Interstellar.mkv</span>
+      <div class="caption-group">
+        <div class="caption-btn"><svg width="11" height="11" viewBox="0 0 11 11"><path d="M1 5.5h9" stroke="currentColor" stroke-width="1.3"/></svg></div>
+        <div class="caption-btn"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></div>
+        <div class="caption-btn close"><svg width="11" height="11" viewBox="0 0 11 11"><path d="M1.5 1.5l8 8M9.5 1.5l-8 8" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+
+    <!-- ── controller panel ──────────────────────────────────────────── -->
+    <div class="controller">
+      <div class="timeline">
+        <div class="track"><div class="fill"></div><div class="thumb"></div></div>
+      </div>
+      <div class="control-row">
+        <!-- left · Open media + playlist -->
+        <div class="zone-left">
+          <button class="mark" data-tip="Open media" style="pointer-events:auto">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3v12M3 9h12"/></svg>
+          </button>
+          <span style="width:6px"></span>
+          <button class="mark" data-tip="Playlist" style="pointer-events:auto">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5h12M3 9h12M3 13.5h12"/></svg>
+          </button>
+        </div>
+
+        <!-- center · transport cluster + sound group -->
+        <div class="cluster">
+          <div class="g1">
+            <button class="mark" id="btnPlay" data-tip="Pause" style="pointer-events:auto">
+              <svg width="17" height="17" viewBox="0 0 17 17" fill="currentColor"><rect x="3.6" y="2.6" width="3" height="11.8" rx="1"/><rect x="10.4" y="2.6" width="3" height="11.8" rx="1"/></svg>
+            </button>
+            <button class="mark" data-tip="Stop" style="pointer-events:auto">
+              <svg width="15" height="15" viewBox="0 0 15 15"><rect x="2.2" y="2.2" width="10.6" height="10.6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+            </button>
+          </div>
+          <div class="g2">
+            <button class="mark" id="btnPrev" data-tip="Previous" style="pointer-events:auto">
+              <svg width="19" height="16" viewBox="0 0 19 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1.8v12.4"/><path d="M15.5 2.8L9 8l6.5 5.2M10.5 2.8L4 8l6.5 5.2"/></svg>
+            </button>
+            <button class="mark" id="btnNext" data-tip="Next" style="pointer-events:auto">
+              <svg width="19" height="16" viewBox="0 0 19 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 1.8v12.4"/><path d="M3.5 2.8L10 8 3.5 13.2M8.5 2.8L15 8 8.5 13.2"/></svg>
+            </button>
+          </div>
+          <div class="g3">
+            <button class="mark" data-tip="Seek back" style="pointer-events:auto">
+              <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 1.8L6 7l7 5.2M8 1.8L1 7l7 5.2"/></svg>
+            </button>
+            <button class="mark" data-tip="Seek forward" style="pointer-events:auto">
+              <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1.8L10 7l-7 5.2M8 1.8L15 7 8 12.2"/></svg>
+            </button>
+          </div>
+          <div class="sound">
+            <button class="mark" data-tip="Mute" style="pointer-events:auto">
+              <svg width="19" height="16" viewBox="0 0 19 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5v5h3l4 3.5v-12l-4 3.5z"/><path d="M12.3 5.2a4 4 0 010 5.6M14.8 3a7.2 7.2 0 010 10"/></svg>
+            </button>
+            <div class="vol"><div class="fill"></div><span class="num">62%</span></div>
+          </div>
+        </div>
+
+        <!-- right · FETCH (new, D14) + fullscreen -->
+        <div class="zone-right">
+          <button class="mark" id="btnFetch" data-tip="Tracks" aria-label="Tracks">
+            <!-- caption-family mark — thin rounded frame + text rules
+                 (deliberately NOT the channel-line speech bubble) -->
+            <svg width="20" height="17" viewBox="0 0 20 17" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1.2" y="1.2" width="17.6" height="14.6" rx="2.6"/>
+              <path d="M5.4 6.2h9.2M5.4 10.8h5.6"/>
+            </svg>
+          </button>
+          <button class="mark" data-tip="Fullscreen" style="pointer-events:auto">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M1.5 5V1.5H5M11 1.5h3.5V5M14.5 11v3.5H11M5 14.5H1.5V11"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── video area ────────────────────────────────────────────────── -->
+    <div class="video-area" id="videoArea">
+      <div class="picture" id="picture">
+        <div class="scene space" id="scene">
+          <div class="stars" id="stars"></div>
+          <div class="dunes" id="dunes" style="display:none"><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="subtitle" id="subtitle" dir="auto"></div>
+      <div class="mode-canvas" id="modeCanvas"></div>
+
+      <!-- OSD deck -->
+      <div class="osd-deck" id="osdDeck"></div>
+
+      <!-- track panel mounts here -->
+      <!-- search modal mounts here -->
+    </div>
+  </div>
+
+  <!-- hidden real file picker for the Load mark -->
+  <input type="file" id="filePick" accept=".srt,.ass,.ssa,.vtt,.sub" style="display:none">
+
+  <!-- ── guide (review tooling) ─────────────────────────────────────── -->
+  <div class="guide">
+    <h2>What to try</h2>
+    <ol>
+      <li><b>Tracks button</b> (right of the control row, left of fullscreen) — the panel slides down: audio · embedded subs (<b>Off pinned on top</b>) · local subs, mirroring what mpv is doing right now.</li>
+      <li>The embedded-subs part has 7 tracks — it <b>scrolls inside</b> at 5 rows; the panel never grows.</li>
+      <li>Tap tracks in any part — the panel <b>stays open</b> and the marks follow live; the subtitle in the black bar changes language; <b>Off</b> hides it. No OSD cards for switches.</li>
+      <li><b>Search mark</b> (bottom of the panel) — the query window: editable movie name, Search · Save · Save &amp; Load · Close. Search → <b>Group A = best 3 in the preferred language</b> (Bangla here), <b>Group B = all languages</b>. Pick a row → Save / Save &amp; Load light up.</li>
+      <li><b>Save &amp; Load</b> — window closes, the sub lands in <i>Local subtitles</i> marked active, subs appear on screen. <b>Save</b> — one OSD card, file lands beside the movie for next open.</li>
+      <li><b>Next</b> (transport) — the panel closes itself on media change (stale list = never). Esc and click-outside close everything, topmost first.</li>
+      <li>Switch the mode above to <b>Audio / Channel</b> — the button <b>greys out and goes inert, it never vanishes</b> (D6: local video only).</li>
+    </ol>
+    <div class="fine">Static design mock wired with demo data — not the real player. Colors, marks, motion timings and rules follow follow.md / cc.md §6.</div>
+  </div>
+
+  <div class="tip" id="tip"></div>
+
+<script>
+'use strict';
+
+/* ── demo data ────────────────────────────────────────────────────────── */
+const LINES = {
+  interstellar: {
+    en: 'We used to look up at the sky and wonder at our place in the stars.',
+    bn: 'আমরা আকাশের দিকে তাকিয়ে ভাবতাম নক্ষত্রের মধ্যে আমাদের স্থান কোথায়।',
+    hi: 'हम आसमान की ओर देखते थे और सोचते थे कि तारों में हमारी जगह क्या है।',
+    ar: 'كنا ننظر إلى السماء ونتساءل عن مكاننا بين النجوم.',
+    es: 'Solíamos mirar el cielo y preguntarnos cuál era nuestro lugar entre las estrellas.',
+    fr: 'Nous levions les yeux vers le ciel et nous demandions quelle était notre place parmi les étoiles.',
+    tr: 'Gökyüzüne bakıp yıldızlar arasındaki yerimizi merak ederdik.',
+    id: 'Dahulu kami menengadah ke langit dan bertanya-tanya tempat kita di antara bintang-bintang.',
+    vi: 'Chúng ta từng ngước nhìn bầu trời và tự hỏi vị trí của mình giữa những vì sao.',
+    ext: 'External subtitle file loaded.'
+  },
+  dune: {
+    en: 'Fear is the mind-killer.',
+    bn: 'ভয় হলো মনের ঘাতক।',
+    hi: 'डर ही मन का हत्यारा है।',
+    ar: 'الخوف هو قاتل العقل.',
+    es: 'El miedo es el asesino de la mente.',
+    fr: 'La peur est l’assassin de l’esprit.',
+    tr: 'Korku, zihin katilidir.',
+    id: 'Ketakutan adalah pembunuh pikiran.',
+    vi: 'Nỗi sợ là kẻ giết tâm trí.',
+    ext: 'External subtitle file loaded.'
+  }
+};
+
+const LANGS = {
+  en: 'English', bn: 'Bangla', hi: 'Hindi', ar: 'Arabic', es: 'Spanish',
+  fr: 'French', tr: 'Turkish', id: 'Indonesian', vi: 'Vietnamese', ur: 'Urdu'
+};
+
+const MEDIA = {
+  interstellar: {
+    file: 'Interstellar.mkv', prefill: 'Interstellar', scene: 'space',
+    audio: [
+      { id: 'a1', name: 'English', sub: '5.1 · ac3' },
+      { id: 'a2', name: 'Japanese', sub: '2.0 · aac' },
+      { id: 'a3', name: 'Hindi', sub: '5.1 · ac3' },
+      { id: 'a4', name: 'Track 4', sub: 'untagged' }
+    ],
+    subEmbed: ['en', 'bn', 'hi', 'ar', 'es', 'fr', 'tr'],
+    local: [
+      { key: 'bn', file: 'Interstellar.bn.srt', via: 'auto-download' },
+      { key: 'en', file: 'Interstellar.en.srt', via: '' }
+    ],
+    defaultAudio: 'a1', defaultSub: { kind: 'embed', key: 'en' }
+  },
+  dune: {
+    file: 'Dune.2021.mkv', prefill: 'Dune', scene: 'desert',
+    audio: [
+      { id: 'a1', name: 'English', sub: '7.1 · eac3' },
+      { id: 'a2', name: 'Bangla', sub: '5.1 · ac3' },
+      { id: 'a3', name: 'Track 3', sub: 'untagged' }
+    ],
+    subEmbed: ['en', 'ar'],
+    local: [],
+    defaultAudio: 'a1', defaultSub: { kind: 'off' }
+  }
+};
+
+const RESULTS = {
+  interstellar: [
+    { t: 'Interstellar (2014)', l: 'bn', r: 'BluRay · 1080p', d: '24,391 dl' },
+    { t: 'Interstellar (2014)', l: 'bn', r: 'BluRay · 720p', d: '18,204 dl' },
+    { t: 'Interstellar (2014)', l: 'bn', r: 'WEB-DL · 1080p', d: '9,877 dl' },
+    { t: 'Interstellar (2014)', l: 'en', r: 'BluRay · 1080p', d: '48,102 dl' },
+    { t: 'Interstellar (2014)', l: 'en', r: 'BluRay · 2160p', d: '31,560 dl' },
+    { t: 'Interstellar (2014)', l: 'en', r: 'WEB-DL · 1080p', d: '27,743 dl' },
+    { t: 'Interstellar (2014)', l: 'hi', r: 'BluRay · 1080p', d: '12,018 dl' },
+    { t: 'Interstellar (2014)', l: 'ar', r: 'BluRay · 1080p', d: '8,455 dl' },
+    { t: 'Interstellar (2014)', l: 'es', r: 'BluRay · 1080p', d: '7,209 dl' },
+    { t: 'Interstellar (2014)', l: 'fr', r: 'BluRay · 1080p', d: '6,640 dl' },
+    { t: 'Interstellar (2014)', l: 'tr', r: 'WEB-DL · 1080p', d: '4,187 dl' },
+    { t: 'Interstellar (2014)', l: 'id', r: 'WEB-DL · 1080p', d: '2,930 dl' },
+    { t: 'Interstellar (2014)', l: 'vi', r: 'BluRay · 1080p', d: '1,712 dl' }
+  ],
+  dune: [
+    { t: 'Dune (2021)', l: 'bn', r: 'BluRay · 1080p', d: '19,004 dl' },
+    { t: 'Dune (2021)', l: 'bn', r: 'WEB-DL · 1080p', d: '11,362 dl' },
+    { t: 'Dune (2021)', l: 'bn', r: 'BluRay · 720p', d: '7,455 dl' },
+    { t: 'Dune (2021)', l: 'en', r: 'BluRay · 1080p', d: '52,918 dl' },
+    { t: 'Dune (2021)', l: 'en', r: 'BluRay · 2160p', d: '30,774 dl' },
+    { t: 'Dune (2021)', l: 'ar', r: 'BluRay · 1080p', d: '10,220 dl' },
+    { t: 'Dune (2021)', l: 'hi', r: 'WEB-DL · 1080p', d: '9,104 dl' },
+    { t: 'Dune (2021)', l: 'es', r: 'BluRay · 1080p', d: '6,811 dl' },
+    { t: 'Dune (2021)', l: 'tr', r: 'WEB-DL · 1080p', d: '3,976 dl' },
+    { t: 'Dune (2021)', l: 'fr', r: 'BluRay · 1080p', d: '5,502 dl' }
+  ]
+};
+
+const PREF = 'bn'; // Settings → preferred language (demo)
+
+/* ── state ────────────────────────────────────────────────────────────── */
+const S = {
+  media: 'interstellar',
+  mode: 'video',
+  panelOpen: false,
+  modalOpen: false,
+  selAudio: null,
+  selSub: null,          // { kind: 'off' } | { kind:'embed', key } | { kind:'local', file }
+  local: null,           // per-media local list (live)
+  saved: { interstellar: [], dune: [] },
+  resSel: -1,
+  resultsShown: false
+};
+
+const $ = (id) => document.getElementById(id);
+const win = $('win'), videoArea = $('videoArea'), subtitle = $('subtitle');
+
+/* ── tiny helpers ─────────────────────────────────────────────────────── */
+function el(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+}
+const tickSvg = '<svg class="tick" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.6l3.2 3.1L13 4.9"/></svg>';
+
+function osd(text) {
+  const deck = $('osdDeck');
+  const card = el('div', 'osd-card', text);
+  deck.appendChild(card);
+  setTimeout(() => { card.classList.add('bye'); setTimeout(() => card.remove(), 240); }, 2600);
+}
+
+/* ── stars for the space scene ────────────────────────────────────────── */
+(function stars() {
+  const box = $('stars');
+  for (let i = 0; i < 34; i++) {
+    const d = el('i');
+    d.style.left = (Math.random() * 100).toFixed(1) + '%';
+    d.style.top = (Math.random() * 100).toFixed(1) + '%';
+    d.style.opacity = (0.25 + Math.random() * 0.6).toFixed(2);
+    box.appendChild(d);
+  }
+})();
+
+/* ── media plumbing ───────────────────────────────────────────────────── */
+function currentMedia() { return MEDIA[S.media]; }
+
+function applyMedia() {
+  const m = currentMedia();
+  $('titleFile').textContent = m.file;
+  const scene = $('scene');
+  scene.className = 'scene ' + m.scene;
+  $('stars').style.display = m.scene === 'space' ? '' : 'none';
+  $('dunes').style.display = m.scene === 'desert' ? '' : 'none';
+  S.local = m.local.map(x => Object.assign({}, x));
+  S.selAudio = m.defaultAudio;
+  S.selSub = Object.assign({}, m.defaultSub);
+  S.saved[S.media] = S.saved[S.media] || [];
+  renderSubLine();
+  if (S.panelOpen) renderPanel();
+}
+
+function renderSubLine() {
+  if (S.mode !== 'video') { subtitle.textContent = ''; return; }
+  const sel = S.selSub;
+  let line = '';
+  if (sel.kind === 'embed') line = (LINES[S.media][sel.key] || LINES[S.media].en);
+  else if (sel.kind === 'local') {
+    const row = S.local.find(r => r.file === sel.file);
+    line = row && row.key !== 'ext' ? (LINES[S.media][row.key] || LINES[S.media].en) : LINES[S.media].ext;
+  }
+  subtitle.textContent = line;
+  subtitle.dir = /^(ar|ur|fa|he)$/.test(line && currentSubLang()) ? 'rtl' : 'auto';
+}
+function currentSubLang() {
+  const sel = S.selSub;
+  if (sel.kind === 'embed') return sel.key;
+  if (sel.kind === 'local') { const r = S.local.find(x => x.file === sel.file); return r ? r.key : 'en'; }
+  return 'en';
+}
+
+/* ── the track panel ──────────────────────────────────────────────────── */
+let panelNode = null;
+
+function closePanel(instant) {
+  if (!panelNode) return;
+  const p = panelNode; panelNode = null;
+  S.panelOpen = false;
+  $('btnFetch').classList.remove('active');
+  if (instant) { p.remove(); return; }
+  p.classList.add('bye');
+  setTimeout(() => p.remove(), 170);
+}
+
+function openPanel() {
+  if (S.mode !== 'video') return;
+  if (S.panelOpen) { closePanel(); return; }
+  S.panelOpen = true;
+  $('btnFetch').classList.add('active');
+  panelNode = el('div', 'track-panel');
+  videoArea.appendChild(panelNode);
+  renderPanel();
+}
+
+function rowNode(label, subText, selected, onTap, attrs) {
+  const r = el('div', 'row' + (selected ? ' sel' : ''));
+  r.appendChild(el('span', 'lbl', label));
+  if (subText) r.appendChild(el('span', 'sub', subText));
+  r.insertAdjacentHTML('beforeend', tickSvg);
+  if (!subText) r.querySelector('.lbl').style.flex = '1';
+  if (attrs) Object.keys(attrs).forEach((k) => { r.dataset[k] = attrs[k]; });
+  r.addEventListener('click', onTap);
+  return r;
+}
+
+/* one selection domain → one string, used to sync row marks in place */
+function subKey(sel) {
+  if (sel.kind === 'off') return 'off';
+  if (sel.kind === 'embed') return 'embed:' + sel.key;
+  return 'local:' + sel.file;
+}
+
+/* re-mark the active rows WITHOUT rebuilding — taps never reset scroll */
+function syncSelections() {
+  if (!panelNode) return;
+  panelNode.querySelectorAll('[data-audio]').forEach((n) => {
+    n.classList.toggle('sel', n.dataset.audio === S.selAudio);
+  });
+  panelNode.querySelectorAll('[data-sub]').forEach((n) => {
+    n.classList.toggle('sel', n.dataset.sub === subKey(S.selSub));
+  });
+}
+
+function renderPanel() {
+  if (!panelNode) return;
+  const m = currentMedia();
+  panelNode.innerHTML = '';
+
+  /* part 1 · audio */
+  panelNode.appendChild(el('div', 'part-label', 'Audio'));
+  const audioRows = el('div', 'rows' + (m.audio.length > 5 ? ' scrollable' : ''));
+  m.audio.forEach(a => audioRows.appendChild(
+    rowNode(a.name, a.sub, a.id === S.selAudio, () => { S.selAudio = a.id; syncSelections(); }, { audio: a.id })
+  ));
+  panelNode.appendChild(audioRows);
+
+  /* part 2 · embedded subtitles — Off pinned on top. The part collapses
+     entirely when the file has no embedded tracks (§6.3); Off then lives
+     atop the local part below — or nowhere on a fully bare video. */
+  if (m.subEmbed.length > 0) {
+    panelNode.appendChild(el('div', 'part-label', 'Subtitles'));
+    const subRows = el('div', 'rows' + (m.subEmbed.length + 1 > 5 ? ' scrollable' : ''));
+    subRows.appendChild(rowNode('Off', '', S.selSub.kind === 'off', () => {
+      S.selSub = { kind: 'off' }; syncSelections(); renderSubLine();
+    }, { sub: 'off' }));
+    m.subEmbed.forEach(k => subRows.appendChild(
+      rowNode(LANGS[k] || k, 'embedded', S.selSub.kind === 'embed' && S.selSub.key === k,
+        () => { S.selSub = { kind: 'embed', key: k }; syncSelections(); renderSubLine(); },
+        { sub: 'embed:' + k })
+    ));
+    panelNode.appendChild(subRows);
+  }
+
+  /* part 3 · local subtitles — collapses when empty, unless it must carry
+     Off (no embedded tracks at all, but local files exist) */
+  if (S.local.length > 0) {
+    panelNode.appendChild(el('div', 'part-label', 'Local'));
+    const localRows = el('div', 'rows' + (S.local.length + (m.subEmbed.length === 0 ? 1 : 0) > 5 ? ' scrollable' : ''));
+    if (m.subEmbed.length === 0) {
+      localRows.appendChild(rowNode('Off', '', S.selSub.kind === 'off', () => {
+        S.selSub = { kind: 'off' }; syncSelections(); renderSubLine();
+      }, { sub: 'off' }));
+    }
+    S.local.forEach(r => localRows.appendChild(
+      rowNode(LANGS[r.key] || 'External', r.file, S.selSub.kind === 'local' && S.selSub.file === r.file,
+        () => { S.selSub = { kind: 'local', file: r.file }; syncSelections(); renderSubLine(); },
+        { sub: 'local:' + r.file })
+    ));
+    panelNode.appendChild(localRows);
+  }
+
+  /* actions · Load + Search (§6.4–6.5) */
+  panelNode.appendChild(el('div', 'hairline'));
+  const actions = el('div', 'panel-actions');
+
+  const loadBtn = el('button', 'mark');
+  loadBtn.dataset.tip = 'Load subtitle';
+  loadBtn.innerHTML = '<svg width="19" height="16" viewBox="0 0 19 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.2" y="1.2" width="16.6" height="13.6" rx="2.4"/><path d="M6.6 1.6v12.8M12.4 1.6v12.8" opacity=".55"/></svg>';
+  loadBtn.addEventListener('click', () => $('filePick').click());
+  actions.appendChild(loadBtn);
+
+  const searchBtn = el('button', 'mark');
+  searchBtn.dataset.tip = 'Search subtitles';
+  searchBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7.6" cy="7.6" r="5.1"/><path d="M11.5 11.5l4.3 4.3"/></svg>';
+  searchBtn.addEventListener('click', openModal);
+  actions.appendChild(searchBtn);
+
+  panelNode.appendChild(actions);
+  bindTips(panelNode);
+}
+
+/* ── the search window ────────────────────────────────────────────────── */
+let modalNode = null, barrierNode = null;
+
+function closeModal(instant) {
+  if (!modalNode) return;
+  const b = barrierNode, m = modalNode;
+  modalNode = null; barrierNode = null;
+  S.modalOpen = false; S.resSel = -1; S.resultsShown = false;
+  if (instant) { b.remove(); m.remove(); return; }
+  b.classList.add('bye'); setTimeout(() => b.remove(), 150);
+  m.style.transition = 'opacity .14s ease-in, transform .14s ease-in';
+  m.style.opacity = '0'; m.style.transform = 'scale(.97)';
+  setTimeout(() => m.remove(), 150);
+}
+
+function openModal() {
+  if (S.modalOpen) return;
+  S.modalOpen = true;
+  barrierNode = el('div', 'barrier');
+  modalNode = el('div', 'modal');
+  barrierNode.appendChild(modalNode);
+  videoArea.appendChild(barrierNode);
+  barrierNode.addEventListener('click', (e) => { if (e.target === barrierNode) closeModal(); });
+
+  /* the editable movie name — pre-filled from the filename (§6.5) */
+  const field = el('input', 'name-field');
+  field.value = currentMedia().prefill;
+  field.spellcheck = false;
+  modalNode.appendChild(field);
+
+  /* the four marks · Search · Save · Save & Load · Close */
+  const acts = el('div', 'modal-actions');
+
+  const mkMark = (tip, svg, dim, onTap) => {
+    const b = el('button', 'mark' + (dim ? ' dim' : ''));
+    b.dataset.tip = tip; b.innerHTML = svg;
+    if (onTap) b.addEventListener('click', onTap);
+    return b;
+  };
+
+  const runSearch = () => {
+    const res = el('div', 'results');
+    const wait = el('div', 'wait');
+    wait.appendChild(el('div', 'spin'));
+    res.appendChild(wait);
+    modalNode.querySelector('.results')?.remove();
+    modalNode.appendChild(res);
+    setTimeout(() => { S.resultsShown = true; renderResults(field.value.trim()); }, 650);
+  };
+
+  acts.appendChild(mkMark('Search',
+    '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7.6" cy="7.6" r="5.1"/><path d="M11.5 11.5l4.3 4.3"/></svg>',
+    false, runSearch));
+
+  const saveSvg = '<svg width="19" height="17" viewBox="0 0 19 17" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.5 1.6v8.6M5.6 6.6l3.9 3.9 3.9-3.9"/><path d="M1.8 12v2.4a1.4 1.4 0 001.4 1.4h12.6a1.4 1.4 0 001.4-1.4V12"/></svg>';
+  const saveLoadSvg = '<svg width="24" height="17" viewBox="0 0 24 17" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8.6 1.6v8.6M4.7 6.6l3.9 3.9 3.9-3.9"/><path d="M1 12v2.4a1.4 1.4 0 001.4 1.4H12"/><path d="M16.2 4.4l5 3.9-5 3.9z" fill="currentColor" stroke="none"/></svg>';
+
+  acts.appendChild(mkMark('Save', saveSvg, true, () => doSave(false)));
+  acts.appendChild(mkMark('Save & Load', saveLoadSvg, true, () => doSave(true)));
+
+  const closeBtn = mkMark('Close',
+    '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2l11 11M13 2L2 13"/></svg>',
+    false, () => closeModal());
+  const slot = el('div', 'close-slot'); slot.style.marginLeft = 'auto'; slot.style.display = 'flex';
+  slot.appendChild(closeBtn);
+  acts.appendChild(slot);
+
+  modalNode.appendChild(acts);
+  const res = el('div', 'results');
+  modalNode.appendChild(res);
+  bindTips(modalNode);
+  field.focus();
+}
+
+function resultRows(query) {
+  const all = RESULTS[S.media];
+  /* best 3 in the preferred language, everything else below (§6.5) */
+  const pref = all.filter(r => r.l === PREF).slice(0, 3);
+  const rest = all.filter(r => !pref.includes(r));
+  return { pref, rest };
+}
+
+function renderResults() {
+  const res = modalNode && modalNode.querySelector('.results');
+  if (!res) return;
+  res.innerHTML = '';
+  const groups = el('div', 'res-groups');
+
+  const { pref, rest } = resultRows();
+  let idx = 0;
+
+  groups.appendChild(el('div', 'part-label', 'Best matches · ' + LANGS[PREF]));
+  if (pref.length === 0) groups.appendChild(el('div', 'row', '<span class="sub" style="padding:0 12px">—</span>'));
+  pref.forEach(r => { groups.appendChild(resRow(r, idx++)); });
+
+  groups.appendChild(el('div', 'part-label', 'All matches'));
+  rest.forEach(r => { groups.appendChild(resRow(r, idx++)); });
+
+  res.appendChild(groups);
+}
+
+function resRow(r, idx) {
+  const row = el('div', 'row res-row');
+  const lines = el('div', 'lines');
+  lines.appendChild(el('span', 'lbl', r.t));
+  lines.appendChild(el('span', 'sub', r.r + '  ·  ' + r.d));
+  row.appendChild(lines);
+  row.appendChild(el('span', 'lang', LANGS[r.l] || r.l));
+  row.insertAdjacentHTML('beforeend', tickSvg);
+  row.addEventListener('click', () => {
+    S.resSel = idx;
+    modalNode.querySelectorAll('.res-row').forEach(n => n.classList.remove('sel'));
+    row.classList.add('sel');
+    modalNode.querySelectorAll('.modal-actions .mark')[1].classList.remove('dim');
+    modalNode.querySelectorAll('.modal-actions .mark')[2].classList.remove('dim');
+  });
+  if (S.resSel === idx) { /* keep after re-render if needed */ }
+  return row;
+}
+
+function pickedResult() {
+  const all = RESULTS[S.media];
+  const { pref, rest } = resultRows();
+  const flat = pref.concat(rest);
+  return flat[S.resSel];
+}
+
+function doSave(alsoLoad) {
+  const r = pickedResult();
+  if (!r) return;
+  const m = currentMedia();
+  const base = m.file.replace(/\.[^.]+$/, '');
+  const fileName = base + '.' + r.l + '.srt';
+  const already = S.local.some(x => x.file === fileName);
+
+  if (!already) {
+    S.local.push({ key: r.l, file: fileName, via: 'search' });
+    S.saved[S.media].push(fileName);
+  }
+
+  if (alsoLoad) {
+    S.selSub = { kind: 'local', file: fileName };
+    renderSubLine();
+    if (S.panelOpen) renderPanel();   /* live mirror — the row lands marked */
+  } else {
+    osd((already ? 'Already saved · ' : 'Saved · ') + fileName);
+  }
+  closeModal();
+}
+
+/* ── Load (real file picker) ──────────────────────────────────────────── */
+$('filePick').addEventListener('change', (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  const name = f.name;
+  const m = /(en|bn|hi|ur|ar|es|fr|de|pt|tr|id|vi)\.[^.]+$/.exec(name);
+  const key = m ? m[1] : 'ext';
+  if (S.local.some(x => x.file === name)) {
+    S.selSub = { kind: 'local', file: name };
+  } else {
+    S.local.push({ key, file: name, via: 'load' });
+    S.selSub = { kind: 'local', file: name };
+  }
+  renderSubLine();
+  if (S.panelOpen) renderPanel();
+});
+
+/* ── transport (demo: Next/Prev switch the demo movie) ────────────────── */
+const ORDER = ['interstellar', 'dune'];
+$('btnNext').addEventListener('click', () => stepMedia(1));
+$('btnPrev').addEventListener('click', () => stepMedia(-1));
+function stepMedia(dir) {
+  if (S.mode !== 'video') return;
+  const i = ORDER.indexOf(S.media);
+  S.media = ORDER[(i + dir + ORDER.length) % ORDER.length];
+  closeModal(true);
+  closePanel(true);       /* §6.2 — the panel closes on media change */
+  applyMedia();
+  osd(currentMedia().file);
+}
+
+/* play/pause — cosmetic mark swap only */
+$('btnPlay').addEventListener('click', () => {
+  const b = $('btnPlay');
+  const paused = b.dataset.paused === '1';
+  b.dataset.paused = paused ? '' : '1';
+  b.dataset.tip = paused ? 'Pause' : 'Play';
+  b.innerHTML = paused
+    ? '<svg width="17" height="17" viewBox="0 0 17 17" fill="currentColor"><rect x="3.6" y="2.6" width="3" height="11.8" rx="1"/><rect x="10.4" y="2.6" width="3" height="11.8" rx="1"/></svg>'
+    : '<svg width="17" height="17" viewBox="0 0 17 17"><path d="M4.2 2.4l10 6.1-10 6.1z" fill="currentColor"/></svg>';
+});
+
+/* ── fetch button + outside click ─────────────────────────────────────── */
+$('btnFetch').addEventListener('click', (e) => { e.stopPropagation(); openPanel(); });
+videoArea.addEventListener('click', (e) => {
+  if (!S.panelOpen || !panelNode) return;
+  if (panelNode.contains(e.target)) return;
+  /* the search window is a modal world of its own — clicks inside it
+     (Search / Save / Close / barrier) belong to it, never to the panel.
+     Checked against the LIVE dom, not a variable: a mark whose handler
+     already closed the modal would otherwise bubble up here with the
+     guard already torn down and kill the panel underneath. */
+  if (e.target.closest && e.target.closest('.barrier')) return;
+  closePanel();
+});
+
+/* ── Esc closes topmost first (rule 3) ────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (S.modalOpen) closeModal();
+  else if (S.panelOpen) closePanel();
+});
+
+/* ── demo mode switcher (D6 visibility rule) ──────────────────────────── */
+$('modeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  document.querySelectorAll('#modeSeg button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  S.mode = b.dataset.mode;
+  const fetch = $('btnFetch');
+  const canvas = $('modeCanvas');
+  const notes = {
+    video: 'Fetch button live — local video (D6)',
+    audio: 'Fetch greyed out, inert — audio is lyrics territory (D6)',
+    channel: 'Fetch greyed out, inert — channels have no files (D6)'
+  };
+  $('modeNote').textContent = notes[S.mode];
+  if (S.mode === 'video') {
+    fetch.classList.remove('gone');
+    canvas.style.display = 'none';
+    $('picture').style.display = '';
+  } else {
+    fetch.classList.add('gone');
+    closeModal(true); closePanel(true);
+    $('picture').style.display = 'none';
+    canvas.style.display = 'flex';
+    canvas.textContent = S.mode === 'audio'
+      ? 'audio canvas — SALU logo canvas (lyrics arrive in Phase 7)'
+      : 'LIVE — channel mode (transport: no timeline seek)';
+  }
+  renderSubLine();
+});
+
+/* ── tooltips — hover-delayed, they only name the control ─────────────── */
+const tip = $('tip');
+let tipTimer = null;
+function bindTips(root) {
+  (root || document).querySelectorAll('[data-tip]').forEach(n => {
+    if (n.dataset.tipped) return;
+    n.dataset.tipped = '1';
+    n.addEventListener('mouseenter', () => {
+      tipTimer = setTimeout(() => {
+        tip.textContent = n.dataset.tip;
+        tip.classList.add('show');
+        const r = n.getBoundingClientRect();
+        tip.style.left = Math.max(6, Math.min(window.innerWidth - 10, r.left + r.width / 2 - tip.offsetWidth / 2)) + 'px';
+        tip.style.top = (r.top > 34 ? r.top - tip.offsetHeight - 8 : r.bottom + 8) + 'px';
+      }, 450);
+    });
+    n.addEventListener('mouseleave', () => { clearTimeout(tipTimer); tip.classList.remove('show'); });
+    n.addEventListener('click', () => { clearTimeout(tipTimer); tip.classList.remove('show'); });
+  });
+}
+bindTips(document);
+
+/* ── go ───────────────────────────────────────────────────────────────── */
+applyMedia();
+</script>
+</body>
+</html>
