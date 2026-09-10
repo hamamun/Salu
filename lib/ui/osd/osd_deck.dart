@@ -135,7 +135,46 @@ class _OsdDeckState extends State<OsdDeck>
       OsdUndoCard c => _UndoToast(card: c),
       OsdAutoloadCard c => _TransientCard(child: _autoloadBody(c)),
       OsdFailedCard c => _TransientCard(child: _failedBody(c)),
+      OsdSubtitleCard c => _TransientCard(child: _subtitleBody(c)),
     };
+  }
+
+  /// The subtitle engine's words (cc.md §3.5 · D10): one quiet cc mark +
+  /// the exact literal, transient (1 s) like every other one-shot card —
+  /// no heading, no detail line, nothing stretched. `saved` /
+  /// `alreadySaved` carry the D8 filename §6.5 asks for.
+  Widget _subtitleBody(OsdSubtitleCard card) {
+    final String text = switch (card.kind) {
+      OsdSubtitleCardKind.ccNotConfigured => 'cc not configured',
+      OsdSubtitleCardKind.checkKey => 'Subtitles — check key',
+      OsdSubtitleCardKind.limitReached => 'Subtitle limit reached',
+      OsdSubtitleCardKind.saved => 'Saved · ${card.fileName}',
+      OsdSubtitleCardKind.alreadySaved => 'Already saved · ${card.fileName}',
+    };
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconTheme.merge(
+          data: const IconThemeData(color: AppColors.textPrimary),
+          child: const CcMark(size: 17),
+        ),
+        const SizedBox(width: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   /// "Failed to load" + the name of what failed (playlist_imp.md §10.8 ·

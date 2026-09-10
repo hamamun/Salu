@@ -1315,3 +1315,236 @@ class _GroupTwistPainter extends CustomPainter {
   bool shouldRepaint(_GroupTwistPainter old) =>
       old.ink != ink || old.stroke != stroke;
 }
+
+// ── Captions family (cc.md §6 · D14) ────────────────────────────────────
+
+/// CC — the Fetch button's mark (cc.md §6.1 / D14): a thin rounded frame
+/// with two text rules inside, drawn in the family's stroke. Deliberately
+/// NOT the channel line's speech bubble (LanguageMark) — a caption frame,
+/// customised per follow.md rule 6.
+class CcMark extends StatelessWidget {
+  const CcMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size * 0.85),
+      painter: _CcPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _CcPainter extends CustomPainter {
+  const _CcPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width, h = size.height;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    // Thin rounded frame (the mock: rx 2.6 of a 20×17 box).
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(w * 0.06, h * 0.07, w * 0.94, h * 0.93),
+        Radius.circular(w * 0.13),
+      ),
+      paint,
+    );
+    // Two caption rules: full-width first, shortened second.
+    canvas.drawLine(Offset(w * 0.27, h * 0.36), Offset(w * 0.74, h * 0.36), paint);
+    canvas.drawLine(Offset(w * 0.27, h * 0.63), Offset(w * 0.55, h * 0.63), paint);
+  }
+
+  @override
+  bool shouldRepaint(_CcPainter old) => old.ink != ink || old.stroke != stroke;
+}
+
+/// Load subtitle — the panel's Load mark (§6.4): the mock's 19×16 frame
+/// with two interior dividers (a subtitle file's column look), same
+/// stroke as the family.
+class LoadSubMark extends StatelessWidget {
+  const LoadSubMark({super.key, this.size = 19});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size * 16 / 19),
+      painter: _LoadSubPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _LoadSubPainter extends CustomPainter {
+  const _LoadSubPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width, h = size.height;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    final Paint quiet = Paint()
+      ..color = ink.withAlpha(140)
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(w * 0.06, h * 0.075, w * 0.94, h * 0.925),
+        Radius.circular(w * 0.126),
+      ),
+      paint,
+    );
+    // Interior dividers at ~35% and ~65%, quieter than the frame.
+    canvas.drawLine(Offset(w * 0.35, h * 0.10), Offset(w * 0.35, h * 0.90), quiet);
+    canvas.drawLine(Offset(w * 0.65, h * 0.10), Offset(w * 0.65, h * 0.90), quiet);
+  }
+
+  @override
+  bool shouldRepaint(_LoadSubPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Save — the search window's tray mark (§6.5): arrow down into an open
+/// tray, the mock's exact silhouette.
+class SaveMark extends StatelessWidget {
+  const SaveMark({super.key, this.size = 19});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size * 17 / 19),
+      painter: _SavePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _SavePainter extends CustomPainter {
+  const _SavePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width, h = size.height;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    // Arrow: shaft + chevron into the tray.
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.5, h * 0.09)
+        ..lineTo(w * 0.5, h * 0.61)
+        ..moveTo(w * 0.295, h * 0.39)
+        ..lineTo(w * 0.5, h * 0.62)
+        ..lineTo(w * 0.705, h * 0.39),
+      paint,
+    );
+    // Open tray below.
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.095, h * 0.71)
+        ..lineTo(w * 0.095, h * 0.85)
+        ..quadraticBezierTo(w * 0.095, h * 0.93, w * 0.17, h * 0.93)
+        ..lineTo(w * 0.83, h * 0.93)
+        ..quadraticBezierTo(w * 0.905, h * 0.93, w * 0.905, h * 0.85)
+        ..lineTo(w * 0.905, h * 0.71),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SavePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Save & Load — the search window's tray + play mark (§6.5): the Save
+/// tray on the left, a filled play flag at its right edge (the mock's
+/// exact composition), so the two actions sit one family apart.
+class SaveLoadMark extends StatelessWidget {
+  const SaveLoadMark({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size * 17 / 24),
+      painter: _SaveLoadPainter(markInk(context), markStrokeFor(size * 19 / 24)),
+    );
+  }
+}
+
+class _SaveLoadPainter extends CustomPainter {
+  const _SaveLoadPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width, h = size.height;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    // The Save tray, compressed left (~55 % width).
+    final double sw = w * 0.55;
+    canvas.drawPath(
+      Path()
+        ..moveTo(sw * 0.5, h * 0.09)
+        ..lineTo(sw * 0.5, h * 0.61)
+        ..moveTo(sw * 0.1, h * 0.39)
+        ..lineTo(sw * 0.5, h * 0.62)
+        ..lineTo(sw * 0.9, h * 0.39),
+      paint,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(sw * 0.02, h * 0.71)
+        ..lineTo(sw * 0.02, h * 0.85)
+        ..quadraticBezierTo(sw * 0.02, h * 0.93, sw * 0.16, h * 0.93)
+        ..lineTo(w * 0.5, h * 0.93),
+      paint,
+    );
+    // The play flag — filled like PlayMark, at the tray's right edge.
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.66, h * 0.26)
+        ..lineTo(w * 0.9, h * 0.49)
+        ..lineTo(w * 0.66, h * 0.72)
+        ..close(),
+      Paint()
+        ..color = ink
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SaveLoadPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}

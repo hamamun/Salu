@@ -20,6 +20,7 @@ import '../osc/open_url_dialog.dart';
 import '../osd/osd_controller.dart';
 import '../osd/osd_deck.dart';
 import '../panels/playlist_panel.dart';
+import '../panels/track_panel.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/live_light.dart';
 import '../widgets/settings_dialog.dart';
@@ -267,12 +268,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final LogicalKeyboardKey key = event.logicalKey;
 
-    // Esc — dismisses the Resume toast, else closes the playlist panel
-    // (its search field already consumed Esc first when it had focus).
-    // With neither up it is just another key: activity → chrome wakes.
+    // Esc — dismisses the topmost popup first (follow.md rule 3):
+    // resume toast → track panel (its Search window is a dialog route
+    // and closes itself above this) → playlist panel. With nothing up
+    // it is just another key: activity → chrome wakes.
     if (key == LogicalKeyboardKey.escape) {
       if (_osd.isResumeToast) {
         _osd.dismiss();
+        return KeyEventResult.handled;
+      }
+      if (PanelService.instance.trackPanelOpen.value) {
+        PanelService.instance.closeTrackPanel();
         return KeyEventResult.handled;
       }
       if (PanelService.instance.playlistOpen.value) {
@@ -399,6 +405,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 //     Sits under the OSD deck (z-order §4.2) and under the
                 //     resume-toast dismiss layer.
                 const PlaylistPanel(),
+
+                // 5b · The Fetch button's slide-down track panel (cc.md
+                //      §6, D14) — audio / embedded subs / local subs,
+                //      live-mirroring mpv. Below the control row on the
+                //      right; above the video, below the OSD deck.
+                const TrackPanel(),
 
                 // 6 · Resume-toast click-outside: dismiss ONLY — never
                 //     triggers Restart, never swallows the click (the

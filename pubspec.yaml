@@ -32,6 +32,12 @@ dependencies:
   # adds no Dart-side win32 version constraints.
   file_selector: ^1.0.3
 
+  # ── Subtitles (cc.md §4) ────────────────────────────────────────────────
+  # OpenSubtitles REST v1 — search / login / download. Pure Dart, no
+  # native glue (already in the dependency graph as media_kit's own HTTP
+  # client, locked at 1.6.0).
+  http: ^1.2.0
+
   # ── Settings & persistence ──────────────────────────────────────────────
   # Lightweight key-value storage for settings (title bar mode, …).
   shared_preferences: ^2.3.0

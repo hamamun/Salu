@@ -59,6 +59,15 @@ class SettingsService {
   static const String _keyResumeMode = 'resume_mode';
   static const String _keyFolderAutoloadMode = 'folder_autoload_mode';
 
+  // ── Subtitles (cc.md §2 · D2 · D3 · D5 · D13) ────────────────────────
+  static const String _keySubtitleApiKey = 'subtitle_api_key';
+  static const String _keySubtitleUsername = 'subtitle_username';
+  static const String _keySubtitleLanguage = 'subtitle_language';
+  static const String _keySubtitleAutoDownload = 'subtitle_autodownload';
+
+  /// Default preferred-subtitle language (D5 — ISO 639-1 `en`).
+  static const String defaultSubtitleLanguage = 'en';
+
   /// How the title bar handles itself while idle (see [TitleBarMode]).
   final ValueNotifier<TitleBarMode> titleBarMode =
       ValueNotifier<TitleBarMode>(TitleBarMode.borderless);
@@ -72,6 +81,30 @@ class SettingsService {
   /// Off is remembered across sessions.
   final ValueNotifier<FolderAutoloadMode> folderAutoloadMode =
       ValueNotifier<FolderAutoloadMode>(FolderAutoloadMode.allVideos);
+
+  /// The OpenSubtitles.com API key (D2). Empty = signed-out state: the
+  /// engine no-ops and surfaces its single once-per-session
+  /// `cc not configured` card (D11). Persisted the moment the field
+  /// changes (§2.1).
+  final ValueNotifier<String> subtitleApiKey = ValueNotifier<String>('');
+
+  /// The OpenSubtitles account username (D13). Plain, low-risk, persisted
+  /// so a session's first download can login silently. The PASSWORD and
+  /// the Bearer token never live here and never touch disk — they are
+  /// `SubtitleService`'s in-memory session state (D13).
+  final ValueNotifier<String> subtitleUsername = ValueNotifier<String>('');
+
+  /// Preferred subtitle language (D5) — ISO 639-1 code, default `en`.
+  /// Auto: preferred → English → nothing (§2.2); manual search groups
+  /// "best 3 in this language" (§6.5). Governs DOWNLOADS only — never an
+  /// mpv override (D17).
+  final ValueNotifier<String> subtitleLanguage =
+      ValueNotifier<String>(defaultSubtitleLanguage);
+
+  /// Auto-download toggle (D3 — default ON). OFF stops future fetches
+  /// only; already-downloaded `.srt` files are never touched (D12).
+  final ValueNotifier<bool> subtitleAutoDownload =
+      ValueNotifier<bool>(true);
 
   /// Reads persisted settings (called once, before the first frame).
   Future<void> load() async {
@@ -96,11 +129,26 @@ class SettingsService {
             FolderAutoloadMode.values.asNameMap()[rawAutoload] ??
                 FolderAutoloadMode.allVideos;
       }
+      final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
+      if (rawSubtitleKey != null) subtitleApiKey.value = rawSubtitleKey;
+      final String? rawSubtitleUser =
+          prefs.getString(_keySubtitleUsername);
+      if (rawSubtitleUser != null) subtitleUsername.value = rawSubtitleUser;
+      final String? rawSubtitleLang = prefs.getString(_keySubtitleLanguage);
+      if (rawSubtitleLang != null && rawSubtitleLang.isNotEmpty) {
+        subtitleLanguage.value = rawSubtitleLang;
+      }
+      subtitleAutoDownload.value =
+          prefs.getBool(_keySubtitleAutoDownload) ?? true;
     } catch (_) {
       // Corrupt/missing prefs — fall back to the defaults, silently.
       titleBarMode.value = TitleBarMode.borderless;
       resumeMode.value = ResumeMode.all;
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
+      subtitleApiKey.value = '';
+      subtitleUsername.value = '';
+      subtitleLanguage.value = defaultSubtitleLanguage;
+      subtitleAutoDownload.value = true;
     }
   }
 
@@ -136,6 +184,58 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyFolderAutoloadMode, mode.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Subtitles — the API key field (§2.1): applies and persists the
+  /// moment it changes (no Save button anywhere in SALU). A change to a
+  /// credential releases the subtitle engine's 401 pause (§3.5 — "engine
+  /// pauses until settings change"), which `SubtitleService` answers by
+  /// listening to these notifiers.
+  Future<void> setSubtitleApiKey(String key) async {
+    subtitleApiKey.value = key.trim();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keySubtitleApiKey, subtitleApiKey.value);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Subtitles — the username field (§2.1 / D13).
+  Future<void> setSubtitleUsername(String username) async {
+    subtitleUsername.value = username.trim();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keySubtitleUsername, subtitleUsername.value);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Subtitles — the preferred-language selector (§2.2 / D5). Governs
+  /// what SALU downloads; mpv's own track picking stays untouched (D17).
+  Future<void> setSubtitleLanguage(String code) async {
+    if (code.isEmpty) return;
+    subtitleLanguage.value = code;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keySubtitleLanguage, code);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Subtitles — the auto-download toggle (§2.3 / D3). OFF stops future
+  /// fetches only: every already-downloaded `.srt` stays exactly where it
+  /// is (D12).
+  Future<void> setSubtitleAutoDownload(bool on) async {
+    subtitleAutoDownload.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keySubtitleAutoDownload, on);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }
