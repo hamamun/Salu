@@ -14,9 +14,30 @@ class PanelService {
   /// Whether the playlist panel is currently open.
   final ValueNotifier<bool> playlistOpen = ValueNotifier<bool>(false);
 
-  /// Toggle (the control-row mark; Ctrl+L).
-  void togglePlaylist() => playlistOpen.value = !playlistOpen.value;
+  /// Whether the Fetch button's track panel is currently open (cc.md
+  /// §6 / D14). Owned here, same recipe: the control mark, the Esc
+  /// tier and the panel itself all read ONE notifier.
+  final ValueNotifier<bool> trackPanelOpen = ValueNotifier<bool>(false);
+
+  /// Toggle (the control-row mark; Ctrl+L). Opening the playlist closes
+  /// other popups (follow.md rule 3's one-popup world).
+  void togglePlaylist() {
+    final bool next = !playlistOpen.value;
+    if (next) closeTrackPanel();
+    playlistOpen.value = next;
+  }
 
   /// Close (Esc, the header's Close ✕).
   void closePlaylist() => playlistOpen.value = false;
+
+  /// Toggle the Fetch track panel — opening it closes other popups
+  /// (follow.md rule 3's one-popup world).
+  void toggleTrackPanel() {
+    final bool next = !trackPanelOpen.value;
+    if (next) closePlaylist();
+    trackPanelOpen.value = next;
+  }
+
+  /// Close (Esc, click-outside, media change — §6.2).
+  void closeTrackPanel() => trackPanelOpen.value = false;
 }

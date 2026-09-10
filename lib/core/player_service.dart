@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,7 @@ import 'channel_view_service.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
 import 'resume_service.dart';
+import 'subtitle_service.dart';
 
 /// SALU's transport states. Three live states plus *idle* (nothing
 /// loaded at all). **Stop is not pause and not start-over** — it parks
@@ -118,6 +120,135 @@ class MovedItemUndo extends QueueUndo {
 
   final int from;
   final int to;
+}
+
+/// One row of mpv's `track-list` (cc.md §6.2) — the track panel's
+/// single source of truth. media_kit's parsed `tracks` skips the
+/// `selected` / `external` / `external-filename` fields, so the panel's
+/// surface is built from the RAW property read (mpv formats it as JSON —
+/// verified against mpv's `print_node` → `json_write`).
+class MpvTrack {
+  const MpvTrack({
+    required this.id,
+    required this.type,
+    this.title,
+    this.lang,
+    this.codec,
+    this.channels,
+    this.external = false,
+    this.externalFilename,
+    this.selected = false,
+  });
+
+  /// mpv's numeric track id as a string (`1`, `2`, …) — the value `sid` /
+  /// `aid` takes. Pseudo rows (`auto` / `no`) never appear here.
+  final String id;
+
+  /// `audio` or `sub`.
+  final String type;
+
+  final String? title;
+
+  /// mpv's language code (ISO 639-1/2) or `null` when untagged.
+  final String? lang;
+
+  /// `ac3`, `subrip`, … for the technical sub-line.
+  final String? codec;
+
+  /// Audio channel layout (`5.1`, `2.0`) from `demux-channels`.
+  final String? channels;
+
+  /// `true` for external subtitle files (autoloaded or loaded) — the
+  /// embedded/local split (§6.3).
+  final bool external;
+
+  /// The external file's path (sub rows only, when mpv reports it).
+  final String? externalFilename;
+
+  /// mpv's own pick — the live row mark (D17: mpv picks, SALU mirrors).
+  final bool selected;
+
+  bool get isAudio => type == 'audio';
+
+  bool get isSub => type == 'sub';
+}
+
+/// The whole track surface for the current media (§6.2): raw lists as
+/// mpv reports them, refreshed on every track/selection event. All rows
+/// of one [TrackSurface] belong to one snapshot — the panel never mixes
+/// lists across rebuilds.
+class TrackSurface {
+  const TrackSurface({
+    this.audio = const <MpvTrack>[],
+    this.embeddedSubs = const <MpvTrack>[],
+    this.localSubs = const <MpvTrack>[],
+  });
+
+  /// Part 1 — every audio track.
+  final List<MpvTrack> audio;
+
+  /// Part 2 — embedded subtitles only (§6.3's split).
+  final List<MpvTrack> embeddedSubs;
+
+  /// Part 3 — external (autoloaded + loaded) subtitle files.
+  final List<MpvTrack> localSubs;
+
+  static const TrackSurface empty = TrackSurface();
+
+  /// `true` when the Off row's mark reads nobody-selected (a sub row's
+  /// selection never shows "Off" while real subs are picked).
+  bool get offIsMarked =>
+      !embeddedSubs.any((MpvTrack t) => t.selected) &&
+      !localSubs.any((MpvTrack t) => t.selected);
+
+  /// Parses the `track-list` JSON string. Anything unreadable → empty
+  /// (the panel simply shows its marks, never bogus rows).
+  static TrackSurface parse(String raw) {
+    try {
+      final List<dynamic> list = jsonDecode(raw) as List<dynamic>;
+      final List<MpvTrack> audio = <MpvTrack>[];
+      final List<MpvTrack> embedded = <MpvTrack>[];
+      final List<MpvTrack> local = <MpvTrack>[];
+      for (final dynamic e in list) {
+        if (e is! Map) continue;
+        final Map<dynamic, dynamic> m = e;
+        final String type = '${m['type'] ?? ''}';
+        if (type != 'audio' && type != 'sub') continue;
+        final Object? id = m['id'];
+        if (id == null) continue;
+        final bool external = type == 'sub' && m['external'] == true;
+        final MpvTrack track = MpvTrack(
+          id: '$id',
+          type: type,
+          title: (m['title'] as String?)?.trim().isEmpty ?? true
+              ? null
+              : (m['title'] as String?),
+          lang: (m['lang'] as String?)?.trim().isEmpty ?? true
+              ? null
+              : (m['lang'] as String?),
+          codec: m['codec'] as String?,
+          channels: m['demux-channels'] as String?,
+          external: external,
+          externalFilename: m['external-filename'] as String?,
+          selected: m['selected'] == true,
+        );
+        if (type == 'audio') {
+          audio.add(track);
+        } else if (external) {
+          local.add(track);
+        } else {
+          embedded.add(track);
+        }
+      }
+      return TrackSurface(
+        audio: audio,
+        embeddedSubs: embedded,
+        localSubs: local,
+      );
+    } catch (_) {
+      return TrackSurface.empty;
+    }
+  }
 }
 
 /// SALU's dedicated playback manager.
@@ -236,6 +367,17 @@ class PlayerService {
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<double>? _volumeSub;
   StreamSubscription<bool>? _bufferingSub;
+  StreamSubscription<Tracks>? _tracksSub;
+
+  /// The sub-download / sub-selection events cluster (start-file emits
+  /// track-list + sid + aid practically together): one debounced raw
+  /// read per burst keeps the mirror exact without churn.
+  Timer? _surfaceDebounce;
+
+  /// mpv-only observation of `sid` / `aid` (installed once, guarded —
+  /// media_kit's own built-in state never double-observes into this
+  /// map; a second registration would [ArgumentError]).
+  bool _selectionObserversInstalled = false;
 
   // ── Smooth position interpolation ─────────────────────────────────────
   Timer? _ticker;
@@ -350,7 +492,25 @@ class PlayerService {
         OsdController.instance
             .show(OsdResumeCard(position: resumeAt));
       }
+
+      // A different item is loading — stale tracks must never flash:
+      // zero the surface, the tracks stream rebuilds it right away.
+      trackSurface.value = TrackSurface.empty;
+
+      // Subtitle engine (cc.md §3.1): every local video landing is
+      // answered once. All guards live inside the service — this stays
+      // one dumb line by design (D6/D17: nothing on the player side is
+      // ever forced).
+      SubtitleService.instance.onMediaLanded(uri, channelMode: channelMode);
     });
+
+    // The track surface (cc.md §6.2): every structural track change
+    // (new media · sub-add / sub-remove · external auto-load landing)
+    // triggers a raw `track-list` re-read; selection flips (sid/aid)
+    // arrive through the observed properties below. Both feed the same
+    // debounced refresh.
+    _tracksSub = player.stream.tracks.listen((_) => _queueSurfaceRefresh());
+    unawaited(_installSelectionObservers());
 
     // Live "is playing" flag — false while paused or when nothing is
     // loaded.
@@ -903,6 +1063,9 @@ class PlayerService {
     // 3 · Zero the transport surface; title bar reads SALU again.
     currentTitle.value = null;
     currentPath.value = null;
+    // The stopped player keeps the LAST media's track-list in mpv — the
+    // panel must not show it: zero the surface with the rest.
+    trackSurface.value = TrackSurface.empty;
     position.value = Duration.zero;
     _anchor = Duration.zero;
     _watch.reset();
@@ -1236,6 +1399,89 @@ class PlayerService {
         title: MediaUtils.displayName(path),
       ),
     );
+  }
+
+  // ── Track surface — the Fetch panel's live mirror (cc.md §6.2) ────────
+
+  /// Everything the track panel shows, rebuilt from RAW `track-list`
+  /// JSON on every mpv track/selection event. Empty while stopped.
+  final ValueNotifier<TrackSurface> trackSurface =
+      ValueNotifier<TrackSurface>(TrackSurface.empty);
+
+  void _queueSurfaceRefresh() {
+    _surfaceDebounce?.cancel();
+    _surfaceDebounce =
+        Timer(const Duration(milliseconds: 70), _refreshTrackSurface);
+  }
+
+  /// Observes `sid` / `aid` exactly once for the player's lifetime —
+  /// selection flips re-read the surface so the panel's marks mirror
+  /// ALL changes (the viewer's taps, mpv's own auto-picks — D17 says
+  /// mpv picks, SALU only mirrors).
+  Future<void> _installSelectionObservers() async {
+    if (_selectionObserversInstalled) return;
+    final PlatformPlayer? platform = player.platform;
+    if (platform is! NativePlayer) return;
+    _selectionObserversInstalled = true;
+    // One burst-source per property is plenty; the debouncer coalesces.
+    try {
+      await platform.observeProperty(
+          'sid', (_) => _queueSurfaceRefresh());
+      await platform.observeProperty(
+          'aid', (_) => _queueSurfaceRefresh());
+    } catch (error) {
+      // Extremely defensive: a future media_kit registering the same
+      // property first would throw ArgumentError — better no observer
+      // than an engine-handled crash.
+      debugPrint('[SALU] track observers unavailable: $error');
+    }
+  }
+
+  Future<void> _refreshTrackSurface() async {
+    // A stopped player keeps the LAST media's track-list — do NOT
+    // re-read and re-show it; the surface is zeroed on stop already
+    // (D6's inert-when-nothing-is-loaded world).
+    if (!hasMedia.value) {
+      if (trackSurface.value.audio.isNotEmpty ||
+          trackSurface.value.embeddedSubs.isNotEmpty ||
+          trackSurface.value.localSubs.isNotEmpty) {
+        trackSurface.value = TrackSurface.empty;
+      }
+      return;
+    }
+    final PlatformPlayer? platform = player.platform;
+    if (platform is! NativePlayer) return;
+    try {
+      final String raw = await platform.getProperty('track-list');
+      // The media may have changed while waiting for the property
+      // (rapid zaps) — the tracks-subscription will re-refresh; only
+      // ever write forward-looking data.
+      trackSurface.value = TrackSurface.parse(raw);
+    } catch (error) {
+      debugPrint('[SALU] track-list read failed: $error');
+    }
+  }
+
+  // ── Track selectors (cc.md §6.6: "select by id; no OSD on switch") ──
+
+  /// Panel tap on an AUDIO row.
+  Future<void> selectAudioTrack(MpvTrack track) async {
+    await player.setAudioTrack(
+      AudioTrack(track.id, track.title, track.lang),
+    );
+  }
+
+  /// Panel tap on a SUB row (embedded or local) — the id drives it;
+  /// mpv figures out the rest (never a SALU re-pick — D17).
+  Future<void> selectSubTrack(MpvTrack track) async {
+    await player.setSubtitleTrack(
+      SubtitleTrack(track.id, track.title, track.lang),
+    );
+  }
+
+  /// Panel tap on the pinned **Off** row (§6.6).
+  Future<void> selectSubOff() async {
+    await player.setSubtitleTrack(SubtitleTrack.no());
   }
 
   // ── Playlist surgery (playlist_imp.md §5) ─────────────────────────────
@@ -1625,6 +1871,8 @@ class PlayerService {
     await _durationSub?.cancel();
     await _volumeSub?.cancel();
     await _bufferingSub?.cancel();
+    await _tracksSub?.cancel();
+    _surfaceDebounce?.cancel();
     await player.dispose();
   }
 }

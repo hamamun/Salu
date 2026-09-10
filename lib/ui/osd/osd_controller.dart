@@ -95,6 +95,48 @@ class OsdFailedCard extends OsdCard {
   final String name;
 }
 
+/// The subtitle engine's cards (cc.md §3.5 · §6.5 · D10). Transient
+/// 1-second deck flashes, each spoken at most once per session (the
+/// service owns the once-flags). Four shapes:
+///
+///   · [OsdSubtitleCard.cc]        — `cc not configured` (D11's literal)
+///   · [OsdSubtitleCard.checkKey]  — `Subtitles — check key` (401)
+///   · [OsdSubtitleCard.limit]     — `Subtitle limit reached` (429/402)
+///   · [OsdSubtitleCard.saved]     — `Saved · file` / `Already saved ·
+///     file` (manual-fetch results, the D10 manual clause)
+class OsdSubtitleCard extends OsdCard {
+  const OsdSubtitleCard.cc()
+      : kind = OsdSubtitleCardKind.ccNotConfigured,
+        fileName = null,
+        super(ttl: const Duration(seconds: 1));
+
+  const OsdSubtitleCard.checkKey()
+      : kind = OsdSubtitleCardKind.checkKey,
+        fileName = null,
+        super(ttl: const Duration(seconds: 1));
+
+  const OsdSubtitleCard.limit()
+      : kind = OsdSubtitleCardKind.limitReached,
+        fileName = null,
+        super(ttl: const Duration(seconds: 1));
+
+  /// §6.5 result cards: [already] toggles the `Saved · file` /
+  /// `Already saved · file` wording.
+  const OsdSubtitleCard.saved({required String name, bool already = false})
+      : kind = already
+            ? OsdSubtitleCardKind.alreadySaved
+            : OsdSubtitleCardKind.saved,
+        fileName = name,
+        super(ttl: const Duration(seconds: 1));
+
+  final OsdSubtitleCardKind kind;
+
+  /// The D8 filename on `saved` / `alreadySaved`, else `null`.
+  final String? fileName;
+}
+
+enum OsdSubtitleCardKind { ccNotConfigured, checkKey, limitReached, saved, alreadySaved }
+
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {
   OsdController._internal();

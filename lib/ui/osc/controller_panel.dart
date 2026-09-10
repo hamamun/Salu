@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/custom_title_bar.dart';
+import 'fetch_control.dart';
 import 'fullscreen_control.dart';
 import 'media_timeline.dart';
 import 'open_media_control.dart';
@@ -65,11 +66,20 @@ class ControllerPanel extends StatelessWidget {
                 ),
                 // Center zone · the transport cluster + sound group.
                 Center(child: TransportCluster()),
-                // Right zone · fullscreen is a direct, one-click action at
-                // the outermost edge.
+                // Right zone · the Fetch button (cc.md §6/D14 — a
+                // caption-family mark, greyed-inert off local video,
+                // NEVER hidden) immediately left of fullscreen, then
+                // fullscreen at the outermost edge.
                 Align(
                   alignment: Alignment.centerRight,
-                  child: FullscreenControl(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      FetchControl(),
+                      SizedBox(width: 6),
+                      FullscreenControl(),
+                    ],
+                  ),
                 ),
               ],
             ),

@@ -38,17 +38,13 @@ class VideoScreen extends StatelessWidget {
                 // SALU builds its own OSC — the stock media_kit controls
                 // are disabled entirely.
                 controls: NoVideoControls,
-                subtitleViewConfiguration: const SubtitleViewConfiguration(
-                  style: TextStyle(
-                    fontFamily: AppTheme.fontFamily,
-                    fontFamilyFallback: AppTheme.fontFamilyFallback,
-                    fontSize: 38,
-                    color: Colors.white,
-                    shadows: <Shadow>[
-                      Shadow(blurRadius: 8, color: Colors.black87),
-                    ],
-                  ),
-                ),
+                // D16 (cc.md §5): mpv itself is the ONE subtitle
+                // renderer; media_kit's Flutter overlay stays mounted
+                // only so its state streams keep breathing (spec lock)
+                // and is never shown. The old style block retired with
+                // the overlay — the typography pass lives on mpv's side.
+                subtitleViewConfiguration:
+                    const SubtitleViewConfiguration(visible: false),
               ),
             // Landing state — until the first media loads, and again
             // while stopped (the parked queue's canvas).
