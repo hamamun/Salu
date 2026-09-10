@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:media_kit/media_kit.dart';
 import 'package:path/path.dart' as p;
 
 import '../ui/osd/osd_controller.dart';
@@ -180,24 +181,25 @@ class SubtitleService {
     if (_failedThisSession.contains(path) || !_inFlight.add(path)) return;
 
     try {
-      // The mpv track report settles right after start-file; give the
-      // tracks stream one beat (bounded) so the "no usable subtitle"
-      // check reads the real state, not the pre-load one.
-      try {
-        await PlayerService.instance.player.stream.tracks.first
-            .timeout(const Duration(milliseconds: 1200));
-      } catch (_) {
-        // No emission in time — the current state is our best answer.
-      }
+      // The mpv track report settles right after start-file — and on a
+      // zap it fires more than once (the outgoing file's tracks torn
+      // down, then the new file's opened). A one-beat read can catch
+      // the DEPLETED list and false-fetch a video that has embedded
+      // subs (D7): wait for the report to go quiet (bounded), then
+      // read the settled state.
+      await _awaitSettledTracks();
       if (_autoWantedPath != path) return; // zapped mid-settle
 
       // Guard 3 — D7 "no usable subtitle": mpv reports zero subtitle
-      // tracks for the item (numeric ids — 'auto'/'no' pseudo-rows are
-      // skipped), AND no basename-matching sibling on disk.
+      // tracks for the item (numeric ids — media_kit prepends
+      // 'auto'/'no' pseudo-rows, skipped here; TEXT AND BITMAP both
+      // count: D16's proof is a PGS .mkv showing its subs through
+      // mpv, so an image track is a usable track, not a gap), AND no
+      // basename-matching sibling on disk.
       final List<SubtitleTrack> subRows =
           PlayerService.instance.player.state.tracks.subtitle;
-      final bool hasSub = subRows.any((SubtitleTrack t) =>
-          int.tryParse(t.id) != null && (t.image ?? false) == false);
+      final bool hasSub =
+          subRows.any((SubtitleTrack t) => int.tryParse(t.id) != null);
       if (hasSub) return;
       if (_hasMatchingSibling(path)) return;
 
@@ -249,6 +251,38 @@ class SubtitleService {
       await _fetchSaveApply(hit, path);
     } finally {
       _inFlight.remove(path);
+    }
+  }
+
+  /// Bounded wait for mpv's track report to settle: [quiet] of
+  /// silence after the last emission, or [cap] overall — whichever
+  /// comes first. The auto fetch is silent background work (D10), so
+  /// the settle costs nothing the viewer can see; a too-early read
+  /// costs quota (a false "no embedded subs" → a download the video
+  /// never needed).
+  Future<void> _awaitSettledTracks() async {
+    const Duration quiet = Duration(milliseconds: 500);
+    const Duration cap = Duration(milliseconds: 1500);
+    final Completer<void> settled = Completer<void>();
+    Timer? silence;
+    StreamSubscription<Tracks>? sub;
+    try {
+      sub = PlayerService.instance.player.stream.tracks.listen(
+        (Tracks _) {
+          silence?.cancel();
+          silence = Timer(quiet, () {
+            if (!settled.isCompleted) settled.complete();
+          });
+        },
+      );
+      try {
+        await settled.future.timeout(cap);
+      } catch (_) {
+        // Cap reached — the current state is our best answer.
+      }
+    } finally {
+      silence?.cancel();
+      await sub?.cancel();
     }
   }
 
@@ -314,13 +348,23 @@ class SubtitleService {
   ) async {
     final String name = _targetName(videoPath, result.language, result.ext);
     // Already-saved target — spend no quota (§6.5; quota is never
-    // burned twice for one file).
+    // burned twice for one file). Beside the video first; a copy in
+    // the temp fallback (§3.3's unwritable-folder save) is the same
+    // bought D8 name, so it counts too.
     final String sibling = p.join(p.dirname(videoPath), name);
     if (await File(sibling).exists()) {
       return SubtitleSaveOutcome(
           status: SubtitleSaveStatus.alreadySaved,
           fileName: name,
           path: sibling);
+    }
+    final String tempCopy =
+        p.join(Directory.systemTemp.path, 'salu_subs', name);
+    if (await File(tempCopy).exists()) {
+      return SubtitleSaveOutcome(
+          status: SubtitleSaveStatus.alreadySaved,
+          fileName: name,
+          path: tempCopy);
     }
     if (SettingsService.instance.subtitleApiKey.value.isEmpty) {
       _noticeCc();
@@ -480,7 +524,11 @@ class SubtitleService {
       final http.Response r = await _client
           .post(
             Uri.parse('$_base/login'),
-            headers: const <String, String>{
+            headers: <String, String>{
+              // /login needs the Api-Key too (§4 — the API's own docs
+              // list it as a required header here, alongside
+              // User-Agent and Content-Type; keyless logins 401).
+              'Api-Key': s.subtitleApiKey.value,
               'User-Agent': _userAgent,
               'Content-Type': 'application/json',
             },
@@ -553,8 +601,10 @@ class SubtitleService {
       if (file.statusCode != 200) return null;
       Uint8List bytes = file.bodyBytes;
       // The API serves gzipped bodies unless asked otherwise (§3.3-2).
+      // (GZipCodec's constructor is not const — dart:io's ZLibCodec
+      // family takes mutable option fields.)
       if (bytes.length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
-        bytes = Uint8List.fromList(const GZipCodec().decode(bytes));
+        bytes = Uint8List.fromList(GZipCodec().decode(bytes));
       }
       return bytes;
     } catch (_) {

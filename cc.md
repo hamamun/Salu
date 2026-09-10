@@ -6,7 +6,21 @@
 > still bind everything below — this file only adds subtitle rules.
 >
 > **Status:** DECISIONS LOCKED D1–D17 (D1–D13, D15–D17 owner 2026-09-09 ·
-> D14 design locked owner 2026-09-10) · NOT YET IMPLEMENTED.
+> D14 design locked owner 2026-09-10) · **v1 IMPLEMENTED** (all 12 files of
+> §7 in place). Recheck 2026-09-10: D1–D17 + §2/§3/§6 verified complete;
+> six review fixes applied (missing media_kit import — was a compile
+> error · /login now sends its required Api-Key header · D7 counts bitmap
+> sub tracks too · D7 track report now waits for a settled quiet window
+> on zaps · §6.5 already-saved check covers the temp fallback · §2.3
+> helper copy restored to the locked words). The owner's first
+> `flutter analyze` (15 issues) is now fixed to zero: the two
+> observeProperty closures (media_kit wants `Future<void> Function(String)`
+> callbacks) · `const GZipCodec()` (not a const constructor) · the Search
+> window's Save assignment (nullable + unused) · import order ·
+> deprecated Matrix4 translate/scale → ByDouble · two never-passed
+> params (`_PartRows` key, `_PlainField` helper) · one needless
+> nullable. The §7 Windows-build verification pass is still owed — no
+> runtime test has been done yet.
 
 ---
 
