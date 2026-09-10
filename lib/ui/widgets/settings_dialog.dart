@@ -1045,7 +1045,8 @@ class _AutoDownloadSwitch extends StatelessWidget {
                       ),
                       SizedBox(height: 3),
                       Text(
-                        'Fetching when a video starts without subtitles.',
+                        // §2.3's locked helper copy.
+                        'Fetches the best match when a video has no subtitles.',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: AppColors.textSecondary,

@@ -6,7 +6,14 @@
 > still bind everything below — this file only adds subtitle rules.
 >
 > **Status:** DECISIONS LOCKED D1–D17 (D1–D13, D15–D17 owner 2026-09-09 ·
-> D14 design locked owner 2026-09-10) · NOT YET IMPLEMENTED.
+> D14 design locked owner 2026-09-10) · **v1 IMPLEMENTED** (all 12 files of
+> §7 in place). Recheck 2026-09-10: D1–D17 + §2/§3/§6 verified complete;
+> six review fixes applied (missing media_kit import — was a compile
+> error · /login now sends its required Api-Key header · D7 counts bitmap
+> sub tracks too · D7 track report now waits for a settled quiet window
+> on zaps · §6.5 already-saved check covers the temp fallback · §2.3
+> helper copy restored to the locked words). The §7 Windows-build
+> verification pass is still owed — no runtime test has been done yet.
 
 ---
 
