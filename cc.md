@@ -12,8 +12,15 @@
 > error · /login now sends its required Api-Key header · D7 counts bitmap
 > sub tracks too · D7 track report now waits for a settled quiet window
 > on zaps · §6.5 already-saved check covers the temp fallback · §2.3
-> helper copy restored to the locked words). The §7 Windows-build
-> verification pass is still owed — no runtime test has been done yet.
+> helper copy restored to the locked words). The owner's first
+> `flutter analyze` (15 issues) is now fixed to zero: the two
+> observeProperty closures (media_kit wants `Future<void> Function(String)`
+> callbacks) · `const GZipCodec()` (not a const constructor) · the Search
+> window's Save assignment (nullable + unused) · import order ·
+> deprecated Matrix4 translate/scale → ByDouble · two never-passed
+> params (`_PartRows` key, `_PlainField` helper) · one needless
+> nullable. The §7 Windows-build verification pass is still owed — no
+> runtime test has been done yet.
 
 ---
 

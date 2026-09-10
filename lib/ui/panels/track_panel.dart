@@ -5,15 +5,15 @@ import 'dart:ui' show ImageFilter;
 import 'package:file_selector/file_selector.dart' as fs;
 import 'package:flutter/material.dart';
 
+import '../../core/language_names.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/ui_lock.dart';
-import '../../core/language_names.dart';
+import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
-import '../widgets/subtitle_search_dialog.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
-import '../../theme/app_theme.dart';
+import '../widgets/subtitle_search_dialog.dart';
 
 /// The Fetch button's slide-down track panel (cc.md §6 · D14).
 ///
@@ -139,9 +139,17 @@ class _TrackPanelState extends State<TrackPanel>
                     child: Opacity(
                       opacity: v,
                       child: Transform(
+                        // vector_math 2.4: the dynamic-typed
+                        // translate()/scale() cascades are deprecated —
+                        // the ByDouble forms are the replacements.
                         transform: Matrix4.identity()
-                          ..translate(0.0, (1 - v) * -8)
-                          ..scale(0.96 + 0.04 * v),
+                          ..translateByDouble(0.0, (1 - v) * -8, 0.0, 1.0)
+                          ..scaleByDouble(
+                            0.96 + 0.04 * v,
+                            0.96 + 0.04 * v,
+                            0.96 + 0.04 * v,
+                            1.0,
+                          ),
                         alignment: Alignment.topRight,
                         child: _glass(_body()),
                       ),
@@ -354,8 +362,9 @@ class _PartLabel extends StatelessWidget {
 /// One part's rows, scrolling on its own once past five (§6.3) — the
 /// panel NEVER grows, only the inner list scrolls.
 class _PartRows extends StatefulWidget {
+  // No `key`: the parts are singletons of the panel's body — identity
+  // is positional, never keyed.
   const _PartRows({
-    super.key,
     required this.rows,
     required this.onTap,
     this.onOffTap,

@@ -1424,11 +1424,15 @@ class PlayerService {
     if (platform is! NativePlayer) return;
     _selectionObserversInstalled = true;
     // One burst-source per property is plenty; the debouncer coalesces.
+    // media_kit's callback contract is `Future<void> Function(String)`
+    // (its `observedProperties` map) — async block bodies satisfy it.
     try {
-      await platform.observeProperty(
-          'sid', (_) => _queueSurfaceRefresh());
-      await platform.observeProperty(
-          'aid', (_) => _queueSurfaceRefresh());
+      await platform.observeProperty('sid', (_) async {
+        _queueSurfaceRefresh();
+      });
+      await platform.observeProperty('aid', (_) async {
+        _queueSurfaceRefresh();
+      });
     } catch (error) {
       // Extremely defensive: a future media_kit registering the same
       // property first would throw ArgumentError — better no observer

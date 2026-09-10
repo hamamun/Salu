@@ -581,18 +581,18 @@ class _SecretField extends StatelessWidget {
   }
 }
 
-/// A plain (non-secret) titled + helper'd field — same visuals.
+/// A plain (non-secret) titled field — same visuals as [_SecretField]
+/// minus the eye/clear row (the username's shape; helpers, when a plain
+/// field ever needs one, go through [_SecretField]'s pattern).
 class _PlainField extends StatelessWidget {
   const _PlainField({
     required this.controller,
     required this.title,
-    this.helper,
     required this.onChanged,
   });
 
   final TextEditingController controller;
   final String title;
-  final String? helper;
   final ValueChanged<String> onChanged;
 
   @override
@@ -608,14 +608,6 @@ class _PlainField extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        if (helper != null) ...<Widget>[
-          const SizedBox(height: 2),
-          Text(
-            helper!,
-            style: const TextStyle(
-                fontSize: 12, color: AppColors.textSecondary),
-          ),
-        ],
         const SizedBox(height: 8),
         _FieldShell(controller: controller, onChanged: onChanged),
       ],

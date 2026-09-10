@@ -116,12 +116,14 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
       _picked = null;
       _rows = null;
     });
-    final List<SubtitleResult>? rows =
+    // search() already returns an empty list for every nothing-to-show
+    // case (not configured / paused / no hits) — non-nullable by design.
+    final List<SubtitleResult> rows =
         await SubtitleService.instance.search(q);
     if (!mounted) return;
     setState(() {
       _searching = false;
-      _rows = rows ?? const <SubtitleResult>[];
+      _rows = rows;
     });
   }
 
@@ -130,9 +132,11 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
     final String? video = PlayerService.instance.currentPath.value;
     if (picked == null || video == null) return;
     // The Save trains are engine-owned; the window only waits to close.
-    final SubtitleSaveOutcome outcome = andLoad
-        ? await SubtitleService.instance.saveAndLoad(picked, video)
-        : await SubtitleService.instance.save(picked, video);
+    if (andLoad) {
+      await SubtitleService.instance.saveAndLoad(picked, video);
+    } else {
+      await SubtitleService.instance.save(picked, video);
+    }
     if (!mounted) return;
     // Close on ANY outcome (§6.5: Save & Load always closes; the mock's
     // Save does too) — a failed save already spoke its engine card or

@@ -601,8 +601,10 @@ class SubtitleService {
       if (file.statusCode != 200) return null;
       Uint8List bytes = file.bodyBytes;
       // The API serves gzipped bodies unless asked otherwise (§3.3-2).
+      // (GZipCodec's constructor is not const — dart:io's ZLibCodec
+      // family takes mutable option fields.)
       if (bytes.length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
-        bytes = Uint8List.fromList(const GZipCodec().decode(bytes));
+        bytes = Uint8List.fromList(GZipCodec().decode(bytes));
       }
       return bytes;
     } catch (_) {
