@@ -97,6 +97,44 @@
 > treated as the bought subtitle FOREVER by the already-saved check.
 > New: `test/subtitle_scramble_test.dart`. The §7 Windows-build
 > verification pass is still owed.
+>
+> **Fourth runtime finding (2026-09-13) — "search + login fine, /download
+> → 503", ROOT CAUSE + FIX:** the owner's log shows `POST /login → 200`
+> (token minted) followed by `POST /download → 503` whose body is an HTML
+> `Error 503 - OpenSubtitles.com` page. The owner rightly asked whether
+> SALU mishandles the download — audited byte-for-byte against the
+> official docs (`opensubtitles.stoplight.io` /download + best-practices):
+> URL, `Api-Key`, `Authorization: Bearer`, `Content-Type`, body
+> `{"file_id":…}` all match (two cosmetic mismatches found and fixed:
+> UA now in the docs' `App name vVersion` shape — `SALU v0.1.0` — and
+> `Accept: application/json` now sent like the docs' own curl example).
+> A malformed request canNOT produce this error: a wrong/missing UA gets
+> **403** "User-Agent header is wrong", a missing key gets **401**
+> "missing api key", a dead token **401**, a bad file_id/quota **403**,
+> rate-limiting (5 req/s per IP) **429** — all JSON, all handled. An HTML
+> 503 is the API's FRONT, answered before the request is validated. The
+> OpenSubtitles team confirm this is the expected cause: on their forum
+> (t=18314) `os_dev` — "Sorry about the 503 these are by definition the
+> errors we couldn't catch, we do our best to avoid them but they can
+> still occur, so the best is to have systems that will try again a
+> request if it fails"; the docs repeat this in the download page's
+> warning and best-practices. Other clients hit the same wall (Emby +
+> Bazarr, Dec 2024; "one server went down, and we are back now", Oct
+> 2025). **Fix:** `/download` now re-asks on any 5xx up to two more times
+> with backoff (honors the front's `Retry-After`, capped 10 s; 2 s → 4 s
+> otherwise) — a rejected request never reaches the app that spends quota,
+> so re-asking is free. Still failing → the ordinary failure paths
+> (`Subtitles — download failed` on a manual tap, session-marked on auto)
+> with NO engine pause (credentials and quota are not at fault). The
+> 429/402/403 wall's "no retry loop" rule stands untouched. Same pass, the
+> two issues the owner's `flutter analyze` surfaced:
+> `test/subtitle_scramble_test.dart` held `'0123456789' * 12` in a `const`
+> list — string repetition is not const-legal (`*` in a constant expression
+> must be `num * num`, `const_eval_type_num`) → now a `final` list — and
+> `_download`'s 401-retry returned the recursive `Future` unawaited inside
+> the `try` (`unawaited_return_in_try_block`) → now `return await`.
+> Known gap against best-practices (untouched, not failure-relevant):
+> SALU never calls `/logout` on exit ("free resources" is server-side).
 
 ---
 
@@ -296,6 +334,7 @@ follow; v1 never renames the viewer's files silently.
 | 401 from `/subtitles` or `/download` (bad **API key** / dead token) | OSD card once per session: `Subtitles — check key` (mark + words; deck rules apply). Engine pauses until settings change. |
 | 401 from `/login` (bad **username/password**) | OSD card once per session: `Subtitles — check login` (added owner 2026-09-13 — the deck used to say `check key` for this too, naming the one field that was fine). Engine pauses until settings change. |
 | 429 / 402 / 403 on `/download` (quota / rate) | OSD card once: `Subtitle limit reached`. Engine pauses until next launch. No retry loop. |
+| 5xx on `/download` (the front's HTML `Error 503` page — transient WAF noise, NOT the quota wall: the app's own errors are JSON) | Up to 2 more attempts with backoff (honors the front's `Retry-After`, capped 10 s; 2 s → 4 s otherwise). Still failing → the ordinary failure paths (manual: `Subtitles — download failed`, every tap; auto: session-marked, silent). NO engine pause — credentials and quota are not at fault, so no Settings change could fix it (owner 2026-09-13, fourth finding). |
 | No login (username or password empty) | AUTO: silent and **not** session-marked — signing in mid-session retries it (§3.1b). Manual Save: `Subtitles — sign in`, every tap. |
 | 200 with junk behind it (empty body / HTML page on the download link) | Refused, nothing written (owner 2026-09-13). A broken D8 file would be treated as the bought subtitle forever by the already-saved check. |
 | No hits | Silent. Session-marked (guard 4). |
