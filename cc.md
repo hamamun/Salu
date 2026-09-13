@@ -21,6 +21,32 @@
 > params (`_PartRows` key, `_PlainField` helper) · one needless
 > nullable. The §7 Windows-build verification pass is still owed — no
 > runtime test has been done yet.
+>
+> **First runtime finding (2026-09-13) — "subtitle is not showing", ROOT
+> CAUSE + FIX:** media_kit ships with **mpv's own subtitle rendering OFF**
+> unless the player is created with `libass: true` — its default is
+> `false`, documented as *"By default, subtitles rendering is Flutter
+> Widget based"*. D16 switched the Flutter overlay off (`visible: false`,
+> §7 file 7) but nothing ever switched mpv's renderer on, so the canvas
+> was left with **zero subtitle renderers**: no embedded, autoloaded,
+> dropped or downloaded subtitle could ever be drawn. Fixed with the one
+> missing flag in `player_service.dart` (`PlayerConfiguration(libass:
+> true)`). D16 now holds as designed: mpv native is the one renderer, the
+> Flutter overlay stays off (both on = doubled subtitles), and the
+> typography pass belongs to mpv (`sub-font`, `sub-font-size`,
+> `sub-color`, `sub-border-size`, `sub-shadow-offset` — §5). The §7
+> Windows-build verification pass is still owed.
+>
+> **Second runtime finding (2026-09-13) — "search works, Save does
+> nothing" + the name box:** (a) Save/Save & Load failed in TOTAL
+> silence whenever there was no stored login — `/download` needs a
+> Bearer token only `/login` can mint (§4), and D13 keeps the password
+> in memory, so every app restart silently broke Save until Settings was
+> refilled. The manual taps now speak (`Subtitles — sign in` /
+> `Subtitles — download failed`) while AUTO keeps D10's silence.
+> (b) The Search window's name box was pre-filled with a "cleaned"
+> title and lost the real release name — it now shows the file's own
+> full name, untouched (§6.5, owner 2026-09-13).
 
 ---
 
@@ -376,10 +402,15 @@ Load + Search marks — that is the find-and-apply case.
 A centered glass modal with dimmed barrier — a focus task, open → act →
 gone (rule 8), deliberately distinct from the live slide-out panel.
 
-- **Top: the movie name — an editable field**, pre-filled from the video
-  filename (extension stripped, obvious release junk cleaned). Editable
-  because D9's whole philosophy is *a human judges*: a garbled filename
-  gets fixed here, not guessed around.
+- **Top: the movie name — an editable field**, pre-filled with the
+  video's **FULL file name exactly as it sits on disk — extension
+  included, nothing cleaned** (owner revision **2026-09-13**, replaces the
+  2026-09-10 "extension stripped, obvious release junk cleaned" wording).
+  Reason: the cleaner threw away the release name — the thing
+  OpenSubtitles indexes best — together with the junk, and a file whose
+  title began with a tag on the list lost its title entirely. Editable
+  because D9's whole philosophy is *a human judges*: the box hands over
+  the true name and the human edits it, never SALU guessing.
 - **Below the field: four marks — Search · Save · Save & Load · Close**
   (custom marks + hover-delay tooltips, rule 6; Save / Save & Load dim
   until a row is picked).
@@ -407,10 +438,27 @@ gone (rule 8), deliberately distinct from the live slide-out panel.
   (same card, honest words), Save & Load applies the existing local copy.
   Quota is never burned twice for one file.
 - **Close** = dismiss, nothing happens.
+- **A Save that cannot run SPEAKS** (owner, **2026-09-13**): a tap is a
+  deliberate human act, so it is never answered with silence, and it
+  answers on **every** tap — the once-per-session flags stay the AUTO
+  engine's business (§3.5), they never mute a human who asked twice.
+  Two new cards join the deck's subtitle family, both 1 s transient:
+  - `Subtitles — sign in` — no stored username/password, so `/download`
+    has no Bearer token (§4: search is key-only, download is key +
+    login; D13 keeps the password in memory, so **every restart lands
+    here** until Settings → Subtitles is filled in again).
+  - `Subtitles — download failed` — the download or the write died.
+  - An engine already paused by a wall names the wall again on a manual
+    tap (`Subtitles — check key` / `Subtitle limit reached`), because the
+    viewer is asking again now.
+  - AUTO stays silent for all of the above (D10 holds): a missing login
+    is not the FILE's fault, so it is not session-marked — signing in
+    mid-session still lets the engine work.
 - **Not configured**: the window still opens; tapping Search shows the
-  one-per-session `cc not configured` OSD card (D11) — no new dialog. Bad
-  key (401) and quota walls surface the same way (§3.5 deck rules, each
-  once per session).
+  one-per-session `cc not configured` OSD card (D11) — no new dialog.
+  (A manual **Save** with no key shows the same card directly, every
+  tap.) Bad key (401) and quota walls surface through their own cards
+  (§3.5 deck rules).
 
 ### 6.6 What D14 does NOT touch
 

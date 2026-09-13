@@ -150,6 +150,8 @@ class _OsdDeckState extends State<OsdDeck>
       OsdSubtitleCardKind.limitReached => 'Subtitle limit reached',
       OsdSubtitleCardKind.saved => 'Saved · ${card.fileName}',
       OsdSubtitleCardKind.alreadySaved => 'Already saved · ${card.fileName}',
+      OsdSubtitleCardKind.signIn => 'Subtitles — sign in',
+      OsdSubtitleCardKind.downloadFailed => 'Subtitles — download failed',
     };
     return Row(
       mainAxisSize: MainAxisSize.min,

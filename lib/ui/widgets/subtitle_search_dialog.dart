@@ -15,8 +15,9 @@ import 'salu_marks.dart';
 /// The Search window (cc.md §6.5 · D14) — a centered glass modal over a
 /// dimmed barrier, the query-search part of the Fetch design:
 ///
-///   · one editable name field, pre-filled from the video's filename
-///     (obvious release junk cleaned)
+///   · one editable name field, pre-filled with the video's FULL file
+///     name exactly as it is on disk (owner 2026-09-13 — nothing
+///     cleaned, nothing guessed: the human judges)
 ///   · four marks below: **Search · Save · Save & Load · Close**
 ///   · results grouped: **Best matches** (top 3 in the preferred
 ///     language) then **All matches** (every language, the preferred
@@ -93,7 +94,7 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
   @override
   void initState() {
     super.initState();
-    _query.text = _cleanNameFor(PlayerService.instance.currentPath.value);
+    _query.text = _fullNameFor(PlayerService.instance.currentPath.value);
     _queryFocus.requestFocus();
   }
 
@@ -146,54 +147,23 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
 
   void _close() => Navigator.of(context).maybePop();
 
-  // ── The cleaned name (§6.5: "the video's filename, obvious release
-  //    junk stripped") ────────────────────────────────────────────────
+  // ── The name in the box (§6.5 · owner revision 2026-09-13: the file's
+  //    own full name, untouched) ──────────────────────────────────────
 
-  static const List<String> _junkTokens = <String>[
-    '480p', '576p', '720p', '1080p', '2160p', '4320p',
-    'x264', 'x265', 'h264', 'h265', 'hevc', 'av1', 'xvid', 'divx',
-    'bluray', 'bdrip', 'brrip', 'webrip', 'web-dl', 'webdl', 'hdtv',
-    'hdrip', 'dvdrip', 'dvdr', 'remux', 'proper', 'repack', 'extended',
-    'unrated', 'internal', 'limited', 'cam', 'ts', 'hdcam', 'screener',
-    'dvdscr', 'r5', 'dvd', 'tvrip', 'pdtv', 'dsr', 'amzn', 'nf', 'atvp',
-    'ddp', 'dd5', 'ddp5', 'dd+', 'aac', 'aac2', 'ac3', 'eac3', 'dts',
-    'mp3', 'truehd', 'atmos', '5 1', '7 1', 'stereo', '10bit', 'hdr10',
-    'hdr', 'sdr', 'dolby', 'subs', 'subbed', 'dubbed', 'multi', 'dual',
-    'eng', 'english', 'complete',
-  ];
-
-  /// `Movie.2024.1080p.WEB-DL.DDP5.1.x265-GRP.mkv` → `Movie 2024`.
-  /// Dots/underscores become spaces, junk tokens die, a bare trailing
-  /// (2024) or [2024] bracket keeps its digits, then it's trimmed.
-  static String _cleanNameFor(String? path) {
+  /// §6.5 — owner revision 2026-09-13: the box shows the video's **full
+  /// file name exactly as it sits on disk**, extension included, nothing
+  /// stripped and nothing guessed.
+  ///
+  /// SALU used to "clean" the name (drop the extension, turn dots into
+  /// spaces, delete everything from the first release tag onwards). That
+  /// cleaning was the problem: it threw the real release name — the
+  /// thing OpenSubtitles indexes best — away with the junk, and a file
+  /// whose title began with a tag on the list lost its title entirely.
+  /// D9's whole philosophy is that a human judges, so the human gets the
+  /// true name and edits it if they want to.
+  static String _fullNameFor(String? path) {
     if (path == null || path.isEmpty) return '';
-    String name = path.split(RegExp(r'[/\\]')).last;
-    final int dot = name.lastIndexOf('.');
-    if (dot > 0) name = name.substring(0, dot);
-    // Pull release-group suffixes like `-GRP` off the tail when the
-    // rest of the name is the release's dot-form (very common shape).
-    name = name.replaceAll(RegExp(r'-[A-Z0-9]+$'), '');
-    // Dots / underscores / brackets → plain spaces.
-    name = name
-        .replaceAll(RegExp(r'[._·]'), ' ')
-        .replaceAll(RegExp(r'[()\[\]{}]'), ' ');
-    final List<String> words = name
-        .split(RegExp(r'\s+'))
-        .where((String w) => w.isNotEmpty)
-        .toList();
-    final List<String> kept = <String>[];
-    for (final String w in words) {
-      final String lw = w.toLowerCase();
-      // Drop junk AND stop reading past it (nothing after a codec tag
-      // is the movie name — `GRP` / release suffixes live there).
-      if (_junkTokens.contains(lw)) break;
-      kept.add(w);
-    }
-    String result = kept.join(' ').trim();
-    // A surviving 4-digit year at the end is fine to keep — the API
-    // tolerates it and it sharpens ambiguous titles.
-    if (result.isEmpty) result = name.trim();
-    return result;
+    return path.split(RegExp(r'[/\\]')).last;
   }
 
   // ── Build ───────────────────────────────────────────────────────────

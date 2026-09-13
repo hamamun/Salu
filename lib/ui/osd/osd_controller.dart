@@ -104,6 +104,11 @@ class OsdFailedCard extends OsdCard {
 ///   · [OsdSubtitleCard.limit]     — `Subtitle limit reached` (429/402)
 ///   · [OsdSubtitleCard.saved]     — `Saved · file` / `Already saved ·
 ///     file` (manual-fetch results, the D10 manual clause)
+///   · [OsdSubtitleCard.signIn]    — `Subtitles — sign in` (manual Save
+///     with no stored login: owner's call 2026-09-13 — a deliberate tap
+///     must never fail in silence)
+///   · [OsdSubtitleCard.downloadFailed] — `Subtitles — download failed`
+///     (manual Save whose write/download died)
 class OsdSubtitleCard extends OsdCard {
   const OsdSubtitleCard.cc()
       : kind = OsdSubtitleCardKind.ccNotConfigured,
@@ -129,13 +134,37 @@ class OsdSubtitleCard extends OsdCard {
         fileName = name,
         super(ttl: const Duration(seconds: 1));
 
+  /// §6.5 manual Save with no stored username/password — `/download`
+  /// needs a Bearer token that only `/login` can mint (cc.md §4), and
+  /// the password is memory-only (D13), so every restart lands here
+  /// until the viewer signs in again. Named, not taught.
+  const OsdSubtitleCard.signIn()
+      : kind = OsdSubtitleCardKind.signIn,
+        fileName = null,
+        super(ttl: const Duration(seconds: 1));
+
+  /// §6.5 manual Save that could not be written — the tap deserves an
+  /// answer even though the AUTO engine stays silent (D10).
+  const OsdSubtitleCard.downloadFailed()
+      : kind = OsdSubtitleCardKind.downloadFailed,
+        fileName = null,
+        super(ttl: const Duration(seconds: 1));
+
   final OsdSubtitleCardKind kind;
 
   /// The D8 filename on `saved` / `alreadySaved`, else `null`.
   final String? fileName;
 }
 
-enum OsdSubtitleCardKind { ccNotConfigured, checkKey, limitReached, saved, alreadySaved }
+enum OsdSubtitleCardKind {
+  ccNotConfigured,
+  checkKey,
+  limitReached,
+  saved,
+  alreadySaved,
+  signIn,
+  downloadFailed,
+}
 
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {

@@ -425,6 +425,13 @@ class PlayerService {
       configuration: const PlayerConfiguration(
         title: 'SALU',
         logLevel: MPVLogLevel.warn,
+        // D16 (cc.md §5): mpv is the ONE subtitle renderer — the Flutter
+        // `SubtitleView` overlay is switched off on the video canvas.
+        // media_kit keeps mpv's own subtitle rendering OFF unless this
+        // is set (default `false` = "subtitles rendering is Flutter
+        // Widget based"), so without it there is no renderer left at
+        // all and no subtitle can ever be drawn.
+        libass: true,
         // Give mpv a generous demuxer cache for smooth local playback.
         bufferSize: 64 * 1024 * 1024,
       ),

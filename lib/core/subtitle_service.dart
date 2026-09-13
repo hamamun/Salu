@@ -65,7 +65,13 @@ class SubtitleResult {
 /// downloaded when the D8 name is already there (quota is never burned
 /// twice) — and [path] says where the bytes actually live so Save & Load
 /// can apply them immediately.
-enum SubtitleSaveStatus { saved, alreadySaved, failed }
+///
+/// [notSignedIn] is the one the owner hit on the first real run
+/// (2026-09-13): search needs only the API key, but `/download` needs a
+/// Bearer token that only `/login` can mint (cc.md §4), and D13 keeps
+/// the password in memory — so after every restart a manual Save lands
+/// here until the viewer signs in again.
+enum SubtitleSaveStatus { saved, alreadySaved, failed, notSignedIn }
 
 class SubtitleSaveOutcome {
   const SubtitleSaveOutcome({
@@ -80,7 +86,8 @@ class SubtitleSaveOutcome {
   final String fileName;
 
   /// Where the file exists on disk after the call (the video's folder,
-  /// or the temp fallback). `null` on [SubtitleSaveStatus.failed].
+  /// or the temp fallback). `null` on [SubtitleSaveStatus.failed] and on
+  /// [SubtitleSaveStatus.notSignedIn] (nothing was written).
   final String? path;
 }
 
@@ -155,6 +162,13 @@ class SubtitleService {
   void _onCredentialChange() {
     _authPaused = false;
   }
+
+  /// A usable login for `/download`: both halves present. The password
+  /// lives in memory only (D13), so this is `false` again after every
+  /// restart until Settings → Subtitles is filled in.
+  bool get _hasLogin =>
+      SettingsService.instance.subtitleUsername.value.isNotEmpty &&
+      sessionPassword.value.isNotEmpty;
 
   // ────────────────────────────────────────────────────────────────────
   //  AUTO path (cc.md §3)
@@ -291,6 +305,10 @@ class SubtitleService {
   /// simply appear.
   Future<void> _fetchSaveApply(SubtitleResult result, String path) async {
     final SubtitleSaveOutcome? outcome = await _saveCore(result, path);
+    // A missing login is not this FILE's fault - the viewer may still
+    // sign in later in the session, so it stays silent and unmarked
+    // (D10: the auto engine never speaks).
+    if (outcome?.status == SubtitleSaveStatus.notSignedIn) return;
     if (outcome == null ||
         (outcome.status == SubtitleSaveStatus.failed &&
             !_quotaPaused &&
@@ -371,6 +389,14 @@ class SubtitleService {
       return null;
     }
     if (_quotaPaused || _authPaused) return null;
+    // §4: `/download` is key **and** Bearer. With no login there is no
+    // token, so no request is spent and nothing is written — the reason
+    // is handed back instead (the manual Save speaks it, D10 keeps the
+    // AUTO engine quiet).
+    if (!_hasLogin) {
+      return const SubtitleSaveOutcome(
+          status: SubtitleSaveStatus.notSignedIn, fileName: '', path: null);
+    }
 
     final Uint8List? bytes = await _download(result.fileId);
     if (bytes == null) {
@@ -409,11 +435,19 @@ class SubtitleService {
       SubtitleResult result, String videoPath) async {
     final String canonical = MediaUtils.canonicalPath(videoPath);
     final SubtitleSaveOutcome? outcome = await _saveCore(result, canonical);
-    if (outcome != null && outcome.status != SubtitleSaveStatus.failed) {
+    if (outcome == null) {
+      _speakSaveFailure(null);
+      return null;
+    }
+    final SubtitleSaveStatus status = outcome.status;
+    if (status == SubtitleSaveStatus.saved ||
+        status == SubtitleSaveStatus.alreadySaved) {
       OsdController.instance.show(OsdSubtitleCard.saved(
         name: outcome.fileName,
-        already: outcome.status == SubtitleSaveStatus.alreadySaved,
+        already: status == SubtitleSaveStatus.alreadySaved,
       ));
+    } else {
+      _speakSaveFailure(outcome);
     }
     return outcome;
   }
@@ -421,19 +455,57 @@ class SubtitleService {
   /// §6.5 **Save & Load** — the same write + apply NOW via
   /// [PlayerService.loadExternalSubtitle]; the already-saved target
   /// applies its existing local copy (§6.5: ONE download, the second
-  /// tap applies the file). NO card here: Save & Load's feedback is the
-  /// subs on screen + the marked panel row (§6.6, D10).
+  /// tap applies the file). No card while it works: Save & Load's
+  /// feedback is the subs on screen + the marked panel row (§6.6, D10).
+  /// A failure does speak — a tap is never answered with silence
+  /// (owner, 2026-09-13).
   Future<SubtitleSaveOutcome?> saveAndLoad(
       SubtitleResult result, String videoPath) async {
     final String canonical = MediaUtils.canonicalPath(videoPath);
     final SubtitleSaveOutcome? outcome = await _saveCore(result, canonical);
-    if (outcome != null &&
-        outcome.status != SubtitleSaveStatus.failed &&
-        outcome.path != null &&
+    if (outcome == null) {
+      _speakSaveFailure(null);
+      return null;
+    }
+    final SubtitleSaveStatus status = outcome.status;
+    if (status != SubtitleSaveStatus.saved &&
+        status != SubtitleSaveStatus.alreadySaved) {
+      _speakSaveFailure(outcome);
+      return outcome;
+    }
+    if (outcome.path != null &&
         PlayerService.instance.currentPath.value == canonical) {
       unawaited(PlayerService.instance.loadExternalSubtitle(outcome.path!));
     }
     return outcome;
+  }
+
+  /// A Save tap is a deliberate human act — it must never fail in
+  /// silence (owner's call, 2026-09-13). The AUTO engine keeps D10's
+  /// silence; only the two manual entry points speak, and they speak on
+  /// every tap: the once-per-session flags are the background engine's
+  /// own business (§3.5), not a reason to go mute when a human asked
+  /// twice.
+  void _speakSaveFailure(SubtitleSaveOutcome? outcome) {
+    final SubtitleSaveStatus? status = outcome?.status;
+    if (status == SubtitleSaveStatus.notSignedIn) {
+      OsdController.instance.show(const OsdSubtitleCard.signIn());
+      return;
+    }
+    if (status == SubtitleSaveStatus.failed) {
+      OsdController.instance.show(const OsdSubtitleCard.downloadFailed());
+      return;
+    }
+    // `null` — nothing was attempted at all: no key, or a wall that
+    // already paused the engine (§3.5). Name the wall; the words are
+    // the ones the deck already owns.
+    if (_authPaused) {
+      OsdController.instance.show(const OsdSubtitleCard.checkKey());
+    } else if (_quotaPaused) {
+      OsdController.instance.show(const OsdSubtitleCard.limit());
+    } else {
+      OsdController.instance.show(const OsdSubtitleCard.cc());
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────
