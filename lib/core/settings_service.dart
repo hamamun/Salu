@@ -101,12 +101,12 @@ class SettingsService {
   /// The OpenSubtitles account password.
   ///
   /// **D13 AMENDED (owner, 2026-09-13):** this is now persisted, scrambled
-  /// by [SubtitleScramble], beside the key and the username. The original D13 kept
-  /// it in RAM only — which meant `/download` (key **and** Bearer, cc.md §4)
-  /// was dead after every restart until the field was retyped, and the AUTO
-  /// engine's one trigger (§3.1) always fired before that retyping could
-  /// happen: no card, no subtitle, no clue. The token still never touches
-  /// disk; restart = one silent re-login.
+  /// by [SubtitleScramble], beside the key and the username. The original
+  /// D13 kept it in RAM only — which meant `/download` (key **and** Bearer,
+  /// cc.md §4) was dead after every restart until the field was retyped,
+  /// and the AUTO engine's one trigger (§3.1) always fired before that
+  /// retyping could happen: no card, no subtitle, no clue. The token still
+  /// never touches disk; restart = one silent re-login.
   ///
   /// **This is obfuscation, NOT encryption** — reversible by anyone holding
   /// both the prefs file and SALU's source. It keeps the password out of

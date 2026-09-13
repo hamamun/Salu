@@ -699,6 +699,7 @@ class SubtitleService {
         _log('GET /subtitles → 401 (API key rejected) — pausing until a '
             'credential changes');
         _authPaused = true;
+        _loginRejected = false; // the key half, not the login half
         _noticeKey();
         return null;
       }
@@ -851,7 +852,11 @@ class SubtitleService {
   /// decompressing gzip (§3.3-2). `null` = the failure path; every branch
   /// says why in the dev console ([_log]) even where the deck must stay
   /// quiet (D10).
-  Future<Uint8List?> _download(int fileId) async {
+  ///
+  /// [retried] marks the ONE automatic retry a refused token earns: the
+  /// key was proven good by the search that produced this `fileId`, so a
+  /// 401 here is the token's fault and re-login is the whole repair.
+  Future<Uint8List?> _download(int fileId, {bool retried = false}) async {
     if (_quotaPaused || _authPaused) return null;
     final String? token = await _ensureToken();
     if (token == null) return null;
@@ -870,11 +875,27 @@ class SubtitleService {
           )
           .timeout(_timeout);
       if (r.statusCode == 401) {
-        // Token expired mid-session → throw it away; next call re-logins.
-        _log('POST /download → 401 (token refused) — dropping it, '
-            'pausing until a credential changes. ${_bodyPeek(r)}');
+        // The key was proven good by the search that produced this
+        // file_id, so a 401 HERE is the TOKEN — expired or refused.
+        // Dropping it is the whole repair and SALU can do that itself, so
+        // it re-logins and retries ONCE. The old code paused the engine
+        // instead: one token hiccup wedged the whole session — SEARCH
+        // included — until a credential was edited, and named the key.
         _token = null;
+        if (!retried) {
+          _log('POST /download → 401 (token refused) — dropped it, '
+              're-logging in and retrying once');
+          // `/login` is rate-limited to 1 request per second (§4). The
+          // token was minted well under a second ago, so going straight
+          // back would trade a 401 for a 429 — and a 429 pauses the
+          // engine until relaunch, which is far worse than the wait.
+          await Future<void>.delayed(const Duration(milliseconds: 1100));
+          return _download(fileId, retried: true);
+        }
+        _log('POST /download → 401 again behind a freshly minted token — '
+            'pausing until a credential changes. ${_bodyPeek(r)}');
         _authPaused = true;
+        _loginRejected = false; // the login just succeeded; the key is next
         _noticeKey();
         return null;
       }
