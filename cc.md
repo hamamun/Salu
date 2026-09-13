@@ -135,6 +135,66 @@
 > the `try` (`unawaited_return_in_try_block`) → now `return await`.
 > Known gap against best-practices (untouched, not failure-relevant):
 > SALU never calls `/logout` on exit ("free resources" is server-side).
+>
+> **Fifth runtime finding (2026-09-13) — "subs jumped out of the bottom
+> black bar into the picture", ROOT CAUSE + §5 CORRECTED + the two
+> options weighed (owner 2026-09-13: "i just need both embedded and
+> downloaded is visible").** Nothing is broken; the *renderer* moved.
+> Before the subtitle work, media_kit's Flutter `SubtitleView` drew the
+> text: that overlay is `Positioned.fill` over the WHOLE widget
+> (`media_kit_video/lib/src/video/video_texture.dart`), bottom-anchored —
+> so it landed in the letterbox, which is Flutter's paint
+> (`Video(fill: AppColors.videoBackdrop)`, `#121212`). D16 switched the
+> overlay off and mpv now draws the subs itself — and mpv's canvas is
+> exactly the PICTURE: media_kit sizes the render surface from mpv's own
+> `video-out-params` (`media_kit_video/windows/video_output.cc` →
+> `GetVideoWidth()`), and Flutter letterboxes that surface with
+> `BoxFit.contain`. mpv therefore never sees a black border, and
+> `sub-use-margins=yes` (§5's whole argument) has no margins to use →
+> text sits at the picture's bottom edge.
+> **§5 is corrected:** its table's "✅ bottom black bar when bars exist"
+> is true for standalone mpv, where the OSD spans the window; it does not
+> hold for a texture renderer. Both D15 (mpv decides, zero code) and D16
+> (mpv native is the one renderer) stand.
+> **Option A — give mpv a window-sized surface so the bars become real —
+> REJECTED on evidence, not taste.** mpv would then letterbox internally
+> and `sub-use-margins` would work. But media_kit's Windows backend
+> UNREGISTERS the Flutter texture and registers a NEW id on every size
+> change (`video_output.cc` → `Resize()`: `UnregisterTexture(texture_id_)`
+> … `texture_id_ = 0` … `RegisterTexture(...)`, ~lines 271–331), so the
+> surface would have to be re-created on every window resize — a visible
+> flash while dragging an edge, or a stretched picture if the resize is
+> debounced. Trading the core video path for subtitle placement is the
+> wrong trade (D20).
+> **Option C — the Flutter overlay back — not taken.** It is not a
+> one-flag flip: the overlay renders only when `libass` is OFF
+> (`visible && !(player.platform?.configuration.libass ?? false)` in
+> `video_texture.dart`), so it would cost styled ASS and image (PGS/VOB)
+> subs — the exact thing the owner's requirement forbids, and the failure
+> is SILENT (image subs have no `sub-text`, so a row would be marked and
+> show nothing). `libass: true` stays; embedded and downloaded both draw.
+>
+> **Same pass, two owner decisions implemented:**
+> · **`unknown6` was engine jargon in a user-facing row** (D18). It is
+>   NOT a track name and the `6` is not a track number: mpv spells an
+>   unidentified channel layout as `unknown` + the channel count
+>   (`audio/chmap.c`: `snprintf(buf, buf_size, "unknown%d", src->num)`),
+>   surfaced as `demux-channels` (`player/command.c`) and printed verbatim
+>   in the audio row's sub-line (`unknown6 · eac3` = 6 channels, no layout
+>   tag — effectively 5.1). The row now says `6 ch`; a layout mpv DID
+>   identify still reads exactly as mpv spelled it (`5.1`, `2.0`).
+> · **Subtitle sync** (D19): the panel's sync row below the Load + Search
+>   marks, `0.0 s` in the middle, ±5 s, 0.1 s steps, double-tap = reset,
+>   remembered PER FILE (`sub_delay_service.dart`, the resume store's
+>   shape) and written to mpv's `sub-delay` — plus Z/X (mpv's own
+>   convention) and Shift = 1 s. One engine gotcha designed around:
+>   `sub-delay` is a RUNTIME option, so it survives a file change inside
+>   one mpv instance — every landing therefore writes an explicit value
+>   (the remembered one, or 0), never relying on mpv's default.
+> No `flutter analyze` was run for this pass: the sandbox has no Dart or
+> Flutter toolchain and its package hosts are unreachable. The §7
+> Windows-build verification pass is still owed, and this change is part
+> of what it owes.
 
 ---
 
@@ -159,6 +219,9 @@
 | D15 | Subtitle position: **mpv decides, zero SALU code** — no `sub-pos`, no margins, no asserts, no forcing of any kind (owner: "no code no force on mpv") | ✅ LOCKED | 2026-09-09 |
 | D16 | **Single renderer = mpv native** — media_kit's Flutter subtitle overlay goes `visible: false` (owner-delegated pick: only mpv shows ALL kinds — text, styled, bitmap) | ✅ LOCKED | 2026-09-09 |
 | D17 | v1 **does not touch mpv track selection** — no `slang`, no manipulation of any default (owner-delegated pick: easiest to adapt, fewest surprises). Preferred language governs downloads only. | ✅ LOCKED | 2026-09-09 |
+| D18 | Track rows translate mpv's unidentified-layout jargon: `unknown6` → **`6 ch`** (owner's pick over `5.1 (6 ch)`). A layout mpv identified is printed unchanged (`5.1`, `2.0`) — it says more than a bare count. One place: `_TrackRowData._channelsOf` | ✅ LOCKED | 2026-09-13 |
+| D19 | **Subtitle sync row** — the track panel, BELOW the Load + Search marks (owner's placement), shown only while a subtitle track is selected. `0.0 s` in the middle, ±5 s, 0.1 s steps, drag · wheel · double-tap-to-reset, value inside the bar (the volume bar's idiom, cc-marked). Keys: **Z = 100 ms earlier, X = 100 ms later** (mpv's own `input.conf`), Shift = SALU's 1 s. Deck card on the keys only. Memory: **per file** (`sub_delay_service.dart`), applied on every landing, kept only while non-zero. Panel is one row taller (§6.3 accepted) | ✅ LOCKED | 2026-09-13 |
+| D20 | **The letterbox stays Flutter's** — subs render at the picture's bottom edge, not in the bar. A window-sized mpv surface (which would restore the bar) is rejected: media_kit re-registers the Flutter texture on every `setSize`, so it would flash on every window resize. `libass: true` stays, so embedded AND downloaded subs both draw. D15/D16 stand; §5's "bottom black bar" row is corrected | ✅ LOCKED | 2026-09-13 |
 
 ---
 
@@ -399,7 +462,7 @@ Two built-in limits (D15 accepts both — they are correct behavior, not bugs):
 
 | Subtitle kind | Where it lands | Why |
 |---|---|---|
-| Plain text (SRT/VTT — everything SALU downloads) | ✅ bottom black bar when bars exist, else video bottom | `sub-use-margins=yes` (default) |
+| Plain text (SRT/VTT — everything SALU downloads) | ⚠️ **CORRECTED 2026-09-13 (D20): video bottom.** The black-bar prediction holds for standalone mpv, where the OSD spans the window; SALU's mpv canvas IS the picture (media_kit sizes the surface from `video-out-params` and Flutter letterboxes it), so there are no margins to use | `sub-use-margins=yes` (default) — a no-op in a texture renderer |
 | Styled (ASS/SSA authored files) | follows the file's own margins/positions | fansub placement is deliberate (signs, toptitles) — forcing it into the bars would break rendering; `sub-ass-override` stays at mpv's default `scale` [3](https://mpv.io/manual/master/) |
 | Bitmap (PGS/VOB/DVB) | baked into the video frame | image subs cannot be repositioned, full stop |
 

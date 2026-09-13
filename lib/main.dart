@@ -13,6 +13,7 @@ import 'core/media_utils.dart';
 import 'core/player_service.dart';
 import 'core/resume_service.dart';
 import 'core/settings_service.dart';
+import 'core/sub_delay_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/home_screen.dart';
 
@@ -87,6 +88,7 @@ Future<void> main(List<String> args) async {
   // ── Load persisted settings + resume memory before the first frame. ──
   await SettingsService.instance.load();
   await ResumeService.instance.load();
+  await SubDelayService.instance.load();
   await ChannelFavouritesService.instance.load();
 
   runApp(SaluApp(initialFilePath: extractMediaPathFromArgs(args)));
@@ -122,6 +124,13 @@ class _CloseGuard with WindowListener {
     }
     try {
       await ResumeService.instance.flush().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
+    try {
+      // A sync offset dragged seconds before the × must never be lost.
+      await SubDelayService.instance.flush().timeout(
         const Duration(seconds: 2),
         onTimeout: () {},
       );

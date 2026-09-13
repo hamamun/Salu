@@ -15,6 +15,7 @@ import 'channel_view_service.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
 import 'resume_service.dart';
+import 'sub_delay_service.dart';
 import 'subtitle_service.dart';
 
 /// SALU's transport states. Three live states plus *idle* (nothing
@@ -358,6 +359,26 @@ class PlayerService {
   /// advance itself; mpv's playlist order is never touched.
   final ValueNotifier<bool> shuffleOn = ValueNotifier<bool>(false);
 
+  // ── Subtitle sync (owner 2026-09-13) ────────────────────────────────
+
+  /// The subtitle offset now in effect, in SECONDS — mpv's `sub-delay`.
+  /// `0.0` = in sync; positive = the text runs LATER than the audio.
+  /// The track panel's sync row and the Z/X keys both read/write this
+  /// one value, so the two can never disagree.
+  final ValueNotifier<double> subDelay = ValueNotifier<double>(0);
+
+  /// The sync row's window and steps (shared with Z/X — mpv's own
+  /// convention is 100 ms; Shift is SALU's coarse second).
+  static const double maxSubDelay = 5.0;
+  static const double subDelayStep = 0.1;
+  static const double subDelayCoarseStep = 1.0;
+
+  /// Whether any subtitle track is actually selected (mpv's truth —
+  /// the panel's Off row is marked when nobody is). The sync row and
+  /// the Z/X keys stay silent while this is false: an offset on an
+  /// unselected track is a number with nothing to move.
+  bool get hasSubtitleSelected => !trackSurface.value.offIsMarked;
+
   StreamSubscription<Playlist>? _playlistSub;
   StreamSubscription<String>? _errorSub;
   StreamSubscription<bool>? _completedSub;
@@ -486,11 +507,18 @@ class PlayerService {
 
       currentPath.value = key;
 
+      // Subtitle sync (owner 2026-09-13): this file's remembered
+      // offset goes on the engine the moment it lands. Always written —
+      // mpv's `sub-delay` outlives a file change inside one instance,
+      // so a silent zero would inherit the previous item's offset.
+      unawaited(_applySavedSubDelay(key));
+
       // A different item is loading — flush the previous one's resume
       // state to disk immediately (switch flush).
       if (_lastAnnouncedIndex != index) {
         _lastAnnouncedIndex = index;
         unawaited(ResumeService.instance.flush());
+        unawaited(SubDelayService.instance.flush());
       }
 
       // Resume: this item was opened with a remembered offset → toast.
@@ -1055,6 +1083,7 @@ class PlayerService {
         ResumeService.instance.update(path, pos, dur);
       }
       unawaited(ResumeService.instance.flush());
+      unawaited(SubDelayService.instance.flush());
     }
 
     // 2 · Release the engine. The landing canvas (opaque) covers the
@@ -1073,6 +1102,10 @@ class PlayerService {
     // The stopped player keeps the LAST media's track-list in mpv — the
     // panel must not show it: zero the surface with the rest.
     trackSurface.value = TrackSurface.empty;
+    // Nothing is loaded, so nothing is out of sync — the sync row is
+    // hidden anyway, but Z/X must not nudge a phantom offset. The
+    // per-file memory stays on disk; Play-again restores it.
+    subDelay.value = 0;
     position.value = Duration.zero;
     _anchor = Duration.zero;
     _watch.reset();
@@ -1493,6 +1526,74 @@ class PlayerService {
   /// Panel tap on the pinned **Off** row (§6.6).
   Future<void> selectSubOff() async {
     await player.setSubtitleTrack(SubtitleTrack.no());
+  }
+
+  // ── Subtitle sync — the one authority (owner 2026-09-13) ────────────
+
+  /// Applies an absolute subtitle offset (seconds, clamped to
+  /// ±[maxSubDelay]) and remembers it against the current file.
+  ///
+  /// mpv's `sub-delay` is the whole mechanism — SALU never re-times a
+  /// file. The write is also the per-file memory: `sub_delay_service`
+  /// keeps the offset while it is non-zero, so putting a file back in
+  /// sync deletes the memory.
+  Future<void> setSubDelay(double seconds) async {
+    final double v = clampSubDelay(seconds);
+    subDelay.value = v;
+    SubDelayService.instance.update(currentPath.value ?? '', _asDuration(v));
+    final PlatformPlayer? platform = player.platform;
+    if (platform is NativePlayer) {
+      try {
+        // mpv's time options take a plain decimal in seconds.
+        await platform.setProperty('sub-delay', v.toStringAsFixed(3));
+      } catch (error) {
+        debugPrint('[SALU] sub-delay write failed: $error');
+      }
+    }
+  }
+
+  /// ±[deltaSeconds] from the current offset. Returns the value now in
+  /// effect so the caller (Z/X) can name it on the OSD deck without
+  /// waiting on the engine.
+  ///
+  /// The result is re-quantized onto the 0.1 s grid: `0.1 + 0.1 + 0.1`
+  /// is `0.30000000000000004` in binary floating point, and a held key
+  /// would otherwise walk that noise into the label and the memory.
+  double stepSubDelay(double deltaSeconds) {
+    final double next = subDelay.value + deltaSeconds;
+    final double v = clampSubDelay((next * 10).roundToDouble() / 10);
+    unawaited(setSubDelay(v));
+    return v;
+  }
+
+  /// Back to `0.0 s` — the sync row's double-tap.
+  Future<void> resetSubDelay() => setSubDelay(0);
+
+  static double clampSubDelay(double v) =>
+      v.clamp(-maxSubDelay, maxSubDelay).toDouble();
+
+  static Duration _asDuration(double seconds) =>
+      Duration(milliseconds: (seconds * 1000).round());
+
+  /// Every file landing writes its own remembered offset — ALWAYS,
+  /// even when that offset is zero.
+  ///
+  /// The reason is mpv, not SALU: `sub-delay` is a runtime option, not
+  /// a per-file one, so the offset set for one item survives into the
+  /// next one inside the same mpv instance. Skipping the write when the
+  /// store is empty would let the previous file's sync leak into a file
+  /// that never asked for it.
+  Future<void> _applySavedSubDelay(String key) async {
+    final Duration saved = SubDelayService.instance.savedOffsetFor(key);
+    final double seconds = saved.inMilliseconds / 1000;
+    subDelay.value = seconds;
+    final PlatformPlayer? platform = player.platform;
+    if (platform is! NativePlayer) return;
+    try {
+      await platform.setProperty('sub-delay', seconds.toStringAsFixed(3));
+    } catch (error) {
+      debugPrint('[SALU] sub-delay apply failed: $error');
+    }
   }
 
   // ── Playlist surgery (playlist_imp.md §5) ─────────────────────────────

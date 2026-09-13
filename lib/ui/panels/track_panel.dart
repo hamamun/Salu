@@ -3,11 +3,20 @@ import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
 import 'package:file_selector/file_selector.dart' as fs;
+import 'package:flutter/gestures.dart'
+    show
+        PointerCancelEvent,
+        PointerDownEvent,
+        PointerMoveEvent,
+        PointerScrollEvent,
+        PointerSignalEvent,
+        PointerUpEvent;
 import 'package:flutter/material.dart';
 
 import '../../core/language_names.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
+import '../../core/sub_delay_service.dart' show formatSubDelay;
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
@@ -251,6 +260,14 @@ class _TrackPanelState extends State<TrackPanel>
           ..add(const _Hairline())
           ..add(_Actions(openSearch: () => _openSearch(context)));
 
+        // The sync row (owner 2026-09-13) — BELOW the Load + Search
+        // marks, and only while a subtitle track is actually selected
+        // (mpv's truth): on a bare video the panel stays Load + Search
+        // only (§6.4). An offset nothing can show is not a control.
+        if (!surface.offIsMarked) {
+          children.add(const _SyncRow());
+        }
+
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -328,11 +345,24 @@ class _TrackRowData {
 
   /// mpv's `demux-channels` strings read `5.1(side)`, `2.0`, …; the
   /// row shows the compact layout only.
+  ///
+  /// mpv's own words for a layout it could not identify are
+  /// `unknown` + the channel count (`audio/chmap.c`:
+  /// `snprintf(buf, buf_size, "unknown%d", src->num)`) — an untagged
+  /// 5.1 therefore reports `unknown6`. That is engine jargon reading
+  /// like a broken track name, so the row says what it means instead:
+  /// `6 ch`. A layout mpv DID identify stays exactly as mpv spelled it
+  /// (`5.1` says more than `6 ch`).
+  static final RegExp _unknownLayout = RegExp(r'^unknown(\d+)$');
+
   static String? _channelsOf(String? raw) {
     if (raw == null) return null;
     final int paren = raw.indexOf('(');
     final String s = (paren >= 0 ? raw.substring(0, paren) : raw).trim();
-    return s.isEmpty ? null : s;
+    if (s.isEmpty) return null;
+    final Match? unknown = _unknownLayout.firstMatch(s);
+    if (unknown != null) return '${unknown.group(1)} ch';
+    return s;
   }
 }
 
@@ -576,5 +606,225 @@ class _Actions extends StatelessWidget {
     // makes them the active track (§6.4 "session-only by default");
     // nothing remembers the pick.
     await PlayerService.instance.loadExternalSubtitle(file.path);
+  }
+}
+
+/// The subtitle-sync row (owner 2026-09-13) — the volume bar's sibling,
+/// anchored at ZERO IN THE MIDDLE instead of 0 at the left.
+///
+/// 30 px hit box · the bar breathes 14 → 16 px on hover inside it · the
+/// offset reads INSIDE the bar (`+0.4 s`, `0.0 s`) pinned to the fill's
+/// outer edge · the cc mark says whose offset it is · drag = horizontal
+/// only · wheel = ±0.1 s · DOUBLE-TAP snaps back to 0.0.
+///
+/// The window is ±5 s. mpv's `sub-delay` has no limit of its own; the
+/// cap is SALU's, because an offset past a few seconds means the wrong
+/// file, not a wrong number. The row and the Z/X keys write the same
+/// value through `PlayerService.setSubDelay` and both spell it with
+/// `formatSubDelay`, so the control and its deck echo can never drift.
+///
+/// No hover chip (the volume bar has one): the value already lives
+/// inside the bar here, so a second number would only repeat it.
+class _SyncRow extends StatefulWidget {
+  const _SyncRow();
+
+  @override
+  State<_SyncRow> createState() => _SyncRowState();
+}
+
+class _SyncRowState extends State<_SyncRow> {
+  final PlayerService _player = PlayerService.instance;
+
+  bool _hovered = false;
+  bool _dragging = false;
+
+  /// Where 0 lives on the bar.
+  static const Color _detent = Color(0x40FFFFFF);
+
+  static const TextStyle _labelStyle = TextStyle(
+    fontSize: 10,
+    fontWeight: FontWeight.w500,
+    height: 1,
+    letterSpacing: 0.3,
+    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+    shadows: <Shadow>[Shadow(color: Color(0x99000000), blurRadius: 2)],
+  );
+
+  /// The offset under pointer x — 0 at the exact middle, ±max at the
+  /// ends, quantized to the 0.1 s step so the bar can only land on a
+  /// value the label is able to print.
+  double _delayAt(double dx, double w) {
+    if (w <= 0) return 0;
+    final double frac = ((dx / w) * 2 - 1).clamp(-1.0, 1.0).toDouble();
+    final double steps =
+        (frac * PlayerService.maxSubDelay / PlayerService.subDelayStep)
+            .roundToDouble();
+    return PlayerService.clampSubDelay(steps * PlayerService.subDelayStep);
+  }
+
+  void _apply(double dx, double w) {
+    unawaited(_player.setSubDelay(_delayAt(dx, w)));
+  }
+
+  void _wheel(double dy) {
+    // Up = later, down = earlier — the same sense as the volume bar's
+    // up = louder.
+    unawaited(_player.setSubDelay(
+      _player.subDelay.value +
+          (dy > 0
+              ? -PlayerService.subDelayStep
+              : PlayerService.subDelayStep),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _player.subDelay,
+      builder: (BuildContext context, Widget? _) {
+        final bool active = _hovered || _dragging;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: SizedBox(
+            height: 30,
+            child: Row(
+              children: <Widget>[
+                IconTheme.merge(
+                  data: IconThemeData(
+                    color:
+                        active ? AppColors.textPrimary : AppColors.iconIdle,
+                  ),
+                  child: const CcMark(size: 14),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: _bar()),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _bar() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double w = constraints.maxWidth;
+        return MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (PointerDownEvent e) {
+              setState(() => _dragging = true);
+              _apply(e.localPosition.dx, w);
+            },
+            onPointerMove: (PointerMoveEvent e) {
+              if (!_dragging) return;
+              _apply(e.localPosition.dx, w);
+            },
+            onPointerUp: (PointerUpEvent e) {
+              if (!_dragging) return;
+              setState(() => _dragging = false);
+              _apply(e.localPosition.dx, w); // final snap
+            },
+            onPointerCancel: (PointerCancelEvent e) {
+              if (_dragging) setState(() => _dragging = false);
+            },
+            onPointerSignal: (PointerSignalEvent event) {
+              if (event is PointerScrollEvent) _wheel(event.scrollDelta.dy);
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTap: () => unawaited(_player.resetSubDelay()),
+              child: Center(child: _paint(w)),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Track + the centre detent + the fill growing OUT of the middle +
+  /// the value riding the fill's outer edge.
+  Widget _paint(double w) {
+    final double delay = _player.subDelay.value;
+    const double labelWidth = 42; // measured for `-5.0 s` at 10 px
+    const double pad = 7;
+
+    final bool bright = _hovered || _dragging;
+    final double barHeight = bright ? 16 : 14;
+    final Color track = bright
+        ? Color.alphaBlend(const Color(0x14FFFFFF), AppColors.barTrack)
+        : AppColors.barTrack;
+    final Color fill = bright
+        ? Color.alphaBlend(const Color(0x1AFFFFFF), AppColors.barFill)
+        : AppColors.barFill;
+    final Color label = bright ? AppColors.textPrimary : AppColors.iconIdle;
+    final TextStyle labelStyle = _labelStyle.copyWith(color: label);
+
+    // A bar too narrow to hold both a fill and its number shows the
+    // number alone (the panel is fixed-width, so this is the guard, not
+    // a path anybody walks).
+    if (w < labelWidth + pad * 2) {
+      return SizedBox(
+        height: barHeight,
+        child: Center(
+          child: Text(formatSubDelay(delay), style: labelStyle),
+        ),
+      );
+    }
+
+    final double half = w / 2;
+    final double frac =
+        (delay / PlayerService.maxSubDelay).clamp(-1.0, 1.0).toDouble();
+    final double reach = half * frac.abs();
+    final double fillLeft = frac >= 0 ? half : half - reach;
+
+    // The value rides the fill's OUTER edge: at 0 it rests on the
+    // detent, at ±5 s it parks inside the bar's end.
+    final double outer = frac >= 0 ? half + reach : half - reach;
+    final double labelX = frac >= 0
+        ? (outer - labelWidth - pad).clamp(pad, w - labelWidth - pad)
+        : outer.clamp(pad, w - labelWidth - pad);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(
+        height: barHeight,
+        width: w,
+        child: Stack(
+          children: <Widget>[
+            Positioned.fill(child: ColoredBox(color: track)),
+            if (reach > 0.5)
+              Positioned(
+                top: 0,
+                bottom: 0,
+                left: fillLeft,
+                width: reach,
+                child: ColoredBox(color: fill),
+              ),
+            // The centre detent — where 0 lives, so "the middle is
+            // in sync" is drawn, not explained.
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: half - 0.5,
+              width: 1,
+              child: const ColoredBox(color: _detent),
+            ),
+            Positioned(
+              left: labelX.toDouble(),
+              top: 0,
+              bottom: 0,
+              width: labelWidth,
+              child: Center(
+                child: Text(formatSubDelay(delay), style: labelStyle),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
