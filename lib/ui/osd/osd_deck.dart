@@ -147,6 +147,7 @@ class _OsdDeckState extends State<OsdDeck>
     final String text = switch (card.kind) {
       OsdSubtitleCardKind.ccNotConfigured => 'cc not configured',
       OsdSubtitleCardKind.checkKey => 'Subtitles — check key',
+      OsdSubtitleCardKind.checkLogin => 'Subtitles — check login',
       OsdSubtitleCardKind.limitReached => 'Subtitle limit reached',
       OsdSubtitleCardKind.saved => 'Saved · ${card.fileName}',
       OsdSubtitleCardKind.alreadySaved => 'Already saved · ${card.fileName}',

@@ -5,8 +5,10 @@
 > `follow.md` (hard rules) and `outline_transport_osd_resume.md` (transport/OSD)
 > still bind everything below — this file only adds subtitle rules.
 >
-> **Status:** DECISIONS LOCKED D1–D17 (D1–D13, D15–D17 owner 2026-09-09 ·
-> D14 design locked owner 2026-09-10) · **v1 IMPLEMENTED** (all 12 files of
+> **Status:** DECISIONS LOCKED D1–D17 (D1–D12, D15–D17 owner 2026-09-09 ·
+> D14 design locked owner 2026-09-10 · **D13 AMENDED owner 2026-09-13** —
+> the password is now persisted scrambled, see the third runtime finding
+> below) · **v1 IMPLEMENTED** (all 12 files of
 > §7 in place). Recheck 2026-09-10: D1–D17 + §2/§3/§6 verified complete;
 > six review fixes applied (missing media_kit import — was a compile
 > error · /login now sends its required Api-Key header · D7 counts bitmap
@@ -47,6 +49,54 @@
 > (b) The Search window's name box was pre-filled with a "cleaned"
 > title and lost the real release name — it now shows the file's own
 > full name, untouched (§6.5, owner 2026-09-13).
+>
+> **Third runtime finding (2026-09-13) — "the password is gone every new
+> session, and download still doesn't work with all three filled", ROOT
+> CAUSE + FIX (D13 AMENDED, owner-approved 2026-09-13).** The owner's two
+> symptoms are one cause with a second bug hiding behind it:
+>
+> 1. **The password was never stored — on purpose.** D13 kept it in RAM
+>    (`SubtitleService.sessionPassword`), while the key and the username
+>    were persisted (§2.1). Restart = signed out. That is not a defect, it
+>    is the locked rule working as written — but its consequence is that
+>    `/download` (key **and** Bearer, §4) is dead from the first frame of
+>    every session, while search (key only) keeps working. Hence "search
+>    fine, download broken".
+> 2. **Typing the password afterwards changed nothing for the video on
+>    screen.** §3.1's AUTO trigger fires exactly once, at the landing —
+>    which is always *before* the viewer can reach Settings. The refusal
+>    (`notSignedIn`) is silent and unmarked by design (D10), and the
+>    credential listener only cleared `_authPaused`; **nothing ever
+>    re-asked the question**. So the loaded video never fetched, and with
+>    the deck quiet the owner saw exactly what they reported: *nothing at
+>    all*. Recovery required closing and reopening the file.
+> 3. **Every failure looked like every other.** `subtitle_service.dart`
+>    had zero logging, so all twelve refusal branches were
+>    indistinguishable; and a 401 from `/login` (username/password
+>    refused) showed **`Subtitles — check key`**, naming the one field
+>    that was fine.
+>
+> **Fix.** (a) **D13 amended**: the password IS persisted, scrambled —
+> `SettingsService.subtitlePassword` + `setSubtitlePassword`, stored as
+> `base64(nonce ‖ xor-keystream)` (`SubtitleScramble`, `shared_preferences`
+> only, no new dependency per follow.md §7). **Obfuscation, not
+> encryption** — the salt is in the source tree, and that limit is stated
+> in code and here so nobody mistakes it for protection. The Bearer TOKEN
+> is still memory-only, so a restart is still one silent `/login`.
+> (b) `_retryCurrent()` — a credential edit now re-answers the video that
+> is already loaded, debounced 1.5 s (one attempt per typing burst, and
+> two logins never inside `/login`'s 1/s rate limit), silent per D10 so a
+> half-typed password can't spend the session's card, giving the file its
+> `_failedThisSession` try back, and dropping the now-stale `_token`.
+> (c) The deck gained **`Subtitles — check login`** for the `/login` 401;
+> `check key` stays for the API-key half (§3.5). (d) `[SALU/subs]` console
+> logging on every branch — refusal reason, HTTP status **and the server's
+> own body** — so a silent UI is never a silent log again. (e) `/download`
+> no longer writes junk under the D8 name: an empty body or an HTML page
+> behind a 200 is refused, because a broken `movie.en.srt` would then be
+> treated as the bought subtitle FOREVER by the already-saved check.
+> New: `test/subtitle_scramble_test.dart`. The §7 Windows-build
+> verification pass is still owed.
 
 ---
 
@@ -66,7 +116,7 @@
 | D10 | Engine is **silent background work**: never blocks playback, never modal; OSD speaks only for `cc not configured` / bad-key / quota-wall (each once per session) and manual-fetch results | ✅ LOCKED | 2026-09-09 |
 | D11 | **Missing API key → OSD `cc not configured`** (owner's literal): toggle ON + bare video + no key = one transient deck card per session, then skip. Toggle OFF stays fully silent. | ✅ LOCKED | 2026-09-09 |
 | D12 | Toggling auto-download **OFF stops future fetches only** — already-downloaded `.srt` files are never touched or deleted | ✅ LOCKED | 2026-09-09 |
-| D13 | Auth: API key field now; **username + password fields** join it (Bearer token kept in memory only, never persisted) — because `/download` requires both key AND token (see §4) | ✅ LOCKED | 2026-09-09 |
+| D13 | Auth: API key field now; **username + password fields** join it (Bearer token kept in memory only, never persisted) — because `/download` requires both key AND token (see §4). **AMENDED owner 2026-09-13:** the password IS persisted, scrambled (`SubtitleScramble` — obfuscation, not encryption); the Bearer token stays memory-only. Reason: a RAM-only password left `/download` dead after every restart, and §3.1's one-shot AUTO trigger always fired before it could be retyped — see the third runtime finding above | ✅ AMENDED | 2026-09-13 |
 | D14 | OSC slot left of fullscreen carries the **Fetch button**: one tap opens the slide-down **track panel** — audio tracks · embedded subs (Off pinned on top) · local subs, live-mirroring mpv — plus **Load** (file explorer) and **Search** (query window: Top-3 in the preferred language + all-language matches, rows are subtitle files, human picks → Save / Save & Load). Owns the query search + Top-3 pick that auto never touches. The original cycle-tracks concept is retired (design: §6) | ✅ LOCKED | 2026-09-10 |
 | D15 | Subtitle position: **mpv decides, zero SALU code** — no `sub-pos`, no margins, no asserts, no forcing of any kind (owner: "no code no force on mpv") | ✅ LOCKED | 2026-09-09 |
 | D16 | **Single renderer = mpv native** — media_kit's Flutter subtitle overlay goes `visible: false` (owner-delegated pick: only mpv shows ALL kinds — text, styled, bitmap) | ✅ LOCKED | 2026-09-09 |
@@ -98,9 +148,23 @@ Settings
   - Trailing clear (×) when non-empty. No "Test" button in v1 — the first real
     search is the test; a 401 surfaces once as an OSD card (see §3.5), not a
     dialog.
-- **Username + password** (D13): two plain fields under the key, same styling.
-  - Password is **never persisted** — login happens per app session, the Bearer
-    token lives in memory only. Restart = re-login (one silent POST, no UI).
+- **Username + password** (D13, amended 2026-09-13): two plain fields under the
+  key, same styling.
+  - Password IS persisted (`subtitle_password`), **scrambled** — `base64(nonce ‖
+    xor-keystream)` via `SubtitleScramble`, stored the moment the field changes
+    like every other SALU setting. **Obfuscation, NOT encryption:** the salt is a
+    constant in the source tree, so it keeps the password out of plain sight in
+    `%APPDATA%` and nothing more — stated in the code so nobody later reads it as
+    protection. Clearing the field removes the stored value (signs SALU out).
+    The field's helper names both facts: `Remembered between sessions — stored
+    scrambled.`
+  - The **Bearer token still lives in memory only** and is dropped whenever any
+    credential changes. Restart = one silent `/login`, no UI.
+  - The original "never persisted" rule is what broke downloads: `/download` was
+    dead from the first frame of every session while search (key-only) worked,
+    and §3.1's one-shot AUTO trigger always fired before the password could be
+    retyped. `_retryCurrent()` covers the mid-session case — a credential edit
+    re-answers the video that is already loaded (debounced 1.5 s, silent per D10).
   - Why both: OpenSubtitles `/download` rejects key-only calls (401). Key-only
     gives search without download — a broken v1. (API facts in §4.)
 
@@ -229,11 +293,32 @@ follow; v1 never renames the viewer's files silently.
 | Failure | Behavior |
 |---|---|
 | Missing key (toggle ON + bare video) | OSD card once per session: `cc not configured` (owner's literal; transient 1 s, deck rules). Engine skips. |
-| 401 (bad key / bad login) | OSD card once per session: `Subtitles — check key` (mark + words; deck rules apply). Engine pauses until settings change. |
-| 429 / 402 (quota / rate) | OSD card once: `Subtitle limit reached`. Engine pauses until next launch. No retry loop. |
+| 401 from `/subtitles` or `/download` (bad **API key** / dead token) | OSD card once per session: `Subtitles — check key` (mark + words; deck rules apply). Engine pauses until settings change. |
+| 401 from `/login` (bad **username/password**) | OSD card once per session: `Subtitles — check login` (added owner 2026-09-13 — the deck used to say `check key` for this too, naming the one field that was fine). Engine pauses until settings change. |
+| 429 / 402 / 403 on `/download` (quota / rate) | OSD card once: `Subtitle limit reached`. Engine pauses until next launch. No retry loop. |
+| No login (username or password empty) | AUTO: silent and **not** session-marked — signing in mid-session retries it (§3.1b). Manual Save: `Subtitles — sign in`, every tap. |
+| 200 with junk behind it (empty body / HTML page on the download link) | Refused, nothing written (owner 2026-09-13). A broken D8 file would be treated as the bought subtitle forever by the already-saved check. |
 | No hits | Silent. Session-marked (guard 4). |
 | Network down / timeout (10 s cap) | Silent. Session-marked. Playback never waits. |
 | Hash of a growing file (recording) | N/A v1 — local finished files only; no special case. |
+
+**§3.1b — a credential edit re-answers the loaded video (owner 2026-09-13).**
+§3.1's trigger fires once, at the landing. If the credentials were missing or
+wrong at that moment, the fetch was refused and nothing would ever ask again for
+that video — so editing any credential field now retries it (`_retryCurrent`):
+debounced 1.5 s of quiet (one attempt per typing burst; two logins never inside
+`/login`'s 1/s rate limit), gated by the same guards as a landing (D12's toggle,
+the quota wall, D7, the in-flight lock), given the file's `_failedThisSession`
+try back, and **silent** — it answers a keystroke, not a viewer request, so it
+never spends a once-per-session card (the flag is checked before the shown-flag
+is set: deferred, not consumed). The next deliberate act still speaks.
+
+**The console is never silent (owner 2026-09-13).** D10 governs the DECK, not
+the log: every branch above also prints one `[SALU/subs]` line — the refusal
+reason, the HTTP status, and the server's own body (trimmed to 240 chars). The
+password itself is never logged; the username is (it already sits in prefs
+unscrambled, and naming it catches the opensubtitles.**org**-vs-.**com** account
+mix-up in one glance).
 
 Quota context: free OpenSubtitles accounts get a small daily download budget
 (~10/day, level-dependent); search is unlimited. The guards in §3.1 exist so one
@@ -445,15 +530,20 @@ gone (rule 8), deliberately distinct from the live slide-out panel.
   Two new cards join the deck's subtitle family, both 1 s transient:
   - `Subtitles — sign in` — no stored username/password, so `/download`
     has no Bearer token (§4: search is key-only, download is key +
-    login; D13 keeps the password in memory, so **every restart lands
-    here** until Settings → Subtitles is filled in again).
-  - `Subtitles — download failed` — the download or the write died.
+    login). **Rare since D13's amendment (owner 2026-09-13)** — the
+    password is persisted scrambled, so this is now a first run or a
+    field the viewer cleared, not every restart.
+  - `Subtitles — download failed` — the download or the write died
+    (including a 200 carrying junk: an empty body or an HTML page is
+    refused rather than written under the D8 name).
   - An engine already paused by a wall names the wall again on a manual
-    tap (`Subtitles — check key` / `Subtitle limit reached`), because the
-    viewer is asking again now.
+    tap (`Subtitles — check key` / `Subtitles — check login` /
+    `Subtitle limit reached`), because the viewer is asking again now.
+    `check login` (added owner 2026-09-13) is the `/login` 401 — the
+    username/password half; `check key` stays the API-key half (§3.5).
   - AUTO stays silent for all of the above (D10 holds): a missing login
     is not the FILE's fault, so it is not session-marked — signing in
-    mid-session still lets the engine work.
+    mid-session retries it at once (§3.1b).
 - **Not configured**: the window still opens; tapping Search shows the
   one-per-session `cc not configured` OSD card (D11) — no new dialog.
   (A manual **Save** with no key shows the same card directly, every
@@ -478,17 +568,28 @@ gone (rule 8), deliberately distinct from the live slide-out panel.
 | # | File | Change |
 |---|---|---|
 | 1 | `pubspec.yaml` | add `http` |
-| 2 | `lib/core/settings_service.dart` | `subtitleApiKey` (String), `subtitleLanguage` (String `en` default), `subtitleAutoDownload` (bool, default `true`) + setters + load() |
+| 2 | `lib/core/settings_service.dart` | `subtitleApiKey` (String), `subtitleUsername` (String), `subtitlePassword` (String, stored scrambled), `subtitleLanguage` (String `en` default), `subtitleAutoDownload` (bool, default `true`) + setters + load(); `SubtitleScramble` (D13 amended 2026-09-13) |
 | 3 | `lib/ui/widgets/settings_dialog.dart` | `_SettingsTab.subtitle`, `Subtitles` tab button, `_SubtitlesTab` (3 sections per §2) |
-| 4 | `lib/core/subtitle_service.dart` (new) | hash + search + download + save + session guards (§3); owns the Bearer token in memory; gains the manual query-search + save-without-apply path (§6.5) |
+| 4 | `lib/core/subtitle_service.dart` (new) | hash + search + download + save + session guards (§3); owns the Bearer token in memory; gains the manual query-search + save-without-apply path (§6.5), the credential-edit retry (§3.1b) and `[SALU/subs]` console logging on every branch (§3.5) |
 | 5 | `lib/core/player_service.dart` | hook §3.1 trigger after playlist-lands-on-video; reuse `loadExternalSubtitle` for apply; expose the track lists + live selection notifier and the selectors (audio track, sub track by id, sub off) — the panel's single source of truth (§6.2) |
-| 6 | `lib/ui/osd/osd_controller.dart` + `osd_deck.dart` | new cards (`cc not configured`, `check key`, `limit reached` — §3.5) — only if new card types are needed |
+| 6 | `lib/ui/osd/osd_controller.dart` + `osd_deck.dart` | new cards (`cc not configured`, `check key`, `check login`, `limit reached` — §3.5; `sign in`, `download failed`, `saved` — §6.5) — only if new card types are needed |
 | 7 | `lib/ui/screens/video_screen.dart` | `SubtitleViewConfiguration(visible: false)` — mpv native becomes the one renderer (D16); the style block retires with the overlay |
 | 8 | `lib/ui/osc/controller_panel.dart` | Fetch button in the right zone, immediately left of fullscreen (§6.1) |
 | 9 | `lib/core/language_names.dart` (new) | ISO 639 code → display name table (`en` → English …), shared by the panel rows and the search-window rows |
 | 10 | `lib/ui/osc/fetch_control.dart` (new) | the Fetch button — mark, tap → panel, greyed-out-inert rule when not a local video (§6.1) |
 | 11 | `lib/ui/panels/track_panel.dart` (new) | the slide-down panel — three live-mirror parts, Off row, per-part 5-row scroll, Load + Search marks (§6.2–6.4) |
 | 12 | `lib/ui/widgets/subtitle_search_dialog.dart` (new) | the query window — editable name field, four marks, Group A/B results, Save / Save & Load (§6.5) |
+
+**Verification added by the third runtime finding (owner 2026-09-13):**
+restart with all three fields filled → the password comes back (scrambled in
+prefs, never as text) and the FIRST bare video of the new session downloads with
+zero Settings visits · clear the password, open a bare video, then type it →
+subs arrive within ~2 s **without reopening the video** (§3.1b) · wrong password
+→ `Subtitles — check login`, not `check key` · typing a password slowly → at most
+ONE login attempt, and no card while typing (the retry is silent) · every refusal
+prints one `[SALU/subs]` line naming the branch, the HTTP status and the server's
+body · a download link returning an empty body or an HTML page → nothing written,
+`Subtitles — download failed` · `test/subtitle_scramble_test.dart` passes.
 
 Verification (on a Windows build): key empty + ON → plays, zero network · key set,
 video with embedded subs → zero network · video with `movie.srt` sibling → zero

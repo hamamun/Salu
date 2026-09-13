@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/language_names.dart';
 import '../../core/settings_service.dart';
-import '../../core/subtitle_service.dart';
 import '../../theme/app_theme.dart';
 import 'dot_grid_icon.dart';
 
@@ -362,9 +361,10 @@ class _FolderAutoloadPicker extends StatelessWidget {
 // ── Subtitles tab (cc.md §2 · D2 · D5 · D13) ─────────────────────────
 
 /// Three sections: **OpenSubtitles** (API key with eye + clear; the
-/// username + password pair — password NEVER persisted, D13), **Language**
-/// (the preferred-language dropdown — label + current value + chevron),
-/// **Auto-download** (a switch row in the same tile styling).
+/// username + password pair — all three persisted, the password scrambled
+/// per D13 amended 2026-09-13), **Language** (the preferred-language
+/// dropdown — label + current value + chevron), **Auto-download** (a
+/// switch row in the same tile styling).
 class _SubtitlesTab extends StatelessWidget {
   const _SubtitlesTab();
 
@@ -432,10 +432,12 @@ class _SubtitlesTab extends StatelessWidget {
 }
 
 /// API key (obscured by default + eye toggle + trailing ×) and the
-/// username / password pair (§2.1). The fields persist their changes the
-/// moment they happen — no save button anywhere in the app — except the
-/// password, which lives in [SubtitleService.sessionPassword] on the
-/// heap only (D13).
+/// username / password pair (§2.1). All three persist their changes the
+/// moment they happen — no save button anywhere in the app. The password
+/// is stored scrambled rather than as text (D13 AMENDED, owner
+/// 2026-09-13 — `SettingsService.setSubtitlePassword`); the original
+/// memory-only rule left `/download` dead after every restart, because it
+/// needs a Bearer token that only `/login` can mint (cc.md §4).
 class _CredentialFields extends StatefulWidget {
   const _CredentialFields();
 
@@ -456,8 +458,10 @@ class _CredentialFieldsState extends State<_CredentialFields> {
     final SettingsService s = SettingsService.instance;
     _apiKey = TextEditingController(text: s.subtitleApiKey.value);
     _username = TextEditingController(text: s.subtitleUsername.value);
-    _password = TextEditingController(
-        text: SubtitleService.instance.sessionPassword.value);
+    // D13 amended (owner 2026-09-13): the password is persisted
+    // scrambled, so it comes back with the key and the username instead
+    // of being empty after every restart.
+    _password = TextEditingController(text: s.subtitlePassword.value);
   }
 
   @override
@@ -494,13 +498,17 @@ class _CredentialFieldsState extends State<_CredentialFields> {
         _SecretField(
           controller: _password,
           title: 'Password',
-          // D13, spelled out where the user's eye is already looking.
-          helper: 'Never written to disk — this session only.',
+          // D13 amended (owner 2026-09-13) — the old helper ("Never
+          // written to disk — this session only") described the rule that
+          // broke downloads after every restart. It now names what the
+          // field does and how it is kept, honestly and in the same
+          // naming-not-teaching register as the key's helper.
+          helper: 'Remembered between sessions — stored scrambled.',
           obscured: _passObscured,
           onToggleObscure: () =>
               setState(() => _passObscured = !_passObscured),
           onChanged: (String v) =>
-              SubtitleService.instance.sessionPassword.value = v,
+              SettingsService.instance.setSubtitlePassword(v),
         ),
       ],
     );

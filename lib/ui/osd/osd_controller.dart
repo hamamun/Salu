@@ -100,7 +100,10 @@ class OsdFailedCard extends OsdCard {
 /// service owns the once-flags). Four shapes:
 ///
 ///   · [OsdSubtitleCard.cc]        — `cc not configured` (D11's literal)
-///   · [OsdSubtitleCard.checkKey]  — `Subtitles — check key` (401)
+///   · [OsdSubtitleCard.checkKey]  — `Subtitles — check key` (401 from
+///     `/subtitles` or `/download` — the API key half)
+///   · [OsdSubtitleCard.checkLogin] — `Subtitles — check login` (401 from
+///     `/login` — the username/password half; added owner 2026-09-13)
 ///   · [OsdSubtitleCard.limit]     — `Subtitle limit reached` (429/402)
 ///   · [OsdSubtitleCard.saved]     — `Saved · file` / `Already saved ·
 ///     file` (manual-fetch results, the D10 manual clause)
@@ -135,11 +138,21 @@ class OsdSubtitleCard extends OsdCard {
         super(ttl: const Duration(seconds: 1));
 
   /// §6.5 manual Save with no stored username/password — `/download`
-  /// needs a Bearer token that only `/login` can mint (cc.md §4), and
-  /// the password is memory-only (D13), so every restart lands here
-  /// until the viewer signs in again. Named, not taught.
+  /// needs a Bearer token that only `/login` can mint (cc.md §4). Rare
+  /// since D13's amendment (owner 2026-09-13) persists the password:
+  /// a first run, or a field the viewer cleared. Named, not taught.
   const OsdSubtitleCard.signIn()
       : kind = OsdSubtitleCardKind.signIn,
+        fileName = null,
+        super(ttl: const Duration(seconds: 1));
+
+  /// §3.5's 401 — but the half that was actually refused: `/login`
+  /// rejected the username/password pair (owner's report 2026-09-13:
+  /// every field filled, nothing happened, and the deck said "check key",
+  /// naming the one field that was fine). Same shape as [checkKey],
+  /// different repair.
+  const OsdSubtitleCard.checkLogin()
+      : kind = OsdSubtitleCardKind.checkLogin,
         fileName = null,
         super(ttl: const Duration(seconds: 1));
 
@@ -159,6 +172,7 @@ class OsdSubtitleCard extends OsdCard {
 enum OsdSubtitleCardKind {
   ccNotConfigured,
   checkKey,
+  checkLogin,
   limitReached,
   saved,
   alreadySaved,
