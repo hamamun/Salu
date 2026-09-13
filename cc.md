@@ -21,6 +21,21 @@
 > params (`_PartRows` key, `_PlainField` helper) · one needless
 > nullable. The §7 Windows-build verification pass is still owed — no
 > runtime test has been done yet.
+>
+> **First runtime finding (2026-09-13) — "subtitle is not showing", ROOT
+> CAUSE + FIX:** media_kit ships with **mpv's own subtitle rendering OFF**
+> unless the player is created with `libass: true` — its default is
+> `false`, documented as *"By default, subtitles rendering is Flutter
+> Widget based"*. D16 switched the Flutter overlay off (`visible: false`,
+> §7 file 7) but nothing ever switched mpv's renderer on, so the canvas
+> was left with **zero subtitle renderers**: no embedded, autoloaded,
+> dropped or downloaded subtitle could ever be drawn. Fixed with the one
+> missing flag in `player_service.dart` (`PlayerConfiguration(libass:
+> true)`). D16 now holds as designed: mpv native is the one renderer, the
+> Flutter overlay stays off (both on = doubled subtitles), and the
+> typography pass belongs to mpv (`sub-font`, `sub-font-size`,
+> `sub-color`, `sub-border-size`, `sub-shadow-offset` — §5). The §7
+> Windows-build verification pass is still owed.
 
 ---
 
