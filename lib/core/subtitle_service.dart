@@ -68,9 +68,13 @@ class SubtitleResult {
 ///
 /// [notSignedIn] is the one the owner hit on the first real run
 /// (2026-09-13): search needs only the API key, but `/download` needs a
-/// Bearer token that only `/login` can mint (cc.md §4), and D13 keeps
-/// the password in memory — so after every restart a manual Save lands
-/// here until the viewer signs in again.
+/// Bearer token that only `/login` can mint (cc.md §4). D13 originally kept
+/// the password in memory, so EVERY restart landed here until the viewer
+/// signed in again — and the AUTO engine's one trigger (§3.1) always fired
+/// before that could happen, which read as "download just doesn't work,
+/// nothing said". D13 is amended (owner 2026-09-13): the password is
+/// persisted scrambled, so this is now only the first run, or a field the
+/// viewer deliberately cleared.
 enum SubtitleSaveStatus { saved, alreadySaved, failed, notSignedIn }
 
 class SubtitleSaveOutcome {
@@ -100,21 +104,24 @@ class SubtitleSaveOutcome {
 /// file with D8 naming.
 ///
 /// Session state per the contract:
-///   · the Bearer token lives in [_token], in memory ONLY (D13) — plus
-///     the password, which also never touches disk (see
-///     [sessionPassword]); restart = re-login.
-///   · `_authorized=false` after a 401 → the engine pauses until a
+///   · the Bearer token lives in [_token], in memory ONLY (D13). The
+///     password is now PERSISTED scrambled (D13 amended, owner
+///     2026-09-13 — see `SettingsService.subtitlePassword`), so a restart
+///     re-logins silently instead of losing the download path entirely.
+///   · `_authPaused=true` after a 401 → the engine pauses until a
 ///     credential changes (§3.5 — settings-change listeners below);
 ///   · `_quotaPaused=true` after a 429/402 → paused until relaunch;
 ///   · [_failedThisSession] — each bare file tries at most once;
-///   · the three cards each speak at most once per session (D10).
+///   · the cards each speak at most once per session (D10).
 class SubtitleService {
   SubtitleService._() {
-    // A credential edit releases the 401 pause (§3.5).
+    // A credential edit releases the 401 pause (§3.5) AND re-opens the
+    // door for the video that is already on screen (§3.1's one trigger
+    // may well have fired while the credentials were still missing).
     final SettingsService s = SettingsService.instance;
     s.subtitleApiKey.addListener(_onCredentialChange);
     s.subtitleUsername.addListener(_onCredentialChange);
-    sessionPassword.addListener(_onCredentialChange);
+    s.subtitlePassword.addListener(_onCredentialChange);
   }
 
   /// The one engine for the app.
@@ -129,15 +136,35 @@ class SubtitleService {
 
   // ── Session state ────────────────────────────────────────────────────
 
-  /// The account password — **memory only, never persisted** (D13).
-  /// Written straight from the settings field onto this notifier.
-  final ValueNotifier<String> sessionPassword = ValueNotifier<String>('');
-
-  /// The Bearer token — memory only, re-login per session (D13).
+  /// The Bearer token — memory only, re-login per session (D13). Never
+  /// persisted, and thrown away the moment any credential changes.
   String? _token;
 
   /// 401 seen → pause until a credential changes (§3.5).
   bool _authPaused = false;
+
+  /// Which half the 401 came from (§3.5): `/login` rejecting the
+  /// username+password is a DIFFERENT repair than `/subtitles` rejecting
+  /// the API key, and the deck used to name the key for both — sending the
+  /// viewer to check the one field that was fine (owner's report,
+  /// 2026-09-13: everything filled, nothing happened, nothing said).
+  bool _loginRejected = false;
+
+  /// Debounce for [_retryCurrent] — a credential field fires its notifier
+  /// on EVERY keystroke, and one keystroke must never buy one download.
+  /// 1.5 s of quiet is longer than a typing pause inside a word and still
+  /// short enough that the subs arrive while the viewer is watching; it
+  /// also keeps two logins more than a second apart, which is `/login`'s
+  /// own rate limit (§4).
+  Timer? _retryTimer;
+
+  /// `true` while a [_retryCurrent] fetch is in flight. Such a fetch
+  /// answers a KEYSTROKE, not a viewer request, so it stays mute (D10's
+  /// AUTO silence): a password half typed when the debounce expired must
+  /// not spend the session's one `check login` card, and the wall it hits
+  /// is still on the record — the next deliberate act speaks it (a manual
+  /// Save answers every tap, §6.5).
+  bool _backgroundRetry = false;
 
   /// 429/402 seen → pause until relaunch (§3.5; quota context §3.5).
   bool _quotaPaused = false;
@@ -153,6 +180,7 @@ class SubtitleService {
   /// Once-per-session notice flags (D10).
   bool _noticeCcShown = false;
   bool _noticeKeyShown = false;
+  bool _noticeLoginShown = false;
   bool _noticeLimitShown = false;
 
   /// The path currently being considered by the auto chain — a fast
@@ -161,14 +189,52 @@ class SubtitleService {
 
   void _onCredentialChange() {
     _authPaused = false;
+    _loginRejected = false;
+    // A changed credential invalidates whatever token the old one minted —
+    // without this, fixing a typo'd password keeps replaying the dead token.
+    _token = null;
+    _retryCurrent();
   }
 
-  /// A usable login for `/download`: both halves present. The password
-  /// lives in memory only (D13), so this is `false` again after every
-  /// restart until Settings → Subtitles is filled in.
+  /// A usable login for `/download`: both halves present. Persisted since
+  /// D13's amendment (owner 2026-09-13), so it now survives a restart.
   bool get _hasLogin =>
       SettingsService.instance.subtitleUsername.value.isNotEmpty &&
-      sessionPassword.value.isNotEmpty;
+      SettingsService.instance.subtitlePassword.value.isNotEmpty;
+
+  /// Re-answers the video that is ALREADY on screen after a credential
+  /// edit (owner's report 2026-09-13: everything filled in, nothing
+  /// happened, nothing said).
+  ///
+  /// §3.1's trigger fires ONCE, at the landing — which is exactly the
+  /// moment a first run (or a cleared field) has no login yet, so the fetch
+  /// was refused and nothing would ever ask again for that video until it
+  /// was closed and reopened. Typing the credential now retries the loaded
+  /// file, debounced so a password typed one character at a time costs one
+  /// attempt, not twenty.
+  ///
+  /// Every existing guard still stands (D12's toggle, the quota wall, the
+  /// in-flight lock, D7's "already has subs") — this only re-asks the
+  /// question, it never widens when SALU may spend quota.
+  void _retryCurrent() {
+    _retryTimer?.cancel();
+    _retryTimer = Timer(const Duration(milliseconds: 1500), () {
+      final String? path = _autoWantedPath;
+      if (path == null) return;
+      if (PlayerService.instance.currentPath.value != path) return;
+      final SettingsService s = SettingsService.instance;
+      if (!s.subtitleAutoDownload.value) return; // D12 — OFF means OFF
+      if (s.subtitleApiKey.value.isEmpty || !_hasLogin) return;
+      if (_quotaPaused) return; // a quota wall still waits for a relaunch
+      _log('credentials changed — retrying the loaded video "$path"');
+      // The earlier refusal may be what marked this file for the session;
+      // a credential edit is a new fact, so the file gets its try back.
+      _failedThisSession.remove(path);
+      _backgroundRetry = true;
+      unawaited(_maybeAutoFetch(path)
+          .whenComplete(() => _backgroundRetry = false));
+    });
+  }
 
   // ────────────────────────────────────────────────────────────────────
   //  AUTO path (cc.md §3)
@@ -178,21 +244,51 @@ class SubtitleService {
   /// lands on an item. Every guard lives here, so the player side stays
   /// a single dumb line. Fire-and-forget.
   void onMediaLanded(String uri, {required bool channelMode}) {
-    if (channelMode) return; // D6 — never channel/live mode.
-    if (uri.contains('://')) return; // D6 — never remote streams.
-    if (!MediaUtils.isVideo(uri)) return; // D6 — never audio.
+    if (channelMode) {
+      _log('skip (D6 channel mode): $uri');
+      return; // D6 — never channel/live mode.
+    }
+    if (uri.contains('://')) {
+      _log('skip (D6 remote stream): $uri');
+      return; // D6 — never remote streams.
+    }
+    if (!MediaUtils.isVideo(uri)) {
+      _log('skip (D6 not a video): $uri');
+      return; // D6 — never audio.
+    }
     final String path = MediaUtils.canonicalPath(uri);
-    if (QueueService.instance.isChannelList) return;
+    if (QueueService.instance.isChannelList) {
+      _log('skip (channel list loaded): $path');
+      return;
+    }
     _autoWantedPath = path;
+    // A fresh landing is a real viewer-caused event, so its cards speak
+    // even if a keystroke-triggered retry is still winding down.
+    _backgroundRetry = false;
     unawaited(_maybeAutoFetch(path));
   }
 
+  /// The console half of the engine. The DECK stays silent by design
+  /// (D10), but silence in the UI must not mean silence in the log — the
+  /// owner's 2026-09-13 report was "nothing at all, no message", and
+  /// without this there is no way to tell which of a dozen guards refused.
+  /// Dev console only; no UI, no instruction text (follow.md rule 1).
+  static void _log(String message) => debugPrint('[SALU/subs] $message');
+
   Future<void> _maybeAutoFetch(String path) async {
     // Guard 1a — the toggle. OFF = fully silent stop (D12).
-    if (!SettingsService.instance.subtitleAutoDownload.value) return;
+    if (!SettingsService.instance.subtitleAutoDownload.value) {
+      _log('auto OFF (D12) — not fetching "$path"');
+      return;
+    }
 
     // Guard 4 — one try per file per session; and never two concurrent.
-    if (_failedThisSession.contains(path) || !_inFlight.add(path)) return;
+    if (_failedThisSession.contains(path)) {
+      _log('already failed/empty this session — not retrying "$path" '
+          '(a credential edit gives it back)');
+      return;
+    }
+    if (!_inFlight.add(path)) return;
 
     try {
       // The mpv track report settles right after start-file — and on a
@@ -202,7 +298,10 @@ class SubtitleService {
       // subs (D7): wait for the report to go quiet (bounded), then
       // read the settled state.
       await _awaitSettledTracks();
-      if (_autoWantedPath != path) return; // zapped mid-settle
+      if (_autoWantedPath != path) {
+        _log('zapped mid-settle — dropping "$path"');
+        return;
+      }
 
       // Guard 3 — D7 "no usable subtitle": mpv reports zero subtitle
       // tracks for the item (numeric ids — media_kit prepends
@@ -214,42 +313,71 @@ class SubtitleService {
           PlayerService.instance.player.state.tracks.subtitle;
       final bool hasSub =
           subRows.any((SubtitleTrack t) => int.tryParse(t.id) != null);
-      if (hasSub) return;
-      if (_hasMatchingSibling(path)) return;
+      if (hasSub) {
+        _log('D7: mpv already reports ${subRows.length} subtitle row(s) '
+            'for "$path" — nothing to fetch');
+        return;
+      }
+      if (_hasMatchingSibling(path)) {
+        _log('D7: a matching sibling subtitle already sits next to '
+            '"$path" — nothing to fetch');
+        return;
+      }
 
       // Guard 1b — the key. Everything else would fetch: this is the
       // one honest `cc not configured` moment (D11). Still tries
       // afterwards (the key may arrive mid-session) — NOT marked failed.
       final SettingsService settings = SettingsService.instance;
       if (settings.subtitleApiKey.value.isEmpty) {
+        _log('no API key — `cc not configured` (D11)');
         _noticeCc();
         return;
       }
       // Engine pauses — silent (their cards already spoke).
-      if (_quotaPaused || _authPaused) return;
+      if (_quotaPaused) {
+        _log('quota-paused (429/402 earlier) — silent until relaunch');
+        return;
+      }
+      if (_authPaused) {
+        _log('auth-paused (401 earlier) — silent until a credential '
+            'changes');
+        return;
+      }
 
       // One more wanted-check before quota is spent: a fast zapper
       // never makes SALU buy the previous episode's subs.
-      if (_autoWantedPath != path) return;
+      if (_autoWantedPath != path) {
+        _log('zapped before the hash — dropping "$path"');
+        return;
+      }
 
       // §3.2 — moviehash, preferred → English. No query step (D9).
       final String? hash = await _movieHash(path);
       if (hash == null) {
+        _log('moviehash failed (file under 64 KB, or unreadable) — '
+            '"$path" marked for the session');
         _failedThisSession.add(path);
         return;
       }
+      _log('moviehash $hash for "$path"');
       final String pref = LanguageNames.normalize(
           SettingsService.instance.subtitleLanguage.value);
       List<SubtitleResult>? hits = await _search(
         <String, String>{'moviehash': hash, 'languages': pref},
       );
       bool gaveUp = false;
-      if (hits == null) return; // notice already spoken (or silent pause)
+      if (hits == null) {
+        _log('hash search ($pref) failed — notice already spoken or a '
+            'wall paused the engine');
+        return; // notice already spoken (or silent pause)
+      }
+      _log('hash search ($pref): ${hits.length} hit(s)');
       if (hits.isEmpty && pref != 'en') {
         hits = await _search(
           <String, String>{'moviehash': hash, 'languages': 'en'},
         );
         if (hits == null) return;
+        _log('hash search fallback (en): ${hits.length} hit(s)');
       }
       if (hits.isEmpty) {
         // Music videos & home movies are free hits to nothing (§3.2) —
@@ -257,6 +385,8 @@ class SubtitleService {
         gaveUp = true;
       }
       if (gaveUp) {
+        _log('no hits for this hash — silence, "$path" marked for the '
+            'session (§3.2)');
         _failedThisSession.add(path);
         return;
       }
@@ -307,8 +437,13 @@ class SubtitleService {
     final SubtitleSaveOutcome? outcome = await _saveCore(result, path);
     // A missing login is not this FILE's fault - the viewer may still
     // sign in later in the session, so it stays silent and unmarked
-    // (D10: the auto engine never speaks).
-    if (outcome?.status == SubtitleSaveStatus.notSignedIn) return;
+    // (D10: the auto engine never speaks). Signing in now retries it —
+    // see [_retryCurrent].
+    if (outcome?.status == SubtitleSaveStatus.notSignedIn) {
+      _log('no login yet (username or password empty) — AUTO stays '
+          'silent and unmarked; typing it retries this file');
+      return;
+    }
     if (outcome == null ||
         (outcome.status == SubtitleSaveStatus.failed &&
             !_quotaPaused &&
@@ -317,6 +452,7 @@ class SubtitleService {
       // auth walls already paused the engine with their one card, so a
       // wall trip is NOT a per-file failure.
       if (outcome == null || !_quotaPaused && !_authPaused) {
+        _log('save failed — "$path" marked for the session');
         _failedThisSession.add(path);
       }
       return;
@@ -327,6 +463,7 @@ class SubtitleService {
     if (outcome.path != null &&
         (PlayerService.instance.currentPath.value == path ||
             _autoWantedPath == path)) {
+      _log('applying "${outcome.fileName}" to the loaded video');
       unawaited(PlayerService.instance.loadExternalSubtitle(outcome.path!));
     }
   }
@@ -349,11 +486,14 @@ class SubtitleService {
     }
     if (_quotaPaused || _authPaused) {
       // Each pause already spoke its card; don't spam (§3.5).
+      _log('manual search refused — engine paused '
+          '(${_quotaPaused ? 'quota' : 'auth'} wall)');
       return const <SubtitleResult>[];
     }
     final List<SubtitleResult>? rows =
         await _search(<String, String>{'query': q});
     if (rows == null) return const <SubtitleResult>[];
+    _log('manual search "$q" → ${rows.length} row(s)');
     return rows;
   }
 
@@ -371,6 +511,7 @@ class SubtitleService {
     // bought D8 name, so it counts too.
     final String sibling = p.join(p.dirname(videoPath), name);
     if (await File(sibling).exists()) {
+      _log('D8 name already beside the video — no quota spent: $sibling');
       return SubtitleSaveOutcome(
           status: SubtitleSaveStatus.alreadySaved,
           fileName: name,
@@ -379,21 +520,40 @@ class SubtitleService {
     final String tempCopy =
         p.join(Directory.systemTemp.path, 'salu_subs', name);
     if (await File(tempCopy).exists()) {
+      _log('D8 name already in the temp fallback — no quota spent: '
+          '$tempCopy');
       return SubtitleSaveOutcome(
           status: SubtitleSaveStatus.alreadySaved,
           fileName: name,
           path: tempCopy);
     }
     if (SettingsService.instance.subtitleApiKey.value.isEmpty) {
+      _log('no API key — `cc not configured` (D11)');
       _noticeCc();
       return null;
     }
-    if (_quotaPaused || _authPaused) return null;
+    if (_quotaPaused) {
+      _log('quota-paused (429/402 earlier) — refusing "$name" until '
+          'relaunch');
+      return null;
+    }
+    if (_authPaused) {
+      _log('auth-paused (401 earlier) — refusing "$name" until a '
+          'credential changes');
+      return null;
+    }
     // §4: `/download` is key **and** Bearer. With no login there is no
     // token, so no request is spent and nothing is written — the reason
     // is handed back instead (the manual Save speaks it, D10 keeps the
     // AUTO engine quiet).
     if (!_hasLogin) {
+      final SettingsService s = SettingsService.instance;
+      final String have = <String>[
+        if (s.subtitleUsername.value.isEmpty) 'username EMPTY',
+        if (s.subtitlePassword.value.isEmpty) 'password EMPTY',
+      ].join(', ');
+      _log('no login ($have) — /download needs a Bearer token only '
+          '/login can mint (§4)');
       return const SubtitleSaveOutcome(
           status: SubtitleSaveStatus.notSignedIn, fileName: '', path: null);
     }
@@ -407,9 +567,12 @@ class SubtitleService {
     // Beside the movie; unwritable → temp, same name (D8).
     try {
       await File(sibling).writeAsBytes(bytes, flush: true);
+      _log('saved ${bytes.length} byte(s) beside the video: $sibling');
       return SubtitleSaveOutcome(
           status: SubtitleSaveStatus.saved, fileName: name, path: sibling);
-    } catch (_) {
+    } catch (error) {
+      _log('write beside the video failed ($error) — trying the temp '
+          'fallback');
       // Fall through to the temp fallback.
     }
     try {
@@ -418,9 +581,11 @@ class SubtitleService {
       await dir.create(recursive: true);
       final String temp = p.join(dir.path, name);
       await File(temp).writeAsBytes(bytes, flush: true);
+      _log('saved ${bytes.length} byte(s) in the temp fallback: $temp');
       return SubtitleSaveOutcome(
           status: SubtitleSaveStatus.saved, fileName: name, path: temp);
-    } catch (_) {
+    } catch (error) {
+      _log('temp fallback write failed too ($error) — nothing saved');
       return const SubtitleSaveOutcome(
           status: SubtitleSaveStatus.failed, fileName: '', path: null);
     }
@@ -498,9 +663,14 @@ class SubtitleService {
     }
     // `null` — nothing was attempted at all: no key, or a wall that
     // already paused the engine (§3.5). Name the wall; the words are
-    // the ones the deck already owns.
+    // the ones the deck already owns. A 401 names the half that was
+    // actually rejected — `/login` refusing the username+password is a
+    // different repair than `/subtitles` refusing the key, and pointing
+    // at the key for both sent the viewer to the one field that was fine.
     if (_authPaused) {
-      OsdController.instance.show(const OsdSubtitleCard.checkKey());
+      OsdController.instance.show(_loginRejected
+          ? const OsdSubtitleCard.checkLogin()
+          : const OsdSubtitleCard.checkKey());
     } else if (_quotaPaused) {
       OsdController.instance.show(const OsdSubtitleCard.limit());
     } else {
@@ -526,16 +696,24 @@ class SubtitleService {
         'Content-Type': 'application/json',
       }).timeout(_timeout);
       if (r.statusCode == 401) {
+        _log('GET /subtitles → 401 (API key rejected) — pausing until a '
+            'credential changes');
         _authPaused = true;
+        _loginRejected = false; // the key half, not the login half
         _noticeKey();
         return null;
       }
       if (r.statusCode == 429 || r.statusCode == 402) {
+        _log('GET /subtitles → ${r.statusCode} (rate/quota wall) — '
+            'pausing until relaunch');
         _quotaPaused = true;
         _noticeLimit();
         return null;
       }
-      if (r.statusCode != 200) return null;
+      if (r.statusCode != 200) {
+        _log('GET /subtitles → ${r.statusCode}: ${_bodyPeek(r)}');
+        return null;
+      }
       final Map<String, dynamic> body =
           jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       final List<dynamic> data = (body['data'] as List?) ?? const [];
@@ -543,9 +721,20 @@ class SubtitleService {
           .map(_resultFrom)
           .whereType<SubtitleResult>()
           .toList(growable: false);
-    } catch (_) {
+    } catch (error) {
+      _log('GET /subtitles threw ($error) — network down or timed out, '
+          'silent (§3.5)');
       return null; // network down / timeout — silent (§3.5).
     }
+  }
+
+  /// The server's own words, trimmed to one console line — the reason a
+  /// request died is in the body (`403 {"message":"Quota exceeded"}`),
+  /// and throwing it away is what made every failure look identical.
+  /// Never logged from the UI: this is the dev console only.
+  static String _bodyPeek(http.Response r) {
+    final String text = utf8.decode(r.bodyBytes, allowMalformed: true).trim();
+    return text.length <= 240 ? text : '${text.substring(0, 240)}…';
   }
 
   SubtitleResult? _resultFrom(dynamic raw) {
@@ -580,18 +769,28 @@ class SubtitleService {
     );
   }
 
-  /// Bearer token for `/download` — silent login per session (D13).
-  /// Returns `null` on any failure: 401 already spoke + paused.
+  /// Bearer token for `/download` — one silent login per session (D13).
+  /// The password is persisted scrambled now (D13 amended 2026-09-13), so
+  /// this fires on the first download of a session with no UI involved;
+  /// the TOKEN itself is still memory-only. Returns `null` on any failure:
+  /// 401 already spoke + paused.
   Future<String?> _ensureToken() async {
     if (_token != null) return _token;
     final SettingsService s = SettingsService.instance;
-    if (s.subtitleUsername.value.isEmpty || sessionPassword.value.isEmpty) {
+    if (s.subtitleUsername.value.isEmpty ||
+        s.subtitlePassword.value.isEmpty) {
       // Credentials are the user's problem statement; with a key but no
       // login, download is simply unavailable (§2.1 — key-only = search
       // without download). Nothing to surface: the fields exist in
       // settings; silence keeps D10.
+      _log('/login skipped — username or password is empty (the API key '
+          'alone can search, never download: §4)');
       return null;
     }
+    // The password is NEVER logged — not here, not anywhere. The username
+    // already sits in prefs unscrambled, so naming it costs nothing and
+    // catches the classic .org-vs-.com account mix-up in one glance.
+    _log('POST /login as "${s.subtitleUsername.value}"');
     try {
       final http.Response r = await _client
           .post(
@@ -606,38 +805,62 @@ class SubtitleService {
             },
             body: jsonEncode(<String, String>{
               'username': s.subtitleUsername.value,
-              'password': sessionPassword.value,
+              'password': s.subtitlePassword.value,
             }),
           )
           .timeout(_timeout);
       if (r.statusCode == 401) {
+        // A 401 HERE is the username/password pair being refused — not the
+        // API key (the key just passed `/subtitles` to get this far).
+        // Naming the key sent the viewer to the one field that was fine.
+        _log('POST /login → 401: the username/password pair was refused '
+            '(opensubtitles.com accounts are separate from opensubtitles.'
+            'org ones). ${_bodyPeek(r)}');
         _authPaused = true;
-        _noticeKey();
+        _loginRejected = true;
+        _noticeLogin();
         return null;
       }
       if (r.statusCode == 429) {
+        _log('POST /login → 429 (login rate limit: 1/s) — pausing until '
+            'relaunch');
         _quotaPaused = true;
         _noticeLimit();
         return null;
       }
-      if (r.statusCode < 200 || r.statusCode >= 300) return null;
+      if (r.statusCode < 200 || r.statusCode >= 300) {
+        _log('POST /login → ${r.statusCode}: ${_bodyPeek(r)}');
+        return null;
+      }
       final Map<String, dynamic> body =
           jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       final String token = '${body['token'] ?? ''}';
-      if (token.isEmpty) return null;
+      if (token.isEmpty) {
+        _log('POST /login → 200 but no token in the body: ${_bodyPeek(r)}');
+        return null;
+      }
+      _log('POST /login → 200, Bearer token minted (${token.length} chars)');
       _token = token; // memory only (D13 — never persisted).
       return token;
-    } catch (_) {
+    } catch (error) {
+      _log('POST /login threw ($error) — network down or timed out');
       return null;
     }
   }
 
   /// `/download` → follow the single-use link immediately (§3.3-1),
-  /// decompressing gzip (§3.3-2). `null` = silent failure path.
-  Future<Uint8List?> _download(int fileId) async {
+  /// decompressing gzip (§3.3-2). `null` = the failure path; every branch
+  /// says why in the dev console ([_log]) even where the deck must stay
+  /// quiet (D10).
+  ///
+  /// [retried] marks the ONE automatic retry a refused token earns: the
+  /// key was proven good by the search that produced this `fileId`, so a
+  /// 401 here is the token's fault and re-login is the whole repair.
+  Future<Uint8List?> _download(int fileId, {bool retried = false}) async {
     if (_quotaPaused || _authPaused) return null;
     final String? token = await _ensureToken();
     if (token == null) return null;
+    _log('POST /download {file_id: $fileId}');
     try {
       final http.Response r = await _client
           .post(
@@ -652,36 +875,100 @@ class SubtitleService {
           )
           .timeout(_timeout);
       if (r.statusCode == 401) {
-        // Token expired mid-session → throw it away; next call re-logins.
+        // The key was proven good by the search that produced this
+        // file_id, so a 401 HERE is the TOKEN — expired or refused.
+        // Dropping it is the whole repair and SALU can do that itself, so
+        // it re-logins and retries ONCE. The old code paused the engine
+        // instead: one token hiccup wedged the whole session — SEARCH
+        // included — until a credential was edited, and named the key.
         _token = null;
+        if (!retried) {
+          _log('POST /download → 401 (token refused) — dropped it, '
+              're-logging in and retrying once');
+          // `/login` is rate-limited to 1 request per second (§4). The
+          // token was minted well under a second ago, so going straight
+          // back would trade a 401 for a 429 — and a 429 pauses the
+          // engine until relaunch, which is far worse than the wait.
+          await Future<void>.delayed(const Duration(milliseconds: 1100));
+          return _download(fileId, retried: true);
+        }
+        _log('POST /download → 401 again behind a freshly minted token — '
+            'pausing until a credential changes. ${_bodyPeek(r)}');
         _authPaused = true;
+        _loginRejected = false; // the login just succeeded; the key is next
         _noticeKey();
         return null;
       }
       if (r.statusCode == 429 || r.statusCode == 402 || r.statusCode == 403) {
+        // 403 is the quota wall's usual face on a free account (§3.5's
+        // ~10 downloads/day) — the API also uses it for a bad file_id,
+        // which is why the body is in the log.
+        _log('POST /download → ${r.statusCode} (quota/rate wall) — '
+            'pausing until relaunch. ${_bodyPeek(r)}');
         _quotaPaused = true;
         _noticeLimit();
         return null;
       }
-      if (r.statusCode != 200) return null;
+      if (r.statusCode != 200) {
+        _log('POST /download → ${r.statusCode}: ${_bodyPeek(r)}');
+        return null;
+      }
       final Map<String, dynamic> body =
           jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
       final String link = '${body['link'] ?? ''}';
-      if (link.isEmpty) return null;
+      if (link.isEmpty) {
+        _log('POST /download → 200 but no link in the body: '
+            '${_bodyPeek(r)}');
+        return null;
+      }
+      _log('following the download link');
       final http.Response file =
           await _client.get(Uri.parse(link)).timeout(_timeout);
-      if (file.statusCode != 200) return null;
+      if (file.statusCode != 200) {
+        _log('GET link → ${file.statusCode}: ${_bodyPeek(file)}');
+        return null;
+      }
       Uint8List bytes = file.bodyBytes;
       // The API serves gzipped bodies unless asked otherwise (§3.3-2).
       // (GZipCodec's constructor is not const — dart:io's ZLibCodec
       // family takes mutable option fields.)
       if (bytes.length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
         bytes = Uint8List.fromList(GZipCodec().decode(bytes));
+        _log('gunzipped → ${bytes.length} byte(s)');
       }
+      // Never write junk under the D8 name: the already-saved check would
+      // then treat that broken file as the bought subtitle FOREVER (both
+      // here and in the temp fallback), and every later Save would answer
+      // `Already saved` while nothing ever showed on screen.
+      if (bytes.isEmpty) {
+        _log('GET link → 200 with an EMPTY body — refusing to save it');
+        return null;
+      }
+      if (_looksLikeHtml(bytes)) {
+        _log('GET link → 200 but the body is an HTML page, not a '
+            'subtitle — refusing to save it. ${_bodyPeek(file)}');
+        return null;
+      }
+      _log('downloaded ${bytes.length} byte(s)');
       return bytes;
-    } catch (_) {
+    } catch (error) {
+      _log('POST /download threw ($error) — network down or timed out');
       return null;
     }
+  }
+
+  /// An HTML document wearing a 200 — the shape a CDN/interstitial/error
+  /// page arrives in when the download link has expired or was refused.
+  /// Saving it as `movie.en.srt` is worse than saving nothing: mpv shows
+  /// garbage, and the D8 name is then permanently "already saved".
+  static bool _looksLikeHtml(Uint8List bytes) {
+    final String head =
+        utf8.decode(bytes.take(512).toList(), allowMalformed: true)
+            .trimLeft()
+            .toLowerCase();
+    return head.startsWith('<!doctype html') ||
+        head.startsWith('<html') ||
+        head.startsWith('<head');
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -766,21 +1053,36 @@ class SubtitleService {
   //  Once-per-session cards (D10 · §3.5)
   // ────────────────────────────────────────────────────────────────────
 
+  /// Every card below is gated the same way: once per session (D10), and
+  /// never from a [_retryCurrent] fetch — that one answers a keystroke, so
+  /// it stays mute and leaves the session's card unspent for a moment the
+  /// viewer actually caused. The flag is checked BEFORE the shown-flag is
+  /// set, so a suppressed card is deferred, not consumed.
+
   /// D11 literal — owner's text, one card per session.
   void _noticeCc() {
-    if (_noticeCcShown) return;
+    if (_backgroundRetry || _noticeCcShown) return;
     _noticeCcShown = true;
     OsdController.instance.show(const OsdSubtitleCard.cc());
   }
 
   void _noticeKey() {
-    if (_noticeKeyShown) return;
+    if (_backgroundRetry || _noticeKeyShown) return;
     _noticeKeyShown = true;
     OsdController.instance.show(const OsdSubtitleCard.checkKey());
   }
 
+  /// The 401 that came from `/login` — the username/password pair, not the
+  /// API key (§3.5). One card per session like the rest (D10); the manual
+  /// Save path repeats it on every tap through [_speakSaveFailure].
+  void _noticeLogin() {
+    if (_backgroundRetry || _noticeLoginShown) return;
+    _noticeLoginShown = true;
+    OsdController.instance.show(const OsdSubtitleCard.checkLogin());
+  }
+
   void _noticeLimit() {
-    if (_noticeLimitShown) return;
+    if (_backgroundRetry || _noticeLimitShown) return;
     _noticeLimitShown = true;
     OsdController.instance.show(const OsdSubtitleCard.limit());
   }
