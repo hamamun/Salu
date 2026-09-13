@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/clock_format.dart';
 import '../../core/player_service.dart';
+import '../../core/sub_delay_service.dart' show formatSubDelay;
 import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
@@ -136,7 +137,35 @@ class _OsdDeckState extends State<OsdDeck>
       OsdAutoloadCard c => _TransientCard(child: _autoloadBody(c)),
       OsdFailedCard c => _TransientCard(child: _failedBody(c)),
       OsdSubtitleCard c => _TransientCard(child: _subtitleBody(c)),
+      OsdSubDelayCard c => _TransientCard(child: _subDelayBody(c)),
     };
+  }
+
+  /// The sync flash (owner 2026-09-13) — the cc mark carrying the
+  /// offset, so the number is never a bare numeral on the deck. The
+  /// deck renders it exactly as the panel's sync row does (`+0.4 s`),
+  /// so the two can never disagree.
+  Widget _subDelayBody(OsdSubDelayCard card) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconTheme.merge(
+          data: const IconThemeData(color: AppColors.textPrimary),
+          child: const CcMark(size: 17),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          'sub ${formatSubDelay(card.delay)}',
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3,
+            fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
   }
 
   /// The subtitle engine's words (cc.md §3.5 · D10): one quiet cc mark +

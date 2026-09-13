@@ -42,6 +42,10 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 - **Resume memory** — files pick up where you stopped (per-kind modes in
   Settings → General → Resume), resumed silently with no visible jump;
   closing after a Stop still remembers.
+- **Subtitle sync** — a per-file delay in the Fetch panel's track list:
+  a bar with `0.0 s` in the middle (±5 s, 0.1 s steps, double-tap to
+  reset), plus `Z` / `X` for 100 ms earlier / later (`Shift` = 1 s).
+  Each file keeps its own offset; mpv's `sub-delay` does the work.
 - **Channel lists (IPTV)** — open an m3u URL or `.m3u`/`.m3u8` file to
   browse its channels: logo rows, favourites saved per provider, a
   group-by pill (Flat / Category / Language / Country) with sticky

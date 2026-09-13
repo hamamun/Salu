@@ -180,6 +180,22 @@ enum OsdSubtitleCardKind {
   downloadFailed,
 }
 
+/// The subtitle-sync flash (owner 2026-09-13): the offset now in
+/// effect, named as `sub +0.4 s` / `sub -1.0 s` / `sub 0.0 s`.
+///
+/// Only the Z/X keys raise it — the panel's sync row shows the same
+/// number live inside its own bar, so a card there would just repeat
+/// what the viewer is already dragging. The deck is the answer for the
+/// keyboard path, where the panel is usually closed. One card per
+/// repeat, TTL restarting like every transport flash.
+class OsdSubDelayCard extends OsdCard {
+  const OsdSubDelayCard({required this.delay})
+      : super(ttl: const Duration(milliseconds: 1000));
+
+  /// The subtitle offset in seconds (mpv's `sub-delay`).
+  final double delay;
+}
+
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {
   OsdController._internal();

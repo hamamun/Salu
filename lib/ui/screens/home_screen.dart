@@ -327,6 +327,26 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.handled;
     }
 
+    // Subtitle sync (owner 2026-09-13) — mpv's own convention: Z shifts
+    // the text 100 ms earlier, X 100 ms later. Shift is SALU's coarse
+    // second (mpv has no coarse step). Silent while no subtitle track is
+    // selected; the deck names the new offset (see `TransportActions
+    // .subtitleSync`). Same family as the transport keys above: OSD
+    // only, no chrome wake.
+    if (key == LogicalKeyboardKey.keyZ || key == LogicalKeyboardKey.keyX) {
+      // Bare keys only: Ctrl/Alt stay out of SALU's way (Ctrl+Z is the
+      // world's undo, and the Search window has text fields in it).
+      final bool bare = !HardwareKeyboard.instance.isControlPressed &&
+          !HardwareKeyboard.instance.isAltPressed;
+      if (bare) {
+        TransportActions.instance.subtitleSync(
+          later: key == LogicalKeyboardKey.keyX,
+          coarse: HardwareKeyboard.instance.isShiftPressed,
+        );
+        return KeyEventResult.handled;
+      }
+    }
+
     // ── Everything else: activity → reveal the chrome ────────────────
     _wakeChrome();
 

@@ -239,6 +239,23 @@ class TransportActions {
     osd.show(OsdVolumeCard(muted: player.isMuted.value));
   }
 
+  /// Subtitle sync one step (Z / X — owner 2026-09-13).
+  ///
+  /// mpv's own convention: `z` shifts the text 100 ms EARLIER, `x`
+  /// 100 ms LATER ([later]); Shift is SALU's coarse second ([coarse]).
+  /// Silent while no subtitle track is selected — an offset with
+  /// nothing to move is not an action. The deck names the new offset
+  /// because the panel is usually closed when the keys are used; the
+  /// panel's own sync row needs no card (it reads the same value live).
+  void subtitleSync({required bool later, bool coarse = false}) {
+    if (!player.hasSubtitleSelected) return;
+    final double step = coarse
+        ? PlayerService.subDelayCoarseStep
+        : PlayerService.subDelayStep;
+    final double value = player.stepSubDelay(later ? step : -step);
+    osd.show(OsdSubDelayCard(delay: value));
+  }
+
   /// The Resume toast's Restart action — the only way Stop ever becomes
   /// "start over": jump to `0:00` and play.
   void restart() {
