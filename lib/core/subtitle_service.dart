@@ -129,7 +129,9 @@ class SubtitleService {
 
   // ── API facts (cc.md §4) ─────────────────────────────────────────────
   static const String _base = 'https://api.opensubtitles.com/api/v1';
-  static const String _userAgent = 'SALU/0.1.0';
+  /// Docs' own example format (best-practices: "App name with version
+  /// eg: MyApp v1.2.3") — a wrong/missing UA gets a 403, so keep it.
+  static const String _userAgent = 'SALU v0.1.0';
   static const Duration _timeout = Duration(seconds: 10);
 
   static final http.Client _client = http.Client();
@@ -694,6 +696,7 @@ class SubtitleService {
         'Api-Key': SettingsService.instance.subtitleApiKey.value,
         'User-Agent': _userAgent,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       }).timeout(_timeout);
       if (r.statusCode == 401) {
         _log('GET /subtitles → 401 (API key rejected) — pausing until a '
@@ -802,6 +805,7 @@ class SubtitleService {
               'Api-Key': s.subtitleApiKey.value,
               'User-Agent': _userAgent,
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
             },
             body: jsonEncode(<String, String>{
               'username': s.subtitleUsername.value,
@@ -856,24 +860,37 @@ class SubtitleService {
   /// [retried] marks the ONE automatic retry a refused token earns: the
   /// key was proven good by the search that produced this `fileId`, so a
   /// 401 here is the token's fault and re-login is the whole repair.
+  ///
+  /// A 5xx — the API's front answers intermittently with its HTML
+  /// `Error 503 - OpenSubtitles.com` page (the app's own errors are JSON,
+  /// so an HTML 5xx is the WAF, not the app) — earns up to two more
+  /// attempts with backoff (fourth runtime finding, cc.md): the request
+  /// never reached the app that spends quota, so re-asking is free and
+  /// the hiccup usually clears within seconds.
   Future<Uint8List?> _download(int fileId, {bool retried = false}) async {
     if (_quotaPaused || _authPaused) return null;
     final String? token = await _ensureToken();
     if (token == null) return null;
     _log('POST /download {file_id: $fileId}');
     try {
-      final http.Response r = await _client
-          .post(
-            Uri.parse('$_base/download'),
-            headers: <String, String>{
-              'Api-Key': SettingsService.instance.subtitleApiKey.value,
-              'Authorization': 'Bearer $token',
-              'User-Agent': _userAgent,
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode(<String, int>{'file_id': fileId}),
-          )
-          .timeout(_timeout);
+      http.Response r = await _postDownload(fileId, token);
+      for (int attempt = 1;
+          r.statusCode >= 500 &&
+          r.statusCode <= 599 &&
+          attempt <= 2;
+          attempt++) {
+        // Honor the front's own Retry-After when it says so (capped — a
+        // manual tap must not wait a minute for the `download failed`
+        // card); otherwise a short growing backoff.
+        final String? retryAfter = r.headers['retry-after'];
+        final int? serverWait = int.tryParse(retryAfter ?? '');
+        final int waitSeconds = (serverWait ?? 2 * attempt).clamp(1, 10);
+        _log('POST /download → ${r.statusCode} (transient server error, '
+            'not a quota wall) — retry $attempt/2 in ${waitSeconds}s. '
+            '${_bodyPeek(r)}');
+        await Future<void>.delayed(Duration(seconds: waitSeconds));
+        r = await _postDownload(fileId, token);
+      }
       if (r.statusCode == 401) {
         // The key was proven good by the search that produced this
         // file_id, so a 401 HERE is the TOKEN — expired or refused.
@@ -890,7 +907,9 @@ class SubtitleService {
           // back would trade a 401 for a 429 — and a 429 pauses the
           // engine until relaunch, which is far worse than the wait.
           await Future<void>.delayed(const Duration(milliseconds: 1100));
-          return _download(fileId, retried: true);
+          // `await` keeps the retry INSIDE this try block — an unawaited
+          // `return` would hand the retry's Future past the catch.
+          return await _download(fileId, retried: true);
         }
         _log('POST /download → 401 again behind a freshly minted token — '
             'pausing until a credential changes. ${_bodyPeek(r)}');
@@ -955,6 +974,26 @@ class SubtitleService {
       _log('POST /download threw ($error) — network down or timed out');
       return null;
     }
+  }
+
+  /// One `POST /download` — the request the 5xx retry loop re-sends.
+  /// A rejected request never reaches the app that spends quota, so a
+  /// retry is free (the quota wall itself, 429/402/403, is answered by
+  /// [_download] at once and is never retried).
+  Future<http.Response> _postDownload(int fileId, String token) async {
+    return _client
+        .post(
+          Uri.parse('$_base/download'),
+          headers: <String, String>{
+            'Api-Key': SettingsService.instance.subtitleApiKey.value,
+            'Authorization': 'Bearer $token',
+            'User-Agent': _userAgent,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode(<String, int>{'file_id': fileId}),
+        )
+        .timeout(_timeout);
   }
 
   /// An HTML document wearing a 200 — the shape a CDN/interstitial/error

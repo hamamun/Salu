@@ -20,7 +20,11 @@ void main() {
     });
 
     test('the awkward shapes a real password can have come back exactly', () {
-      const List<String> passwords = <String>[
+      // `final`, NOT `const`: `'0123456789' * 12` is string repetition,
+      // and the const grammar only allows `*` between `num` operands
+      // (`const_eval_type_num`) — every value here is a literal either way,
+      // only the repetition runs at runtime.
+      final List<String> passwords = <String>[
         ' leading and trailing ', // NOT trimmed on purpose — it is literal
         'p@ss!w0rd#\$%&*()_+-=[]{};:,.<>?/|~`^',
         'CorrectHorseBatteryStaple99',
