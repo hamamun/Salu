@@ -182,3 +182,89 @@ class TunePresets {
     return null;
   }
 }
+
+/// A scene (eq_imp.md §7b) — one mark that moves the four lines together.
+///
+/// Only the fields a scene NAMES are touched: a scene never silently clears
+/// something it did not come to change, and keep-pitch is never a scene's
+/// business (a scene is a sound and a look, not a preference). The three
+/// locked scenes name everything but pitch.
+class TuneScene {
+  const TuneScene({
+    required this.key,
+    required this.label,
+    required this.note,
+    this.eqPreset,
+    this.pictureLook,
+    this.aspectStop,
+    this.speedStop,
+    this.snapWindow,
+  });
+
+  /// Machine key (persisted nowhere yet — a scene is a gesture, not a state).
+  final String key;
+
+  /// The short name on its mark.
+  final String label;
+
+  /// One honest line for the tooltip: what this mark moves.
+  final String note;
+
+  /// An EQ preset key of the file's own set — skipped when the playing file's
+  /// line does not have it (a video line has no `vocal`).
+  final String? eqPreset;
+
+  /// A picture look key.
+  final String? pictureLook;
+
+  /// An aspect stop key (`auto` = the file's own shape).
+  final String? aspectStop;
+
+  /// A speed stop key.
+  final String? speedStop;
+
+  /// Whether "the window is the screen" is part of the scene.
+  final bool? snapWindow;
+
+  /// The three locked scenes (eq_imp.md §7b).
+  static const List<TuneScene> all = <TuneScene>[
+    TuneScene(
+      key: 'cinema',
+      label: 'Cinema',
+      note: 'Cinema · the window takes the film’s shape, Night look, Movie sound',
+      eqPreset: 'movie',
+      pictureLook: 'night',
+      aspectStop: 'auto',
+      speedStop: 'x1',
+      snapWindow: true,
+    ),
+    TuneScene(
+      key: 'podcast',
+      label: 'Podcast',
+      note: 'Podcast · Vocal sound, normal speed, no window snap',
+      eqPreset: 'vocal',
+      pictureLook: 'original',
+      aspectStop: 'auto',
+      speedStop: 'x1',
+      snapWindow: false,
+    ),
+    TuneScene(
+      key: 'vivid',
+      label: 'Vivid',
+      note: 'Vivid · Vivid look, Flat sound, the file’s own shape',
+      eqPreset: 'flat',
+      pictureLook: 'vivid',
+      aspectStop: 'auto',
+      speedStop: 'x1',
+      snapWindow: false,
+    ),
+  ];
+
+  static TuneScene? byKey(String? key) {
+    if (key == null) return null;
+    for (final TuneScene s in all) {
+      if (s.key == key) return s;
+    }
+    return null;
+  }
+}

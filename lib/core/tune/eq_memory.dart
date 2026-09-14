@@ -1,11 +1,14 @@
 import 'dart:convert';
 
+import 'tune_model.dart';
+
 /// The Auto EQ learning map (eq_imp.md §5) — bounded, on-device, no network.
 ///
 /// Shape, one JSON blob inside the settings store:
-/// `{"audio|jazz": ["pop", 1720000000000], "video|the office": ["movie", …]}`
-/// — key = file type + genre/series, value = the KEPT choice + last-used
-/// time (≈ 100 bytes an entry).
+/// `{"audio|jazz": ["pop", 1720000000000], "video|the office": ["", …, [0,2,…]]}`
+/// — key = file type + genre/series, value = the KEPT choice + last-used time
+/// (≈ 100 bytes an entry, + 10 numbers when the kept thing is a full curve,
+/// §7c).
 ///
 /// The bounds are the spec's own data policy:
 ///  * **LRU cap 500** — every pick/teach touches its entry, so recency is
@@ -19,8 +22,6 @@ import 'dart:convert';
 /// pruning and the round-trip are unit-testable, and `TuneService` owns the
 /// disk write exactly like `SubDelayService` does.
 class EqMemory {
-  EqMemory._(this._entries);
-
   EqMemory.empty() : _entries = <String, EqMemoryEntry>{};
 
   /// Beyond this many entries the least-recently-used one is evicted.
@@ -37,19 +38,36 @@ class EqMemory {
 
   Iterable<String> get keys => _entries.keys;
 
-  /// The kept choice for a key, `null` when nothing was ever kept.
-  String? presetFor(String key) => _entries[key]?.presetKey;
+  /// The kept choice for a key, `null` when nothing was ever kept. Empty for
+  /// a key whose kept thing is a custom curve (§7c) — ask [entryFor] for the
+  /// numbers in that case.
+  String? presetFor(String key) {
+    final String? preset = _entries[key]?.presetKey;
+    return preset == null || preset.isEmpty ? null : preset;
+  }
 
   EqMemoryEntry? entryFor(String key) => _entries[key];
 
   /// Records a KEPT choice (a hover never teaches — §5's rule). The entry is
-  /// created or refreshed, and the LRU cap is applied immediately so
-  /// [length] never overshoots.
-  void teach(String key, String presetKey, {DateTime? now}) {
-    if (key.isEmpty || presetKey.isEmpty) return;
+  /// created or refreshed, and the LRU cap is applied immediately so [length]
+  /// never overshoots.
+  ///
+  /// [presetKey] is the named stop the person landed on (may be empty for a
+  /// free curve), [gains] the curve they kept — §7c: the full curve is what
+  /// makes Auto return *their* sound, not merely the preset nearest to it.
+  void teach(
+    String key, {
+    String presetKey = '',
+    List<double>? gains,
+    DateTime? now,
+  }) {
+    if (key.isEmpty) return;
+    final List<double>? curve = _cleanCurve(gains);
+    if (presetKey.isEmpty && curve == null) return;
     _entries[key] = EqMemoryEntry(
       presetKey: presetKey,
       usedAtMs: (now ?? DateTime.now()).millisecondsSinceEpoch,
+      gains: curve,
     );
     _evictToCap();
   }
@@ -62,6 +80,7 @@ class EqMemory {
     _entries[key] = EqMemoryEntry(
       presetKey: e.presetKey,
       usedAtMs: (now ?? DateTime.now()).millisecondsSinceEpoch,
+      gains: e.gains,
     );
   }
 
@@ -109,14 +128,29 @@ class EqMemory {
     }
   }
 
+  /// A curve is only a curve when it is the full 10 bands of numbers —
+  /// anything else is dropped, silently (a half-written blob must not invent
+  /// a sound out of nothing).
+  static List<double>? _cleanCurve(List<double>? raw) {
+    if (raw == null || raw.length < kEqBandCount) return null;
+    final List<double> out = List<double>.filled(kEqBandCount, 0);
+    for (int i = 0; i < kEqBandCount; i++) {
+      final double v = raw[i];
+      if (!v.isFinite) return null;
+      out[i] = clampRange(v, kEqGainMin, kEqGainMax);
+    }
+    return out;
+  }
+
   // ── Wire format ────────────────────────────────────────────────────────
 
-  /// `key → [preset, usedAtMs]` — the same compact shape the resume and
-  /// subtitle-sync stores use.
+  /// `key → [preset, usedAtMs, curve?]` — the same compact shape the resume
+  /// and subtitle-sync stores use, with the §7c curve appended only when the
+  /// kept thing *was* a curve.
   String encode() {
     final Map<String, List<Object>> out = <String, List<Object>>{};
     _entries.forEach((String key, EqMemoryEntry e) {
-      out[key] = <Object>[e.presetKey, e.usedAtMs];
+      out[key] = e.toJson();
     });
     return jsonEncode(out);
   }
@@ -138,46 +172,101 @@ class EqMemory {
     if (decoded is! Map) return memory;
     decoded.forEach((Object? key, Object? value) {
       if (key is! String || key.isEmpty) return;
-      if (value is List && value.isNotEmpty && value.first is String) {
-        memory._entries[key] = EqMemoryEntry(
-          presetKey: value.first as String,
-          usedAtMs: value.length >= 2 && value[1] is num
-              ? (value[1] as num).toInt()
-              : 0,
-        );
-      } else if (value is Map && value['preset'] is String) {
-        final Object? ts = value['used'];
-        memory._entries[key] = EqMemoryEntry(
-          presetKey: value['preset'] as String,
-          usedAtMs: ts is num ? ts.toInt() : 0,
-        );
-      }
+      final EqMemoryEntry? entry = _entryFrom(value);
+      if (entry != null) memory._entries[key] = entry;
     });
     memory._evictToCap();
     return memory;
+  }
+
+  /// One row of the map, in either the current shape (`[preset, ms, curve?]`)
+  /// or the first one (`[preset, ms]`, and a map with `preset` / `used`).
+  static EqMemoryEntry? _entryFrom(Object? value) {
+    if (value is List && value.isNotEmpty) {
+      final List<double>? gains = value.length >= 3 ? _curveFrom(value[2]) : null;
+      final String preset = value.first is String ? value.first as String : '';
+      if (preset.isEmpty && gains == null) return null;
+      return EqMemoryEntry(
+        presetKey: preset,
+        usedAtMs: value.length >= 2 && value[1] is num
+            ? (value[1] as num).toInt()
+            : 0,
+        gains: gains,
+      );
+    }
+    if (value is Map) {
+      final Object? preset = value['preset'];
+      final Object? gains = _curveFrom(value['gains']);
+      if (preset is! String && gains == null) return null;
+      final Object? ts = value['used'];
+      return EqMemoryEntry(
+        presetKey: preset is String ? preset : '',
+        usedAtMs: ts is num ? ts.toInt() : 0,
+        gains: gains,
+      );
+    }
+    return null;
+  }
+
+  /// A stored curve, tolerantly: JSON gives `List<dynamic>`, and anything
+  /// short, non-numeric or out of range is not a curve.
+  static List<double>? _curveFrom(Object? raw) {
+    if (raw is! List) return null;
+    if (raw.length < kEqBandCount) return null;
+    final List<double> out = <double>[];
+    for (int i = 0; i < kEqBandCount; i++) {
+      final Object? v = raw[i];
+      if (v is! num || !v.toDouble().isFinite) return null;
+      out.add(clampRange(v.toDouble(), kEqGainMin, kEqGainMax));
+    }
+    return out;
   }
 }
 
 /// One learning entry: what this person kept for this kind of content, and
 /// when they last kept it.
 class EqMemoryEntry {
-  const EqMemoryEntry({required this.presetKey, required this.usedAtMs});
+  const EqMemoryEntry({
+    required this.presetKey,
+    required this.usedAtMs,
+    this.gains,
+  });
 
+  /// The named stop that was kept — `''` when they kept a free curve.
   final String presetKey;
 
   /// Epoch milliseconds — the LRU clock and the staleness clock.
   final int usedAtMs;
 
+  /// The 10 gains they kept (eq_imp.md §7c), `null` for a preset-name-only
+  /// entry (v1's shape, and the shape a named stop writes today).
+  final List<double>? gains;
+
   DateTime get usedAt => DateTime.fromMillisecondsSinceEpoch(usedAtMs);
 
-  List<Object> toJson() => <Object>[presetKey, usedAtMs];
+  bool get hasCurve => gains != null && gains!.length == kEqBandCount;
+
+  List<Object> toJson() => <Object>[
+        presetKey,
+        usedAtMs,
+        if (gains != null) gains!,
+      ];
+
+  bool sameAs(EqMemoryEntry other) {
+    if (other.presetKey != presetKey || other.usedAtMs != usedAtMs) return false;
+    if (other.gains == null || gains == null) return other.gains == gains;
+    if (other.gains!.length != gains!.length) return false;
+    for (int i = 0; i < gains!.length; i++) {
+      if (other.gains![i] != gains![i]) return false;
+    }
+    return true;
+  }
 
   @override
   bool operator ==(Object other) =>
-      other is EqMemoryEntry &&
-      other.presetKey == presetKey &&
-      other.usedAtMs == usedAtMs;
+      other is EqMemoryEntry && sameAs(other);
 
   @override
-  int get hashCode => Object.hash(presetKey, usedAtMs);
+  int get hashCode =>
+      Object.hash(presetKey, usedAtMs, gains == null ? null : Object.hashAll(gains!));
 }

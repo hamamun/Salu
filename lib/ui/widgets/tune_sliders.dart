@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart'
     show
         PointerCancelEvent,
@@ -13,6 +14,7 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart';
 
 import '../../core/tune/tune_model.dart';
+import '../../core/tune_service.dart';
 import '../../theme/app_theme.dart';
 import 'eq_curve_painter.dart';
 
@@ -25,12 +27,17 @@ import 'eq_curve_painter.dart';
 /// Nothing here stores a value: the numbers arrive in, the changes leave
 /// through the callbacks, so the panel and the service agree by construction.
 
-/// The house preview delay (TuneService.hoverLead's value, kept as a plain
-/// constant so the widgets stay free of the service import).
-const Duration kTuneHoverLead = Duration(milliseconds: 300);
+/// The house preview delay — §8's "~0.3 s on the control". The service owns
+/// the number and this reads it, so the two can never drift apart.
+const Duration kTuneHoverLead = TuneService.hoverLead;
 
 /// Double-tap window — the sliders' reset-to-zero gesture (§1.11).
 const Duration kTuneDoubleTap = Duration(milliseconds: 320);
+
+/// How far apart two presses may land and still count as one double tap.
+/// Two quick DRAGS are two drags, not a reset (the gesture is "double-tap",
+/// and a tap does not travel).
+const double kTuneDoubleTapSlop = 6;
 
 /// The band slider's track, in its 74 px box: rule from top to bottom, the
 /// label under it.
@@ -79,38 +86,56 @@ class GlideList extends StatefulWidget {
 class _GlideListState extends State<GlideList>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late List<double> _shown;
-  List<double> _from = const <double>[];
+
+  /// Where the glide started. The shape ON SCREEN is always `_from` and the
+  /// current values interpolated by the controller — never a remembered copy
+  /// of a target, which is what used to make a drag after a preset jump snap
+  /// back to the pre-jump curve.
+  late List<double> _from;
 
   @override
   void initState() {
     super.initState();
-    _shown = List<double>.of(widget.values);
     _from = List<double>.of(widget.values);
     _controller = AnimationController(vsync: this, duration: widget.duration)
       ..addListener(_tick);
+  }
+
+  /// The shape on screen for [target], at the animation's current point.
+  List<double> _shown(List<double> target) {
+    final double t = Curves.easeOutCubic.transform(_controller.value);
+    final List<double> out = List<double>.filled(target.length, 0);
+    for (int i = 0; i < target.length; i++) {
+      final double from = i < _from.length ? _from[i] : target[i];
+      out[i] = from + (target[i] - from) * t;
+    }
+    return out;
   }
 
   @override
   void didUpdateWidget(GlideList old) {
     super.didUpdateWidget(old);
     if (listEquals(old.values, widget.values)) return;
+    // What the eye is looking at the moment the new values arrive: the old
+    // target, at the animation's current point — so the jump test below
+    // measures a real jump, and a new glide starts from the line that is on
+    // screen (continuity, never a flicker back).
+    final List<double> onScreen = _shown(old.values);
     final List<double> target = widget.values;
     double delta = 0;
-    for (int i = 0; i < target.length && i < _shown.length; i++) {
-      delta = math.max(delta, (target[i] - _shown[i]).abs());
+    for (int i = 0; i < target.length && i < onScreen.length; i++) {
+      delta = math.max(delta, (target[i] - onScreen[i]).abs());
     }
-    _from = List<double>.of(_shown);
-    if (delta <= widget.jumpThreshold || target.length != _shown.length) {
+    _from = onScreen;
+    if (delta <= widget.jumpThreshold || target.length != onScreen.length) {
       // A drag increment — no animation to catch up with.
-      _shown = List<double>.of(target);
       if (_controller.isAnimating) _controller.stop();
       _controller.value = 1;
-      setState(() {});
-      return;
+    } else {
+      // A real jump (a preset, a look, a reset, an Auto EQ pick): glide.
+      _controller.forward(from: 0);
     }
     setState(() {});
-    _controller.forward(from: 0);
   }
 
   void _tick() {
@@ -126,16 +151,7 @@ class _GlideListState extends State<GlideList>
   }
 
   @override
-  Widget build(BuildContext context) {
-    final double t = Curves.easeOutCubic.transform(_controller.value);
-    final List<double> target = widget.values;
-    final List<double> shown = List<double>.filled(target.length, 0);
-    for (int i = 0; i < target.length; i++) {
-      final double from = i < _from.length ? _from[i] : target[i];
-      shown[i] = from + (target[i] - from) * t;
-    }
-    return widget.builder(context, shown);
-  }
+  Widget build(BuildContext context) => widget.builder(context, _shown(widget.values));
 }
 
 // ── The 10 band sliders ────────────────────────────────────────────────────
@@ -162,7 +178,6 @@ class TuneBands extends StatelessWidget {
   final VoidCallback? onGestureStart;
   final VoidCallback? onGestureEnd;
 
-  static const double bandWidth = 34;
   static const double bandHeight = 62;
   static const double curveHeight = 20;
 
@@ -256,6 +271,7 @@ class _TuneBandState extends State<_TuneBand> {
   bool _dragging = false;
   bool _inside = false;
   DateTime? _lastUp;
+  double? _lastUpY;
   double _hoverValue = 0;
 
   static double get _mid => (_bandTop + _bandBottom) / 2;
@@ -335,9 +351,16 @@ class _TuneBandState extends State<_TuneBand> {
                 onPointerUp: (PointerUpEvent e) {
                   if (!_dragging) return;
                   final DateTime now = DateTime.now();
+                  final double upY = e.localPosition.dy;
+                  // A tap does not travel: two quick DRAGS are two drags,
+                  // and resetting a band the viewer was pulling would be a
+                  // bug dressed as a gesture (§1.11's double-tap).
                   final bool doubleUp = _lastUp != null &&
-                      now.difference(_lastUp!) < kTuneDoubleTap;
+                      _lastUpY != null &&
+                      now.difference(_lastUp!) < kTuneDoubleTap &&
+                      (upY - _lastUpY!).abs() <= kTuneDoubleTapSlop;
                   _lastUp = now;
+                  _lastUpY = upY;
                   setState(() => _dragging = false);
                   if (doubleUp) {
                     // Double tap = back to zero (§1.11).
@@ -476,12 +499,18 @@ class _BandPainter extends CustomPainter {
 /// The picture line's fine layer (eq_imp.md §4): Saturation · Gamma ·
 /// Contrast · Brightness · Hue, each −100…+100, 0 = neutral. Always
 /// live-bound to whatever the knob is on — a look, a blend, or free.
+///
+/// Behind the two sliders that move the tones — Gamma and Brightness — sits
+/// the live tone histogram of the playing frame (eq_imp.md §7a): dark at the
+/// left, bright at the right, exactly the axis those two sliders travel. You
+/// see where the picture's tones are before you push them.
 class TunePictureBars extends StatelessWidget {
   const TunePictureBars({
     super.key,
     required this.values,
     required this.enabled,
     required this.onValue,
+    this.histogram,
     this.onPreviewStart,
     this.onPreviewEnd,
     this.onGestureStart,
@@ -490,6 +519,13 @@ class TunePictureBars extends StatelessWidget {
 
   final List<double> values;
   final bool enabled;
+
+  /// The tone shape (0…1 per bin, peak-normalised), on the Gamma and
+  /// Brightness bars only. `null` = nothing read yet, draw nothing.
+  final List<double>? histogram;
+
+  /// The bars the histogram belongs behind: Gamma (1) and Brightness (3).
+  static const Set<int> toneBars = <int>{1, 3};
   final void Function(int index, double value, bool commit) onValue;
   final VoidCallback? onPreviewStart;
   final VoidCallback? onPreviewEnd;
@@ -508,6 +544,7 @@ class TunePictureBars extends StatelessWidget {
               label: kPictureLabels[i],
               value: values.length > i ? values[i] : 0,
               enabled: enabled,
+              behind: toneBars.contains(i) ? histogram : null,
               onChanged: onValue,
               onPreviewStart: onPreviewStart,
               onPreviewEnd: onPreviewEnd,
@@ -527,6 +564,7 @@ class _TuneFineBar extends StatefulWidget {
     required this.value,
     required this.enabled,
     required this.onChanged,
+    this.behind,
     this.onPreviewStart,
     this.onPreviewEnd,
     this.onGestureStart,
@@ -537,6 +575,10 @@ class _TuneFineBar extends StatefulWidget {
   final String label;
   final double value;
   final bool enabled;
+
+  /// The tone shape drawn behind the track (§7a), `null` for a bar without
+  /// one.
+  final List<double>? behind;
   final void Function(int index, double value, bool commit) onChanged;
   final VoidCallback? onPreviewStart;
   final VoidCallback? onPreviewEnd;
@@ -553,6 +595,7 @@ class _TuneFineBarState extends State<_TuneFineBar> {
   bool _dragging = false;
   bool _inside = false;
   DateTime? _lastUp;
+  double? _lastUpX;
   double _hoverValue = 0;
 
   static const double _barHeight = 18;
@@ -650,9 +693,13 @@ class _TuneFineBarState extends State<_TuneFineBar> {
                         onPointerUp: (PointerUpEvent e) {
                           if (!_dragging) return;
                           final DateTime now = DateTime.now();
+                          final double upX = e.localPosition.dx;
                           final bool doubleUp = _lastUp != null &&
-                              now.difference(_lastUp!) < kTuneDoubleTap;
+                              _lastUpX != null &&
+                              now.difference(_lastUp!) < kTuneDoubleTap &&
+                              (upX - _lastUpX!).abs() <= kTuneDoubleTapSlop;
                           _lastUp = now;
+                          _lastUpX = upX;
                           setState(() => _dragging = false);
                           widget.onChanged(
                             widget.index,
@@ -672,6 +719,7 @@ class _TuneFineBarState extends State<_TuneFineBar> {
                           size: Size(w, _barHeight),
                           painter: _FineBarPainter(
                             value: widget.value,
+                            behind: widget.behind,
                             active: active,
                             previewing: _armed && !_dragging,
                             enabled: widget.enabled,
@@ -709,19 +757,26 @@ class _TuneFineBarState extends State<_TuneFineBar> {
 }
 
 /// A −100…+100 bar that grows from its centre, breathing on hover (the
-/// timeline's and the volume bar's sibling, mirrored).
+/// timeline's and the volume bar's sibling, mirrored) — and, behind it, the
+/// live tone histogram when the bar is one of the two the tones answer to.
 class _FineBarPainter extends CustomPainter {
   const _FineBarPainter({
     required this.value,
     required this.active,
     required this.previewing,
     required this.enabled,
+    this.behind,
   });
 
   final double value;
   final bool active;
   final bool previewing;
   final bool enabled;
+
+  /// The tone shape: one value per bin, 0…1, dark at the left of the track.
+  /// Drawn mirrored around the track's centre line, so the slider's own
+  /// travel reads as movement over the distribution.
+  final List<double>? behind;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -730,6 +785,30 @@ class _FineBarPainter extends CustomPainter {
     final Color idle = enabled
         ? (active ? AppColors.textPrimary : AppColors.iconIdle)
         : AppColors.iconIdle.withAlpha(100);
+    // The tones first, under everything (§7a): a scope behind the two
+    // sliders that move them. Quiet enough to read as texture, never as a
+    // second control — it takes no pointer, and the sliders' ink is drawn
+    // over it.
+    final List<double>? shape = behind;
+    if (shape != null && shape.isNotEmpty) {
+      final double usable = w - 12;
+      final double reach = (h - 6) / 2;
+      final Paint ink = Paint()
+        ..color = idle.withAlpha(active ? 64 : 40)
+        ..strokeCap = StrokeCap.butt
+        ..strokeWidth = math.max(1, usable / shape.length - 1.4);
+      for (int i = 0; i < shape.length; i++) {
+        final double x = 6 + usable * (i + 0.5) / shape.length;
+        final double v = clampRange(shape[i], 0, 1);
+        final double half = 1.2 + v * (reach - 1.2);
+        canvas.drawLine(
+          Offset(x, h / 2 - half),
+          Offset(x, h / 2 + half),
+          ink,
+        );
+      }
+    }
+
     final RRect track = RRect.fromRectAndRadius(
       Rect.fromLTWH(6, (h - 6) / 2, w - 12, 6),
       const Radius.circular(3),
@@ -775,5 +854,6 @@ class _FineBarPainter extends CustomPainter {
       old.value != value ||
       old.active != active ||
       old.previewing != previewing ||
-      old.enabled != enabled;
+      old.enabled != enabled ||
+      !listEquals(old.behind, behind);
 }

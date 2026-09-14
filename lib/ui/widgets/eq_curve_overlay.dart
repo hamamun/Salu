@@ -6,6 +6,9 @@ import '../../theme/app_theme.dart';
 import 'eq_curve_painter.dart';
 import 'tune_sliders.dart';
 
+// The painter and the glide live in the widgets the panel also uses, so the
+// mini curve and the on-video curve can never disagree about either.
+
 /// The curve on the video (eq_imp.md §1.8) — the third, rare use of the
 /// monochrome mark: the mark itself, blown up.
 ///

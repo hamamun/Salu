@@ -200,14 +200,16 @@ The 5 sliders (each −100 … +100, 0 = neutral) are the **fine-tune layer**:
 - **A/B compare for free** — hovering the **Original** stop shows the
   untouched picture; leaving returns your adjusted one. No extra control
   needed.
-- **Phase-2 candidate (owner's call, NOT in v1) — live tone histogram:**
+- **Live tone histogram (Phase 2, owner pulled it forward) — built:**
   a small luminance histogram drawn behind the Brightness + Gamma
   sliders, computed from the actually-playing frame (mpv's built-in
   screenshot command → downscaled in pure Dart → histogram). You see
   where the content's tones sit and where your adjustment pushes them —
   the camera-scope feel. No new dependency needed (mpv screenshot +
-  Flutter's own image decode); it is extra work, so it stays a future
-  phase unless the owner pulls it forward.
+  Flutter's own image decode). SALU reads a frame every ~2 s, and only
+  while the panel is open — a scope you cannot see must not cost
+  anything. It takes no pointer and never paints over the sliders' ink;
+  `null` means nothing has been read yet and shows nothing at all.
 
 ---
 
@@ -247,8 +249,10 @@ honesty — you can see the automation working and exactly what it chose.
 **Learning map — data policy (bounded, owner-approved):**
 - Stored **on-device only** — one JSON blob inside the existing settings
   entry. No network, no privacy surface.
-- One entry = key (file type + genre/series) → the kept choice (preset
-  name in v1, the full curve in Phase 2) + last-used time. ≈ 100 bytes.
+- One entry = key (file type + genre/series) → the kept choice (the
+  preset's name *and* the curve itself — Phase 2 landed, so the numbers
+  travel with the name and Auto returns the person's own sound) +
+  last-used time. ≈ 100 bytes, and an old two-field entry still decodes.
 - The key space is naturally small (a user meets dozens of genres and a
   few hundred series over years) — an absolute worst case is ~1,000
   entries ≈ 100 KB. It grows with *kinds of content seen*, never with
@@ -317,21 +321,28 @@ file's labels and facts (genre tag, length, sound layout, name). A deeper
    "Clear EQ memory" with Undo toast).
 6. Polish: slider glide animation, response curve line,
    window-is-the-screen.
-7. *(Phase 2 — owner-approved candidates)*
+7. *(Phase 2 — owner-approved, now built — see §8)*
    a) live tone histogram behind the Brightness + Gamma sliders
-      (section 4);
+      (section 4) — built: `tone_histogram.dart`, read while the panel
+      is open, drawn behind Gamma (1) and Brightness (3);
    b) **scenes** — one mark moves all four lines together (Cinema:
       window snap + Night look + Movie EQ · Podcast: Vocal EQ + 1× ·
-      Vivid: Vivid look + Flat);
+      Vivid: Vivid look + Flat) — built: three marks in the panel
+      footer, glowing on hover and acting on click — no hover preview,
+      because a scene snaps the window (see §8, deviation 6);
    c) **learning that remembers full custom curves** per genre/series
       instead of preset names (the data policy in section 5 already
-      bounds it).
+      bounds it) — built: the map stores the curve beside the name, and
+      Auto returns it as `Custom`.
 ---
 
-## 8. Built (v1) — what landed, and the four places it deviates
+## 8. Built (v1 + the three Phase-2 pieces) — what landed, and where it deviates
 
-Owner asked for the whole spec; steps 1–6 of §7 are implemented. Step 7 (the
-tone histogram, scenes, full-curve learning) stays Phase 2, untouched.
+Owner asked for the whole spec, and then pulled Phase 2 forward: **steps 1–6
+plus all three candidates of §7.7 are implemented** — the live tone histogram
+(§7.7a · §4), the three scenes (§7.7b), and learning that remembers the full
+curve (§7.7c). Phase 2 is no longer "untouched"; what it added is marked
+`(Phase 2)` below.
 
 **Core (pure Dart, unit-tested).**
 
@@ -344,7 +355,8 @@ tone histogram, scenes, full-curve learning) stays Phase 2, untouched.
 | `lib/core/tune/eq_memory.dart` | the learning map: LRU cap 500, 90-day prune, tolerant JSON |
 | `lib/core/tune/tune_state.dart` | the one `shared_preferences` entry, tolerant decode |
 | `lib/core/tune/tune_engine.dart` | `TuneEngine` + `MpvTuneEngine` (single property writes) + `NullTuneEngine` |
-| `lib/core/tune_service.dart` | **the owner of every value** — knobs, curves, snapping, preview/keep, teaching, persistence, window snap |
+| `lib/core/tune/tone_histogram.dart` | **(Phase 2)** the tone histogram: a frame in, Rec. 709-luma bins and a peak-normalised shape out (`ToneHistogram`, `ToneHistogramSampler` — capture injected, the image disposed) |
+| `lib/core/tune_service.dart` | **the owner of every value** — knobs, curves, snapping, preview/keep, teaching, persistence, window snap, scenes and the histogram's read cadence |
 
 **UI.** `lib/ui/osc/tune_control.dart` (the button, left of Fetch, greyed — never
 hidden — on live media), `lib/ui/panels/tune_panel.dart` (the four parts,
@@ -354,6 +366,20 @@ tune_continuum.dart` (the line + knob + floating `HoverChip` + `TuneSwitch`),
 the ~200 ms glide), `lib/ui/widgets/eq_curve_painter.dart` (one painter for the
 mini curve and the on-video drawing), `lib/ui/widgets/eq_curve_overlay.dart`,
 plus `EqualizerMark` / `MyMark` / `CurveMark` in `salu_marks.dart`.
+
+**(Phase 2) in the same files.** The panel's footer carries the three scene
+marks before the reset mark — `CurveMark` + the scene's name in the house's
+quiet type, brightening on hover and acting on click, exactly like the other
+mark in that row (reset-all). A scene is deliberately NOT hover-previewed even
+though the continua above it are: it is four lines at once and one of them is
+"the window is the screen" — a hover must never resize the window, and a
+preview that quietly skips one of a scene's moves would be a lie about what
+the click does. The OS tooltip names what a scene moves; the click shows it.
+Behind the Gamma and Brightness bars
+sits the tone histogram, mirrored around the bars' centre so the sliders'
+travel reads as movement over the distribution; it is `IgnorePointer`-quiet,
+never painted over the sliders' ink, and simply absent until a frame has been
+read.
 
 **Wiring.** `PanelService` gained `tunePanelOpen` (one-popup with the other two),
 `home_screen.dart` gained Ctrl+E, Ctrl+↑/↓ (steps the line the pointer last
@@ -371,7 +397,19 @@ round-trip and its forgiveness of garbage, the map's cap and prune, Auto EQ's
 rule order, and the service — knob→curve→engine, preview reverts, `Custom`,
 grey-means-writes-nothing, snapping at the ends, reset-all, persistence.
 
-**Four deviations, all deliberate:**
+**(Phase 2) coverage.** `test/tune_glide_test.dart` pins the glide's one-frame
+honesty (a second jump mid-glide continues from the line on screen — a
+widget-level test, since that is where the bug lives), and the service tests
+gained three groups: the histogram (Rec. 709 binning of a real frame,
+`null` when there is nothing to read, reads only while the panel is open,
+never on live media or an audio file), the scenes (all the lines a scene names
+move; an EQ key the playing line does not have is skipped rather than forced;
+a scene on live media writes nothing), and the learning map's full curves
+(a kept curve comes back exactly as `Custom` and survives a capture/restore;
+a kept name still beats it; a stale key from the other line falls through to
+§5's rules; a manual tap puts the dot out).
+
+**Six deviations, all deliberate:**
 
 1. **Curve-on-video is painted by Flutter, not by ffmpeg's `curves`.** That
    filter needs `--lavfi-complex` (a video pad wired to an audio filter) and
@@ -386,13 +424,29 @@ grey-means-writes-nothing, snapping at the ends, reset-all, persistence.
 4. **§3's "reset-all mark (point 13)"** refers to a list that ends at 12 — the
    mark is built, in the footer, using the Resume toast's `RestartMark`, and it
    leaves the saved **My** curve alone (it is a kept thing, not a setting).
+5. **(Phase 2) The histogram is sampled every ~2 s, and only while the panel
+   is open.** §4 asked for the reading, not a frame budget: a scope nobody can
+   see must cost nothing, and 2 s of latency is invisible in a distribution
+   that barely moves. The capture rides mpv's own `screenshot-to-file` and
+   Flutter's codec — no new dependency, as §4 required.
+6. **(Phase 2) A scene acts on click, and only on click**, unlike the four
+   lines it moves. §7b called it "one mark"; the panel's other marks (reset,
+   save, curve-on-video) already work this way, and hover-previewing a scene
+   would mean either resizing the window on a hover or previewing a scene that
+   is not the scene — both worse than a brightening mark. The spec's four
+   lines keep their full hover recipe; the scene is the sum of them.
 
 **§12's "video parts", read exactly:** the parts that need a picture are Aspect
 and Picture, so those are the two that dim on an audio-only file — the audio
 line and the speed line stay live (a podcast at 1.25× with Keep pitch on is the
 common case, and dimming it would be a bug dressed as a rule).
 
-Also fixed on the way: `video-aspect-override` now writes **`no`** for Auto
+Also fixed on the way: **the aspect line's custom ratio persists** (§1.4's
+promise — a blend between two shapes comes back as the same blend, while
+`Auto` still means the file's own shape and comes back as `Auto`), the Auto EQ
+dot **goes dark the moment a change is made by hand** (it is Auto's report,
+never a second name for the current curve), swapping the engine re-binds the
+tone sampler, `video-aspect-override` writes **`no`** for Auto
 (`0` is not a valid aspect in mpv), and Auto EQ's series key requires a real
 episode marker, so one-off films share `video|untitled` instead of forking the
 map per file — §5's "it grows with kinds of content, never with playback

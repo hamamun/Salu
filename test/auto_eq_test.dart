@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/tune/auto_eq.dart';
+import 'package:salu/core/tune/eq_memory.dart';
 import 'package:salu/core/tune/tune_model.dart';
 import 'package:salu/core/tune/tune_presets.dart';
 
@@ -22,7 +23,11 @@ void main() {
 
     test('punctuation collapses to spaces, case goes away', () {
       expect(AutoEq.normalizeGenre('  HEAVY  METAL  '), 'heavy metal');
-      expect(AutoEq.normalizeGenre('Hip-Hop'), 'hip-hop');
+      // The hyphen is GONE by the time a rule sees the tag — which is why
+      // every rule word is written in this spelling (`hip hop`, `lo fi`).
+      expect(AutoEq.normalizeGenre('Hip-Hop'), 'hip hop');
+      expect(AutoEq.normalizeGenre('K-Pop'), 'k pop');
+      expect(AutoEq.normalizeGenre('Lo-Fi'), 'lo fi');
       expect(AutoEq.normalizeGenre('R&B'), 'r b');
       expect(AutoEq.normalizeGenre('   '), isNull);
       expect(AutoEq.normalizeGenre(null), isNull);
@@ -43,6 +48,14 @@ void main() {
       expect(AutoEq.presetForGenre('choir'), 'vocal');
     });
 
+    test('a hyphenated tag still lands — the rules are spelled the '
+        'normalised way', () {
+      expect(AutoEq.presetForGenre('Hip-Hop'), 'bass');
+      expect(AutoEq.presetForGenre('K-Pop'), 'pop');
+      expect(AutoEq.presetForGenre('Drum & Bass'), 'bass');
+      expect(AutoEq.presetForGenre('A Cappella'), 'vocal');
+    });
+
     test('an unknown genre has no opinion at all', () {
       expect(AutoEq.presetForGenre('Polka'), isNull);
       expect(AutoEq.presetForGenre(null), isNull);
@@ -56,6 +69,54 @@ void main() {
       expect(AutoEq.presetForGenreInAudioSet('country'), 'lounge');
       expect(AutoEq.presetForGenreInAudioSet('jazz'), 'jazz');
       expect(AutoEq.presetForGenreInAudioSet('Polka'), isNull);
+    });
+  });
+
+  group('a name word is a word, never a fragment (§5 rule 5)', () {
+    test('`recording` is not a record player, and a `tapestry` is not a tape',
+        () {
+      expect(AutoEq.hasWord('vinyl rips', 'vinyl'), isTrue);
+      expect(AutoEq.hasWord('vinyl rips', 'record'), isFalse);
+      expect(AutoEq.hasWord('field recording 12', 'record'), isFalse);
+      expect(AutoEq.hasWord('the tapestry', 'tape'), isFalse);
+      expect(AutoEq.hasWord('tape 3', 'tape'), isTrue);
+      // Digits are word characters too, so a marker like `s01e02` is not an
+      // `s0`.
+      expect(AutoEq.hasWord('show s01e02', 's0'), isFalse);
+    });
+
+    test('the whole name-word path agrees', () {
+      // A field recording is not a record: nothing matches, so Auto stays
+      // honestly silent instead of guessing Lounge.
+      expect(
+        AutoEq.pick(const AutoEqFacts(
+          kind: TuneFileKind.audio,
+          fileName: 'Field Recording 12',
+        )).presetKey,
+        'flat',
+      );
+      expect(AutoEq.presetForName('Vinyl Rips', TuneFileKind.audio), 'lounge');
+      expect(AutoEq.presetForName('Tape 5', TuneFileKind.audio), 'lounge');
+    });
+
+    test('an episode marker makes a video an episode', () {
+      expect(AutoEq.hasEpisodeMarker('The News S01E02'), isTrue);
+      expect(AutoEq.hasEpisodeMarker('Great Cities - 3x07 - Rome'), isTrue);
+      expect(AutoEq.hasEpisodeMarker('Show Ep 12'), isTrue);
+      // `Part 3` is deliberately not an episode marker: it is as often a
+      // film, and rule 4 (length) owns long films.
+      expect(AutoEq.hasEpisodeMarker('The Godfather Part 2'), isFalse);
+      expect(AutoEq.hasEpisodeMarker('Blade Runner 1982 2160p'), isFalse);
+      expect(
+        AutoEq.presetForName('The News S01E02', TuneFileKind.video),
+        'documentary',
+      );
+      // …but a long film's own length still wins (rule 4).
+      expect(
+        AutoEq.presetForName('The News S01E02', TuneFileKind.video,
+            longVideo: true),
+        isNull,
+      );
     });
   });
 
@@ -152,6 +213,64 @@ void main() {
         genre: 'pop',
       );
       expect(AutoEq.memoryKey(a), AutoEq.memoryKey(b));
+    });
+  });
+
+  group('choose — the memory outranks the rules (§5 · §7c)', () {
+    const AutoEqFacts jazzFile = AutoEqFacts(
+      kind: TuneFileKind.audio,
+      fileName: 'Kind of Blue',
+      genre: 'Jazz',
+    );
+    const List<double> ownCurve =
+        <double>[7, 5, 3, 1, 0, 1, 2, 4, 5, 3];
+
+    test('nothing remembered: the rules answer, with their own rule', () {
+      final AutoEqChoice c = AutoEq.choose(jazzFile, EqMemory.empty());
+      expect(c.presetKey, 'jazz');
+      expect(c.rule, AutoEqRule.genreTag);
+      expect(c.isCustom, isFalse);
+      expect(c.gains, isNull);
+    });
+
+    test('a remembered name beats the file\'s own tag', () {
+      final EqMemory m = EqMemory.empty()..teach('audio|jazz', 'rock');
+      final AutoEqChoice c = AutoEq.choose(jazzFile, m);
+      expect(c.presetKey, 'rock');
+      expect(c.rule, AutoEqRule.learned);
+    });
+
+    test('a remembered curve comes back as itself (§7c)', () {
+      final EqMemory m = EqMemory.empty()..teach('audio|jazz', '', gains: ownCurve);
+      final AutoEqChoice c = AutoEq.choose(jazzFile, m);
+      expect(c.isCustom, isTrue);
+      expect(c.gains, ownCurve);
+      expect(c.rule, AutoEqRule.learnedCurve);
+    });
+
+    test('a remembered name this line does not have falls back to the rules',
+        () {
+      // A video line has no `rock`: a stale entry must not silence Auto.
+      final EqMemory m = EqMemory.empty()..teach('video|the news', 'rock');
+      const AutoEqFacts episode = AutoEqFacts(
+        kind: TuneFileKind.video,
+        fileName: 'The News S01E02',
+        channelCount: 6,
+      );
+      final AutoEqChoice c = AutoEq.choose(episode, m);
+      expect(c.presetKey, 'documentary');
+      expect(c.rule, AutoEqRule.nameWords);
+    });
+
+    test('the key is file type + genre/series, never the file', () {
+      const AutoEqFacts other = AutoEqFacts(
+        kind: TuneFileKind.audio,
+        fileName: 'Some Other Album',
+        genre: 'jazz',
+      );
+      final EqMemory m = EqMemory.empty()..teach('audio|jazz', 'lounge');
+      expect(AutoEq.memoryKey(other), 'audio|jazz');
+      expect(AutoEq.choose(other, m).presetKey, 'lounge');
     });
   });
 
