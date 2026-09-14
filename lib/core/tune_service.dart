@@ -184,10 +184,13 @@ class TuneService {
     }
   }
 
-  /// The greyed parts of the panel: the video ones on an audio-only file
-  /// (§12), everything on live media.
-  bool partActive(TunePart part) =>
-      available.value && (part == TunePart.eq || videoPartsActive.value);
+  /// The greyed parts of the panel: the PICTURE ones on an audio-only file
+  /// (§12) — Aspect and Picture have no meaning without a picture — and
+  /// everything on live media. The audio line and the speed line stay live on
+  /// a music file: a podcast at 1.25× is exactly what §12 protects, not what
+  /// it dims.
+  bool partActive(TunePart part) => available.value &&
+      (part == TunePart.eq || part == TunePart.speed || videoPartsActive.value);
 
   /// The floating label's text (§3): the stop's name, an exact custom value,
   /// a blend pair, or `Custom`.

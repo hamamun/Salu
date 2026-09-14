@@ -197,6 +197,17 @@ void main() {
       tune.videoPartsActive.value = false;
       expect(tune.partActive(TunePart.eq), isTrue);
       expect(tune.partActive(TunePart.picture), isFalse);
+      expect(tune.partActive(TunePart.aspect), isFalse);
+      // Speed is not a video part: a podcast still slows down.
+      expect(tune.partActive(TunePart.speed), isTrue);
+      tune.nudgeFocused(1); // focused == eq by default
+      tune.focusedPart.value = TunePart.speed;
+      // 1× is a stop on the line, so one press steps to the next one — the
+      // speed line stays answerable on a music file.
+      expect(tune.nudgeFocused(1), 'x1_25');
+      tune.focusedPart.value = TunePart.aspect;
+      expect(tune.nudgeFocused(1), isNull);
+      tune.focusedPart.value = TunePart.eq;
       // The audio line is the 13-preset one the moment the file is music.
       expect(tune.eqLine.length, 13);
     });

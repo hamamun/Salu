@@ -387,6 +387,11 @@ grey-means-writes-nothing, snapping at the ends, reset-all, persistence.
    mark is built, in the footer, using the Resume toast's `RestartMark`, and it
    leaves the saved **My** curve alone (it is a kept thing, not a setting).
 
+**§12's "video parts", read exactly:** the parts that need a picture are Aspect
+and Picture, so those are the two that dim on an audio-only file — the audio
+line and the speed line stay live (a podcast at 1.25× with Keep pitch on is the
+common case, and dimming it would be a bug dressed as a rule).
+
 Also fixed on the way: `video-aspect-override` now writes **`no`** for Auto
 (`0` is not a valid aspect in mpv), and Auto EQ's series key requires a real
 episode marker, so one-off films share `video|untitled` instead of forking the
