@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
+import '../../core/tune/auto_eq.dart';
 import '../../core/tune/tune_model.dart';
 import '../../core/tune/tune_presets.dart';
 import '../../core/tune_service.dart';
@@ -102,6 +103,9 @@ class _TunePanelState extends State<TunePanel>
       _tune.endPreview();
       _open.reverse();
     }
+    // §7a: SALU reads no frames while the panel is closed — the numbers are
+    // only ever looked at from here.
+    _tune.setHistogramActive(open);
   }
 
   @override
@@ -189,6 +193,17 @@ class _TunePanelState extends State<TunePanel>
   }
 
   Widget _body() {
+    // The panel lives in the tree the whole time (the slide is an animation,
+    // not a mount), so the four lines are only BUILT while it is actually up:
+    // a closed panel listens to nothing and paints nothing.
+    return ValueListenableBuilder<bool>(
+      valueListenable: _panels.tunePanelOpen,
+      builder: (BuildContext context, bool open, Widget? _) =>
+          open ? _openBody() : const SizedBox.shrink(),
+    );
+  }
+
+  Widget _openBody() {
     final PlayerService player = PlayerService.instance;
     return ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[
@@ -201,6 +216,7 @@ class _TunePanelState extends State<TunePanel>
         _tune.pictureStop,
         _tune.pictureCustom,
         _tune.aspectKnob,
+        _tune.aspectStop,
         _tune.aspectRatio,
         _tune.speed,
         _tune.speedKnob,
@@ -214,6 +230,7 @@ class _TunePanelState extends State<TunePanel>
         _tune.videoPartsActive,
         _tune.previewing,
         _tune.fileAspect,
+        _tune.histogram,
         _tune.focusedPart,
         player.currentPath,
       ]),
@@ -346,11 +363,9 @@ class _TunePanelState extends State<TunePanel>
 
   /// The Auto EQ indicator (§5): a tiny dot beside the audio line's label,
   /// its tooltip naming what Auto chose — one pixel of honesty.
-  Widget _autoDot(String presetKey) {
-    final EqPreset? preset =
-        TunePresets.presetByKey(presetKey, _tune.fileKind.value);
+  Widget _autoDot(String choice) {
     return Tooltip(
-      message: preset == null ? 'Auto EQ' : 'Auto EQ · ${preset.label}',
+      message: AutoEq.describe(choice),
       waitDuration: const Duration(milliseconds: 400),
       child: Container(
         width: 6,
@@ -386,6 +401,7 @@ class _TunePanelState extends State<TunePanel>
         below: TunePictureBars(
           values: values.vector,
           enabled: _tune.partActive(TunePart.picture),
+          histogram: _tune.histogram.value?.shape,
           onValue: (int index, double v, bool commit) =>
               _tune.setPictureValue(index, v, commit: commit),
           onPreviewStart: _tune.beginPreview,
@@ -467,14 +483,25 @@ class _TunePanelState extends State<TunePanel>
 
   // ── Footer ─────────────────────────────────────────────────────────────
 
-  /// The reset-all mark (§3's footer): every line and every slider back to
-  /// the untouched media. The My slot survives — it is a saved thing, not a
-  /// setting.
+  /// The footer: the scenes on the left (§7b — one mark moves the lines
+  /// together), the reset-all mark on the right (§3's footer).
   Widget _footer() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 2),
+      padding: const EdgeInsets.fromLTRB(12, 0, 10, 2),
       child: Row(
         children: <Widget>[
+          for (final TuneScene scene in TuneScene.all) ...<Widget>[
+            _SceneMark(
+              scene: scene,
+              enabled: _tune.available.value,
+              onTap: () {
+                _tune.beginGesture();
+                _tune.applyScene(scene);
+                unawaited(_tune.endGesture());
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
           const Spacer(),
           SaluIconButton(
             tooltip: 'Reset all',
@@ -490,6 +517,78 @@ class _TunePanelState extends State<TunePanel>
             child: const RestartMark(size: 14),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A scene's mark (eq_imp.md §7b): its name, in the house's quiet type, with
+/// the curve mark beside it — the one mark that already means "the shape of
+/// the sound and the picture". No active state: a scene is a gesture, not a
+/// place the panel can be in.
+class _SceneMark extends StatefulWidget {
+  const _SceneMark({
+    required this.scene,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final TuneScene scene;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  State<_SceneMark> createState() => _SceneMarkState();
+}
+
+class _SceneMarkState extends State<_SceneMark> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool on = widget.enabled;
+    final bool bright = on && _hovered;
+    return Tooltip(
+      message: widget.scene.note,
+      waitDuration: const Duration(milliseconds: 500),
+      child: MouseRegion(
+        cursor: on ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: on ? widget.onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                IconTheme.merge(
+                  data: IconThemeData(
+                    color: !on
+                        ? AppColors.iconIdle.withAlpha(120)
+                        : (bright ? AppColors.textPrimary : AppColors.iconIdle),
+                  ),
+                  child: const CurveMark(size: 13),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  widget.scene.label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    letterSpacing: 0.4,
+                    fontWeight: bright ? FontWeight.w600 : FontWeight.w400,
+                    color: !on
+                        ? AppColors.textSecondary.withAlpha(120)
+                        : (bright
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

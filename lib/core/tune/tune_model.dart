@@ -93,12 +93,16 @@ class EqCurve {
 
   bool get isFlat => gains.every((double g) => g.abs() < kEqGainZero);
 
+  /// One band, on the grid: ±12 dB and halves only. The quantising lives here
+  /// (not in the caller) so every write to a band passes through the same
+  /// rule and a preset stays exactly matchable — `withBand(3, 2.3)` IS 2.5 dB,
+  /// which is the number the slider shows and the label prints.
   EqCurve withBand(int index, double db) {
     final List<double> out = List<double>.of(gains);
     if (index >= 0 && index < out.length) {
-      out[index] = clampRange(db, kEqGainMin, kEqGainMax);
+      out[index] = db;
     }
-    return EqCurve(out);
+    return EqCurve(out).quantized();
   }
 
   /// Clamped to the ±12 dB grid and rounded to halves — the number the
@@ -466,8 +470,10 @@ class Continuum {
     return out;
   }
 
-  /// The numeric value at [t] (ratio, speed) — `null` when a neighbour has
-  /// no number of its own (the aspect line's `Auto`).
+  /// The numeric value at [t] interpolated between the two neighbouring
+  /// STOPS (`null` when a neighbour has no number of its own — the aspect
+  /// line's `Auto`). The knob's real number comes from [valueOnLine], which
+  /// also knows the ends of a value line.
   double? valueAt(double t) {
     if (stops.isEmpty) return null;
     final ContinuumSpan span = spanOf(t);
@@ -485,20 +491,47 @@ class Continuum {
     return clampRange((v - valueMin) / (valueMax - valueMin), 0, 1);
   }
 
-  /// The value a numeric line holds at [t].
+  /// The value a numeric line holds at [t] — the number the engine is given.
+  ///
+  /// On a stop that is the stop's own value. Between them, a
+  /// [ContinuumSpacing.linearInValue] line is interpolated across its WHOLE
+  /// span (`valueMin`…`valueMax`), not just across the stretch its stops
+  /// cover: the speed line's 0.25× lives at its head, before the first stop,
+  /// and the knob has to be able to rest there (eq_imp.md §3's
+  /// "0.25×–3.0×, linear in value").
   double valueOnLine(double t) {
-    final int? snapped = stopWithinTolerance(t);
+    final double x = clampRange(t, 0, 1);
+    final ContinuumStop? on = stopExactlyAt(x);
+    final double? exact = on?.value;
+    if (exact != null) return exact;
+    if (spacing == ContinuumSpacing.linearInValue && valueMax > valueMin) {
+      return valueMin + (valueMax - valueMin) * x;
+    }
+    final int? snapped = stopWithinTolerance(x);
     if (snapped != null) {
       final double? v = stops[snapped].value;
       if (v != null) return v;
     }
-    return valueAt(t) ?? double.nan;
+    return valueAt(x) ?? double.nan;
   }
 
-  /// The exact stop [t] rests on (after snapping), else `null`.
+  /// The exact stop [t] rests on (after snapping), else `null`. A RELEASE
+  /// answer: it forgives the near-miss that [snap] rounds onto a stop.
   ContinuumStop? stopAtPosition(double t) {
     final int? i = stopWithinTolerance(t);
     return i == null ? null : stops[i];
+  }
+
+  /// The stop [t] is *exactly* on — no tolerance at all. This is the
+  /// mid-drag answer: a blend under the pointer must never be named as a stop
+  /// it is not on, or the floating label lies about what is being heard
+  /// (eq_imp.md §3: the knob rests ON a stop or BETWEEN two).
+  ContinuumStop? stopExactlyAt(double t) {
+    final double x = clampRange(t, 0, 1);
+    for (int i = 0; i < positions.length; i++) {
+      if ((positions[i] - x).abs() <= 1e-9) return stops[i];
+    }
+    return null;
   }
 
   static List<double> _positions(
@@ -542,7 +575,7 @@ String formatSpeedValue(double speed) {
     s = s.substring(0, s.length - 1);
   }
   if (s.endsWith('.')) s = s.substring(0, s.length - 1);
-  return '${s}×';
+  return '$s×';
 }
 
 /// A blended pair, `Pop ↔ Rock`.

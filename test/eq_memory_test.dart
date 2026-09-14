@@ -72,8 +72,9 @@ void main() {
       }
       // The oldest entry is refreshed, then the map grows by one: the one
       // that leaves is now the *second* oldest.
-      m.touch('video|s0', now: now + const Duration(hours: 1));
-      m.teach('video|new', 'documentary', now: now + const Duration(hours: 2));
+      m.touch('video|s0', now: now.add(const Duration(hours: 1)));
+      m.teach('video|new', 'documentary',
+          now: now.add(const Duration(hours: 2)));
       expect(m.length, EqMemory.maxEntries);
       expect(m.presetFor('video|s0'), 'movie');
       expect(m.presetFor('video|s1'), isNull);
@@ -154,6 +155,72 @@ void main() {
             .presetFor('audio|blues'),
         'blues',
       );
+    });
+  });
+
+  group('curves (§7c)', () {
+    const List<double> keep = <double>[6, 5, 3, 1, 0, -1, -2, -2, -1, 0];
+
+    test('a kept curve is stored, returned and survives the round trip', () {
+      final EqMemory m = EqMemory.empty();
+      m.teach('audio|rock', '', gains: keep, now: now);
+      expect(m.presetFor('audio|rock'), isNull); // it is not a named stop
+      expect(m.entryFor('audio|rock')!.hasCurve, isTrue);
+      expect(m.entryFor('audio|rock')!.gains, keep);
+      final EqMemory back = EqMemory.decode(m.encode());
+      expect(back.entryFor('audio|rock')!.gains, keep);
+      expect(back.entryFor('audio|rock')!.usedAtMs, now.millisecondsSinceEpoch);
+    });
+
+    test('a named stop keeps its name AND its curve', () {
+      final EqMemory m = EqMemory.empty();
+      m.teach('audio|jazz', 'jazz', gains: keep, now: now);
+      expect(m.presetFor('audio|jazz'), 'jazz');
+      expect(m.entryFor('audio|jazz')!.gains, keep);
+    });
+
+    test('a curve that is not the full grid is not a curve', () {
+      final EqMemory m = EqMemory.empty();
+      // Nothing to remember at all: an empty key with no curve is dropped.
+      m.teach('audio|x', '');
+      expect(m.isEmpty, isTrue);
+      // A short or non-finite list is refused, not truncated into a sound.
+      m.teach('audio|x', '', gains: <double>[1, 2, 3]);
+      expect(m.isEmpty, isTrue);
+      m.teach('audio|x', '', gains: <double>[1, 2, 3, 4, 5, 6, 7, 8, 9, double.nan]);
+      expect(m.isEmpty, isTrue);
+      // Out-of-range gains are fenced on the way in.
+      m.teach('audio|x', '', gains: <double>[99, 0, 0, 0, 0, 0, 0, 0, 0, -99]);
+      expect(m.entryFor('audio|x')!.gains!.first, 12);
+      expect(m.entryFor('audio|x')!.gains!.last, -12);
+    });
+
+    test('an entry written before curves existed still loads', () {
+      // v1's two-element shape, and the map shape before that.
+      final EqMemory two = EqMemory.decode('{"audio|jazz": ["jazz", 5]}');
+      expect(two.presetFor('audio|jazz'), 'jazz');
+      expect(two.entryFor('audio|jazz')!.gains, isNull);
+      expect(two.entryFor('audio|jazz')!.hasCurve, isFalse);
+      final EqMemory old =
+          EqMemory.decode('{"audio|blues": {"preset": "blues", "used": 5}}');
+      expect(old.presetFor('audio|blues'), 'blues');
+      // A row whose curve is garbage keeps the name it does have.
+      final EqMemory mixed =
+          EqMemory.decode('{"audio|rock": ["rock", 5, "not a curve"]}');
+      expect(mixed.presetFor('audio|rock'), 'rock');
+      expect(mixed.entryFor('audio|rock')!.gains, isNull);
+    });
+
+    test('a curve never breaks the bounds: the cap still holds', () {
+      final EqMemory m = EqMemory.empty();
+      for (int i = 0; i <= EqMemory.maxEntries; i++) {
+        m.teach('video|s$i', '', gains: keep,
+            now: now.add(Duration(minutes: i)));
+      }
+      // 501 curves in, 500 kept, and the oldest one is gone entirely.
+      expect(m.length, EqMemory.maxEntries);
+      expect(m.entryFor('video|s0'), isNull);
+      expect(m.entryFor('video|s1')!.gains, keep);
     });
   });
 

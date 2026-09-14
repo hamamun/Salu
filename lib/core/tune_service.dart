@@ -9,6 +9,7 @@ import 'queue_service.dart';
 import 'settings_service.dart';
 import 'tune/auto_eq.dart';
 import 'tune/eq_memory.dart';
+import 'tune/tone_histogram.dart';
 import 'tune/tune_engine.dart';
 import 'tune/tune_model.dart';
 import 'tune/tune_presets.dart';
@@ -55,11 +56,21 @@ class TuneService {
   static const int _aspectTries = 6;
   static const Duration _aspectGap = Duration(milliseconds: 200);
 
+  /// How often the tone histogram reads a frame while the panel is open
+  /// (§7a). Two seconds is enough for a scope and cheap enough to forget.
+  static const Duration histogramGap = Duration(seconds: 2);
+
   /// The mpv engine, attached lazily the way the subtitle engine is — no
   /// bootstrap step can forget it, and a run with no player (a test, a
   /// headless start) simply never touches it. Tests swap it for a recorder.
   TuneEngine get engine => _engine ??= MpvTuneEngine();
-  set engine(TuneEngine value) => _engine = value;
+  set engine(TuneEngine value) {
+    _engine = value;
+    // A screenshot sampler belongs to the engine it reads: swapping the
+    // engine must not leave the histogram reading the old one's frames.
+    _histogramSampler = null;
+  }
+
   TuneEngine? _engine;
 
   /// The Auto EQ learning map (bounded — §5's data policy).
@@ -120,12 +131,18 @@ class TuneService {
   /// One shared "My" slot (`null` = nothing saved yet).
   final ValueNotifier<EqCurve?> mySlot = ValueNotifier<EqCurve?>(null);
 
-  /// The preset Auto EQ applied at the last load — the indicator dot's
-  /// content (`null` = Auto stayed silent).
+  /// What Auto EQ applied at the last load, as the word the indicator dot
+  /// shows (`null` = Auto stayed silent). `Custom` when what it applied was
+  /// a curve this person kept themselves (§7c).
   final ValueNotifier<String?> autoPick = ValueNotifier<String?>(null);
 
   /// The playing file's real display ratio: what `Auto` and window snap use.
   final ValueNotifier<double?> fileAspect = ValueNotifier<double?>(null);
+
+  /// The live tone histogram (§7a): where the playing picture's tones sit.
+  /// `null` until a frame has been read, and whenever there is no picture.
+  final ValueNotifier<ToneHistogram?> histogram =
+      ValueNotifier<ToneHistogram?>(null);
 
   /// Whether what is on screen right now is a hover preview that will
   /// revert. The panel answers with a quieter knob — never a second label.
@@ -194,10 +211,14 @@ class TuneService {
 
   /// The floating label's text (§3): the stop's name, an exact custom value,
   /// a blend pair, or `Custom`.
+  ///
+  /// The stop is matched EXACTLY: a hover preview and a drag both sit at
+  /// positions that are not stops, and naming the nearest one there would
+  /// tell the viewer they are hearing something they are not.
   String labelFor(TunePart part) {
     final Continuum line = lineFor(part);
     final double t = knobFor(part);
-    final ContinuumStop? on = line.stopAtPosition(t);
+    final ContinuumStop? on = line.stopExactlyAt(t);
     if (on != null) return on.label;
     switch (part) {
       case TunePart.aspect:
@@ -223,6 +244,10 @@ class TuneService {
   bool _watching = false;
   AutoEqFacts? _facts;
 
+  /// Bumped by every file landing, so a slow read (the aspect polls, the
+  /// genre tag) can never write the previous film's facts over the new one's.
+  int _generation = 0;
+
   /// Reads the persisted panel and the learning map. Safe before the engine
   /// exists: nothing is written out until a value changes or a file lands.
   Future<void> load() async {
@@ -243,11 +268,16 @@ class TuneService {
   }
 
   /// Starts mirroring the player — once, right after [engine] is set.
+  ///
+  /// It watches the PLAYING MEDIA, not the queue: a playlist edit (an add, a
+  /// reorder, a remove) is not a new file, and re-reading mpv's facts for one
+  /// would re-run the whole load — Auto EQ would speak again and a manual
+  /// choice made mid-playback could be replaced under the viewer's hands
+  /// (§5: "Auto only speaks at file load. A manual tap always wins").
   void startWatching() {
     if (_watching) return;
     _watching = true;
     PlayerService.instance.currentPath.addListener(_onMediaChanged);
-    QueueService.instance.items.addListener(_onMediaChanged);
     SettingsService.instance.autoEq.addListener(_onAutoEqChanged);
     _onMediaChanged();
   }
@@ -263,14 +293,18 @@ class TuneService {
   /// A file landed: re-lay the line for its kind, keep the curve, read the
   /// facts, let Auto EQ speak, and hand every value to the engine.
   Future<void> onMediaLanded() async {
+    final int generation = ++_generation;
     final String? path = PlayerService.instance.currentPath.value;
     final bool local = path != null &&
         !path.contains('://') &&
         !QueueService.instance.isChannelList;
     available.value = local;
+    // The last film's tones are not this film's.
+    histogram.value = null;
     if (!local) {
       // Live channels and URLs: the panel stays visible and inert (§12) and
-      // SALU writes nothing to a stream.
+      // SALU writes nothing to a stream. Any read still in flight is
+      // abandoned — `_generation` has already moved on.
       return;
     }
     fileKind.value =
@@ -281,25 +315,34 @@ class TuneService {
     engine.forgetInstalledFilter();
     resyncEqFromCurve(); // §1.6 — the curve is kept, the knob may find a stop
     applyAll();
-    await _readFacts(path);
-    if (SettingsService.instance.autoEq.value) await _autoPick();
+    await _readFacts(path, generation);
+    if (generation != _generation) return; // another file landed meanwhile
+    final AutoEqFacts? facts = _facts;
+    if (facts != null && SettingsService.instance.autoEq.value) {
+      await applyAutoEq(facts);
+    }
+    if (generation != _generation) return;
     snapWindowToFit(force: true);
   }
 
-  Future<void> _readFacts(String path) async {
+  Future<void> _readFacts(String path, int generation) async {
     final bool audioOnly = MediaUtils.isAudio(path);
     double? aspect;
     if (!audioOnly) {
       for (int i = 0; i < _aspectTries; i++) {
         aspect = await engine.readFileAspect();
         if (aspect != null) break;
+        if (generation != _generation) return;
         await Future<void>.delayed(_aspectGap);
       }
+      if (generation != _generation) return;
       fileAspect.value = aspect;
     }
     final int? channels = await engine.readAudioChannels();
+    if (generation != _generation) return;
     String? genre;
     if (audioOnly) genre = await engine.readGenre();
+    if (generation != _generation) return;
     _facts = AutoEqFacts(
       kind: fileKind.value,
       fileName: MediaUtils.displayName(path),
@@ -309,30 +352,80 @@ class TuneService {
     );
   }
 
-  Future<void> _autoPick() async {
-    final AutoEqFacts? facts = _facts;
-    if (facts == null) return;
-    final String? kept = memory.presetFor(AutoEq.memoryKey(facts));
-    AutoEqPick pick = kept == null
-        ? AutoEq.pick(facts)
-        : AutoEqPick(kept, AutoEqRule.genreTag);
-    // A name this line does not have (an audio preset on a video file, a
-    // stale map entry) is no pick at all.
-    EqPreset? preset = TunePresets.presetByKey(pick.presetKey, facts.kind);
-    if (preset == null) {
-      pick = const AutoEqPick('flat', AutoEqRule.none);
-      preset = TunePresets.presetByKey(pick.presetKey, facts.kind);
+  /// The Auto EQ step (§5's rules + §7c's learning), with the facts handed
+  /// in: the load path passes what mpv says about the film, and a test passes
+  /// a made-up file.
+  Future<void> applyAutoEq(AutoEqFacts facts) async {
+    final AutoEqChoice choice = AutoEq.choose(facts, memory);
+    // §5: every pick touches its entry, so a heavily used key is never the
+    // one the LRU cap evicts.
+    memory.touch(AutoEq.memoryKey(facts));
+    final List<double>? gains = choice.gains;
+    if (gains != null && gains.length == kEqBandCount && choice.isCustom) {
+      // §7c — the curve this person kept for this kind of content, exactly.
+      _parkEqOn(EqCurve(gains), stopKey: null, indicator: 'Custom');
+      return;
     }
-    if (preset == null) return;
-    // The slide into the new curve is the panel's animation (§1.11); here
-    // the values simply become the preset.
-    eq.value = preset.curve;
-    eqCustom.value = false;
-    eqStop.value = preset.key;
-    eqKnob.value = eqLine.positionOf(eqLine.indexOfKey(preset.key));
-    autoPick.value = preset.key;
-    unawaited(_writeEqNow(force: true));
+    final EqPreset? preset =
+        TunePresets.presetByKey(choice.presetKey, facts.kind);
+    if (preset == null) {
+      // A key this line does not have is no pick at all (a stale entry, an
+      // audio preset on a video file): silence, never a guess.
+      return;
+    }
+    _parkEqOn(preset.curve, stopKey: preset.key, indicator: preset.label);
+  }
+
+  /// A change to the sound made BY HAND. §5's first rule is that a manual tap
+  /// wins; the second is that the dot is Auto's report. Once the person picks
+  /// their own curve the report is stale, so it goes dark — the dot is never a
+  /// second label for "which curve am I on".
+  void _manualEq() {
+    if (autoPick.value != null) autoPick.value = null;
+  }
+
+  /// Applies a curve the way Auto does: the values, the knob, the indicator
+  /// and the engine, in one place. [indicator] is what the Auto EQ dot should
+  /// say; `null` (the default) means this was not Auto's doing at all — a
+  /// "My" curve, for one, must never show the automation's dot.
+  void _parkEqOn(
+    EqCurve curve, {
+    required String? stopKey,
+    String? indicator,
+  }) {
+    eq.value = curve;
+    eqStop.value = stopKey;
+    eqCustom.value = stopKey == null;
+    final Continuum line = eqLine;
+    final int i = stopKey == null
+        ? nearestStopFor(line, curve.gains)
+        : line.indexOfKey(stopKey);
+    eqKnob.value = line.positionOf(i < 0 ? 0 : i);
+    autoPick.value = indicator;
+    unawaited(_writeEqNow());
     _persist();
+  }
+
+  /// The stop whose values are nearest to [vector] — §4's "the continuum
+  /// knob moves to the nearest look" for a custom value, mirrored onto the
+  /// audio line. The knob then points at the closest named sound instead of
+  /// wherever it happened to be.
+  static int nearestStopFor(Continuum line, List<double> vector) {
+    int best = 0;
+    double bestD = double.infinity;
+    for (int i = 0; i < line.length; i++) {
+      final List<double>? v = line.stopAt(i).vector;
+      if (v == null) continue;
+      double d = 0;
+      for (int b = 0; b < vector.length; b++) {
+        d += ((v.length > b ? v[b] : 0) - vector[b]).abs();
+      }
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
   }
 
   // ── The knobs ──────────────────────────────────────────────────────────
@@ -344,12 +437,17 @@ class TuneService {
     if (line.isEmpty) return;
     final double raw = clampRange(t, 0, 1);
     final double position = commit ? line.snap(raw) : raw;
-    final ContinuumStop? stop = line.stopAtPosition(position);
+    // A release is a decision and may snap onto a stop; a drag is a blend,
+    // and must be named as one.
+    final ContinuumStop? stop = commit
+        ? line.stopAtPosition(position)
+        : line.stopExactlyAt(position);
     switch (part) {
       case TunePart.eq:
         eqKnob.value = position;
         eqStop.value = stop?.key;
         eqCustom.value = false;
+        if (commit) _manualEq();
         final List<double>? v = line.vectorAt(position);
         if (v != null) eq.value = EqCurve(v).quantized();
         _pushEq(commit: commit);
@@ -363,8 +461,11 @@ class TuneService {
       case TunePart.aspect:
         aspectKnob.value = position;
         aspectStop.value = stop?.key;
-        aspectRatio.value =
-            stop?.key == 'auto' ? 0 : (line.valueAt(position) ?? 0);
+        // `Auto` has no number of its own — its number is the file's shape,
+        // which is also what a blend beside it starts from.
+        aspectRatio.value = stop?.key == 'auto'
+            ? 0
+            : (stop?.value ?? aspectRatioAt(position));
         _engineWrite(() => engine.setAspectOverride(aspectRatio.value));
         if (commit) snapWindowToFit();
       case TunePart.speed:
@@ -376,6 +477,19 @@ class TuneService {
             () => engine.setSpeed(speed.value, keepPitch: keepPitch.value));
     }
     if (commit) _kept(part);
+  }
+
+  /// The ratio a position on the aspect line means: a named stop, or a blend
+  /// between two of them. Next to `Auto` the blend starts from the FILE's own
+  /// shape, because that is what `Auto` means (§1.10).
+  double aspectRatioAt(double t) {
+    final Continuum line = aspectLine;
+    final ContinuumSpan span = line.spanOf(t);
+    final double? a = (line.stopAt(span.a).value ?? fileAspect.value);
+    final double? b = (line.stopAt(span.b).value ?? fileAspect.value);
+    if (a == null || b == null) return 0;
+    if (span.b == span.a || span.frac <= 0) return a;
+    return lerpDouble(a, b, span.frac);
   }
 
   /// A click on a named stop — the whole point of the line.
@@ -394,7 +508,7 @@ class TuneService {
     final Continuum line = lineFor(part);
     if (line.length < 2) return null;
     final double t = knobFor(part);
-    final ContinuumStop? on = line.stopAtPosition(t);
+    final ContinuumStop? on = line.stopExactlyAt(t);
     int index;
     if (on != null) {
       index = line.indexOfKey(on.key);
@@ -460,15 +574,16 @@ class TuneService {
 
   /// One band gain — the 10 sliders below the audio line. Dragging a slider
   /// leaves the line: the knob parks on the nearest stop and the label reads
-  /// `Custom`.
+  /// `Custom` (§4's rule, mirrored).
   void setBandGain(int index, double db, {bool commit = true}) {
-    // The grid is the service's, not the widget's: halves only, ±12 dB, so a
-    // preset stays exactly matchable and the label never lies.
-    eq.value = eq.value.withBand(index, (db * 2).roundToDouble() / 2);
+    // The grid is the curve's own (halves, ±12 dB) — a preset stays exactly
+    // matchable and the label never lies.
+    eq.value = eq.value.withBand(index, db);
     eqCustom.value = true;
     eqStop.value = null;
+    if (commit) _manualEq();
     final Continuum line = eqLine;
-    eqKnob.value = line.positionOf(line.nearestStop(eqKnob.value));
+    eqKnob.value = line.positionOf(nearestStopFor(line, eq.value.gains));
     _pushEq(commit: commit);
     if (commit) _kept(TunePart.eq);
   }
@@ -476,6 +591,7 @@ class TuneService {
   /// Every band back to 0 — which is `Flat`, so the filter leaves the audio
   /// chain entirely (§2).
   void resetBands() {
+    _manualEq();
     eq.value = const EqCurve.flat();
     final Continuum line = eqLine;
     final int i = line.indexOfKey('flat');
@@ -493,12 +609,13 @@ class TuneService {
     pictureCustom.value = true;
     pictureStop.value = null;
     final Continuum line = pictureLine;
-    pictureKnob.value = line.positionOf(line.nearestStop(pictureKnob.value));
+    pictureKnob.value =
+        line.positionOf(nearestStopFor(line, picture.value.vector));
     _engineWrite(() => engine.setPicture(picture.value));
     if (commit) _kept(TunePart.picture);
   }
 
-  // ── My · toggles · reset ───────────────────────────────────────────────
+  // ── My · toggles · scenes · reset ──────────────────────────────────────
 
   /// Stores the current 10-band setup as "My" (§1.5).
   void saveMy() {
@@ -511,13 +628,10 @@ class TuneService {
   void applyMy() {
     final EqCurve? curve = mySlot.value;
     if (curve == null) return;
-    eq.value = curve;
-    eqCustom.value = true;
-    eqStop.value = null;
-    final Continuum line = eqLine;
-    eqKnob.value = line.positionOf(line.nearestStop(eqKnob.value));
-    autoPick.value = null;
-    _pushEq(commit: true);
+    // Not Auto's doing: the indicator stays dark (the dot is Auto's report,
+    // never a second label for "which curve am I on").
+    _parkEqOn(curve, stopKey: null, indicator: null);
+    _flushEq();
     _kept(TunePart.eq);
   }
 
@@ -538,6 +652,29 @@ class TuneService {
     _persist();
   }
 
+  /// A scene (§7b) — one mark that moves the lines together. Only the fields
+  /// the scene names are touched, and an EQ key the playing file's line does
+  /// not have (a `vocal` on a video) is skipped rather than forced onto the
+  /// wrong sound.
+  void applyScene(TuneScene scene) {
+    if (!available.value) return;
+    if (scene.eqPreset != null &&
+        eqLine.indexOfKey(scene.eqPreset!) >= 0) {
+      selectStop(TunePart.eq, scene.eqPreset!);
+    }
+    if (scene.pictureLook != null) {
+      selectStop(TunePart.picture, scene.pictureLook!);
+    }
+    if (scene.aspectStop != null) {
+      selectStop(TunePart.aspect, scene.aspectStop!);
+    }
+    if (scene.speedStop != null) {
+      selectStop(TunePart.speed, scene.speedStop!);
+    }
+    if (scene.snapWindow != null) setSnapWindow(scene.snapWindow!);
+    snapWindowToFit(force: true);
+  }
+
   /// The footer's reset-all mark: the media untouched again. The "My" slot
   /// survives — it is a saved thing, not a setting.
   void resetAll() {
@@ -552,6 +689,7 @@ class TuneService {
         pictureStop: 'original',
         aspectKnob: 0,
         aspectStop: 'auto',
+        aspectRatio: 0,
         speed: 1,
         speedKnob: TuneState.initial.speedKnob,
         speedStop: 'x1',
@@ -616,7 +754,7 @@ class TuneService {
   /// The whole state to the engine — the load path and the reset mark.
   void applyAll() {
     resyncEqFromCurve();
-    unawaited(_writeEqNow(force: true));
+    unawaited(_writeEqNow());
     unawaited(engine.setPicture(picture.value));
     unawaited(engine.setAspectOverride(aspectRatio.value));
     unawaited(engine.setSpeed(speed.value, keepPitch: keepPitch.value));
@@ -657,7 +795,6 @@ class TuneService {
   /// release.
   Timer? _eqCooldown;
   bool _eqDirty = false;
-  String _eqPushed = '';
 
   void _pushEq({required bool commit}) {
     if (commit) {
@@ -668,12 +805,12 @@ class TuneService {
       _eqDirty = true;
       return;
     }
-    unawaited(_writeEqNow(force: true));
+    unawaited(_writeEqNow());
     _eqCooldown = Timer(eqWriteGap, () {
       _eqCooldown = null;
       if (!_eqDirty) return;
       _eqDirty = false;
-      unawaited(_writeEqNow(force: true));
+      unawaited(_writeEqNow());
     });
   }
 
@@ -681,16 +818,16 @@ class TuneService {
     _eqCooldown?.cancel();
     _eqCooldown = null;
     _eqDirty = false;
-    unawaited(_writeEqNow(force: true));
+    unawaited(_writeEqNow());
   }
 
-  Future<void> _writeEqNow({bool force = false}) async {
-    final EqCurve curve = eq.value;
-    final String signature = curve.gains.join(',');
-    if (!force && signature == _eqPushed) return;
-    _eqPushed = signature;
+  /// One `af` write of what the curve is now. The engine itself drops a write
+  /// that would install the graph it already has, so nothing here needs a
+  /// second cache of "what is installed" — and a new file clears the engine's
+  /// belief, which is the only time a repeated string is a real write.
+  Future<void> _writeEqNow() async {
     if (!available.value) return; // live media — the panel is inert (§12)
-    await engine.setEqCurve(curve);
+    await engine.setEqCurve(eq.value);
   }
 
   /// A kept change: remembered on disk, and it teaches the learning map.
@@ -699,14 +836,18 @@ class TuneService {
     if (part == TunePart.eq) _teach();
   }
 
-  /// §5: only a KEPT choice teaches, and in v1 a kept choice is always a
-  /// named preset (a custom curve teaches nothing).
+  /// §5: only a KEPT choice teaches (a hover never comes through here), and
+  /// §7c: what it teaches is the curve itself — so the next file of this kind
+  /// can come back as the person's own sound, not as the preset nearest to
+  /// it. A named stop teaches its name as well; a free curve teaches only the
+  /// numbers.
   void _teach() {
     final AutoEqFacts? facts = _facts;
     if (facts == null || !available.value) return;
-    final String? key = eqStop.value;
-    if (key == null || key.isEmpty) return;
-    memory.teach(AutoEq.memoryKey(facts), key);
+    final String key = eqStop.value ?? '';
+    final EqCurve curve = eq.value;
+    if (key.isEmpty && curve.isFlat) return; // nothing was chosen
+    memory.teach(AutoEq.memoryKey(facts), key, gains: curve.gains);
     unawaited(persistMemory());
   }
 
@@ -730,6 +871,46 @@ class TuneService {
     }
     eqStop.value = null;
     eqCustom.value = true;
+    eqKnob.value = line.positionOf(nearestStopFor(line, eq.value.gains));
+  }
+
+  // ── The tone histogram (§7a) ───────────────────────────────────────────
+
+  Timer? _histogramTimer;
+  ToneHistogramSampler? _histogramSampler;
+  bool _samplingTone = false;
+
+  /// Starts / stops §7a's reading. Only the panel shows the numbers, so the
+  /// panel is what turns it on: with the panel closed SALU reads no frames at
+  /// all.
+  void setHistogramActive(bool on) {
+    if (!on) {
+      _histogramTimer?.cancel();
+      _histogramTimer = null;
+      histogram.value = null;
+      return;
+    }
+    if (_histogramTimer != null) return;
+    _histogramTimer =
+        Timer.periodic(histogramGap, (_) => unawaited(sampleToneNow()));
+    unawaited(sampleToneNow());
+  }
+
+  /// One reading — the panel opening, the timer, or a test.
+  Future<void> sampleToneNow() async {
+    if (_samplingTone || !available.value || !videoPartsActive.value) return;
+    _samplingTone = true;
+    try {
+      final ToneHistogramSampler sampler = _histogramSampler ??=
+          ToneHistogramSampler(capture: engine.captureFrame);
+      final ToneHistogram? reading = await sampler.sample();
+      if (reading != null && !reading.isEmpty) histogram.value = reading;
+    } catch (_) {
+      // A build with no screenshot support simply shows no histogram — never
+      // a failure on screen (§12: nothing here can break playback).
+    } finally {
+      _samplingTone = false;
+    }
   }
 
   // ── Capture / restore ──────────────────────────────────────────────────
@@ -744,6 +925,7 @@ class TuneService {
         pictureStop: pictureStop.value,
         aspectKnob: aspectKnob.value,
         aspectStop: aspectStop.value,
+        aspectRatio: aspectRatio.value,
         speed: speed.value,
         speedKnob: speedKnob.value,
         speedStop: speedStop.value,
@@ -772,11 +954,14 @@ class TuneService {
         state.pictureStop == null && !state.picture.isNeutral;
     aspectKnob.value = state.aspectKnob;
     aspectStop.value = state.aspectStop;
-    // `Auto` has no number of its own; every other position carries one,
-    // read from the restored knob so a between-stops ratio survives too.
-    aspectRatio.value = (state.aspectStop == 'auto')
+    // A kept custom ratio is restored as the number itself; an older blob
+    // that stored only the knob (before the ratio was saved) still lands on
+    // the shape its position means.
+    aspectRatio.value = state.aspectAuto
         ? 0
-        : (aspectLine.valueAt(state.aspectKnob) ?? 0);
+        : (state.aspectRatio > 0
+            ? state.aspectRatio
+            : (aspectLine.valueAt(state.aspectKnob) ?? 0));
     speed.value = state.speed;
     speedKnob.value = state.speedKnob;
     speedStop.value = state.speedStop;
@@ -784,8 +969,10 @@ class TuneService {
     snapWindow.value = state.snapWindow;
     curveOnVideo.value = state.curveOnVideo;
     mySlot.value = state.myCurve;
-    if (push) {
-      unawaited(_writeEqNow(force: true));
+    if (push && available.value) {
+      // The same grey rule as every other write: on live media SALU changes
+      // the numbers it remembers and touches nothing on the stream (§12).
+      unawaited(_writeEqNow());
       unawaited(engine.setPicture(picture.value));
       unawaited(engine.setAspectOverride(aspectRatio.value));
       unawaited(engine.setSpeed(speed.value, keepPitch: keepPitch.value));
@@ -859,13 +1046,18 @@ class TuneService {
   /// The test seam: a known starting point without touching disk.
   void resetForTest() {
     _facts = null;
+    _generation = 0;
     available.value = true;
     videoPartsActive.value = true;
     autoPick.value = null;
     fileAspect.value = null;
+    histogram.value = null;
+    _histogramTimer?.cancel();
+    _histogramTimer = null;
+    _histogramSampler = null;
+    _samplingTone = false;
     _snapActive = false;
     _lastFitted = 0;
-    _eqPushed = '';
     _eqDirty = false;
     _eqCooldown?.cancel();
     _eqCooldown = null;

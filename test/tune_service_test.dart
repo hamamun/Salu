@@ -1,5 +1,10 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/panel_service.dart';
+import 'package:salu/core/tune/auto_eq.dart';
+import 'package:salu/core/tune/tone_histogram.dart';
 import 'package:salu/core/tune/tune_model.dart';
 import 'package:salu/core/tune/tune_presets.dart';
 import 'package:salu/core/tune/tune_state.dart';
@@ -27,6 +32,22 @@ void main() {
 
   late TuneFakeEngine fake;
   late TuneService tune;
+
+  /// A real `ui.Image` for the §7a tests — the same kind of object the
+  /// engine's screenshot hands over, without a player.
+  Future<ui.Image> image(List<int> rgba, int width, int height) async {
+    final ui.ImmutableBuffer buffer =
+        await ui.ImmutableBuffer.fromUint8List(Uint8List.fromList(rgba));
+    final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
+      buffer,
+      width: width,
+      height: height,
+      pixelFormat: ui.PixelFormat.rgba8888,
+    );
+    final ui.Codec codec = await descriptor.instantiateCodec();
+    final ui.FrameInfo frame = await codec.getNextFrame();
+    return frame.image;
+  }
 
   setUp(() async {
     // The store the service writes to is mocked; the player is never
@@ -113,6 +134,66 @@ void main() {
       tune.selectStop(TunePart.speed, 'x2');
       expect(fake.speedWrites.last.speed, 2);
       expect(fake.speedWrites.last.keepPitch, isFalse);
+    });
+  });
+
+  group('a custom shape is remembered (§1.4 · §3)', () {
+    test('a between-stops ratio is a number, not a lost knob', () {
+      final Continuum line = tune.aspectLine;
+      final double t = (line.positionOf(1) + line.positionOf(2)) / 2;
+      tune.setKnob(TunePart.aspect, t, commit: true);
+      // 4:3 ↔ 16:9 at the halfway point — a real ratio, written to the engine.
+      expect(tune.aspectStop.value, isNull);
+      expect(tune.aspectRatio.value, closeTo((1.333333 + 1.777778) / 2, 1e-3));
+      expect(tune.labelFor(TunePart.aspect), '1.56:1');
+      expect(fake.aspectWrites.last, closeTo(1.5555555, 1e-3));
+    });
+
+    test('a capture/restore cycle keeps the exact ratio and the label', () {
+      final Continuum line = tune.aspectLine;
+      tune.setKnob(TunePart.aspect,
+          (line.positionOf(1) + line.positionOf(2)) / 2,
+          commit: true);
+      final TuneState saved = tune.capture();
+      final double ratio = tune.aspectRatio.value;
+      final String label = tune.labelFor(TunePart.aspect);
+
+      tune.resetForTest();
+      expect(tune.aspectRatio.value, 0);
+      tune.applyState(saved, persist: false, push: true);
+
+      expect(tune.aspectStop.value, isNull);
+      expect(tune.aspectRatio.value, ratio);
+      expect(tune.labelFor(TunePart.aspect), label);
+      expect(fake.aspectWrites.last, ratio);
+    });
+
+    test('the ratio survives the settings store, not just memory', () async {
+      final Continuum line = tune.aspectLine;
+      tune.setKnob(TunePart.aspect,
+          (line.positionOf(1) + line.positionOf(2)) / 2,
+          commit: true);
+      final double ratio = tune.aspectRatio.value;
+      await tune.persistNow();
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final TuneState back = TuneState.decode(prefs.getString('tune_state'));
+      expect(back.aspectStop, isNull);
+      expect(back.aspectRatio, ratio);
+      // …and the next launch lands on the same shape, not on Auto.
+      tune.resetForTest();
+      tune.applyState(back, persist: false, push: true);
+      expect(tune.aspectRatio.value, ratio);
+      expect(tune.labelFor(TunePart.aspect), isNot('Auto'));
+    });
+
+    test('beside Auto a blend starts from the file\'s own shape', () {
+      tune.fileAspect.value = 2.35;
+      final Continuum line = tune.aspectLine;
+      final double t = (line.positionOf(0) + line.positionOf(1)) / 2;
+      tune.setKnob(TunePart.aspect, t, commit: true);
+      expect(tune.aspectStop.value, isNull);
+      // Halfway from 2.35 to 4:3.
+      expect(tune.aspectRatio.value, closeTo((2.35 + 1.333333) / 2, 1e-3));
     });
   });
 
@@ -485,6 +566,306 @@ void main() {
       // The service writes the same curve again — the fake starts empty, so
       // the second write is what the next file gets.
       expect(fake.eqCurves.length, 1);
+    });
+  });
+
+  group('the tone histogram (§7a)', () {
+    test('Rec. 709 luma: black, white, grey, blue and green land in their bins',
+        () {
+      final Uint8List rgba = Uint8List.fromList(<int>[
+        0, 0, 0, 255, // black
+        255, 255, 255, 255, // white
+        128, 128, 128, 255, // mid grey
+        0, 0, 255, 255, // saturated blue
+        0, 255, 0, 255, // saturated green
+      ]);
+      final ToneHistogram h = ToneHistogram.fromRgba(rgba, width: 5, height: 1);
+      expect(h.total, 5);
+      expect(h.bins.length, ToneHistogram.binCount);
+      expect(h.bins.first, 1); // black at the darkest end
+      expect(h.bins[16], 1); // 128 grey
+      expect(h.bins[2], 1); // blue: luma 18
+      expect(h.bins.last, 1); // white at the brightest end
+      // Green (luma 182, bin 22) reads brighter than blue (18, bin 2) — that
+      // weighting is the whole reason this is not a plain mean of r, g and b.
+      expect(h.bins[22], 1);
+      expect(h.share(0), closeTo(0.2, 1e-9));
+      expect(h.peakShare, closeTo(0.2, 1e-9));
+      expect(h.meanTone, greaterThan(0));
+      expect(h.meanTone, lessThan(1));
+      expect(h.isEmpty, isFalse);
+    });
+
+    test('an empty frame is an empty reading, never a divide by zero', () {
+      final ToneHistogram empty =
+          ToneHistogram(List<int>.filled(ToneHistogram.binCount, 0));
+      expect(empty.isEmpty, isTrue);
+      expect(empty.total, 0);
+      expect(empty.share(0), 0);
+      expect(empty.share(-1), 0);
+      expect(empty.meanTone, 0);
+      expect(empty.peakShare, 0);
+      expect(empty.shape.every((double v) => v == 0), isTrue);
+      // A zero-sized buffer is refused, not read out of bounds.
+      final ToneHistogram none =
+          ToneHistogram.fromRgba(Uint8List(0), width: 0, height: 0);
+      expect(none.isEmpty, isTrue);
+    });
+
+    test('the shape is normalised to its peak, so a dark frame still reads',
+        () {
+      final List<int> bins = List<int>.filled(ToneHistogram.binCount, 0);
+      bins[10] = 1;
+      bins[11] = 4; // the peak
+      bins[12] = 2;
+      final List<double> shape = ToneHistogram(bins).shape;
+      expect(shape.length, ToneHistogram.binCount);
+      expect(shape[11], closeTo(1, 1e-9));
+      expect(shape[11], greaterThan(shape[10]));
+      expect(shape[11], greaterThan(shape[12]));
+      for (final double v in shape) {
+        expect(v, lessThanOrEqualTo(1 + 1e-9));
+        expect(v, greaterThanOrEqualTo(0));
+      }
+    });
+
+    test('nothing to read is null, not an empty histogram', () async {
+      final ToneHistogramSampler sampler =
+          ToneHistogramSampler(capture: () async => null);
+      expect(await sampler.sample(), isNull);
+    });
+
+    test('a real frame is binned — and disposed — by the sampler', () async {
+      final ui.Image frame = await image(
+        <int>[0, 0, 0, 255, 255, 255, 255, 255],
+        2,
+        1,
+      );
+      final ToneHistogramSampler sampler =
+          ToneHistogramSampler(capture: () async => frame);
+      final ToneHistogram? h = await sampler.sample();
+      expect(h, isNotNull);
+      expect(h!.total, 2);
+      expect(h.bins.first, 1); // the black pixel
+      expect(h.bins.last, 1); // the white pixel
+      // The binning is all that leaves the sampler; the image goes with it.
+      expect(frame.debugDisposed, isTrue);
+    });
+
+    test('the panel reads while it is open, and a bad frame is only silence',
+        () async {
+      expect(tune.histogram.value, isNull);
+      tune.setHistogramActive(true);
+      // Let the read's await chain settle. The fake has no frame, so it is
+      // one hop, and the capture itself already happened synchronously.
+      await Future<void>.delayed(Duration.zero);
+      // One reading at once, not one gap later — and with nothing to sample
+      // (the fake has no frame) the reading is simply absent.
+      expect(fake.captures, 1);
+      expect(tune.histogram.value, isNull);
+      tune.setHistogramActive(false);
+      // Closing the panel drops the reading, so a reopened panel never shows
+      // the last film's shape.
+      tune.histogram.value = ToneHistogram(
+        List<int>.filled(ToneHistogram.binCount, 0)..[5] = 3,
+      );
+      tune.setHistogramActive(false);
+      expect(tune.histogram.value, isNull);
+    });
+
+    test('a real read reaches the notifier the bars listen to', () async {
+      fake.frame = await image(
+        <int>[0, 0, 0, 255, 255, 255, 255, 255],
+        2,
+        1,
+      );
+      await tune.sampleToneNow();
+      expect(fake.captures, 1);
+      expect(tune.histogram.value, isNotNull);
+      expect(tune.histogram.value!.total, 2);
+      expect(tune.histogram.value!.bins.last, 1);
+    });
+
+    test('nothing is read on live media, and nothing on an audio file (§12)',
+        () async {
+      tune.available.value = false;
+      await tune.sampleToneNow();
+      expect(fake.captures, 0);
+      expect(tune.histogram.value, isNull);
+      // §7a is a picture reading: an audio file has none to take.
+      tune.available.value = true;
+      tune.videoPartsActive.value = false;
+      await tune.sampleToneNow();
+      expect(fake.captures, 0);
+    });
+  });
+
+  group('scenes (§7b)', () {
+    test('Cinema moves all four lines together', () {
+      tune.selectStop(TunePart.speed, 'x2');
+      tune.setSnapWindow(false);
+      tune.applyScene(TuneScene.byKey('cinema')!);
+      expect(tune.labelFor(TunePart.eq), 'Movie');
+      expect(tune.labelFor(TunePart.picture), 'Night');
+      expect(tune.aspectAuto, isTrue);
+      expect(tune.speed.value, 1);
+      expect(tune.speedStop.value, 'x1');
+      expect(tune.snapWindow.value, isTrue);
+      expect(fake.snapModes.last, isTrue);
+      expect(tune.eqStop.value, 'movie');
+      expect(tune.pictureStop.value, 'night');
+    });
+
+    test('Vivid asks for a flat sound and the file shape, no snap', () {
+      tune.selectStop(TunePart.eq, 'movie');
+      tune.applyScene(TuneScene.byKey('vivid')!);
+      expect(tune.labelFor(TunePart.eq), 'Flat');
+      expect(tune.labelFor(TunePart.picture), 'Vivid');
+      expect(tune.aspectAuto, isTrue);
+      expect(tune.snapWindow.value, isFalse);
+      expect(fake.snapModes.last, isFalse);
+    });
+
+    test('a sound the line does not have is skipped, not forced', () {
+      // Podcast asks for Vocal — an audio-line preset. A video has no such
+      // stop, so the sound it has stays rather than sliding to a neighbour.
+      tune.selectStop(TunePart.eq, 'movie');
+      tune.applyScene(TuneScene.byKey('podcast')!);
+      expect(tune.labelFor(TunePart.eq), 'Movie');
+      expect(tune.eqStop.value, 'movie');
+      // The rest of the scene still lands.
+      expect(tune.labelFor(TunePart.picture), 'Original');
+      expect(tune.snapWindow.value, isFalse);
+    });
+
+    test('the same scene does move the sound on an audio file', () {
+      tune.fileKind.value = TuneFileKind.audio;
+      tune.applyScene(TuneScene.byKey('podcast')!);
+      expect(tune.labelFor(TunePart.eq), 'Vocal');
+      expect(tune.eqStop.value, 'vocal');
+    });
+
+    test('a scene on live media writes nothing at all (§12)', () {
+      tune.available.value = false;
+      final TuneState before = tune.capture();
+      tune.applyScene(TuneScene.byKey('cinema')!);
+      expect(tune.capture().eqGains, before.eqGains);
+      expect(tune.capture().aspectStop, before.aspectStop);
+      expect(fake.eqCurves, isEmpty);
+      expect(fake.aspectWrites, isEmpty);
+      expect(fake.snapModes, isEmpty);
+    });
+  });
+
+  group('learning the whole curve (§7c)', () {
+    const AutoEqFacts jazz = AutoEqFacts(
+      kind: TuneFileKind.audio,
+      fileName: 'mix',
+      genre: 'jazz',
+    );
+
+    test('a curve you kept comes back exactly, and calls itself Custom',
+        () async {
+      final List<double> mine = <double>[3, -2, 1, 0, -1, 2, -3, 1, 0, 2];
+      tune.memory.teach(AutoEq.memoryKey(jazz), gains: mine);
+      await tune.applyAutoEq(jazz);
+      expect(tune.eq.value.gains, mine);
+      expect(tune.eqStop.value, isNull);
+      expect(tune.eqCustom.value, isTrue);
+      expect(tune.autoPick.value, 'Custom');
+      expect(AutoEq.describe(tune.autoPick.value!), 'Auto EQ · Custom');
+      // The engine gets those numbers, not the nearest preset to them.
+      expect(fake.eqCurves.last, mine);
+    });
+
+    test('the numbers survive a capture/restore round trip', () async {
+      final List<double> mine = <double>[3, -2, 1, 0, -1, 2, -3, 1, 0, 2];
+      tune.memory.teach(AutoEq.memoryKey(jazz), gains: mine);
+      await tune.applyAutoEq(jazz);
+      final TuneState saved = tune.capture();
+      fake.eqCurves.clear();
+      tune.applyState(saved, persist: false, push: true);
+      expect(tune.eq.value.gains, mine);
+      expect(tune.eqStop.value, isNull);
+      expect(tune.eqCustom.value, isTrue);
+      expect(fake.eqCurves.last, mine);
+    });
+
+    test('a manual tap wins, and puts the automation dot out (§5)', () async {
+      tune.memory.teach(AutoEq.memoryKey(jazz), presetKey: 'rock');
+      await tune.applyAutoEq(jazz);
+      expect(tune.autoPick.value, 'Rock');
+      // The tap decides — and the dot, which is Auto's report and not a
+      // second name for the current curve, goes dark with it.
+      tune.selectStop(TunePart.eq, 'flat');
+      expect(tune.eqStop.value, 'flat');
+      expect(tune.autoPick.value, isNull);
+      // A band drag too.
+      await tune.applyAutoEq(jazz);
+      expect(tune.autoPick.value, 'Rock');
+      tune.setBandGain(0, 3);
+      expect(tune.autoPick.value, isNull);
+      await tune.applyAutoEq(jazz);
+      tune.resetBands();
+      expect(tune.autoPick.value, isNull);
+      // …but a hover is not a tap: leaving a preview decides nothing, so the
+      // report it interrupted is still true.
+      await tune.applyAutoEq(jazz);
+      expect(tune.autoPick.value, 'Rock');
+      tune.beginPreview();
+      tune.setKnob(TunePart.eq, tune.eqLine.positionOf(0), commit: false);
+      tune.endPreview();
+      expect(tune.eqStop.value, 'rock');
+      expect(tune.autoPick.value, 'Rock');
+    });
+
+    test('a kept preset answers, and the dot says its name', () async {
+      tune.memory.teach(AutoEq.memoryKey(jazz), presetKey: 'rock');
+      await tune.applyAutoEq(jazz);
+      final EqPreset rock =
+          TunePresets.presetByKey('rock', TuneFileKind.audio)!;
+      expect(tune.eqStop.value, 'rock');
+      expect(tune.eq.value.gains, rock.curve);
+      expect(tune.autoPick.value, rock.label);
+      expect(AutoEq.describe(tune.autoPick.value!), 'Auto EQ · Rock');
+    });
+
+    test('a kept curve outranks the preset nearest to it (§7c)', () async {
+      final List<double> mine = <double>[3, -2, 1, 0, -1, 2, -3, 1, 0, 2];
+      tune.memory.teach(AutoEq.memoryKey(jazz), presetKey: 'rock', gains: mine);
+      await tune.applyAutoEq(jazz);
+      // A named stop wins when the person landed on one — the curve is the
+      // memory for the times they did not.
+      expect(tune.eqStop.value, 'rock');
+      expect(tune.eq.value.gains,
+          TunePresets.presetByKey('rock', TuneFileKind.audio)!.curve);
+    });
+
+    test('a key from another line is not a guess about this one', () async {
+      // Vocal is an audio sound; a video line has no such stop, so the stale
+      // entry is not applied to the film.
+      const AutoEqFacts film =
+          AutoEqFacts(kind: TuneFileKind.video, fileName: 'film');
+      tune.memory.teach(AutoEq.memoryKey(film), presetKey: 'vocal');
+      await tune.applyAutoEq(film);
+      expect(tune.eqStop.value, isNot('vocal'));
+      expect(tune.eq.value.gains,
+          isNot(TunePresets.presetByKey('vocal', TuneFileKind.audio)!.curve));
+      // §5's rules answer instead, here the plain sound.
+      expect(tune.eqStop.value, 'flat');
+    });
+
+    test('a curve you set yourself never lights the automation dot', () {
+      tune.fileKind.value = TuneFileKind.audio;
+      tune.selectStop(TunePart.eq, 'rock');
+      tune.saveMy();
+      tune.selectStop(TunePart.eq, 'flat');
+      expect(tune.autoPick.value, isNull);
+      tune.applyMy();
+      expect(tune.eqStop.value, isNull);
+      expect(tune.eqCustom.value, isTrue);
+      expect(tune.autoPick.value, isNull);
+      expect(AutoEq.describe('Rock'), 'Auto EQ · Rock');
     });
   });
 }

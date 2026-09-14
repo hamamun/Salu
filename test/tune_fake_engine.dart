@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:salu/core/tune/tune_engine.dart';
 import 'package:salu/core/tune/tune_model.dart';
 
@@ -32,6 +34,10 @@ class TuneFakeEngine implements TuneEngine {
   int? channels;
   String? genre;
 
+  /// How many tone frames were asked for, and what the §7a capture answers.
+  int captures = 0;
+  ui.Image? frame;
+
   @override
   Future<void> setEqCurve(EqCurve curve) async {
     eqCurves.add(curve);
@@ -60,6 +66,12 @@ class TuneFakeEngine implements TuneEngine {
 
   @override
   Future<String?> readGenre() async => genre;
+
+  @override
+  Future<ui.Image?> captureFrame() async {
+    captures++;
+    return frame;
+  }
 
   @override
   Future<void> setSnapMode(bool on) async {
@@ -92,6 +104,8 @@ class TuneFakeEngine implements TuneEngine {
     fileAspect = null;
     channels = null;
     genre = null;
+    captures = 0;
+    frame = null;
   }
 }
 

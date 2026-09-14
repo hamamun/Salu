@@ -1,4 +1,6 @@
+import 'eq_memory.dart';
 import 'tune_model.dart';
+import 'tune_presets.dart';
 
 /// The Auto EQ guess (eq_imp.md §5) — pure, in this order, first rule that
 /// speaks wins:
@@ -14,6 +16,9 @@ import 'tune_model.dart';
 /// SALU never listens to the audio (mpv does not hand out samples without a
 /// new native dependency), so every fact here comes from the file's own
 /// labels: its tag, its length, its sound layout, its name.
+///
+/// What the person KEPT outranks every rule above ([choose]) — §5's learning,
+/// with §7c's full curves.
 class AutoEqFacts {
   const AutoEqFacts({
     required this.kind,
@@ -49,7 +54,16 @@ class AutoEqFacts {
 
 /// Which rule answered — named so the indicator, the tests and the learning
 /// map can all say *why* a preset was picked.
-enum AutoEqRule { genreTag, surroundVideo, shortVideoStereo, longVideo, nameWords, none }
+enum AutoEqRule {
+  genreTag,
+  surroundVideo,
+  shortVideoStereo,
+  longVideo,
+  nameWords,
+  learned,
+  learnedCurve,
+  none,
+}
 
 /// The pick: a preset key of the playing file's own set, plus its rule.
 class AutoEqPick {
@@ -57,6 +71,30 @@ class AutoEqPick {
 
   final String presetKey;
   final AutoEqRule rule;
+
+  bool get isFlat => presetKey == 'flat';
+}
+
+/// What Auto should apply to a file: a named stop of the file's own set, or —
+/// when the person kept a curve of their own for this kind of content (§7c) —
+/// those exact 10 gains.
+class AutoEqChoice {
+  const AutoEqChoice({
+    this.presetKey,
+    this.gains,
+    required this.rule,
+  });
+
+  /// A preset key, `null` when the choice is a kept curve. Always a key of
+  /// the playing file's own set ([TunePresets.presetByKey] resolves it).
+  final String? presetKey;
+
+  /// The kept curve, `null` unless this came from the learning map.
+  final List<double>? gains;
+
+  final AutoEqRule rule;
+
+  bool get isCustom => presetKey == null && gains != null;
 
   bool get isFlat => presetKey == 'flat';
 }
@@ -80,6 +118,10 @@ class AutoEq {
 
   /// A genre tag's canonical spelling: lowercased, `;`/`,` split handled by
   /// the caller taking the first tag, non-alphanumerics collapsed to a space.
+  ///
+  /// Everything that matches a rule goes through here, so a rule word is
+  /// written the way this produces it — `k pop`, `hip hop`, `lo fi` (never
+  /// `k-pop`: the hyphen is gone by the time the table sees it).
   static String? normalizeGenre(String? raw) {
     if (raw == null) return null;
     String s = raw.trim();
@@ -113,21 +155,27 @@ class AutoEq {
     return null;
   }
 
+  /// Rule words are written in [normalizeGenre]'s spelling — the space form.
+  /// A hyphenated spelling here could never match: `Lo-Fi` normalises to
+  /// `lo fi`, so `lo-fi` would be a dead entry.
   static const Map<String, List<String>> _genreRulesMap = <String, List<String>>{
     'rock': <String>['rock', 'metal', 'punk', 'grunge', 'alternative', 'hardcore'],
-    'pop': <String>['pop', 'synthpop', 'indie', 'k-pop', 'j-pop'],
+    'pop': <String>['pop', 'synthpop', 'indie', 'k pop', 'j pop'],
     'jazz': <String>['jazz', 'blues', 'swing', 'bebop', 'bossa nova', 'big band'],
     'classical': <String>[
       'classical', 'orchestral', 'symphony', 'chamber', 'opera', 'concerto',
       'soundtrack',
     ],
     'bass': <String>[
-      'hip hop', 'hip-hop', 'rap', 'trap', 'r b', 'r&b', 'rnb', 'soul',
-      'funk', 'gospel', 'drum and bass',
+      'hip hop', 'rap', 'trap', 'r b', 'rnb', 'soul', 'funk', 'gospel',
+      'drum and bass', 'drum',
     ],
     'dance': <String>['dance', 'edm', 'house', 'techno', 'trance', 'electro', 'dubstep', 'disco'],
     'vocal': <String>['vocal', 'a cappella', 'acappella', 'choir', 'karaoke'],
-    'lounge': <String>['lounge', 'ambient', 'new age', 'easy listening', 'lo-fi', 'lofi', 'chillout'],
+    'lounge': <String>[
+      'lounge', 'ambient', 'new age', 'easy listening', 'lo fi', 'lofi',
+      'chillout',
+    ],
     'live': <String>['live', 'concert'],
     'folk': <String>['folk', 'country', 'bluegrass', 'reggae', 'ska'],
   };
@@ -148,8 +196,7 @@ class AutoEq {
     TuneFileKind kind, {
     bool longVideo = false,
   }) {
-    final String n = fileName.toLowerCase();
-    bool has(List<String> words) => words.any((String w) => n.contains(w));
+    bool has(List<String> words) => words.any((String w) => hasWord(fileName, w));
     if (kind == TuneFileKind.video) {
       if (has(<String>['documentary', 'interview', 'lecture', 'talk', 'seminar'])) {
         return 'documentary';
@@ -157,7 +204,7 @@ class AutoEq {
       if (has(<String>['concert', 'live at', 'live in', 'tour', 'festival', 'unplugged'])) {
         return 'musicvideo';
       }
-      if (has(<String>['podcast', 'episode', 's0', 'e0'])) {
+      if (has(<String>['podcast', 'episode']) || hasEpisodeMarker(fileName)) {
         // A spoken-word episode is a dialogue track, not a cinema mix — but
         // only when it is not a long film (rule 4 owns those).
         if (!longVideo) return 'documentary';
@@ -170,6 +217,41 @@ class AutoEq {
     if (has(<String>['vinyl', 'record', 'tape'])) return 'lounge';
     return null;
   }
+
+  /// Whether [word] appears in [haystack] as a WORD — not buried inside a
+  /// longer one. `Field Recording 12` must not read as a record player, and
+  /// a `tapestry` must not read as a tape. Both are lowercased already, so a
+  /// word character is a letter or a digit.
+  static bool hasWord(String haystack, String word) {
+    if (word.isEmpty) return false;
+    int from = 0;
+    while (from <= haystack.length - word.length) {
+      final int i = haystack.indexOf(word, from);
+      if (i < 0) return false;
+      final int end = i + word.length;
+      final bool leftOk = i == 0 || !_isWordChar(haystack.codeUnitAt(i - 1));
+      final bool rightOk =
+          end >= haystack.length || !_isWordChar(haystack.codeUnitAt(end));
+      if (leftOk && rightOk) return true;
+      from = i + 1;
+    }
+    return false;
+  }
+
+  static bool _isWordChar(int c) =>
+      (c >= 0x30 && c <= 0x39) || (c >= 0x61 && c <= 0x7a);
+
+  /// The season/episode markers that make a name *an episode*: `S01E02`,
+  /// `1x02`, `Ep 12`. `Part 3` is deliberately not one of them — it is as
+  /// often a film as an episode, and `seriesOf` (which only needs a stable
+  /// map key) is free to be more generous.
+  static final RegExp _episodeMarker = RegExp(
+    r'(\bs\d{1,2}[\s._-]?e\d{1,3}\b)|(\b\d{1,2}x\d{1,3}\b)|(\b(?:ep|episode)\D{0,3}\d{1,4}\b)',
+    caseSensitive: false,
+  );
+
+  static bool hasEpisodeMarker(String fileName) =>
+      _episodeMarker.hasMatch(fileName);
 
   /// A series handle from a file name: the leading words before an episode
   /// marker (`S01E02`, `1x02`, `Ep 12`, `Part 3`).
@@ -241,6 +323,25 @@ class AutoEq {
     return const AutoEqPick('flat', AutoEqRule.none);
   }
 
+  /// What Auto applies to [facts], the memory first: the thing this person
+  /// kept for this kind of content — their own curve (§7c) or a named stop —
+  /// then §5's six rules. Read-only (the caller touches the entry it used).
+  static AutoEqChoice choose(AutoEqFacts facts, EqMemory memory) {
+    final EqMemoryEntry? kept = memory.entryFor(memoryKey(facts));
+    if (kept != null) {
+      final String key = kept.presetKey;
+      if (key.isNotEmpty &&
+          TunePresets.presetByKey(key, facts.kind) != null) {
+        return AutoEqChoice(presetKey: key, rule: AutoEqRule.learned);
+      }
+      if (kept.hasCurve) {
+        return AutoEqChoice(gains: kept.gains, rule: AutoEqRule.learnedCurve);
+      }
+    }
+    final AutoEqPick pick = pick(facts);
+    return AutoEqChoice(presetKey: pick.presetKey, rule: pick.rule);
+  }
+
   /// A short, honest tooltip line for the indicator dot: "Auto EQ · Rock".
-  static String describe(String presetLabel) => 'Auto EQ · $presetLabel';
+  static String describe(String choiceLabel) => 'Auto EQ · $choiceLabel';
 }
