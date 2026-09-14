@@ -32,6 +32,7 @@ class SaluIconButton extends StatefulWidget {
     this.size = 34,
     this.active = false,
     this.enabled = true,
+    this.badge = false,
     this.onHoldRepeat,
   });
 
@@ -52,6 +53,11 @@ class SaluIconButton extends StatefulWidget {
   /// When false the mark dims, ignores hover/press and does not fire
   /// [onTap]. Nothing is drawn around it — it just goes quiet.
   final bool enabled;
+
+  /// A small presence pip (lrc.md L14): lyrics available and currently
+  /// off. Never a hover highlight — the pip is a state mark, not a
+  /// shape behind the icon.
+  final bool badge;
 
   /// Press-and-hold mode (the seek marks): when set, the button fires
   /// [onHoldRepeat] the instant the pointer goes down, then keeps firing
@@ -136,6 +142,28 @@ class _SaluIconButtonState extends State<SaluIconButton> {
           ],
         ),
         child: mark,
+      );
+    }
+
+    if (widget.badge && on) {
+      mark = Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          mark,
+          const Positioned(
+            top: -1,
+            right: -1,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.accent,
+                ),
+                child: SizedBox(width: 6, height: 6),
+              ),
+            ),
+          ),
+        ],
       );
     }
 

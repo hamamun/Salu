@@ -24,6 +24,13 @@ class MediaUtils {
     '.srt', '.ass', '.ssa', '.sub', '.vtt',
   };
 
+  /// Sidecar lyrics (lrc.md L7 / L25). `.lrc` ONLY — never a subtitle
+  /// spelling, never mixed into [subtitleExtensions]. `.lyr` is a
+  /// different karaoke format and is out of scope for v1.
+  static const Set<String> lyricExtensions = <String>{
+    '.lrc',
+  };
+
   static const Set<String> playlistExtensions = <String>{
     '.m3u', '.m3u8',
   };
@@ -38,6 +45,8 @@ class MediaUtils {
 
   static bool isSubtitle(String path) =>
       subtitleExtensions.contains(_ext(path));
+
+  static bool isLyrics(String path) => lyricExtensions.contains(_ext(path));
 
   static bool isPlaylist(String path) =>
       playlistExtensions.contains(_ext(path));

@@ -8,10 +8,12 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../ui/osd/osd_controller.dart';
+import 'audio_display_service.dart';
 import 'channel_favourites_service.dart';
 import 'channel_grouping.dart';
 import 'channel_load_service.dart';
 import 'channel_view_service.dart';
+import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
 import 'resume_service.dart';
@@ -537,6 +539,12 @@ class PlayerService {
       // one dumb line by design (D6/D17: nothing on the player side is
       // ever forced).
       SubtitleService.instance.onMediaLanded(uri, channelMode: channelMode);
+      // Lyrics + audio canvas (lrc.md L26): the same start-file
+      // trigger, so a zapped-to track never inherits the previous
+      // track's lyric, art, or mode.
+      LyricService.instance.onMediaLanded(uri, channelMode: channelMode);
+      AudioDisplayService.instance
+          .onMediaLanded(uri, channelMode: channelMode);
     });
 
     // The track surface (cc.md §6.2): every structural track change
@@ -638,6 +646,11 @@ class PlayerService {
     // keep-open=yes: pause on the last frame at the end of the playlist
     // (never quit), while entries before the last still auto-advance.
     unawaited(_setKeepOpen('yes'));
+    // lrc.md L19: Flutter owns the audio canvas. mpv's default
+    // `audio-display=attached-picture` would render embedded cover art
+    // as a video stream and collide with mode C. The option has no
+    // effect on video files.
+    unawaited(_setAudioDisplayNo());
   }
 
   // ── Path normalization ────────────────────────────────────────────────
@@ -689,6 +702,17 @@ class PlayerService {
         await platform.setProperty('keep-open', value);
       } catch (_) {
         // Harmless if unavailable — mpv's default is `yes` anyway.
+      }
+    }
+  }
+
+  Future<void> _setAudioDisplayNo() async {
+    final PlatformPlayer? platform = player.platform;
+    if (platform is NativePlayer) {
+      try {
+        await platform.setProperty('audio-display', 'no');
+      } catch (_) {
+        // Harmless if unavailable — the Flutter overlay still covers.
       }
     }
   }
@@ -1102,6 +1126,8 @@ class PlayerService {
     // The stopped player keeps the LAST media's track-list in mpv — the
     // panel must not show it: zero the surface with the rest.
     trackSurface.value = TrackSurface.empty;
+    LyricService.instance.onStopped();
+    AudioDisplayService.instance.onStopped();
     // Nothing is loaded, so nothing is out of sync — the sync row is
     // hidden anyway, but Z/X must not nudge a phantom offset. The
     // per-file memory stays on disk; Play-again restores it.

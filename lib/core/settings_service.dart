@@ -68,6 +68,9 @@ class SettingsService {
   // ── Mouse over preview (owner, 2026-09-14) ─────────────────────────────
   static const String _keyMouseOverPreview = 'mouse_over_preview';
 
+  // ── Audio visualizer (lrc.md L17) ──────────────────────────────────────
+  static const String _keyVisualizer = 'visualizer';
+
   // ── Subtitles (cc.md §2 · D2 · D3 · D5 · D13 amended 2026-09-13) ─────
   static const String _keySubtitleApiKey = 'subtitle_api_key';
   static const String _keySubtitleUsername = 'subtitle_username';
@@ -108,6 +111,12 @@ class SettingsService {
   /// reads it live, and nothing on screen is re-decided. The value already
   /// in force stays exactly as it is.
   final ValueNotifier<bool> mouseOverPreview = ValueNotifier<bool>(false);
+
+  /// **Visualizer** (Settings → General, lrc.md L17) — mpv `lavfi-complex`
+  /// bars on the audio canvas. Default **Off**, audio-only, one global
+  /// toggle. Lyrics fully replace it (the engine stops, L18) rather than
+  /// covering a running visualizer.
+  final ValueNotifier<bool> visualizer = ValueNotifier<bool>(false);
 
   /// The OpenSubtitles.com API key (D2). Empty = signed-out state: the
   /// engine no-ops and surfaces its single once-per-session
@@ -173,6 +182,7 @@ class SettingsService {
       }
       autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
       mouseOverPreview.value = prefs.getBool(_keyMouseOverPreview) ?? false;
+      visualizer.value = prefs.getBool(_keyVisualizer) ?? false;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
       if (rawSubtitleKey != null) subtitleApiKey.value = rawSubtitleKey;
       final String? rawSubtitleUser =
@@ -199,6 +209,7 @@ class SettingsService {
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
       autoEq.value = false;
       mouseOverPreview.value = false;
+      visualizer.value = false;
       subtitleApiKey.value = '';
       subtitleUsername.value = '';
       subtitlePassword.value = '';
@@ -267,6 +278,19 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_keyMouseOverPreview, on);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Visualizer — the Settings → General switch (lrc.md L17). Applies
+  /// instantly and persists; the audio canvas re-evaluates the three-mode
+  /// table the moment it flips.
+  Future<void> setVisualizer(bool on) async {
+    visualizer.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyVisualizer, on);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }
