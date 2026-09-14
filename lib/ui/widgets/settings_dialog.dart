@@ -202,6 +202,8 @@ class _GeneralTab extends StatelessWidget {
           SizedBox(height: 16),
           _AutoEqSwitch(),
           SizedBox(height: 10),
+          _MouseOverPreviewSwitch(),
+          SizedBox(height: 10),
           _ClearEqMemoryRow(),
         ],
       ),
@@ -270,6 +272,88 @@ class _AutoEqSwitch extends StatelessWidget {
                       Text(
                         'Picks a starting sound when a file loads, and learns '
                         'from what you keep.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _SaluSwitch(on: on),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// **Mouse over preview** — the Equalizer section's second switch (owner,
+/// 2026-09-14). It decides whether a pointer that merely RESTS on a Tune
+/// control previews the value under it (eq_imp.md §8's hover recipe) or only
+/// lights the control up.
+///
+/// Default **Off**. Off, the panel moves on a press or a drag and on nothing
+/// else, so a pointer crossing the window on its way somewhere can never
+/// change the sound or the picture; the value already in force is untouched
+/// either way. Same tile as Auto EQ: one switch, applied instantly.
+class _MouseOverPreviewSwitch extends StatelessWidget {
+  const _MouseOverPreviewSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: SettingsService.instance.mouseOverPreview,
+      builder: (BuildContext context, bool on, Widget? _) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => SettingsService.instance.setMouseOverPreview(!on),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: on ? const Color(0x144C9EEB) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: on ? const Color(0x404C9EEB) : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color:
+                        on ? const Color(0x264C9EEB) : AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.mouse_outlined,
+                    size: 20,
+                    color: on ? AppColors.accent : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Mouse over preview',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'Previews the value a resting pointer is on. Off, a '
+                        'click or a drag is what moves it.',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: AppColors.textSecondary,
