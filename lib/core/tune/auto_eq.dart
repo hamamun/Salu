@@ -338,8 +338,8 @@ class AutoEq {
         return AutoEqChoice(gains: kept.gains, rule: AutoEqRule.learnedCurve);
       }
     }
-    final AutoEqPick pick = pick(facts);
-    return AutoEqChoice(presetKey: pick.presetKey, rule: pick.rule);
+    final AutoEqPick guess = pick(facts);
+    return AutoEqChoice(presetKey: guess.presetKey, rule: guess.rule);
   }
 
   /// A short, honest tooltip line for the indicator dot: "Auto EQ · Rock".

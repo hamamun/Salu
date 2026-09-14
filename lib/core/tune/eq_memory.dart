@@ -56,11 +56,10 @@ class EqMemory {
   /// free curve), [gains] the curve they kept — §7c: the full curve is what
   /// makes Auto return *their* sound, not merely the preset nearest to it.
   void teach(
-    String key, {
-    String presetKey = '',
-    List<double>? gains,
-    DateTime? now,
-  }) {
+    String key,
+    [String presetKey = ''],
+    {List<double>? gains, DateTime? now},
+  ) {
     if (key.isEmpty) return;
     final List<double>? curve = _cleanCurve(gains);
     if (presetKey.isEmpty && curve == null) return;
@@ -196,7 +195,7 @@ class EqMemory {
     }
     if (value is Map) {
       final Object? preset = value['preset'];
-      final Object? gains = _curveFrom(value['gains']);
+      final List<double>? gains = _curveFrom(value['gains']);
       if (preset is! String && gains == null) return null;
       final Object? ts = value['used'];
       return EqMemoryEntry(
