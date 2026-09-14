@@ -196,6 +196,22 @@ class OsdSubDelayCard extends OsdCard {
   final double delay;
 }
 
+/// The Tune flash (eq_imp.md §6): one 1-second card naming the part and the
+/// stop the keyboard just landed on — `Audio · Pop` / `Picture · Night` /
+/// `Speed · 1.25×`. It exists because the keyboard tier has no bar to watch;
+/// the panel shows the same value inside its own line, so a tap there never
+/// raises a card (the subtitle-sync rule, copied).
+class OsdTuneCard extends OsdCard {
+  const OsdTuneCard({required this.part, required this.value})
+      : super(ttl: const Duration(milliseconds: 1000));
+
+  /// The part word — Audio / Picture / Aspect / Speed.
+  final String part;
+
+  /// What the line is on now — a stop name, a ratio, a rate.
+  final String value;
+}
+
 /// Singleton deck driver: holds the current card, runs its TTL.
 class OsdController {
   OsdController._internal();

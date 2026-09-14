@@ -7,6 +7,7 @@ import 'media_timeline.dart';
 import 'open_media_control.dart';
 import 'playlist_control.dart';
 import 'transport_cluster.dart';
+import 'tune_control.dart';
 
 /// SALU's on-screen controller container.
 ///
@@ -66,15 +67,18 @@ class ControllerPanel extends StatelessWidget {
                 ),
                 // Center zone · the transport cluster + sound group.
                 Center(child: TransportCluster()),
-                // Right zone · the Fetch button (cc.md §6/D14 — a
-                // caption-family mark, greyed-inert off local video,
-                // NEVER hidden) immediately left of fullscreen, then
+                // Right zone · the Equalizer button (eq_imp.md §1.1 — the
+                // tune-family mark, greyed-inert on live media, NEVER
+                // hidden) immediately left of the Fetch button (cc.md
+                // §6/D14 — a caption-family mark, same rule), then
                 // fullscreen at the outermost edge.
                 Align(
                   alignment: Alignment.centerRight,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
+                      TuneControl(),
+                      SizedBox(width: 6),
                       FetchControl(),
                       SizedBox(width: 6),
                       FullscreenControl(),

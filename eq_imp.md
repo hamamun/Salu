@@ -326,3 +326,69 @@ file's labels and facts (genre tag, length, sound layout, name). A deeper
    c) **learning that remembers full custom curves** per genre/series
       instead of preset names (the data policy in section 5 already
       bounds it).
+---
+
+## 8. Built (v1) — what landed, and the four places it deviates
+
+Owner asked for the whole spec; steps 1–6 of §7 are implemented. Step 7 (the
+tone histogram, scenes, full-curve learning) stays Phase 2, untouched.
+
+**Core (pure Dart, unit-tested).**
+
+| File | Owns |
+|---|---|
+| `lib/core/tune/tune_model.dart` | `TunePart`, `TuneFileKind`, `EqCurve`, `PictureValues`, `Continuum` (stops, spacing, blend, snap, labels), the ±12 dB grid |
+| `lib/core/tune/tune_presets.dart` | the locked tables: 13 audio presets, 4 video, 6 looks, 8 shapes, 7 speeds |
+| `lib/core/tune/eq_filter.dart` | the `--af` builders — `lavfi=[anequalizer=params=…]` primary, chained `equalizer=` peaking bands as the fallback |
+| `lib/core/tune/auto_eq.dart` | §5's six rules, the genre table, the series handle, the memory key |
+| `lib/core/tune/eq_memory.dart` | the learning map: LRU cap 500, 90-day prune, tolerant JSON |
+| `lib/core/tune/tune_state.dart` | the one `shared_preferences` entry, tolerant decode |
+| `lib/core/tune/tune_engine.dart` | `TuneEngine` + `MpvTuneEngine` (single property writes) + `NullTuneEngine` |
+| `lib/core/tune_service.dart` | **the owner of every value** — knobs, curves, snapping, preview/keep, teaching, persistence, window snap |
+
+**UI.** `lib/ui/osc/tune_control.dart` (the button, left of Fetch, greyed — never
+hidden — on live media), `lib/ui/panels/tune_panel.dart` (the four parts,
+Tracks-panel glass recipe, ChromeLock, click-outside), `lib/ui/widgets/
+tune_continuum.dart` (the line + knob + floating `HoverChip` + `TuneSwitch`),
+`lib/ui/widgets/tune_sliders.dart` (the 10 band sliders, the 5 picture bars,
+the ~200 ms glide), `lib/ui/widgets/eq_curve_painter.dart` (one painter for the
+mini curve and the on-video drawing), `lib/ui/widgets/eq_curve_overlay.dart`,
+plus `EqualizerMark` / `MyMark` / `CurveMark` in `salu_marks.dart`.
+
+**Wiring.** `PanelService` gained `tunePanelOpen` (one-popup with the other two),
+`home_screen.dart` gained Ctrl+E, Ctrl+↑/↓ (steps the line the pointer last
+rested on) and Ctrl+Alt+↑/↓ (walks that focus), Esc order
+toast → tune → track → playlist, and two new `Stack` layers; `OsdTuneCard`
+speaks the keyboard tier's results when the panel is closed; Settings gained the
+**Auto EQ** switch and **Clear EQ memory** (Undo toast, no dialog); `main.dart`
+loads the store before the first frame and flushes it in the close guard;
+`settings_service.dart` persists `auto_eq` (default **off**).
+
+**Tests** (`test/tune_*`, `test/eq_*`, `test/auto_eq_test.dart`, with
+`test/tune_fake_engine.dart` as the recorder): continuum spacing/snap/label/
+blend, the preset tables pinned number by number, the filter strings, the state
+round-trip and its forgiveness of garbage, the map's cap and prune, Auto EQ's
+rule order, and the service — knob→curve→engine, preview reverts, `Custom`,
+grey-means-writes-nothing, snapping at the ends, reset-all, persistence.
+
+**Four deviations, all deliberate:**
+
+1. **Curve-on-video is painted by Flutter, not by ffmpeg's `curves`.** That
+   filter needs `--lavfi-complex` (a video pad wired to an audio filter) and
+   would darken the picture on pause — exactly what §1.9 forbids. An
+   `IgnorePointer` layer under the chrome cannot.
+2. **The band sliders show their value by swapping the frequency label**, not
+   by a 96 px `HoverChip` per band: ten of those would collide in a 34 px
+   column. Same information, same house moment (only while working).
+3. **Keep pitch defaults to ON** and maps to `audio-pitch-correction=yes`.
+   §6's wording ("pitch stays natural unless you turn it off") and the option's
+   own mpv default agree only this way.
+4. **§3's "reset-all mark (point 13)"** refers to a list that ends at 12 — the
+   mark is built, in the footer, using the Resume toast's `RestartMark`, and it
+   leaves the saved **My** curve alone (it is a kept thing, not a setting).
+
+Also fixed on the way: `video-aspect-override` now writes **`no`** for Auto
+(`0` is not a valid aspect in mpv), and Auto EQ's series key requires a real
+episode marker, so one-off films share `video|untitled` instead of forking the
+map per file — §5's "it grows with kinds of content, never with playback
+count", enforced.

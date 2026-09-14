@@ -5,8 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/language_names.dart';
 import '../../core/settings_service.dart';
+import '../../core/tune/eq_memory.dart';
+import '../../core/tune_service.dart';
 import '../../theme/app_theme.dart';
+import '../osd/osd_controller.dart';
 import 'dot_grid_icon.dart';
+import 'salu_marks.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
 /// backdrop, opened by the 6-dot button in the title bar.
@@ -181,8 +185,176 @@ class _GeneralTab extends StatelessWidget {
           ),
           SizedBox(height: 16),
           _FolderAutoloadPicker(),
+          SizedBox(height: 28),
+          Text(
+            'Equalizer',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'What SALU may decide for itself about sound.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _AutoEqSwitch(),
+          SizedBox(height: 10),
+          _ClearEqMemoryRow(),
         ],
       ),
+    );
+  }
+}
+
+/// Auto EQ (§5) — one switch, default Off, sitting with the Resume and
+/// Folder auto-load options exactly as the spec asks. On, SALU picks a preset
+/// at file load from the file's own facts and learns from what you keep.
+/// Off, nothing is guessed — and switching it off leaves the current
+/// settings exactly as they are (§5's safety rule).
+class _AutoEqSwitch extends StatelessWidget {
+  const _AutoEqSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: SettingsService.instance.autoEq,
+      builder: (BuildContext context, bool on, Widget? _) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => SettingsService.instance.setAutoEq(!on),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: on ? const Color(0x144C9EEB) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: on ? const Color(0x404C9EEB) : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color:
+                        on ? const Color(0x264C9EEB) : AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: IconTheme.merge(
+                    data: IconThemeData(
+                      color: on ? AppColors.accent : AppColors.textSecondary,
+                    ),
+                    child: const EqualizerMark(size: 20),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Auto EQ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'Picks a starting sound when a file loads, and learns '
+                        'from what you keep.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _SaluSwitch(on: on),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The learning map's one control (§5's data policy): a row that names how
+/// much SALU remembers and wipes it in a tap. No confirm dialog — the house
+/// answer is the 5-second Undo toast on the deck, which restores the exact
+/// snapshot. Disabled when there is nothing to clear.
+class _ClearEqMemoryRow extends StatelessWidget {
+  const _ClearEqMemoryRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String?>(
+      // Any notifier on the service wakes this row; the map itself is a plain
+      // object, and its size changes only alongside real tune state writes.
+      valueListenable: TuneService.instance.autoPick,
+      builder: (BuildContext context, String? picked, Widget? child) {
+        final TuneService tune = TuneService.instance;
+        final int count = tune.memory.length;
+        final bool enabled = count > 0;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled
+              ? () {
+                  final Map<String, EqMemoryEntry> previous =
+                      tune.clearMemory();
+                  OsdController.instance.show(OsdUndoCard(
+                    label: 'EQ memory cleared',
+                    onUndo: () => tune.restoreMemory(previous),
+                  ));
+                }
+              : null,
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    'Clear EQ memory',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: enabled
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                Text(
+                  // The bound is on the record, not hidden in a file: the
+                  // viewer can see the map's size, then empty it.
+                  count == 0 ? 'empty' : '$count',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    letterSpacing: 0.3,
+                    color: enabled
+                        ? AppColors.textSecondary
+                        : AppColors.textSecondary.withAlpha(140),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
