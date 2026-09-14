@@ -65,6 +65,9 @@ class SettingsService {
   // ── Auto EQ (eq_imp.md §5) ─────────────────────────────────────────────
   static const String _keyAutoEq = 'auto_eq';
 
+  // ── Mouse over preview (owner, 2026-09-14) ─────────────────────────────
+  static const String _keyMouseOverPreview = 'mouse_over_preview';
+
   // ── Subtitles (cc.md §2 · D2 · D3 · D5 · D13 amended 2026-09-13) ─────
   static const String _keySubtitleApiKey = 'subtitle_api_key';
   static const String _keySubtitleUsername = 'subtitle_username';
@@ -93,6 +96,18 @@ class SettingsService {
   /// and learns from the viewer's corrections. Default **Off**, and turning
   /// it off leaves the current EQ exactly as it is.
   final ValueNotifier<bool> autoEq = ValueNotifier<bool>(false);
+
+  /// **Mouse over preview** (Settings → Equalizer, owner 2026-09-14) —
+  /// whether a pointer that merely RESTS on a Tune control previews the
+  /// value under it, live, until it is kept or the pointer leaves
+  /// (eq_imp.md §8's hover recipe).
+  ///
+  /// Default **Off**: the panel then moves only on a press or a drag, and a
+  /// pointer crossing the window can never change the sound or the picture
+  /// on its way past. Flipping it changes the behavior at once — the panel
+  /// reads it live, and nothing on screen is re-decided. The value already
+  /// in force stays exactly as it is.
+  final ValueNotifier<bool> mouseOverPreview = ValueNotifier<bool>(false);
 
   /// The OpenSubtitles.com API key (D2). Empty = signed-out state: the
   /// engine no-ops and surfaces its single once-per-session
@@ -157,6 +172,7 @@ class SettingsService {
                 FolderAutoloadMode.allVideos;
       }
       autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
+      mouseOverPreview.value = prefs.getBool(_keyMouseOverPreview) ?? false;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
       if (rawSubtitleKey != null) subtitleApiKey.value = rawSubtitleKey;
       final String? rawSubtitleUser =
@@ -182,6 +198,7 @@ class SettingsService {
       resumeMode.value = ResumeMode.all;
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
       autoEq.value = false;
+      mouseOverPreview.value = false;
       subtitleApiKey.value = '';
       subtitleUsername.value = '';
       subtitlePassword.value = '';
@@ -235,6 +252,21 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_keyAutoEq, on);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Mouse over preview — the Settings → Equalizer switch (owner,
+  /// 2026-09-14). Applies instantly and persists; the Tune panel reads it
+  /// live, so the moment it is flipped the panel's controls stop (or start)
+  /// previewing under a resting pointer. Nothing already on screen is
+  /// touched either way.
+  Future<void> setMouseOverPreview(bool on) async {
+    mouseOverPreview.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyMouseOverPreview, on);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }

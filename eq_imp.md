@@ -69,6 +69,12 @@
    - **Single click → keeps it** (saved like everything else).
    - The preview starts after ~0.3 s on the control, so sweeping the
      mouse across does not flick through settings.
+   - **Settings switch: "Mouse over preview", default OFF** (owner,
+     2026-09-14 — Settings → Equalizer, right below Auto EQ). OFF, the
+     hover half of the recipe is off everywhere in the panel: a pointer
+     that merely rests on a control never moves it and never writes to
+     the engine — only a click or a drag does. ON restores the wording
+     above, exactly as written.
 
 9. **Curve on the video** (owner's idea): a small mark in the panel draws
    the equalizer curve right on the picture itself, in a soft colour,
@@ -334,7 +340,10 @@ file's labels and facts (genre tag, length, sound layout, name). A deeper
       window snap + Night look + Movie EQ · Podcast: Vocal EQ + 1× ·
       Vivid: Vivid look + Flat) — built: three marks in the panel
       footer, glowing on hover and acting on click — no hover preview,
-      because a scene snaps the window (see §8, deviation 6);
+      because a scene snaps the window (see §8, deviation 6).
+      **REMOVED from the UI on the owner's word, 2026-09-14** — the
+      footer carries the reset mark alone (see §8's amendment; the core
+      `TuneScene` / `applyScene` stay, tested, with no UI entry);
    c) **learning that remembers full custom curves** per genre/series
       instead of preset names (the data policy in section 5 already
       bounds it) — built: the map stores the curve beside the name, and
@@ -372,15 +381,18 @@ the ~200 ms glide), `lib/ui/widgets/eq_curve_painter.dart` (one painter for the
 mini curve and the on-video drawing), `lib/ui/widgets/eq_curve_overlay.dart`,
 plus `EqualizerMark` / `MyMark` / `CurveMark` in `salu_marks.dart`.
 
-**(Phase 2) in the same files.** The panel's footer carries the three scene
+**(Phase 2) in the same files.** The panel's footer carried the three scene
 marks before the reset mark — `CurveMark` + the scene's name in the house's
 quiet type, brightening on hover and acting on click, exactly like the other
-mark in that row (reset-all). A scene is deliberately NOT hover-previewed even
-though the continua above it are: it is four lines at once and one of them is
-"the window is the screen" — a hover must never resize the window, and a
-preview that quietly skips one of a scene's moves would be a lie about what
-the click does. The OS tooltip names what a scene moves; the click shows it.
-Behind the Gamma and Brightness bars
+mark in that row (reset-all). A scene was deliberately NOT hover-previewed
+even though the continua above it are: it is four lines at once and one of
+them is "the window is the screen" — a hover must never resize the window, and
+a preview that quietly skips one of a scene's moves would be a lie about what
+the click does. The OS tooltip named what a scene moves; the click showed it.
+**Owner's call, 2026-09-14: those three marks are gone and that row is the
+reset mark alone** — §3's own list named reset there and nothing else.
+`TuneScene` and `TuneService.applyScene` stay in core, tested, with no UI entry
+point. Behind the Gamma and Brightness bars
 sits the tone histogram, mirrored around the bars' centre so the sliders'
 travel reads as movement over the distribution; it is `IgnorePointer`-quiet,
 never painted over the sliders' ink, and simply absent until a frame has been
@@ -391,9 +403,12 @@ read.
 rested on) and Ctrl+Alt+↑/↓ (walks that focus), Esc order
 toast → tune → track → playlist, and two new `Stack` layers; `OsdTuneCard`
 speaks the keyboard tier's results when the panel is closed; Settings gained the
-**Auto EQ** switch and **Clear EQ memory** (Undo toast, no dialog); `main.dart`
+**Auto EQ** switch, the **Mouse over preview** switch (owner, 2026-09-14 —
+default **off**; the panel's controls read it live before they arm a hover) and
+**Clear EQ memory** (Undo toast, no dialog); `main.dart`
 loads the store before the first frame and flushes it in the close guard;
-`settings_service.dart` persists `auto_eq` (default **off**).
+`settings_service.dart` persists `auto_eq` and `mouse_over_preview`
+(default **off**).
 
 **Tests** (`test/tune_*`, `test/eq_*`, `test/auto_eq_test.dart`, with
 `test/tune_fake_engine.dart` as the recorder): continuum spacing/snap/label/
@@ -404,7 +419,10 @@ grey-means-writes-nothing, snapping at the ends, reset-all, persistence.
 
 **(Phase 2) coverage.** `test/tune_glide_test.dart` pins the glide's one-frame
 honesty (a second jump mid-glide continues from the line on screen — a
-widget-level test, since that is where the bug lives), and the service tests
+widget-level test, since that is where the bug lives); `test/tune_hover_preview_test.dart`
+pins the **Mouse over preview** gate the same way (off, a resting pointer
+reaches no callback and a band keeps its frequency label; on, the same rest
+previews, uncommitted; a press is never gated); and the service tests
 gained three groups: the histogram (Rec. 709 binning of a real frame,
 `null` when there is nothing to read, reads only while the panel is open,
 never on live media or an audio file), the scenes (all the lines a scene names
@@ -442,6 +460,8 @@ a kept name still beats it; a stale key from the other line falls through to
    would mean either resizing the window on a hover or previewing a scene that
    is not the scene — both worse than a brightening mark. The spec's four
    lines keep their full hover recipe; the scene is the sum of them.
+   *(2026-09-14: the scene marks themselves are out of the footer — the rule
+   above still holds for the core call, which is reachable from no UI now.)*
 
 **§12's "video parts", read exactly:** the parts that need a picture are Aspect
 and Picture, so those are the two that dim on an audio-only file — the audio

@@ -12,6 +12,7 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart';
 
 import '../../core/tune/tune_model.dart';
+import '../../core/tune_service.dart';
 import '../../theme/app_theme.dart';
 import '../osc/hover_chip.dart';
 
@@ -26,6 +27,10 @@ import '../osc/hover_chip.dart';
 ///   · leave         → revert, nothing saved
 ///   · click         → keep it (snapped to the named stop when near one)
 ///   · drag          → live, release keeps
+///
+/// The two hover gestures are the **Mouse over preview** switch in Settings
+/// (default **Off**): off, a hover only brightens the row — the line moves
+/// on a click or a drag, and never because a pointer crossed it.
 ///
 /// The widget holds no values of its own — every position comes in, every
 /// change goes out through [onChanged] — so the panel, the keyboard tier and
@@ -135,6 +140,10 @@ class _TuneContinuumState extends State<TuneContinuum> {
   void _arm() {
     _armTimer?.cancel();
     if (!widget.enabled || widget.line.isEmpty) return;
+    // Mouse over preview (Settings → Equalizer): off, a rest on the line is
+    // only a rest. The pointer never moves the knob, never touches the
+    // engine, and the label keeps naming the value really in force.
+    if (!TuneService.instance.hoverPreview) return;
     _armTimer = Timer(widget.previewDelay, () {
       if (!_inside || !widget.enabled || _armed) return;
       setState(() => _armed = true);

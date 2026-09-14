@@ -24,6 +24,11 @@ import 'eq_curve_painter.dart';
 /// and PREVIEWs the value under the cursor, leaving reverts, a click or a
 /// released drag keeps — and both reset to zero on a double tap.
 ///
+/// The hover half of that recipe is the **Mouse over preview** switch in
+/// Settings → Equalizer (default **Off**): off, a hover is attention only —
+/// the rule brightens, the value stays exactly as it was, and a press or a
+/// drag is what moves it.
+///
 /// Nothing here stores a value: the numbers arrive in, the changes leave
 /// through the callbacks, so the panel and the service agree by construction.
 
@@ -285,6 +290,9 @@ class _TuneBandState extends State<_TuneBand> {
   void _arm() {
     _armTimer?.cancel();
     if (!widget.enabled) return;
+    // Mouse over preview (Settings → Equalizer): off, a hover only lights
+    // the band up — the gain stays put until a press or a drag moves it.
+    if (!TuneService.instance.hoverPreview) return;
     _armTimer = Timer(kTuneHoverLead, () {
       if (!_inside || _armed || _dragging || !widget.enabled) return;
       setState(() => _armed = true);
@@ -309,7 +317,14 @@ class _TuneBandState extends State<_TuneBand> {
 
   @override
   Widget build(BuildContext context) {
+    // Two different questions: `active` is the band answering the pointer,
+    // `naming` is the label speaking the value UNDER the cursor. The second
+    // one is a preview, so it follows the Mouse over preview switch — with
+    // preview off the label keeps naming what the band really holds, while
+    // the rule still lights up under the pointer.
     final bool active = _inside || _dragging;
+    final bool naming =
+        _dragging || (_inside && TuneService.instance.hoverPreview);
     return SizedBox(
       height: TuneBands.bandHeight,
       child: IgnorePointer(
@@ -394,7 +409,7 @@ class _TuneBandState extends State<_TuneBand> {
                         right: 0,
                         top: _bandLabelTop,
                         child: Text(
-                          active
+                          naming
                               ? formatGainDb(widget.value)
                               : widget.label,
                           maxLines: 1,
@@ -407,7 +422,7 @@ class _TuneBandState extends State<_TuneBand> {
                             fontFeatures: const <FontFeature>[
                               FontFeature.tabularFigures(),
                             ],
-                            color: active
+                            color: naming
                                 ? AppColors.textPrimary
                                 : AppColors.textSecondary.withAlpha(200),
                           ),
@@ -610,6 +625,9 @@ class _TuneFineBarState extends State<_TuneFineBar> {
   void _arm() {
     _armTimer?.cancel();
     if (!widget.enabled) return;
+    // Mouse over preview (Settings → Equalizer): off, a hover only brightens
+    // the bar — nothing is written until a press or a drag.
+    if (!TuneService.instance.hoverPreview) return;
     _armTimer = Timer(kTuneHoverLead, () {
       if (!_inside || _armed || _dragging || !widget.enabled) return;
       setState(() => _armed = true);

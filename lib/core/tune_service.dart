@@ -709,8 +709,22 @@ class TuneService {
   TuneState? _hoverSnapshot;
   bool _gestureDown = false;
 
+  /// Whether a pointer that merely RESTS on a control previews the value
+  /// under it — the Settings → Equalizer → **Mouse over preview** switch
+  /// (owner, 2026-09-14), default **Off**.
+  ///
+  /// The panel's controls read it before they arm, so off means off all the
+  /// way down: no timer, no knob movement, no engine write, and every label
+  /// keeps naming the value that is really in force. A click and a drag are
+  /// untouched — they keep working exactly as §8 says.
+  ///
+  /// Kept a plain read of [SettingsService] rather than a second copy here:
+  /// one switch, one truth, no sync to get wrong.
+  bool get hoverPreview => SettingsService.instance.mouseOverPreview.value;
+
   /// The pointer has rested on a control: everything written from here is a
-  /// preview, until a click keeps it or the pointer leaves.
+  /// preview, until a click keeps it or the pointer leaves. Only ever called
+  /// while [hoverPreview] is on — the control that arms the timer decides.
   void beginPreview() {
     if (_hoverSnapshot != null) return;
     _hoverSnapshot = capture();
