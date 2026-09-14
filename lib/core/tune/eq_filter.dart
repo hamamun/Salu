@@ -1,24 +1,29 @@
 import 'tune_model.dart';
 
 /// The one place SALU spells an EQ curve as an mpv audio-filter string
-/// (eq_imp.md §6: "the anequalizer filter-string builder").
+/// (eq_imp.md §6: "the filter-string builder").
 ///
-/// mpv's own `audio-equalizer` options no longer exist in the libmpv build
-/// media_kit ships, so the EQ is handed to libavfilter through mpv's `lavfi`
-/// audio wrapper — with the graph quoted in `[ … ]`, which is exactly what
-/// mpv's filter syntax prescribes for values containing `=` or `,`
-/// (DOCS/man/vf.rst: "param-value can further be quoted in [ / ]").
+/// The libmpv that media_kit ships for Windows is built against a slimmed
+/// FFmpeg (`--disable-filters`, then only a handful re-enabled). Of the
+/// libavfilter equalizers, ONLY the single-band peaking `equalizer` is in that
+/// build — `anequalizer`, `superequalizer` and `firequalizer` are not, and
+/// asking for one of them makes mpv print "Audio filter initialized failed!"
+/// and, when the request lands before the audio chain exists (a file
+/// landing), disable the audio track outright. So the curve is spelled as a
+/// chain of `equalizer` bells, one per non-zero band, inside ONE `lavfi`
+/// graph.
 ///
-/// Two spellings, tried in this order by the engine:
+/// The graph is preceded by mpv's own `format=floatp`. The peaking filter
+/// only takes PLANAR samples, and the slim build has no `aresample` for
+/// libavfilter to convert with — FLAC, WAV, Opus and PCM decoders hand mpv
+/// packed samples, which would fail to configure the graph ("'aresample'
+/// filter not present"). `format=floatp` makes mpv's own converter (its
+/// built-in swresample wrapper, always present) hand the graph planar float,
+/// which is also the format the bell processes natively.
 ///
-///  * [primary] — FFmpeg's multi-band `anequalizer`. One filter instance
-///    holds all 10 bands; its `params` string names a channel per band, so
-///    the entry list repeats for c0…c7 (7.1 = 8 channels; FFmpeg ignores
-///    entries whose channel the input does not have).
-///  * [fallback] — 10 chained single-band `equalizer` peaking filters, one
-///    per mpv filter entry (no commas inside a graph, so nothing to escape).
-///    Present because `anequalizer` is not in every libavfilter build, and a
-///    dead EQ is worse than a plainer one.
+/// The graph is quoted in `[ … ]`, which is exactly what mpv's filter syntax
+/// prescribes for values containing `=` , `:` or `,` (DOCS/man/vf.rst:
+/// "param-value can further be quoted in [ / ]").
 ///
 /// `Flat` (every gain 0) builds the EMPTY string — the engine then removes
 /// the filter from the chain completely, so nothing extra sits in the audio
@@ -26,60 +31,39 @@ import 'tune_model.dart';
 class EqFilter {
   EqFilter._();
 
-  /// Channels the primary spelling covers: stereo through 7.1.
-  static const int maxChannels = 8;
+  /// Q of each band — a graphic-EQ bell (~1.1 gives the classic ISO-octave
+  /// overlap without ringing). Tuned by ear, as the spec allows.
+  static const double bandQ = 1.1;
 
-  /// Q of each fallback band — a graphic-EQ bell (~1.1 gives the classic
-  /// ISO-octave overlap without ringing).
-  static const double fallbackQ = 1.1;
+  /// The conversion request in front of the graph (see the class note).
+  static const String formatEntry = 'format=floatp';
 
-  /// The primary `params` string for one curve (`Flat` → `null`).
-  static String? params(EqCurve curve) {
-    if (curve.isFlat) return null;
-    final List<String> bands = <String>[];
-    for (int ch = 0; ch < maxChannels; ch++) {
-      for (int i = 0; i < kEqBandCount; i++) {
-        final double g = curve.at(i);
-        if (g.abs() < kEqGainZero) continue;
-        bands.add('c$ch f=${_num(kEqBandFreqs[i])} '
-            'w=${_num(kEqBandWidthsHz[i])} g=${_num(g)} t=0');
-      }
-    }
-    if (bands.isEmpty) return null;
-    return bands.join('|');
-  }
+  /// The substring that proves the chain is in mpv's `af` list when it is
+  /// read back — the engine checks for it because media_kit's property write
+  /// reports no error (see [MpvTuneEngine.setEqCurve]).
+  static const String marker = 'equalizer=';
 
   /// The mpv `af` value that carries the curve — `''` when Flat (no filter).
-  static String primary(EqCurve curve) {
-    final String? p = params(curve);
-    if (p == null) return '';
-    return 'lavfi=[anequalizer=params=$p]';
+  static String build(EqCurve curve) {
+    final List<String> bands = bandEntries(curve);
+    if (bands.isEmpty) return '';
+    return '$formatEntry,lavfi=[${bands.join(',')}]';
   }
 
-  /// The fallback `af` value — one peaking `equalizer` per non-zero band.
-  static String fallback(EqCurve curve) {
-    if (curve.isFlat) return '';
+  /// One `equalizer=` element per non-zero band, in band order.
+  static List<String> bandEntries(EqCurve curve) {
+    if (curve.isFlat) return const <String>[];
     final List<String> entries = <String>[];
     for (int i = 0; i < kEqBandCount; i++) {
       final double g = curve.at(i);
       if (g.abs() < kEqGainZero) continue;
-      entries.add('lavfi=[equalizer='
+      entries.add('equalizer='
           'f=${_num(kEqBandFreqs[i])}'
           ':t=q'
-          ':w=${_num(fallbackQ)}'
-          ':g=${_num(g)}'
-          ']');
+          ':w=${_num(bandQ)}'
+          ':g=${_num(g)}');
     }
-    return entries.join(',');
-  }
-
-  /// Both spellings, in the order the engine tries them. Empty strings are
-  /// dropped — `''` means "no filter", which the caller applies as itself.
-  static List<String> candidates(EqCurve curve) {
-    if (curve.isFlat) return const <String>[''];
-    final String a = primary(curve);
-    final String b = fallback(curve);
-    return <String>[a, if (b.isNotEmpty) b];
+    return entries;
   }
 
   /// Shortest honest number: `31`, `5`, `-2.5` — no trailing zeros, no `+`.

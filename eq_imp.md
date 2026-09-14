@@ -277,10 +277,15 @@ file's labels and facts (genre tag, length, sound layout, name). A deeper
 ## 6. How it works under the hood (short version)
 
 - All four parts drive **mpv directly, live**:
-  - Audio EQ → one mpv filter (`anequalizer`, the verified multi-band
-    filter; the old `audio-equalizer` options no longer exist in the mpv
-    build that media_kit ships). The same filter can draw its curve on
-    the video (the "curve on the video" feature).
+  - Audio EQ → one mpv `lavfi` graph of chained single-band `equalizer`
+    bells (the ONLY equalizer compiled into media_kit's slim libmpv —
+    `anequalizer` / `superequalizer` / `firequalizer` are not there, and
+    the old `audio-equalizer` options no longer exist). `format=floatp`
+    goes in front of it, because that build also lacks `aresample`, so
+    packed FLAC/WAV/Opus samples must be converted by mpv before the
+    graph. The write waits for the file's audio chain to exist (a write
+    before that makes mpv drop the audio track — "no sound for video
+    files"), and the `af` list is read back to confirm the install.
   - Picture → mpv's `saturation` / `gamma` / `contrast` / `brightness` /
     `hue` options (range −100…+100, 0 = neutral — verified for this
     build).
@@ -300,7 +305,7 @@ file's labels and facts (genre tag, length, sound layout, name). A deeper
   engine can never disagree.
 - One settings entry, persisted with `shared_preferences` (+ the Auto EQ
   learning map).
-- Unit tests: blend math, snap/label logic, the anequalizer filter-string
+- Unit tests: blend math, snap/label logic, the equalizer filter-string
   builder, persistence round-trip.
 
 ---
@@ -350,7 +355,7 @@ curve (§7.7c). Phase 2 is no longer "untouched"; what it added is marked
 |---|---|
 | `lib/core/tune/tune_model.dart` | `TunePart`, `TuneFileKind`, `EqCurve`, `PictureValues`, `Continuum` (stops, spacing, blend, snap, labels), the ±12 dB grid |
 | `lib/core/tune/tune_presets.dart` | the locked tables: 13 audio presets, 4 video, 6 looks, 8 shapes, 7 speeds |
-| `lib/core/tune/eq_filter.dart` | the `--af` builders — `lavfi=[anequalizer=params=…]` primary, chained `equalizer=` peaking bands as the fallback |
+| `lib/core/tune/eq_filter.dart` | the `--af` builder — `format=floatp,lavfi=[equalizer=…,equalizer=…]` (chained peaking bands, the one spelling media_kit's libmpv can build) |
 | `lib/core/tune/auto_eq.dart` | §5's six rules, the genre table, the series handle, the memory key |
 | `lib/core/tune/eq_memory.dart` | the learning map: LRU cap 500, 90-day prune, tolerant JSON |
 | `lib/core/tune/tune_state.dart` | the one `shared_preferences` entry, tolerant decode |
@@ -427,7 +432,9 @@ a kept name still beats it; a stale key from the other line falls through to
 5. **(Phase 2) The histogram is sampled every ~2 s, and only while the panel
    is open.** §4 asked for the reading, not a frame budget: a scope nobody can
    see must cost nothing, and 2 s of latency is invisible in a distribution
-   that barely moves. The capture rides mpv's own `screenshot-to-file` and
+   that barely moves. The capture rides mpv's own `screenshot-raw` (through
+   media_kit's `screenshot()`, a BGRA buffer in memory — media_kit's libmpv
+   has no PNG/JPEG encoder, so `screenshot-to-file` fails there) and
    Flutter's codec — no new dependency, as §4 required.
 6. **(Phase 2) A scene acts on click, and only on click**, unlike the four
    lines it moves. §7b called it "one mark"; the panel's other marks (reset,

@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -132,20 +132,16 @@ class MpvTuneEngine implements TuneEngine {
   /// 64 × ~36 is 2 300 pixels: plenty for 32 tone bins, and free.
   static const int histogramWidth = 64;
 
-  /// Where the tone histogram's screenshot lands — one fixed file, rewritten
-  /// in place (no pile of PNGs in the temp folder).
-  static String get histogramShotPath =>
-      '${Directory.systemTemp.path}${Platform.pathSeparator}salu-tone.png';
-
   bool _snapModeOn = false;
-
-  /// Which [EqFilter] spelling this libmpv accepted (`0` = anequalizer,
-  /// `1` = the chained peaking fallback). Latched for the session: a build
-  /// without `anequalizer` must not be re-probed on every drag.
-  int _afSpelling = 0;
 
   /// The graph currently installed, so a no-op change writes nothing.
   String _afInstalled = '';
+
+  /// Set once this libmpv has refused the chain — the EQ then stays silent
+  /// for the session instead of failing on every drag. Cleared when a new
+  /// file lands: a chain that failed because there was no audio track yet is
+  /// not a chain this build lacks.
+  bool _afRefused = false;
 
   /// Whether mpv's equalizer options were touched this session — the
   /// neutral state needs no write at all (SALU leaves the engine's defaults
@@ -180,37 +176,80 @@ class MpvTuneEngine implements TuneEngine {
 
   // ── Audio EQ ───────────────────────────────────────────────────────────
 
+  /// EQ writes run one after another: a write may wait for the audio chain,
+  /// and a second write racing past it would install a stale curve on top.
+  Future<void> _afQueue = Future<void>.value();
+
   @override
-  Future<void> setEqCurve(EqCurve curve) async {
-    final List<String> candidates = EqFilter.candidates(curve);
+  Future<void> setEqCurve(EqCurve curve) {
+    final Future<void> next = _afQueue.then((_) => _applyEqCurve(curve));
+    _afQueue = next.catchError((_) {});
+    return next;
+  }
+
+  Future<void> _applyEqCurve(EqCurve curve) async {
+    final String value = EqFilter.build(curve);
+    if (value == _afInstalled) return;
+    final NativePlayer? native = _native;
+    if (native == null) return;
     // Flat → no filter at all in the chain (eq_imp.md §2's closing rule).
-    if (candidates.length == 1 && candidates.first.isEmpty) {
-      if (_afInstalled.isEmpty) return;
+    if (value.isEmpty) {
       _afInstalled = '';
       await _write('af', '');
       return;
     }
-    final NativePlayer? native = _native;
-    if (native == null) return;
-    final int start = _afSpelling.clamp(0, candidates.length - 1).toInt();
-    for (int i = start; i < candidates.length; i++) {
-      final String value = candidates[i];
-      if (value == _afInstalled) return;
-      try {
-        await native.setProperty('af', value);
-        _afInstalled = value;
-        _afSpelling = i;
-        return;
-      } catch (error) {
-        debugPrint('[SALU/tune] af spelling $i rejected: $error');
-        _afInstalled = '';
-      }
+    if (_afRefused) return;
+    // A chain written before mpv has an audio chain to hang it on makes mpv
+    // give up on the track ("Audio filter initialized failed!", then no
+    // sound for the whole file). So the write waits until the file's audio
+    // is actually up — never more than a moment after a load.
+    if (!await _waitForAudio()) return;
+    try {
+      await native.setProperty('af', value);
+    } catch (error) {
+      debugPrint('[SALU/tune] af write failed: $error');
+      _afInstalled = '';
+      return;
     }
+    // media_kit's `setProperty` reports no error, so the list is read back:
+    // mpv keeps the previous list when a chain fails to build, so a chain
+    // this libmpv cannot build at all is simply not there afterwards.
+    final String readBack = await _read('af');
+    if (readBack.contains(EqFilter.marker)) {
+      _afInstalled = value;
+      return;
+    }
+    _afInstalled = '';
+    _afRefused = true;
+    debugPrint('[SALU/tune] this libmpv refused the EQ chain — EQ is off for '
+        'this session (af read back as "$readBack")');
+    // Leave nothing half-installed behind.
+    await _write('af', '');
+  }
+
+  /// How long a file is given to bring its audio chain up before an EQ
+  /// write is dropped (it is re-sent by the next change or the next file).
+  static const int _audioWaitTries = 25;
+  static const Duration _audioWaitGap = Duration(milliseconds: 80);
+
+  /// True once mpv reports live audio parameters (the AO chain exists), or
+  /// at once when the file has no audio track (nothing to filter, and nothing
+  /// the write could break).
+  Future<bool> _waitForAudio() async {
+    for (int i = 0; i < _audioWaitTries; i++) {
+      if ((await _read('aid')).trim() == 'no') return true;
+      final String rate = (await _read('audio-params/samplerate')).trim();
+      if ((double.tryParse(rate) ?? 0) > 0) return true;
+      await Future<void>.delayed(_audioWaitGap);
+    }
+    debugPrint('[SALU/tune] no audio chain yet — EQ write skipped');
+    return false;
   }
 
   @override
   void forgetInstalledFilter() {
     _afInstalled = '';
+    _afRefused = false;
   }
 
   // ── Picture ────────────────────────────────────────────────────────────
@@ -339,40 +378,70 @@ class MpvTuneEngine implements TuneEngine {
   Future<ui.Image?> captureFrame() async {
     final NativePlayer? native = _native;
     if (native == null) return null;
-    final String path = histogramShotPath;
     try {
-      // mpv's own screenshot: synchronous inside mpv, so the file is there
-      // when the command answers. No new dependency — the decode below is
-      // Flutter's own image codec.
-      await native.command(<String>['screenshot-to-file', path, 'video']);
-      final File file = File(path);
-      Uint8List bytes = await _readShot(file);
-      if (bytes.isEmpty) {
-        // One retry: a few builds answer the command before the encoder has
-        // finished with the file.
-        await Future<void>.delayed(const Duration(milliseconds: 60));
-        bytes = await _readShot(file);
+      // mpv's `screenshot-raw`, through media_kit's own wrapper: the frame
+      // arrives as pixels in memory and no file is ever written. The
+      // file-writing route (`screenshot-to-file`) fails in media_kit's
+      // libmpv — "Error writing screenshot!" on every read — and its image
+      // encoders are not something SALU should lean on; the raw path is the
+      // one media_kit itself ships and exercises. `null` format = the BGRA
+      // buffer, no re-encode on the way.
+      final Uint8List? bgra = await native.screenshot(format: null);
+      if (bgra == null || bgra.isEmpty) return null;
+      // media_kit hands back the pixels without their size; the player's
+      // own display size is the frame's (rotation already applied, the
+      // same way `screenshot-raw` applies it). If they disagree the
+      // rotated pair is tried, then the read is given up — never a guess.
+      int w = PlayerService.instance.player.state.width ?? 0;
+      int h = PlayerService.instance.player.state.height ?? 0;
+      if (w > 0 && h > 0 && bgra.length < w * h * 4) {
+        final int t = w;
+        w = h;
+        h = t;
       }
-      if (bytes.isEmpty) return null;
-      final ui.Codec codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: histogramWidth,
-      );
-      final ui.FrameInfo frame = await codec.getNextFrame();
-      codec.dispose();
-      return frame.image;
+      return await _decodeBgra(bgra, w, h);
     } catch (error) {
       debugPrint('[SALU/tune] tone frame failed: $error');
       return null;
     }
   }
 
-  Future<Uint8List> _readShot(File file) async {
+  /// Wraps a raw BGRA buffer as a small [ui.Image]. The row stride is taken
+  /// from the buffer's length (mpv pads rows on some VOs), and the image is
+  /// decoded straight down to [histogramWidth] — the histogram never needs
+  /// more.
+  static Future<ui.Image?> _decodeBgra(Uint8List bgra, int w, int h) async {
+    if (w <= 0 || h <= 0) return null;
+    final int rowBytes = bgra.length ~/ h;
+    if (rowBytes < w * 4) return null;
+    final ui.ImmutableBuffer buffer =
+        await ui.ImmutableBuffer.fromUint8List(bgra);
     try {
-      if (!await file.exists()) return Uint8List(0);
-      return await file.readAsBytes();
-    } catch (_) {
-      return Uint8List(0);
+      final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
+        buffer,
+        width: w,
+        height: h,
+        rowBytes: rowBytes,
+        pixelFormat: ui.PixelFormat.bgra8888,
+      );
+      try {
+        final int targetW = math.min(w, histogramWidth);
+        final int targetH = math.max(1, (h * targetW / w).round());
+        final ui.Codec codec = await descriptor.instantiateCodec(
+          targetWidth: targetW,
+          targetHeight: targetH,
+        );
+        try {
+          final ui.FrameInfo frame = await codec.getNextFrame();
+          return frame.image;
+        } finally {
+          codec.dispose();
+        }
+      } finally {
+        descriptor.dispose();
+      }
+    } finally {
+      buffer.dispose();
     }
   }
 
