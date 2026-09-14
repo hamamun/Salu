@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../ui/osd/osd_controller.dart';
 import 'clock_format.dart';
+import 'lyric_service.dart';
 import 'player_service.dart';
 import 'queue_service.dart';
 
@@ -243,12 +244,17 @@ class TransportActions {
   ///
   /// mpv's own convention: `z` shifts the text 100 ms EARLIER, `x`
   /// 100 ms LATER ([later]); Shift is SALU's coarse second ([coarse]).
-  /// Silent while no subtitle track is selected — an offset with
-  /// nothing to move is not an action. The deck names the new offset
-  /// because the panel is usually closed when the keys are used; the
-  /// panel's own sync row needs no card (it reads the same value live).
+  /// Silent while no subtitle track is selected AND lyrics are not
+  /// showing — an offset with nothing to move is not an action. Lyrics
+  /// reuse this same `sub-delay` value (lrc.md L12 / L20): the Flutter
+  /// overlay reads it on lookup, so the keys actually move the lines.
+  /// The deck names the new offset because the panel is usually closed
+  /// when the keys are used; the panel's own sync row needs no card
+  /// (it reads the same value live).
   void subtitleSync({required bool later, bool coarse = false}) {
-    if (!player.hasSubtitleSelected) return;
+    if (!player.hasSubtitleSelected && !LyricService.instance.isShowing) {
+      return;
+    }
     final double step = coarse
         ? PlayerService.subDelayCoarseStep
         : PlayerService.subDelayStep;

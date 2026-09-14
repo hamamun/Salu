@@ -4,9 +4,11 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/audio_display_service.dart';
 import '../../core/channel_load_service.dart';
 import '../../core/drop_handler.dart';
 import '../../core/folder_autoload_service.dart';
+import '../../core/lyric_service.dart';
 import '../../core/open_media_service.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
@@ -116,6 +118,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // place the first media is opened, so a landed file re-lays its four
     // continua (and answers Auto EQ) before the panel can ever paint.
     TuneService.instance.startWatching();
+    // Lyrics + the audio canvas (lrc.md L26): clock listeners and the
+    // visualizer settings toggle, so a flip in Settings re-evaluates
+    // the three-mode table immediately.
+    LyricService.instance.startWatching();
+    AudioDisplayService.instance.startWatching();
     _restartHideTimer();
 
     // Play the file the app was launched with, if any.

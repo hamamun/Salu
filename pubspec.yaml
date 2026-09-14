@@ -38,6 +38,11 @@ dependencies:
   # client, locked at 1.6.0).
   http: ^1.2.0
 
+  # ── Audio display (lrc.md L21) ──────────────────────────────────────────
+  # Cover-art bytes only (ID3 APIC / FLAC picture / MP4 covr). Title /
+  # artist / album come from mpv metadata — this package never feeds text.
+  audio_metadata_reader: ^1.4.0
+
   # ── Settings & persistence ──────────────────────────────────────────────
   # Lightweight key-value storage for settings (title bar mode, …).
   shared_preferences: ^2.3.0

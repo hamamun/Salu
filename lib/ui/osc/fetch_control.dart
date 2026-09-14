@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/lyric_service.dart';
 import '../../core/media_utils.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
@@ -7,15 +8,15 @@ import '../../core/queue_service.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 
-/// The Fetch button (cc.md §6 / D14) — the control row's right zone,
-/// immediately left of fullscreen.
+/// The Fetch button (cc.md §6 / D14 · lrc.md L13 / L14) — the control
+/// row's right zone, immediately left of fullscreen.
 ///
-/// Live ONLY while a local video file is playing (D6): audio files,
-/// channel mode, and remote URL streams all leave it **greyed out and
-/// inert — never hidden** (SaluIconButton's `enabled: false` already
-/// dims the mark and keeps the tooltip name, exactly what D6 asks for
-/// and what follow.md prescribes). A tap toggles the slide-down track
-/// panel via [PanelService].
+/// Job by media kind:
+///   · **Video** → opens the track panel (`Tracks` tooltip). Unchanged.
+///   · **Audio with lyrics available** → lyrics on/off toggle (`Lyrics`
+///     tooltip). A dot badge means "available and currently off" (L14).
+///   · **Audio with no lyrics** (and channels / remote URLs) → greyed
+///     out and inert, never hidden.
 class FetchControl extends StatelessWidget {
   const FetchControl({super.key});
 
@@ -23,24 +24,35 @@ class FetchControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final PlayerService player = PlayerService.instance;
     final PanelService panels = PanelService.instance;
-    return ValueListenableBuilder<String?>(
-      valueListenable: player.currentPath,
-      builder: (BuildContext context, String? path, Widget? _) {
-        final bool enabled = path != null &&
+    final LyricService lyrics = LyricService.instance;
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        player.currentPath,
+        lyrics.available,
+        lyrics.shown,
+        panels.trackPanelOpen,
+      ]),
+      builder: (BuildContext context, Widget? _) {
+        final String? path = player.currentPath.value;
+        final bool local = path != null &&
             !path.contains('://') &&
-            !QueueService.instance.isChannelList &&
-            MediaUtils.isVideo(path);
-        return ValueListenableBuilder<bool>(
-          valueListenable: panels.trackPanelOpen,
-          builder: (BuildContext context, bool open, Widget? _) {
-            return SaluIconButton(
-              tooltip: 'Tracks',
-              enabled: enabled,
-              active: open,
-              onTap: panels.toggleTrackPanel,
-              child: const CcMark(size: 19),
-            );
-          },
+            !QueueService.instance.isChannelList;
+        final bool video =
+            local && path != null && MediaUtils.isVideo(path);
+        final bool audioLyrics = local &&
+            path != null &&
+            MediaUtils.isAudio(path) &&
+            lyrics.available.value;
+        final bool audio = local && path != null && MediaUtils.isAudio(path);
+        final bool enabled = video || audioLyrics;
+        final bool lyricsOn = audioLyrics && lyrics.shown.value;
+        return SaluIconButton(
+          tooltip: audio ? 'Lyrics' : 'Tracks',
+          enabled: enabled,
+          active: video ? panels.trackPanelOpen.value : lyricsOn,
+          badge: audioLyrics && !lyrics.shown.value,
+          onTap: video ? panels.toggleTrackPanel : lyrics.toggleShown,
+          child: const CcMark(size: 19),
         );
       },
     );
