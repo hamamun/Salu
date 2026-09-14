@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:salu/core/lyric_locator.dart';
+import 'package:salu/core/lyric_parser.dart';
 
 void main() {
   late Directory dir;

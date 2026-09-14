@@ -34,16 +34,14 @@ class FetchControl extends StatelessWidget {
       ]),
       builder: (BuildContext context, Widget? _) {
         final String? path = player.currentPath.value;
+        // [local] promotes [path] to non-null for every check below, so
+        // the media-kind tests need no further null guard.
         final bool local = path != null &&
             !path.contains('://') &&
             !QueueService.instance.isChannelList;
-        final bool video =
-            local && path != null && MediaUtils.isVideo(path);
-        final bool audioLyrics = local &&
-            path != null &&
-            MediaUtils.isAudio(path) &&
-            lyrics.available.value;
-        final bool audio = local && path != null && MediaUtils.isAudio(path);
+        final bool video = local && MediaUtils.isVideo(path);
+        final bool audio = local && MediaUtils.isAudio(path);
+        final bool audioLyrics = audio && lyrics.available.value;
         final bool enabled = video || audioLyrics;
         final bool lyricsOn = audioLyrics && lyrics.shown.value;
         return SaluIconButton(
