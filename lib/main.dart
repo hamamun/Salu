@@ -14,6 +14,7 @@ import 'core/player_service.dart';
 import 'core/resume_service.dart';
 import 'core/settings_service.dart';
 import 'core/sub_delay_service.dart';
+import 'core/tune_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/home_screen.dart';
 
@@ -90,6 +91,10 @@ Future<void> main(List<String> args) async {
   await ResumeService.instance.load();
   await SubDelayService.instance.load();
   await ChannelFavouritesService.instance.load();
+  // The Tune panel's values (its four lines + the Auto EQ learning map) are
+  // read before the first frame, so a launch straight into a file lands on
+  // the remembered curve instead of flashing a Flat one (eq_imp.md §6).
+  await TuneService.instance.load();
 
   runApp(SaluApp(initialFilePath: extractMediaPathFromArgs(args)));
 }
@@ -138,6 +143,14 @@ class _CloseGuard with WindowListener {
     try {
       // A bookmark tapped seconds before the × must never be lost.
       await ChannelFavouritesService.instance.flush().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
+    try {
+      // An equalizer dragged seconds before the × must never be lost — the
+      // panel state and the learning map both ride the same flush.
+      await TuneService.instance.flush().timeout(
         const Duration(seconds: 2),
         onTimeout: () {},
       );

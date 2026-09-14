@@ -138,7 +138,34 @@ class _OsdDeckState extends State<OsdDeck>
       OsdFailedCard c => _TransientCard(child: _failedBody(c)),
       OsdSubtitleCard c => _TransientCard(child: _subtitleBody(c)),
       OsdSubDelayCard c => _TransientCard(child: _subDelayBody(c)),
+      OsdTuneCard c => _TransientCard(child: _tuneBody(c)),
     };
+  }
+
+  /// The Tune flash (eq_imp.md §6) — the equalizer mark carrying what the
+  /// keyboard just landed on. The deck shows `Audio · Pop`, the panel shows
+  /// the same words inside the line; neither ever teaches anything.
+  Widget _tuneBody(OsdTuneCard card) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconTheme.merge(
+          data: const IconThemeData(color: AppColors.textPrimary),
+          child: const EqualizerMark(size: 17),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          '${card.part} · ${card.value}',
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3,
+            fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
   }
 
   /// The sync flash (owner 2026-09-13) — the cc mark carrying the

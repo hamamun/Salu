@@ -62,6 +62,9 @@ class SettingsService {
   static const String _keyResumeMode = 'resume_mode';
   static const String _keyFolderAutoloadMode = 'folder_autoload_mode';
 
+  // ── Auto EQ (eq_imp.md §5) ─────────────────────────────────────────────
+  static const String _keyAutoEq = 'auto_eq';
+
   // ── Subtitles (cc.md §2 · D2 · D3 · D5 · D13 amended 2026-09-13) ─────
   static const String _keySubtitleApiKey = 'subtitle_api_key';
   static const String _keySubtitleUsername = 'subtitle_username';
@@ -85,6 +88,11 @@ class SettingsService {
   /// Off is remembered across sessions.
   final ValueNotifier<FolderAutoloadMode> folderAutoloadMode =
       ValueNotifier<FolderAutoloadMode>(FolderAutoloadMode.allVideos);
+
+  /// Auto EQ (eq_imp.md §5) — SALU picks a preset the moment a file loads
+  /// and learns from the viewer's corrections. Default **Off**, and turning
+  /// it off leaves the current EQ exactly as it is.
+  final ValueNotifier<bool> autoEq = ValueNotifier<bool>(false);
 
   /// The OpenSubtitles.com API key (D2). Empty = signed-out state: the
   /// engine no-ops and surfaces its single once-per-session
@@ -148,6 +156,7 @@ class SettingsService {
             FolderAutoloadMode.values.asNameMap()[rawAutoload] ??
                 FolderAutoloadMode.allVideos;
       }
+      autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
       if (rawSubtitleKey != null) subtitleApiKey.value = rawSubtitleKey;
       final String? rawSubtitleUser =
@@ -172,6 +181,7 @@ class SettingsService {
       titleBarMode.value = TitleBarMode.borderless;
       resumeMode.value = ResumeMode.all;
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
+      autoEq.value = false;
       subtitleApiKey.value = '';
       subtitleUsername.value = '';
       subtitlePassword.value = '';
@@ -212,6 +222,19 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyFolderAutoloadMode, mode.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Auto EQ — the Settings → General switch (eq_imp.md §5). Applies
+  /// instantly and persists; nothing is re-picked for the file already
+  /// playing (Auto only ever speaks at file load).
+  Future<void> setAutoEq(bool on) async {
+    autoEq.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyAutoEq, on);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }

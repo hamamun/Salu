@@ -12,6 +12,8 @@ import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
 import '../../core/settings_service.dart';
+import '../../core/tune/tune_model.dart';
+import '../../core/tune_service.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
@@ -21,7 +23,9 @@ import '../osd/osd_controller.dart';
 import '../osd/osd_deck.dart';
 import '../panels/playlist_panel.dart';
 import '../panels/track_panel.dart';
+import '../panels/tune_panel.dart';
 import '../widgets/custom_title_bar.dart';
+import '../widgets/eq_curve_overlay.dart';
 import '../widgets/live_light.dart';
 import '../widgets/settings_dialog.dart';
 import 'video_screen.dart';
@@ -108,6 +112,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // Pin-mode rule: when playback stops or pauses, the pinned chrome
     // must come up (a keypress must never kill a pinned chrome).
     _player.transportState.addListener(_onTransportStateChanged);
+    // The Tune panel's owner starts mirroring the player here — the same
+    // place the first media is opened, so a landed file re-lays its four
+    // continua (and answers Auto EQ) before the panel can ever paint.
+    TuneService.instance.startWatching();
     _restartHideTimer();
 
     // Play the file the app was launched with, if any.
@@ -269,12 +277,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final LogicalKeyboardKey key = event.logicalKey;
 
     // Esc — dismisses the topmost popup first (follow.md rule 3):
-    // resume toast → track panel (its Search window is a dialog route
-    // and closes itself above this) → playlist panel. With nothing up
-    // it is just another key: activity → chrome wakes.
+    // resume toast → tune panel → track panel (its Search window is a
+    // dialog route and closes itself above this) → playlist panel. With
+    // nothing up it is just another key: activity → chrome wakes.
     if (key == LogicalKeyboardKey.escape) {
       if (_osd.isResumeToast) {
         _osd.dismiss();
+        return KeyEventResult.handled;
+      }
+      if (PanelService.instance.tunePanelOpen.value) {
+        PanelService.instance.closeTunePanel();
         return KeyEventResult.handled;
       }
       if (PanelService.instance.trackPanelOpen.value) {
@@ -302,6 +314,49 @@ class _HomeScreenState extends State<HomeScreen> {
       TransportActions.instance.seekForward();
       return KeyEventResult.handled;
     }
+    // ── Tune: the silent keyboard tier (eq_imp.md §6) ──────────────────
+    //
+    // Ctrl/Cmd + E opens the panel; Ctrl/Cmd + ↑/↓ steps whichever line the
+    // pointer last rested on inside it ("one part at a time"), and
+    // Ctrl/Cmd + Alt + ↑/↓ walks that focus over the four lines. The deck
+    // names the stop, because a closed bar has nothing to show — the same
+    // answer the subtitle-sync keys give. The BARE arrows below stay the
+    // volume, and a greyed line answers nothing at all: the key falls
+    // through, exactly as if the tier were not there.
+    final bool tuneCtrl = HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+    if (tuneCtrl && !repeat && key == LogicalKeyboardKey.keyE) {
+      PanelService.instance.toggleTunePanel();
+      return KeyEventResult.handled;
+    }
+    if (tuneCtrl &&
+        !repeat &&
+        (key == LogicalKeyboardKey.arrowUp ||
+            key == LogicalKeyboardKey.arrowDown)) {
+      final int delta = key == LogicalKeyboardKey.arrowDown ? -1 : 1;
+      final TuneService tune = TuneService.instance;
+      // The card is the answer for the keyboard alone: with the panel open
+      // the line already says the same words (the subtitle-sync rule).
+      final bool sayIt = !PanelService.instance.tunePanelOpen.value;
+      if (HardwareKeyboard.instance.isAltPressed) {
+        final TunePart part = tune.moveFocus(delta);
+        if (sayIt) {
+          _osd.show(OsdTuneCard(part: 'Tune', value: tune.partName(part)));
+        }
+        return KeyEventResult.handled;
+      }
+      final TunePart before = tune.focusedPart.value;
+      if (tune.nudgeFocused(delta) != null) {
+        if (sayIt) {
+          _osd.show(OsdTuneCard(
+            part: tune.partName(before),
+            value: tune.labelFor(before),
+          ));
+        }
+        return KeyEventResult.handled;
+      }
+    }
+
     if (key == LogicalKeyboardKey.arrowUp) {
       TransportActions.instance.volumeUp();
       return KeyEventResult.handled;
@@ -404,6 +459,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const VideoScreen(),
                 ),
 
+                // 1b · The equalizer curve on the picture (eq_imp.md §1.9)
+                //      — the mark blown up, faint as grain, over the film
+                //      and under everything else. It hides itself when the
+                //      curve is Flat, on live media, and when the toggle is
+                //      off; it ignores every pointer.
+                const Positioned.fill(child: EqCurveOverlay()),
+
                 // 2 · Drop highlight overlay.
                 _DropOverlay(
                   visible: _dropHovering,
@@ -431,6 +493,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 //      live-mirroring mpv. Below the control row on the
                 //      right; above the video, below the OSD deck.
                 const TrackPanel(),
+
+                // 5c · The Tune panel (eq_imp.md §1.2) — the fourth panel in
+                //      the one-popup world: opening it closes the Playlist
+                //      and Tracks panels, Esc closes it, and it locks the
+                //      chrome awake while it is up.
+                const Positioned.fill(child: TunePanel()),
 
                 // 6 · Resume-toast click-outside: dismiss ONLY — never
                 //     triggers Restart, never swallows the click (the

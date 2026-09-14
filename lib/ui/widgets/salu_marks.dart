@@ -1548,3 +1548,164 @@ class _SaveLoadPainter extends CustomPainter {
   bool shouldRepaint(_SaveLoadPainter old) =>
       old.ink != ink || old.stroke != stroke;
 }
+
+/// The Equalizer (Tune) button's mark — three sliders: three thin rules
+/// with a thumb crossing each at a different height (eq_imp.md §1.1's
+/// "custom thin mark — three sliders"). Drawn in the family's stroke, so
+/// [SaluIconButton]'s grey → white hover and the active glow light it up
+/// exactly like every other mark in the row.
+class EqualizerMark extends StatelessWidget {
+  const EqualizerMark({super.key, this.size = 19});
+
+  final double size;
+
+  /// Thumb heights, deliberately uneven — an even row would read as the
+  /// ≡ drag handle (GripMark), which hard rule 6 forbids.
+  static const List<double> _thumbY = <double>[0.30, 0.64, 0.42];
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _EqualizerPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _EqualizerPainter extends CustomPainter {
+  const _EqualizerPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width, h = size.height;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    for (int i = 0; i < 3; i++) {
+      final double x = w * (0.22 + 0.28 * i);
+      // The rule, and its thumb.
+      canvas.drawLine(Offset(x, h * 0.12), Offset(x, h * 0.88), paint);
+      canvas.drawLine(
+        Offset(x - w * 0.12, h * EqualizerMark._thumbY[i]),
+        Offset(x + w * 0.12, h * EqualizerMark._thumbY[i]),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_EqualizerPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// "My" — the one shared EQ slot (eq_imp.md §1.5): a ring with a dot at
+/// its centre, "yours, kept". A quiet mark, not a stop on the line: it
+/// sits BELOW the continuum, beside the save mark that fills it.
+class MyMark extends StatelessWidget {
+  const MyMark({super.key, this.size = 15, this.filled = false});
+
+  final double size;
+
+  /// True once a curve has been saved into the slot — the ring fills.
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _MyPainter(markInk(context), markStrokeFor(size), filled),
+    );
+  }
+}
+
+class _MyPainter extends CustomPainter {
+  const _MyPainter(this.ink, this.stroke, this.filled);
+
+  final Color ink;
+  final double stroke;
+  final bool filled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset c = size.center(Offset.zero);
+    final double r = size.width * 0.40;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(c, r, paint);
+    canvas.drawCircle(
+      c,
+      filled ? r * 0.46 : r * 0.22,
+      Paint()
+        ..color = ink
+        ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
+        ..strokeWidth = stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MyPainter old) =>
+      old.ink != ink || old.stroke != stroke || old.filled != filled;
+}
+
+/// Curve on the video (eq_imp.md §1.9): the EQ's response line riding over a
+/// soft frame — the mark that toggles the curve being drawn ON the picture,
+/// "in a soft colour, like film grain".
+class CurveMark extends StatelessWidget {
+  const CurveMark({super.key, this.size = 17});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size * 0.86),
+      painter: _CurvePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _CurvePainter extends CustomPainter {
+  const _CurvePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width, h = size.height;
+    final Paint quiet = Paint()
+      ..color = ink.withAlpha(120)
+      ..strokeWidth = stroke * 0.8
+      ..strokeCap = StrokeCap.round;
+    // The picture frame, quiet: a baseline and two short side ticks.
+    canvas.drawLine(Offset(w * 0.06, h * 0.88), Offset(w * 0.94, h * 0.88), quiet);
+    canvas.drawLine(Offset(w * 0.06, h * 0.70), Offset(w * 0.06, h * 0.88), quiet);
+    canvas.drawLine(Offset(w * 0.94, h * 0.70), Offset(w * 0.94, h * 0.88), quiet);
+    // The curve — bass lifted, mids dipped, treble up: a graphic EQ's
+    // silhouette, bright and the mark's whole point.
+    final Path path = Path()
+      ..moveTo(w * 0.08, h * 0.52)
+      ..cubicTo(w * 0.26, h * 0.06, w * 0.34, h * 0.92, w * 0.52, h * 0.74)
+      ..cubicTo(w * 0.68, h * 0.58, w * 0.74, h * 0.18, w * 0.92, h * 0.30);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = ink
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CurvePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
