@@ -767,7 +767,7 @@ void main() {
     test('a curve you kept comes back exactly, and calls itself Custom',
         () async {
       final List<double> mine = <double>[3, -2, 1, 0, -1, 2, -3, 1, 0, 2];
-      tune.memory.teach(AutoEq.memoryKey(jazz), gains: mine);
+      tune.memory.teach(AutoEq.memoryKey(jazz), '', gains: mine);
       await tune.applyAutoEq(jazz);
       expect(tune.eq.value.gains, mine);
       expect(tune.eqStop.value, isNull);
@@ -780,7 +780,7 @@ void main() {
 
     test('the numbers survive a capture/restore round trip', () async {
       final List<double> mine = <double>[3, -2, 1, 0, -1, 2, -3, 1, 0, 2];
-      tune.memory.teach(AutoEq.memoryKey(jazz), gains: mine);
+      tune.memory.teach(AutoEq.memoryKey(jazz), '', gains: mine);
       await tune.applyAutoEq(jazz);
       final TuneState saved = tune.capture();
       fake.eqCurves.clear();
@@ -792,7 +792,7 @@ void main() {
     });
 
     test('a manual tap wins, and puts the automation dot out (§5)', () async {
-      tune.memory.teach(AutoEq.memoryKey(jazz), presetKey: 'rock');
+      tune.memory.teach(AutoEq.memoryKey(jazz), 'rock');
       await tune.applyAutoEq(jazz);
       expect(tune.autoPick.value, 'Rock');
       // The tap decides — and the dot, which is Auto's report and not a
@@ -820,7 +820,7 @@ void main() {
     });
 
     test('a kept preset answers, and the dot says its name', () async {
-      tune.memory.teach(AutoEq.memoryKey(jazz), presetKey: 'rock');
+      tune.memory.teach(AutoEq.memoryKey(jazz), 'rock');
       await tune.applyAutoEq(jazz);
       final EqPreset rock =
           TunePresets.presetByKey('rock', TuneFileKind.audio)!;
@@ -832,7 +832,7 @@ void main() {
 
     test('a kept curve outranks the preset nearest to it (§7c)', () async {
       final List<double> mine = <double>[3, -2, 1, 0, -1, 2, -3, 1, 0, 2];
-      tune.memory.teach(AutoEq.memoryKey(jazz), presetKey: 'rock', gains: mine);
+      tune.memory.teach(AutoEq.memoryKey(jazz), 'rock', gains: mine);
       await tune.applyAutoEq(jazz);
       // A named stop wins when the person landed on one — the curve is the
       // memory for the times they did not.
@@ -846,7 +846,7 @@ void main() {
       // entry is not applied to the film.
       const AutoEqFacts film =
           AutoEqFacts(kind: TuneFileKind.video, fileName: 'film');
-      tune.memory.teach(AutoEq.memoryKey(film), presetKey: 'vocal');
+      tune.memory.teach(AutoEq.memoryKey(film), 'vocal');
       await tune.applyAutoEq(film);
       expect(tune.eqStop.value, isNot('vocal'));
       expect(tune.eq.value.gains,

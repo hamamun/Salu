@@ -52,14 +52,15 @@ class EqMemory {
   /// created or refreshed, and the LRU cap is applied immediately so [length]
   /// never overshoots.
   ///
-  /// [presetKey] is the named stop the person landed on (may be empty for a
-  /// free curve), [gains] the curve they kept — §7c: the full curve is what
+  /// [presetKey] is the named stop the person landed on (`''` for a free
+  /// curve), [gains] the curve they kept — §7c: the full curve is what
   /// makes Auto return *their* sound, not merely the preset nearest to it.
   void teach(
     String key,
-    [String presetKey = ''],
-    {List<double>? gains, DateTime? now},
-  ) {
+    String presetKey, {
+    List<double>? gains,
+    DateTime? now,
+  }) {
     if (key.isEmpty) return;
     final List<double>? curve = _cleanCurve(gains);
     if (presetKey.isEmpty && curve == null) return;
