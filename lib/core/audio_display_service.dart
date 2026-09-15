@@ -157,6 +157,9 @@ class AudioDisplayService {
     // clears any earlier install-failure marker.
     _graphLive = PlayerService.instance.visualizerArmed;
     if (_graphLive) _installFailedAt = null;
+    debugPrint('[SALU/viz] landed: $path — graph '
+        '${_graphLive ? "LIVE" : "not in pipeline"}'
+        '${LyricService.instance.isShowing ? " (lyrics on top)" : ""}');
     // Never inherit the previous track's art or text (L26).
     coverBytes.value = null;
     info.value = AudioTrackInfo(title: MediaUtils.displayName(path));
@@ -238,10 +241,14 @@ class AudioDisplayService {
           now.difference(_installFailedAt!) < _installCooldown) {
         // The pre-load already failed for this file — a re-open would
         // just re-open it. The canvas keeps the metadata.
+        debugPrint('[SALU/viz] toggle ignored — install cooldown active '
+            '(last install failed ${now.difference(_installFailedAt!).inSeconds}s ago)');
         mode.value = AudioCanvasMode.metadata;
         return;
       }
       _installFailedAt = now;
+      debugPrint('[SALU/viz] toggle on → re-opening "$path" at '
+          '${player.position.value} to install the graph');
       await player.reopenItemAt(
         index,
         player.position.value,
@@ -281,6 +288,8 @@ class AudioDisplayService {
       if (dur <= Duration.zero || dur - at <= const Duration(seconds: 2)) {
         return;
       }
+      debugPrint('[SALU/viz] KILL detected — the engine ended "$_killPath" '
+          'at $at of $dur: the lavfi graph died; rolling back');
       unawaited(_recoverFromKill(at));
     });
   }
