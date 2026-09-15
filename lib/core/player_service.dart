@@ -8,11 +8,11 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../ui/osd/osd_controller.dart';
+import 'audio_display_service.dart';
 import 'channel_favourites_service.dart';
 import 'channel_grouping.dart';
 import 'channel_load_service.dart';
 import 'channel_view_service.dart';
-import 'audio_display_service.dart';
 import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
