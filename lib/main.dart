@@ -15,6 +15,7 @@ import 'core/resume_service.dart';
 import 'core/settings_service.dart';
 import 'core/sub_delay_service.dart';
 import 'core/tune_service.dart';
+import 'core/window_state_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/home_screen.dart';
 
@@ -87,6 +88,10 @@ Future<void> main(List<String> args) async {
   windowManager.addListener(_CloseGuard());
 
   // ── Load persisted settings + resume memory before the first frame. ──
+  // The one shared window-state memory starts here too (bug 2 fix): one
+  // listener + live re-reads back both caption buttons, so fullscreen /
+  // maximize can never disagree with the real window again.
+  await WindowStateService.instance.ensureInitialized();
   await SettingsService.instance.load();
   await ResumeService.instance.load();
   await SubDelayService.instance.load();

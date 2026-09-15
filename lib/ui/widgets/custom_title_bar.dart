@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
 import 'dot_grid_icon.dart';
 
@@ -21,7 +22,12 @@ import 'dot_grid_icon.dart';
 /// visibility animation of its own — the parent block (HomeScreen's fused
 /// top chrome) owns the shared background and show/hide motion, so the
 /// title bar and the controller below always move and fade as one piece.
-class CustomTitleBar extends StatefulWidget {
+///
+/// The maximize / restore mark reads [WindowStateService.isMaximized] —
+/// the one shared window-state memory (bug 2 fix) — and the button routes
+/// through [WindowStateService.toggleMaximize], which exits fullscreen
+/// through the clean path instead of restoring around it.
+class CustomTitleBar extends StatelessWidget {
   const CustomTitleBar({
     super.key,
     required this.visible,
@@ -47,50 +53,12 @@ class CustomTitleBar extends StatefulWidget {
   static const double height = 40;
 
   @override
-  State<CustomTitleBar> createState() => _CustomTitleBarState();
-}
-
-class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
-  bool _isMaximized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    windowManager.addListener(this);
-    _syncMaximizedState();
-  }
-
-  @override
-  void dispose() {
-    windowManager.removeListener(this);
-    super.dispose();
-  }
-
-  Future<void> _syncMaximizedState() async {
-    final bool maximized = await windowManager.isMaximized();
-    if (mounted) setState(() => _isMaximized = maximized);
-  }
-
-  @override
-  void onWindowMaximize() => setState(() => _isMaximized = true);
-
-  @override
-  void onWindowUnmaximize() => setState(() => _isMaximized = false);
-
-  Future<void> _toggleMaximize() async {
-    if (await windowManager.isMaximized()) {
-      await windowManager.unmaximize();
-    } else {
-      await windowManager.maximize();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final WindowStateService windows = WindowStateService.instance;
     // The bar's own content — gradient scrim applied only when standalone.
     final Widget content = Container(
       height: CustomTitleBar.height,
-      decoration: widget.immersive
+      decoration: immersive
           ? null
           : const BoxDecoration(
               // Soft scrim so the bar stays readable over bright video,
@@ -108,7 +76,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
             child: DragToMoveArea(
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
-                onDoubleTap: _toggleMaximize,
+                onDoubleTap: windows.toggleMaximize,
                 child: const SizedBox.expand(),
               ),
             ),
@@ -123,7 +91,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                       .toDouble(),
                 ),
                 child: Text(
-                  widget.title ?? 'SALU',
+                  title ?? 'SALU',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
@@ -150,17 +118,23 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
                     size: 18,
                     color: AppColors.textPrimary,
                   ),
-                  onPressed: () => widget.onSettings?.call(),
+                  onPressed: () => onSettings?.call(),
                 ),
                 _CaptionButton(
                   glyph: '\uE921', // Minimize
                   tooltip: 'Minimize',
                   onPressed: () => windowManager.minimize(),
                 ),
-                _CaptionButton(
-                  glyph: _isMaximized ? '\uE923' : '\uE922',
-                  tooltip: _isMaximized ? 'Restore' : 'Maximize',
-                  onPressed: _toggleMaximize,
+                ValueListenableBuilder<bool>(
+                  valueListenable: windows.isMaximized,
+                  builder:
+                      (BuildContext context, bool maximized, Widget? _) {
+                    return _CaptionButton(
+                      glyph: maximized ? '\uE923' : '\uE922',
+                      tooltip: maximized ? 'Restore' : 'Maximize',
+                      onPressed: windows.toggleMaximize,
+                    );
+                  },
                 ),
                 _CaptionButton(
                   glyph: '\uE8BB', // Close
@@ -175,21 +149,21 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
       ),
     );
 
-    if (widget.immersive) return content;
+    if (immersive) return content;
 
     return AnimatedSlide(
       // The bar slides down from the top edge as it fades in (like
       // Windows' own auto-hiding caption bars); the off-screen part is
       // clipped by the window, so at rest it is fully invisible.
-      offset: widget.visible ? Offset.zero : const Offset(0, -0.5),
+      offset: visible ? Offset.zero : const Offset(0, -0.5),
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
       child: AnimatedOpacity(
-        opacity: widget.visible ? 1 : 0,
+        opacity: visible ? 1 : 0,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
         child: IgnorePointer(
-          ignoring: !widget.visible,
+          ignoring: !visible,
           child: content,
         ),
       ),
