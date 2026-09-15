@@ -274,6 +274,24 @@ class _HomeScreenState extends State<HomeScreen> {
   // toast. Everything else is activity: the chrome reveals and the
   // 3-second countdown restarts, so keyboard-only usage can't get locked
   // out of the window controls.
+  //
+  // The one exception is typing: while the focus sits inside a text
+  // field (the playlist filter), the bare single-key shortcuts stand
+  // down entirely — see [_isTyping] — so the keystroke reaches the
+  // field instead of muting, stopping, seeking, or paging.
+
+  /// Whether the keyboard focus currently sits inside a text field — the
+  /// playlist filter is the only one living under this handler (dialog
+  /// fields sit on their own routes above it). While true, the bare
+  /// single-key shortcuts below stand down so typing reaches the field:
+  /// `m` lands in the filter instead of muting, arrows move the caret
+  /// instead of seeking, Space types a space instead of pausing. Ctrl
+  /// combinations stay global — they never insert text.
+  bool get _isTyping {
+    final BuildContext? context = FocusManager.instance.primaryFocus?.context;
+    if (context == null) return false;
+    return context.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     final bool down = event is KeyDownEvent;
@@ -308,15 +326,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // ── Transport keys: OSD only, no chrome wake ─────────────────────
-    if (key == LogicalKeyboardKey.space) {
+    //
+    // Each bare key below yields while typing ([_isTyping]) — the
+    // keystroke belongs to the field. Ctrl combinations (the Tune tier
+    // next, the open-media set at the bottom) stay global.
+    final bool typing = _isTyping;
+    if (!typing && key == LogicalKeyboardKey.space) {
       TransportActions.instance.playOrPause();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.arrowLeft) {
+    if (!typing && key == LogicalKeyboardKey.arrowLeft) {
       TransportActions.instance.seekBackward();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.arrowRight) {
+    if (!typing && key == LogicalKeyboardKey.arrowRight) {
       TransportActions.instance.seekForward();
       return KeyEventResult.handled;
     }
@@ -363,27 +386,27 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    if (key == LogicalKeyboardKey.arrowUp) {
+    if (!typing && key == LogicalKeyboardKey.arrowUp) {
       TransportActions.instance.volumeUp();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.arrowDown) {
+    if (!typing && key == LogicalKeyboardKey.arrowDown) {
       TransportActions.instance.volumeDown();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.keyM) {
+    if (!typing && key == LogicalKeyboardKey.keyM) {
       TransportActions.instance.toggleMute();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.keyS) {
+    if (!typing && key == LogicalKeyboardKey.keyS) {
       TransportActions.instance.stop();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.pageUp) {
+    if (!typing && key == LogicalKeyboardKey.pageUp) {
       TransportActions.instance.previous();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.pageDown) {
+    if (!typing && key == LogicalKeyboardKey.pageDown) {
       TransportActions.instance.next();
       return KeyEventResult.handled;
     }
@@ -394,7 +417,8 @@ class _HomeScreenState extends State<HomeScreen> {
     // selected; the deck names the new offset (see `TransportActions
     // .subtitleSync`). Same family as the transport keys above: OSD
     // only, no chrome wake.
-    if (key == LogicalKeyboardKey.keyZ || key == LogicalKeyboardKey.keyX) {
+    if (!typing &&
+        (key == LogicalKeyboardKey.keyZ || key == LogicalKeyboardKey.keyX)) {
       // Bare keys only: Ctrl/Alt stay out of SALU's way (Ctrl+Z is the
       // world's undo, and the Search window has text fields in it).
       final bool bare = !HardwareKeyboard.instance.isControlPressed &&

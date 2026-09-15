@@ -187,3 +187,48 @@ panel widget into `ChannelViewService` so keyboard steps and closed-panel steps
 follow the same shown order; the transport buttons listen to it so their dim
 states refresh on grouping changes. Member list is cached per
 (list, mode, group, search) so dim reads never rescan 50 000 rows (§10.10c).
+
+## 7 · Typing M/S/Space/arrows in the playlist filter fired transport shortcuts
+**Status:** FIXED 2026-09-15 — typing guard in `HomeScreen._onKeyEvent`
+(`lib/ui/screens/home_screen.dart`, `_isTyping`).
+
+**Symptom:** pressing M in the playlist filter muted/unmuted instead of typing
+"m". Same class for S (stop), Space (play/pause), arrows (seek/volume instead
+of caret), Z/X (subtitle sync), PgUp/PgDn (track step).
+
+**Cause:** the window-wide key handler treated bare single keys as transport
+shortcuts unconditionally; the filter's field wrapper only consumed Esc, so
+every other key bubbled up and got swallowed before producing text.
+
+**Fix:** `_onKeyEvent` now checks whether the focus sits inside an
+`EditableText` and yields all bare single-key shortcuts while typing (Ctrl
+combinations stay global — they never insert text). One guard covers every
+affected key, including Shift+Arrow text selection.
+
+## 8 · Maximize → fullscreen → restore left stale icons, then killed pointer input + painting
+**Status:** FIXED 2026-09-15 — new `lib/core/window_state_service.dart`;
+`FullscreenControl` + `CustomTitleBar` rewired to it; started in `main`.
+
+**Symptom:** maximize → fullscreen → title-bar restore: window shrank but the
+fullscreen button still showed "exit fullscreen". Clicking it then left a
+screen-covering window showing only video — no chrome on hover or keys, clicks
+dead — while transport keys and playback kept working. Any clean resize
+(Win+D, Win+Down) healed it.
+
+**Cause (traced against window_manager 0.5.2 native code + owner testing):**
+the two buttons kept separate state memories. The title-bar restore bypassed
+the fullscreen system (plugin flag + event machine went silent — no
+unmaximize / leave-fullscreen event), so the fullscreen button lied and the
+next click sent `setFullScreen(false)` to an already-windowed window. That
+raced restore routine (style swap + manual Flutter-view resize + async
+re-maximize) corrupted the engine's view state: pointers dropped, framework
+frames frozen, while key dispatch, audio, and direct video textures kept
+going. Proven by: Ctrl+L opening the panel invisibly (visible after heal),
+actions working with no OSD card.
+
+**Fix:** one shared window-state memory (`isFullscreen` / `isMaximized`
+notifiers) with live OS re-reads after every command and on every window
+event (focus heals external Win+Down/taskbar changes); restore-while-
+fullscreen diverts through the clean `setFullScreen(false)` path; fullscreen
+toggle reads live state before acting so "exit" can never fire while
+windowed. The step-4 trigger is unreachable.
