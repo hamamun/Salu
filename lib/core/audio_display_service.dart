@@ -150,15 +150,22 @@ class AudioDisplayService {
   /// file has no tags" or "its header is still being parsed". A file
   /// whose load never takes (failed open, or we already moved on)
   /// keeps the file name that landed with it.
+  ///
+  /// The gate compares with [MediaUtils.samePath], never with `==`: on
+  /// Windows media_kit hands mpv the `\\?\C:\…` long-path spelling, and
+  /// mpv's `path` reports exactly what it was given. Plain string
+  /// equality therefore never matched a local file — the gate timed out
+  /// on every track and mode C kept showing the bare file name.
   Future<void> _loadText(String path, int generation) async {
     bool current = false;
+    String seen = '';
     for (int i = 0; i < _fileTries; i++) {
       if (generation != _generation) return;
       final NativePlayer? native = _native;
       if (native != null) {
         try {
-          final String raw = await native.getProperty('path');
-          if (raw.isNotEmpty && MediaUtils.canonicalPath(raw) == path) {
+          seen = await native.getProperty('path');
+          if (seen.isNotEmpty && MediaUtils.samePath(seen, path)) {
             current = true;
             break;
           }
@@ -166,30 +173,33 @@ class AudioDisplayService {
       }
       await Future<void>.delayed(_metaGap);
     }
-    if (!current) return;
+    if (!current) {
+      // Never read a previous file's tags. One debug line, so a
+      // mismatch is diagnosable instead of silent — the file name that
+      // landed with the track stays on screen.
+      debugPrint('[SALU/audio] tags skipped for "$path" (engine path "$seen")');
+      return;
+    }
     // Settle: the new demuxer's tags (or their absence) land as soon
     // as its header is parsed. Poll like the old retry loop did — now
     // safe, because nothing stale can answer.
-    String title = '';
-    String artist = '';
-    String album = '';
-    Map<String, String> additional = <String, String>{};
+    Map<String, String> tags = <String, String>{};
     for (int i = 0; i < _metaTries; i++) {
       if (generation != _generation) return;
-      title = await _readTag('title');
-      artist = await _readTag('artist');
-      album = await _readTag('album');
-      additional = await _readAllTags();
-      if (title.isNotEmpty ||
-          artist.isNotEmpty ||
-          album.isNotEmpty ||
-          additional.isNotEmpty) {
-        break;
-      }
+      tags = await _readTagMap();
+      if (tags.isNotEmpty) break;
       await Future<void>.delayed(_metaGap);
     }
     if (generation != _generation) return;
     final String fallback = MediaUtils.displayName(path);
+    final String title = _pickTag(tags, 'title');
+    final String artist = _pickTag(tags, 'artist');
+    final String album = _pickTag(tags, 'album');
+    final Map<String, String> additional = <String, String>{};
+    for (final MapEntry<String, String> entry in tags.entries) {
+      if (_isPrimaryTag(entry.key)) continue;
+      additional[entry.key] = entry.value;
+    }
     info.value = AudioTrackInfo(
       title: title.isEmpty ? fallback : title,
       artist: artist.isEmpty ? null : artist,
@@ -198,53 +208,94 @@ class AudioDisplayService {
     );
   }
 
-  Future<String> _readTag(String key) async {
+  /// The three fields the layout gives a line of their own (L2).
+  static const List<String> _primaryKeys = <String>['title', 'artist', 'album'];
+
+  static bool _isPrimaryTag(String key) =>
+      _primaryKeys.contains(key.toLowerCase());
+
+  /// First non-empty tag answering [key], matched case-insensitively:
+  /// ID3v2 tags arrive lowercased (`title`), a FLAC Vorbis comment
+  /// arrives uppercased (`TITLE`) — same field, same line.
+  static String _pickTag(Map<String, String> tags, String key) {
+    for (final MapEntry<String, String> entry in tags.entries) {
+      if (entry.key.toLowerCase() == key && entry.value.isNotEmpty) {
+        return entry.value;
+      }
+    }
+    return '';
+  }
+
+  /// Every tag mpv exposes for the file the engine now holds.
+  ///
+  /// `metadata` is a `MPV_FORMAT_NODE_MAP`, and libmpv's manual is
+  /// explicit that trying to retrieve it as a raw string does not work —
+  /// media_kit's `getProperty` answers `''` for it, and for
+  /// `filtered-metadata` too (which would additionally hide every tag
+  /// outside mpv's `--display-tags` list). So the map is walked through
+  /// its own documented string sub-properties instead:
+  /// `metadata/list/count`, `metadata/list/N/key`, `metadata/list/N/value`.
+  /// `metadata` — never the filtered map: mode C shows every available
+  /// field (L2).
+  Future<Map<String, String>> _readTagMap() async {
+    final String countRaw = await _readProperty('metadata/list/count');
+    final int count = int.tryParse(countRaw) ?? -1;
+    if (count < 0) {
+      // An engine build without the list sub-properties — fall back to
+      // one string probe per common tag.
+      return _probeTags();
+    }
+    final Map<String, String> tags = <String, String>{};
+    for (int i = 0; i < count; i++) {
+      final String key = await _readProperty('metadata/list/$i/key');
+      if (key.isEmpty) continue;
+      final String value = await _readProperty('metadata/list/$i/value');
+      if (value.isEmpty) continue;
+      tags[key] = value;
+    }
+    if (tags.isEmpty && count > 0) {
+      // The list answered nothing although mpv counts entries — a build
+      // with only part of the sub-properties. The probes still get the
+      // common fields on screen.
+      return _probeTags();
+    }
+    return tags;
+  }
+
+  /// Safety net for a libmpv without `metadata/list/*`: mpv's own
+  /// `--display-tags` default set, one `metadata/by-key/…` probe each
+  /// (`metadata/by-key/<key>` IS a plain string property, so it always
+  /// answers — with `''` when the file has no such tag).
+  static const List<String> _probeKeys = <String>[
+    'title', 'artist', 'album', 'album_artist', 'genre', 'date', 'year',
+    'track', 'disc', 'composer', 'performer', 'comment', 'publisher',
+    'copyright', 'language', 'encoder', 'bpm', 'lyricist',
+  ];
+
+  Future<Map<String, String>> _probeTags() async {
+    final Map<String, String> tags = <String, String>{};
+    for (final String key in _probeKeys) {
+      final String value = await _readProperty('metadata/by-key/$key');
+      if (value.isNotEmpty) tags[key] = value;
+    }
+    return tags;
+  }
+
+  /// One mpv property as a string; `''` whenever mpv has nothing to say
+  /// (unavailable property, engine not up yet, read failed).
+  ///
+  /// `NativePlayer.getProperty` returns `''` for a property mpv cannot
+  /// serve, so empty is the only "no value" signal there is. A tag whose
+  /// text merely STARTS with `(` is a real tag value (`(I Can't Get No)
+  /// Satisfaction`) and is kept.
+  Future<String> _readProperty(String name) async {
     final NativePlayer? native = _native;
     if (native == null) return '';
     try {
-      final String raw =
-          (await native.getProperty('metadata/by-key/$key')).trim();
-      if (raw.isEmpty || raw.startsWith('(')) return '';
-      return raw;
+      return (await native.getProperty(name)).trim();
     } catch (_) {
       return '';
     }
-  }
-
-  Future<Map<String, String>> _readAllTags() async {
-    final NativePlayer? native = _native;
-    if (native == null) return <String, String>{};
-    try {
-      final String raw = await native.getProperty('filtered-metadata');
-      final Map<String, String> tags = _parseMetadataMap(raw);
-      tags.removeWhere(
-        (String key, String value) =>
-            value.trim().isEmpty ||
-            value.trim().startsWith('(') ||
-            const <String>{'title', 'artist', 'album'}.contains(key.toLowerCase()),
-      );
-      return tags;
-    } catch (_) {
-      return <String, String>{};
-    }
-  }
-
-  /// mpv prints filtered metadata as a map such as `{genre=Rock, date=2024}`.
-  /// Values may contain commas, so only commas followed by another key are
-  /// treated as separators.
-  static Map<String, String> _parseMetadataMap(String raw) {
-    final String text = raw.trim();
-    if (text.isEmpty) return <String, String>{};
-    final Map<String, String> result = <String, String>{};
-    final RegExp entry = RegExp(
-      r'([A-Za-z0-9_.-]+)\s*=\s*(.*?)(?=,\s*[A-Za-z0-9_.-]+\s*=|\s*})',
-    );
-    for (final RegExpMatch match in entry.allMatches(text)) {
-      final String key = match.group(1)!.trim();
-      final String value = match.group(2)!.trim();
-      if (key.isNotEmpty && value.isNotEmpty) result[key] = value;
-    }
-    return result;
   }
 
   Future<void> _loadCover(String path, int generation) async {
@@ -259,6 +310,12 @@ class AudioDisplayService {
       bytes = await compute(_readCoverArtBytes, path);
     } catch (_) {
       bytes = _readCoverArtBytes(path);
+    }
+    if (bytes == null) {
+      // No embedded picture (or the tag reader could not open the
+      // container) — the SALU-logo placeholder is the intended look
+      // (L5). One debug line says which of the two it was.
+      debugPrint('[SALU/audio] no embedded cover art in "$path"');
     }
     _remember(path, bytes);
     if (generation != _generation) return;

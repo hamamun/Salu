@@ -17,7 +17,6 @@ import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
 import 'resume_service.dart';
-import 'settings_service.dart';
 import 'sub_delay_service.dart';
 import 'subtitle_service.dart';
 
