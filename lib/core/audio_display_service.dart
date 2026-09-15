@@ -76,6 +76,10 @@ class AudioDisplayService {
   /// its tags may be read (25 × 120 ms ≈ 3 s).
   static const int _fileTries = 25;
   static const Duration _metaGap = Duration(milliseconds: 120);
+  /// Settle polls once the file gate has passed — the new demuxer's
+  /// header (and with it the tags, or their absence) lands within this
+  /// many ticks for a local file.
+  static const int _metaTries = 8;
   /// A pre-load install failure stays disqualifying for this long — a
   /// re-open right after it would just re-open (the failure is a
   /// build-level one, not a per-try flake).
@@ -325,13 +329,16 @@ class AudioDisplayService {
 
   /// Mode C's text — the tags, but only THIS file's tags.
   ///
-  /// mpv's `metadata` outlives a file change: read it before the new
-  /// load has taken over and the PREVIOUS song's tags come back — the
-  /// stale title on a no-tag file. `path` flips the moment the new load
-  /// owns the engine, so it is the gate; until it matches, whatever is
-  /// readable belongs to someone else. A file whose load never takes
-  /// (failed open, or we already moved on) keeps the file name that
-  /// landed with it — the previous song's tags are never adopted.
+  /// mpv's `metadata` property reads the CURRENT demuxer's tags, and
+  /// the old demuxer is torn down BEFORE `path` flips to the new file
+  /// (mpv asserts `demuxer == NULL` when it sets the new filename).
+  /// So `path` matching this file is the gate: until it matches,
+  /// whatever is readable belongs to the previous song — the stale
+  /// title on a no-tag file — and after it matches, the previous
+  /// song's tags are unreachable, so an empty read can only mean "this
+  /// file has no tags" or "its header is still being parsed". A file
+  /// whose load never takes (failed open, or we already moved on)
+  /// keeps the file name that landed with it.
   Future<void> _loadText(String path, int generation) async {
     bool current = false;
     for (int i = 0; i < _fileTries; i++) {
@@ -349,14 +356,21 @@ class AudioDisplayService {
       await Future<void>.delayed(_metaGap);
     }
     if (!current) return;
-    // The demuxer's tags (or their absence) land a beat after `path`
-    // flips — one settle tick so a no-tag file reads as empty, not as
-    // the previous song's leftovers.
-    await Future<void>.delayed(_metaGap);
+    // Settle: the new demuxer's tags (or their absence) land as soon
+    // as its header is parsed. Poll like the old retry loop did — now
+    // safe, because nothing stale can answer.
+    String title = '';
+    String artist = '';
+    String album = '';
+    for (int i = 0; i < _metaTries; i++) {
+      if (generation != _generation) return;
+      title = await _readTag('title');
+      artist = await _readTag('artist');
+      album = await _readTag('album');
+      if (title.isNotEmpty || artist.isNotEmpty || album.isNotEmpty) break;
+      await Future<void>.delayed(_metaGap);
+    }
     if (generation != _generation) return;
-    final String title = await _readTag('title');
-    final String artist = await _readTag('artist');
-    final String album = await _readTag('album');
     final String fallback = MediaUtils.displayName(path);
     info.value = AudioTrackInfo(
       title: title.isEmpty ? fallback : title,
