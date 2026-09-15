@@ -742,9 +742,32 @@ class PlayerService {
       await platform.setProperty(
           'lavfi-complex', wants ? AudioDisplayService.visualizerGraph : '');
       visualizerArmed = wants;
+      debugPrint('[SALU/viz] pre-load: graph '
+          '${wants ? "ARMED" : "cleared"} for $target');
     } catch (error) {
       visualizerArmed = false;
-      debugPrint('[SALU/audio] visualizer pre-load failed: $error');
+      debugPrint('[SALU/viz] pre-load FAILED for $target: $error');
+    }
+  }
+
+  /// Per-load subtitle auto-load gate.
+  ///
+  /// mpv (0.35+) treats a sidecar `.lrc` as a subtitle candidate and
+  /// tries to open it on every landing — which fails and spams
+  /// `Can not open external file ….lrc` into the terminal. SALU's lyrics
+  /// are Flutter-side only (lrc.md §0: lyrics are NOT subtitles) and an
+  /// audio file never uses mpv's subtitle pipeline (D6), so audio loads
+  /// switch external subtitle auto-loading OFF. Every other target gets
+  /// mpv's default (`exact`), so video subtitle auto-load (cc.md §3.4)
+  /// behaves exactly as before.
+  Future<void> _applySubAutoloadForLoad(String target) async {
+    final PlatformPlayer? platform = player.platform;
+    if (platform is! NativePlayer) return;
+    final bool audio = !target.contains('://') && MediaUtils.isAudio(target);
+    try {
+      await platform.setProperty('sub-auto', audio ? 'no' : 'exact');
+    } catch (_) {
+      // Harmless — worst case the `.lrc` line stays in the log.
     }
   }
 
@@ -1032,6 +1055,7 @@ class PlayerService {
       // Streams never carry the graph — clear whatever an earlier
       // audio load installed.
       await _applyVisualizerForLoad(channel.url);
+      await _applySubAutoloadForLoad(channel.url);
       await player.open(Media(channel.url), play: play);
       if (play) _userPaused = false;
       // A live stream carries no remembered offset (`resume_service`
@@ -1100,6 +1124,7 @@ class PlayerService {
     hasMedia.value = true;
     _refreshTransportState();
     await _applyVisualizerForLoad(paths[idx]);
+    await _applySubAutoloadForLoad(paths[idx]);
     await player.open(Playlist(medias, index: idx), play: play);
     if (play) _userPaused = false;
     await _applyPlaylistMode();

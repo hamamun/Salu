@@ -11,9 +11,14 @@ import '../../theme/app_theme.dart';
 class LyricsOverlay extends StatelessWidget {
   const LyricsOverlay({super.key});
 
-  // The tile metrics mirror _LyricLineTile exactly (font × 1.35 leading
-  // + the tile's vertical padding × 2), so the fit count below never
-  // overflows the window.
+  // The tile metrics mirror _LyricLineTile (font × 1.35 leading + the
+  // tile's vertical padding × 2) so the fit count below is a close
+  // estimate of how many lines the window holds. It is only an estimate:
+  // real text can land a hair taller than `fontSize × 1.35` (font
+  // metrics, Windows DPI scaling, or a long line that wraps), so the
+  // column additionally sits in a centered scroll region — if the
+  // estimate is ever a few pixels too tall the block scrolls instead of
+  // overflowing (the yellow/black stripes + RenderFlex exception).
   static const double _currentTile = 24 * 1.35 + 20; // 52.4
   static const double _nearTile = 16 * 1.35 + 12; // 33.6 (distance 1)
   static const double _farTile = 14 * 1.35 + 12; // 30.9 (distance ≥ 2)
@@ -71,22 +76,37 @@ class LyricsOverlay extends StatelessWidget {
                 // window's middle. At the document's head or tail the
                 // missing side simply doesn't exist — the current line
                 // drifts toward the edge instead of being pushed out.
-                return Align(
-                  alignment: Alignment.center,
+                // The scroll view is the overflow safety net. The inner
+                // `minHeight` box + Center keep the block vertically
+                // centered exactly as before while it fits; only when the
+                // real text lands a few pixels taller than the fit
+                // estimate does the region become scrollable instead of
+                // throwing a RenderFlex overflow (the yellow/black
+                // stripes). Width stays bounded, so long lines still wrap.
+                return SingleChildScrollView(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 720),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          for (int i = from; i <= to; i++)
-                            _LyricLineTile(
-                              line: doc.lines[i],
-                              current: i == current,
-                              distance: current < 0 ? 1 : (i - current).abs(),
-                            ),
-                        ],
+                    constraints: BoxConstraints(
+                      minHeight:
+                          box.maxHeight.isFinite ? box.maxHeight : 0.0,
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 720),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              for (int i = from; i <= to; i++)
+                                _LyricLineTile(
+                                  line: doc.lines[i],
+                                  current: i == current,
+                                  distance:
+                                      current < 0 ? 1 : (i - current).abs(),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
