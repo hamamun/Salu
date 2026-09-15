@@ -36,6 +36,11 @@ class AudioTrackInfo {
   final String? artist;
   final String? album;
 
+  /// Context-line fields, already cleaned; null means "not drawn".
+  final String? genre;
+  final String? year;
+  final String? track;
+
   /// Context-line parts, in render order, already cleaned. Empty list in
   /// [minimal] mode.
   List<String> get contextParts => <String>[
