@@ -1,8 +1,7 @@
-# SALU — lrc.md (Lyrics, audio display & visualizer decisions & implementation contract)
+# SALU — lrc.md (Lyrics, audio display decisions & implementation contract)
 
 > **Purpose:** The single decision log for everything audio-lyrics related in
-> SALU — the `.lrc` sidecar file, the audio display (metadata + album art),
-> the mpv audio visualizer, and the toggles that drive them. Every decision
+> SALU — the `.lrc` sidecar file, the audio display (metadata + album art). Every decision
 > the owner locks in chat lands here first, then in code. `follow.md` (hard
 > rules) and `cc.md` (subtitle contract) still bind everything below — this
 > file only adds the lyrics/audio-display layer, and it never touches the
@@ -25,13 +24,11 @@ A `.lrc` file is **parsed directly** — it is never converted to SRT, never
 added to `MediaUtils.subtitleExtensions`, and never appears in the video
 track panel. This one rule keeps the two worlds from ever mixing.
 
-The audio canvas has **three possible renders, one at a time** (never mixed,
-never layered on top of each other):
-- **mpv video** → the audio visualizer (mode B),
-- **Flutter** → metadata + album art (mode C),
-- **Flutter** → lyrics (mode A).
+The audio canvas has two possible Flutter renders, one at a time:
+- metadata + album art, or
+- lyrics.
 
-Which one shows is decided by §2's precedence table.
+Lyrics take precedence when available and enabled.
 
 ---
 
@@ -44,7 +41,7 @@ the section where it is explained in full.
 |---|---|---|
 | L1 | Lyrics are audio-only, local-only, sidecar `.lrc` only, no online fetch | 1 |
 | L2 | Mode C shows album art + title/artist/album | 3 |
-| L3→L21 | Tag reader is for **cover-art bytes only**; text comes from mpv | 3 |
+| L3→L21 | Tag reader supplies cover-art bytes; all text metadata comes from mpv | 3 |
 | L4 | Text fallback to file name; never blank | 3 |
 | L5 | Missing art → SALU-logo placeholder (generated look) | 3 |
 | L6 | External `cover.jpg`/`folder.jpg` is a later phase | 3 |
@@ -57,10 +54,7 @@ the section where it is explained in full.
 | L12→L20 | Sync offset reuse needs a Dart bridge (`subDelay`) | 6 |
 | L13 | Fetch button → lyrics toggle on audio | 7 |
 | L14 | Lyrics default OFF + dot badge (available ∧ off) | 8 |
-| L15 | Three-mode precedence: lyrics > visualizer > metadata | 2 |
-| L16→L22 | Visualizer is mpv's; `lavfi-complex` is primary | 4 |
-| L17 | Visualizer = Settings toggle, default OFF, audio-only | 4 |
-| L18 | Visualizer is disabled, not covered, by lyrics | 4 |
+| L15 | Lyrics take precedence over metadata | 2 |
 | L19 | `audio-display=no` — Flutter owns the audio canvas | 2 |
 | L20 | (merged — see L12) | 6 |
 | L21 | (merged — see L3) | 3 |
@@ -68,7 +62,7 @@ the section where it is explained in full.
 | L23 | (merged — see L10) | 5 |
 | L24 | (merged — see L9) | 5 |
 | L25 | (merged — see L7) | 5 |
-| L26 | Mode/lyric/metadata/visualizer re-evaluates every landing | 5 |
+| L26 | Mode/lyric/metadata re-evaluates every landing | 5 |
 | L27 | Cover-art bytes cached by canonical path | 3 |
 | L28 | Lyric lines are clickable → seek to that timestamp | 6 |
 
@@ -95,24 +89,18 @@ the section where it is explained in full.
 
 ---
 
-## 2. The audio display — three modes & precedence (L15)
+## 2. The audio display — two modes & precedence (L15)
 
-Today audio plays through the same `Video` widget as video, which renders a
-dark backdrop with nothing on it (`video_screen.dart`). There is no branch
-for audio. This section replaces that empty backdrop with **one of three
-mutually-exclusive modes**, decided by two independent switches (the lyrics
-toggle, §7, and the visualizer toggle, §4):
+Today audio plays through the same `Video` widget as video. SALU overlays
+lyrics when enabled, or metadata and album art otherwise.
 
-| Lyrics | Visualizer | What shows on the audio canvas |
+| Lyrics | What shows on the audio canvas |
 |---|---|---|
-| **ON**  | any | **Lyrics only — full window** (no art, no metadata, no visualizer) |
-| OFF | **ON**  | **Visualizer only — full canvas** (no art, no metadata) |
-| OFF | OFF | **Metadata + album art** (§3) |
+| **ON** | **Lyrics only — full window** (no art or metadata) |
+| OFF | **Metadata + album art** (§3) |
 
-1. **L15 — precedence rule.** Lyrics win over everything; then visualizer;
-   then metadata + album art as the fallback. The three modes are exclusive —
-   exactly one renders at a time. This is the single authority the audio view
-   reads; nothing else in the file may imply a different combination.
+1. **L15 — precedence rule.** Lyrics take precedence over metadata and album
+   art. The two modes are exclusive — exactly one renders at a time.
 
 2. **Video is untouched** by all of this: video keeps the plain mpv canvas
    and subtitles, exactly as today.
@@ -123,23 +111,21 @@ toggle, §7, and the visualizer toggle, §4):
    the video stream**, so art-bearing audio shows a raw cover through the
    `Video` widget today. To stop that raw cover colliding with SALU's styled
    album art (mode C), SALU sets **`audio-display=no`** for audio. mpv then
-   produces NO video for audio — except when the visualizer (mode B) is on,
-   where the visualizer itself is the video. Flutter draws everything else
-   (art + text + lyrics). This is the one rule that makes the three modes
+   produces no video for audio. Flutter draws the metadata, art, and lyrics. This is the one rule that makes the three modes
    exclusive in practice, not just in the table.
 
 ---
 
 ## 3. Mode C — metadata + album art (the fallback, both toggles off) (L2–L6, L21, L27)
 
-Shown only when the lyrics toggle is OFF **and** the visualizer toggle is
-OFF. **Nothing in the project reads tags or album art yet** (no
+Shown when lyrics are OFF. **Nothing in the project reads tags or album art yet** (no
 metadata/cover dependency in `pubspec.yaml`, no tag-reading code); this
 section is net-new work.
 
 1. **L2 — the metadata + album art view.** When this mode is active, the
-   canvas shows album art (large, centered), then title / artist / album
-   underneath. It is not shown when lyrics or the visualizer are on.
+   canvas shows album art (large, centered), then every available non-empty
+   metadata field underneath. Missing fields are omitted; the file name is used
+   when the title is unavailable. It is not shown when lyrics are on.
 
 2. **L3 / L21 — the tag reader is for art bytes ONLY; text comes from mpv.**
    Embedded album art bytes (ID3 `APIC`, FLAC `METADATA_BLOCK_PICTURE`, MP4
@@ -175,44 +161,6 @@ stack — album art (rounded, faint `surfaceOutline` ring, soft shadow, roughly
 `min(55–60% of height, width-limited)`), then Title (`#EDEDED`, ~22–24px
 semibold), Artist (`#9A9A9A`, ~16px), Album (dimmer, ~14px). No icons, no new
 colors — text + thin marks only, consistent with the rest of the app.
-
----
-
-## 4. Mode B — the mpv visualizer (L16–L18, L22)
-
-1. **L16 / L22 — the visualizer is mpv's, not Flutter's — `lavfi-complex` is
-   the primary path.** mpv synthesizes the visualization into its own video
-   output — the same canvas SALU's `Video` widget already renders — so no new
-   Flutter drawing is needed. Two ways exist:
-   - **`--lavfi-complex`** with ffmpeg filters (`showfreqs` = bars,
-     `showspectrum`, `showcqt`, `showwaves`, `avectorscope`) — **this is the
-     primary, guaranteed path**: `media_kit_libs_windows_video` ships a full
-     libmpv with ffmpeg filters compiled in, so it always works and offers
-     full control.
-   - the built-in `--audio-visualizer` option (mpv 0.36+; `showfreqs` /
-     `showspectrum`) — noted only as a possible simplification **if** the
-     bundled libmpv is confirmed ≥ 0.36; otherwise ignore it.
-
-   SALU already sets mpv properties via `platform.setProperty(...)` (used for
-   `track-list`, `sub-delay`, `hwdec-current`, `keep-open`), so wiring
-   `lavfi-complex` is the same one-line pattern.
-
-   **Styling** is plain color, driven to SALU's palette (monochrome or the
-   `#4C9EEB` accent on the `#121212` backdrop) — the "bar type / plain
-   color / elegant" look the owner asked for. No spectrum-style color themes.
-
-2. **L17 — a Settings toggle, default OFF.** `Visualizer` lives in Settings
-   as a simple on/off. OFF by default (no cost until asked). **Audio-only**:
-   it applies to local audio files and never to video or channel/stream mode
-   (consistent with §1). It is not a per-file state — one global toggle.
-
-3. **L18 — the visualizer is disabled, not merely covered.** When the lyrics
-   toggle turns ON over an active visualizer, the visualizer must be
-   **actually stopped** (unset `lavfi-complex` / `audio-visualizer`), not
-   hidden behind an opaque overlay — mpv would otherwise keep generating
-   frames nobody sees and burn CPU/GPU. "Lyrics fully replace the visualizer"
-   means the engine stops producing it while lyrics are shown, and resumes
-   when lyrics turn OFF (if the visualizer toggle is still ON).
 
 ---
 
@@ -266,7 +214,7 @@ colors — text + thin marks only, consistent with the rest of the app.
      sibling discovery already covers the normal workflow.
 
 6. **L26 — the lyric lookup re-runs on EVERY landing.** Mode + lyric
-   discovery + metadata + visualizer state must re-evaluate on every
+   discovery + metadata + metadata state must re-evaluate on every
    `start-file` / playlist advance, not just the first open — exactly the
    trigger `SubtitleService.onMediaLanded` already uses. A zapped-to track
    must never inherit the previous track's lyric, art, or mode.
@@ -277,7 +225,7 @@ colors — text + thin marks only, consistent with the rest of the app.
 
 1. **L11 — full-window Flutter overlay, karaoke style.** When lyrics are
    ON, they are the **only** thing on the audio canvas — no album art, no
-   metadata, no visualizer. Centered in the window, the **current line is
+   metadata, no extra canvas. Centered in the window, the **current line is
    highlighted** with a line or two of context above/below. Audio has no
    video frame, so this is the one place Flutter rendering is correct —
    video keeps mpv/libass, audio keeps this overlay, and the two never meet.
@@ -335,10 +283,6 @@ track panel and is greyed out for audio (its enabled check literally requires
    "lyrics default on/off" is less surprising than remembering per song;
    per-file memory can come later if it is ever wanted.
 
-4. **The visualizer has no badge.** It is a Settings toggle (§4 L17), not a
-   control-row button, so it carries no dot — the two switches are
-   deliberately different shapes.
-
 ---
 
 ## 9. Implementation checklist (the order of work)
@@ -352,24 +296,20 @@ track panel and is greyed out for audio (its enabled check literally requires
    for (available, shown, current line), and per-line timestamp lookup for
    click-to-seek (L28).
 4. **Audio display branch** — a mode switch in `video_screen.dart` (or a
-   sibling widget) implementing §2's three-mode precedence table, with
+   sibling widget) implementing §2's two-mode precedence table, with
    `audio-display=no` for audio (L19).
 5. **Metadata + album art view** — mode C (L2–L6, L21, L27) + SALU-logo
    placeholder.
-6. **Visualizer** — mode B (L16–L18, L22): mpv `lavfi-complex` wiring,
-   monochrome/accent palette, stop-when-covered.
-7. **Lyrics overlay** — mode A, full-window karaoke text driven by the lyrics
+6. **Lyrics overlay** — mode A, full-window karaoke text driven by the lyrics
    service (L11), honoring the toggle, with click-to-seek (L28).
-8. **Fetch button** — repurpose per §7 (L13) with the `Lyrics` tooltip and
+7. **Fetch button** — repurpose per §7 (L13) with the `Lyrics` tooltip and
    the enabled-condition change.
-9. **Badge** — the dot on the button per §8 (L14).
-10. **Visualizer settings toggle** — the on/off switch per §4 (L17), default
-    OFF, persisted like the other settings.
-11. **Sync bridge** — the lyric lookup applies `subDelay` itself (L20), so
+8. **Badge** — the dot on the button per §8 (L14).
+10. **Sync bridge** — the lyric lookup applies `subDelay` itself (L20), so
     Z/X moves the Flutter-rendered lines.
-12. **Re-evaluate on landing** — hook the mode/lyric/metadata/visualizer
+11. **Re-evaluate on landing** — hook the mode/lyric/metadata
     re-run to the same start-file trigger `onMediaLanded` uses (L26).
-13. **Drop/open wiring** — verify both Open File… and drag & drop reach the
+12. **Drop/open wiring** — verify both Open File… and drag & drop reach the
     lyric lookup with no extra work (they share the local open path; see
     L10a — discovery is sibling-based, so no selection plumbing is needed).
 
@@ -383,4 +323,4 @@ track panel and is greyed out for audio (its enabled check literally requires
 - Per-file lyrics toggle memory.
 - Word-level (enhanced LRC) highlighting beyond graceful degradation.
 - Dropping a `.lrc` file directly onto the window (sibling discovery covers it).
-- Visualizer color-theme presets beyond the monochrome/accent default.
+- Additional audio-canvas theme presets.

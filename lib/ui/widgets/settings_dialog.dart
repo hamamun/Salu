@@ -205,22 +205,6 @@ class _GeneralTab extends StatelessWidget {
           _MouseOverPreviewSwitch(),
           SizedBox(height: 10),
           _ClearEqMemoryRow(),
-          SizedBox(height: 28),
-          Text(
-            'Visualizer',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Frequency bars on the audio canvas.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-          ),
-          SizedBox(height: 16),
-          _VisualizerSwitch(),
         ],
       ),
     );
@@ -370,82 +354,6 @@ class _MouseOverPreviewSwitch extends StatelessWidget {
                       Text(
                         'Previews the value a resting pointer is on. Off, a '
                         'click or a drag is what moves it.',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _SaluSwitch(on: on),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Visualizer (lrc.md L17) — one switch, default Off. Audio-only: the
-/// canvas re-evaluates the three-mode table the moment it flips. Lyrics
-/// fully replace it (the engine stops) rather than covering a running
-/// visualizer.
-class _VisualizerSwitch extends StatelessWidget {
-  const _VisualizerSwitch();
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: SettingsService.instance.visualizer,
-      builder: (BuildContext context, bool on, Widget? _) {
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => SettingsService.instance.setVisualizer(!on),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: on ? const Color(0x144C9EEB) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: on ? const Color(0x404C9EEB) : Colors.transparent,
-              ),
-            ),
-            child: Row(
-              children: <Widget>[
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color:
-                        on ? const Color(0x264C9EEB) : AppColors.surface,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.graphic_eq,
-                    size: 20,
-                    color: on ? AppColors.accent : AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Visualizer',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        'Frequency bars while a local audio file plays.',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: AppColors.textSecondary,

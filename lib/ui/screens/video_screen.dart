@@ -14,10 +14,9 @@ import '../widgets/lyrics_overlay.dart';
 /// letterbox bars use SALU's deep dark gray (never pure black UI, but the
 /// video stage itself sits on #121212 for a cinematic look).
 ///
-/// For **local audio** the canvas is one of three exclusive modes
-/// (lrc.md §2 / L15): lyrics (Flutter) > visualizer (mpv) > metadata +
-/// album art (Flutter). Video is untouched — it keeps the plain mpv
-/// canvas and subtitles.
+/// For **local audio**, Flutter shows lyrics when available and otherwise
+/// shows metadata and album art. Video keeps the plain mpv canvas and
+/// subtitles.
 ///
 /// The empty state (before the first media, and while STOPPED — the
 /// queue is parked and the canvas returns to the initial window) shows
@@ -39,8 +38,6 @@ class VideoScreen extends StatelessWidget {
           children: <Widget>[
             // The mpv canvas — mounted only when media is active so
             // ANGLE/D3D11 surfaces aren't created eagerly at startup.
-            // For audio this is the visualizer (mode B) or a dark
-            // frame that Flutter then covers (modes A and C).
             if (hasMedia)
               Video(
                 controller: service.videoController,
@@ -65,9 +62,7 @@ class VideoScreen extends StatelessWidget {
                   return switch (mode) {
                     AudioCanvasMode.lyrics => const LyricsOverlay(),
                     AudioCanvasMode.metadata => const AlbumArtView(),
-                    AudioCanvasMode.visualizer ||
-                    AudioCanvasMode.none =>
-                      const SizedBox.shrink(),
+                    AudioCanvasMode.none => const SizedBox.shrink(),
                   };
                 },
               ),

@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import '../../core/audio_display_service.dart';
 import '../../theme/app_theme.dart';
 
-/// Mode C (lrc.md L2–L6): album art + title / artist / album. Shown
-/// only when both the lyrics toggle and the visualizer toggle are off.
+/// Mode C (lrc.md L2–L6): album art plus every non-empty metadata field.
+/// Missing fields are omitted; the title falls back to the file name.
 class AlbumArtView extends StatelessWidget {
   const AlbumArtView({super.key});
 
@@ -37,10 +37,11 @@ class AlbumArtView extends StatelessWidget {
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        _Cover(size: art, bytes: audio.coverBytes.value),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          _Cover(size: art, bytes: audio.coverBytes.value),
                         const SizedBox(height: 28),
                         Text(
                           info.title,
@@ -68,21 +69,37 @@ class AlbumArtView extends StatelessWidget {
                             ),
                           ),
                         ],
-                        if (info.album != null) ...<Widget>[
-                          const SizedBox(height: 4),
-                          Text(
-                            info.album!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.textSecondary.withAlpha(170),
+                          if (info.album != null) ...<Widget>[
+                            const SizedBox(height: 4),
+                            Text(
+                              info.album!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.textSecondary.withAlpha(170),
+                              ),
+                            ),
+                          ],
+                          ...info.additional.entries.map<Widget>(
+                            (MapEntry<String, String> entry) => Padding(
+                              padding: const EdgeInsets.only(top: 7),
+                              child: Text(
+                                '${_metadataLabel(entry.key)}: ${entry.value}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary.withAlpha(190),
+                                ),
+                              ),
                             ),
                           ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 );
@@ -93,6 +110,17 @@ class AlbumArtView extends StatelessWidget {
       ),
     );
   }
+}
+
+String _metadataLabel(String key) {
+  return key
+      .replaceAll(RegExp(r'[_-]+'), ' ')
+      .replaceAll(RegExp(r'(?<=[a-z])(?=[A-Z])'), ' ')
+      .split(' ')
+      .where((String part) => part.isNotEmpty)
+      .map((String part) =>
+          '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+      .join(' ');
 }
 
 class _Cover extends StatelessWidget {

@@ -39,8 +39,8 @@ dependencies:
   http: ^1.2.0
 
   # ── Audio display (lrc.md L21) ──────────────────────────────────────────
-  # Cover-art bytes only (ID3 APIC / FLAC picture / MP4 covr). Title /
-  # artist / album come from mpv metadata — this package never feeds text.
+  # Cover-art bytes (ID3 APIC / FLAC picture / MP4 covr). Audio metadata
+  # fields come from mpv; this package is used for embedded artwork.
   audio_metadata_reader: ^1.4.0
 
   # ── Settings & persistence ──────────────────────────────────────────────

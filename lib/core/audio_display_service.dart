@@ -5,31 +5,31 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../ui/osd/osd_controller.dart';
 import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
 import 'queue_service.dart';
-import 'settings_service.dart';
 
-/// The three exclusive audio-canvas modes (lrc.md §2 / L15). `none` is
-/// everything that is not local audio — video keeps the plain mpv
-/// canvas, untouched.
-enum AudioCanvasMode { none, lyrics, visualizer, metadata }
+/// Audio-canvas modes. `none` is everything that is not local audio —
+/// video keeps the plain mpv canvas, untouched.
+enum AudioCanvasMode { none, lyrics, metadata }
 
-/// Title / artist / album as shown in mode C. [title] is never empty
-/// (lrc.md L4) — the file name fills any gap.
+/// Audio metadata shown in mode C. [title] is never empty (lrc.md L4) —
+/// the file name fills any gap; other fields are shown only when present.
 class AudioTrackInfo {
   const AudioTrackInfo({
     required this.title,
     this.artist,
     this.album,
+    this.additional = const <String, String>{},
   });
 
   final String title;
   final String? artist;
   final String? album;
-}
+
+  /// Every other non-empty tag exposed by mpv for the current file.
+  final Map<String, String> additional;
 
 /// Cached cover-art bytes keyed by canonical path (lrc.md L27).
 class _CoverEntry {
@@ -44,32 +44,12 @@ class _CoverEntry {
   final DateTime modified;
 }
 
-/// The audio canvas's one authority (lrc.md §2).
-///
-/// Precedence is lyrics > visualizer > metadata, exactly one at a time.
-/// Flutter draws lyrics and metadata; mpv draws the visualizer via
-/// `lavfi-complex` (L16) and is told `audio-display=no` so an embedded
-/// cover never collides with mode C (L19). When lyrics win, the
-/// visualizer is actually stopped — not covered (L18).
-///
-/// **The graph is only ever in the pipeline when a load STARTED with
-/// it.** `PlayerService` sets `lavfi-complex` before `player.open`, so
-/// mpv folds the graph into the filter chain at first init. A running
-/// pipeline is never handed the graph: mpv re-inits the chain on a
-/// runtime change, and a failing re-init (or filter) STOPS the playback
-/// — the engine treats a dead lavfi filter as end-of-file, which is how
-/// the old toggle killed playback. The mid-playback switch therefore
-/// re-opens the current item at its position instead, and a kill-watch
-/// rolls any filter death back to exactly where the song was.
+/// Coordinates the audio canvas and its metadata/cover-art surface.
+/// Lyrics take precedence over metadata; video keeps the plain mpv canvas.
 class AudioDisplayService {
   AudioDisplayService._internal();
 
   static final AudioDisplayService instance = AudioDisplayService._internal();
-
-  /// Primary `lavfi-complex` graph (lrc.md L16): bar-type `showfreqs`,
-  /// SALU accent on a dark canvas. No spectrum colour themes.
-  static const String visualizerGraph =
-      '[aid1]asplit[ao][a];[a]showfreqs=s=1280x720:mode=bar:ascale=log:fscale=log:win_func=gauss:averaging=5:colors=0x4C9EEB,format=yuv420p[vo]';
 
   static const int _cacheCap = 32;
   /// How long to wait for the engine to actually hold THIS file before
@@ -80,17 +60,12 @@ class AudioDisplayService {
   /// header (and with it the tags, or their absence) lands within this
   /// many ticks for a local file.
   static const int _metaTries = 8;
-  /// A pre-load install failure stays disqualifying for this long — a
-  /// re-open right after it would just re-open (the failure is a
-  /// build-level one, not a per-try flake).
-  static const Duration _installCooldown = Duration(seconds: 30);
-
   /// The mode the audio view reads. Nothing else in the file may imply
   /// a different combination (L15).
   final ValueNotifier<AudioCanvasMode> mode =
       ValueNotifier<AudioCanvasMode>(AudioCanvasMode.none);
 
-  /// Mode C's text. `null` while not on a local audio file.
+  /// Metadata text. `null` while not on a local audio file.
   final ValueNotifier<AudioTrackInfo?> info =
       ValueNotifier<AudioTrackInfo?>(null);
 
@@ -101,24 +76,6 @@ class AudioDisplayService {
   int _generation = 0;
   String? _path;
 
-  // ── Visualizer safety ────────────────────────────────────────────────
-
-  /// Whether the pipeline currently holds the graph — the pre-load's
-  /// decision, read on every landing and cleared by any runtime
-  /// removal.
-  bool _graphLive = false;
-
-  /// The path whose install the pre-load failed for, and when — a
-  /// re-open inside the cooldown would just loop.
-  DateTime? _installFailedAt;
-
-  StreamSubscription<bool>? _killWatch;
-  String _killPath = '';
-
-  /// `true` while a kill-recovery re-open is in flight — holds the
-  /// end-of-item parker off so the restored song is not parked again.
-  bool recovering = false;
-
   final Map<String, _CoverEntry> _coverCache = <String, _CoverEntry>{};
   final List<String> _coverOrder = <String>[];
 
@@ -126,13 +83,7 @@ class AudioDisplayService {
   void startWatching() {
     if (_watching) return;
     _watching = true;
-    // `shown` and the Settings visualizer are the two switches the
-    // table reads live. `available` only changes on landing/stop, and
-    // those paths call [_recompute] themselves — listening here would
-    // re-evaluate against the *previous* track's path (audio → video
-    // would briefly install lavfi-complex on a film).
     LyricService.instance.shown.addListener(_recompute);
-    SettingsService.instance.visualizer.addListener(_recompute);
   }
 
   /// Same start-file trigger as [SubtitleService.onMediaLanded] (L26).
@@ -144,22 +95,11 @@ class AudioDisplayService {
         QueueService.instance.isChannelList ||
         !MediaUtils.isAudio(uri)) {
       _path = null;
-      _graphLive = false;
       _resetSurface();
-      unawaited(_applyEngine(AudioCanvasMode.none));
       return;
     }
     final String path = MediaUtils.canonicalPath(uri);
     _path = path;
-    // The pre-load (in PlayerService, before the open) already decided
-    // whether this load carries the graph — read the fact, then
-    // re-evaluate the table. A load that DID take with the graph
-    // clears any earlier install-failure marker.
-    _graphLive = PlayerService.instance.visualizerArmed;
-    if (_graphLive) _installFailedAt = null;
-    debugPrint('[SALU/viz] landed: $path — graph '
-        '${_graphLive ? "LIVE" : "not in pipeline"}'
-        '${LyricService.instance.isShowing ? " (lyrics on top)" : ""}');
     // Never inherit the previous track's art or text (L26).
     coverBytes.value = null;
     info.value = AudioTrackInfo(title: MediaUtils.displayName(path));
@@ -171,34 +111,17 @@ class AudioDisplayService {
   void onStopped() {
     _generation++;
     _path = null;
-    _graphLive = false;
     _resetSurface();
-    unawaited(_applyEngine(AudioCanvasMode.none));
-  }
-
-  /// Pure precedence table (lrc.md §2) — the single authority.
-  static AudioCanvasMode resolve({
-    required bool isLocalAudio,
-    required bool lyricsAvailable,
-    required bool lyricsShown,
-    required bool visualizerOn,
-  }) {
-    if (!isLocalAudio) return AudioCanvasMode.none;
-    if (lyricsAvailable && lyricsShown) return AudioCanvasMode.lyrics;
-    if (visualizerOn) return AudioCanvasMode.visualizer;
-    return AudioCanvasMode.metadata;
   }
 
   void _recompute() {
-    final AudioCanvasMode next = resolve(
-      isLocalAudio: _path != null,
-      lyricsAvailable: LyricService.instance.available.value,
-      lyricsShown: LyricService.instance.shown.value,
-      visualizerOn: SettingsService.instance.visualizer.value,
-    );
-    final AudioCanvasMode previous = mode.value;
-    if (previous != next) mode.value = next;
-    unawaited(_applyEngine(next));
+    final AudioCanvasMode next = _path == null
+        ? AudioCanvasMode.none
+        : (LyricService.instance.available.value &&
+                LyricService.instance.shown.value
+            ? AudioCanvasMode.lyrics
+            : AudioCanvasMode.metadata);
+    if (mode.value != next) mode.value = next;
   }
 
   void _resetSurface() {
@@ -207,133 +130,6 @@ class AudioDisplayService {
     }
     if (info.value != null) info.value = null;
     if (coverBytes.value != null) coverBytes.value = null;
-  }
-
-  Future<void> _applyEngine(AudioCanvasMode next) async {
-    // L18: lyrics fully replace the visualizer — the engine stops
-    // producing frames nobody sees. Metadata likewise. Always written
-    // so a new landing cannot inherit a running graph.
-    await _setVisualizer(next == AudioCanvasMode.visualizer);
-  }
-
-  Future<void> _setVisualizer(bool on) async {
-    _disarmKillWatch();
-    final NativePlayer? native = _native;
-    if (native == null) return;
-    if (on) {
-      if (_graphLive) {
-        // This load came with the graph — it is in the pipeline from
-        // init, nothing to install. All that is left is to watch for
-        // a filter death.
-        _armKillWatch();
-        return;
-      }
-      // A running pipeline cannot be handed the graph (class doc): the
-      // switch re-opens the current item at its position, and the load
-      // comes back with the graph pre-applied.
-      final PlayerService player = PlayerService.instance;
-      final String? path = player.currentPath.value;
-      if (path == null) return;
-      final int index = QueueService.instance.indexOfUrl(path);
-      if (index < 0) return;
-      final DateTime now = DateTime.now();
-      if (_installFailedAt != null &&
-          now.difference(_installFailedAt!) < _installCooldown) {
-        // The pre-load already failed for this file — a re-open would
-        // just re-open it. The canvas keeps the metadata.
-        debugPrint('[SALU/viz] toggle ignored — install cooldown active '
-            '(last install failed ${now.difference(_installFailedAt!).inSeconds}s ago)');
-        mode.value = AudioCanvasMode.metadata;
-        return;
-      }
-      _installFailedAt = now;
-      debugPrint('[SALU/viz] toggle on → re-opening "$path" at '
-          '${player.position.value} to install the graph');
-      await player.reopenItemAt(
-        index,
-        player.position.value,
-        play: player.isPlaying.value,
-      );
-      return;
-    }
-    _graphLive = false;
-    // A removal the pipeline tolerates — an empty graph has no filter
-    // that can fail.
-    try {
-      await native.setProperty('lavfi-complex', '');
-    } catch (error) {
-      debugPrint('[SALU/audio] lavfi-complex clear failed: $error');
-    }
-  }
-
-  // ── Kill watch — a dead lavfi filter is an "end of file" to mpv ─────
-
-  /// Watches a graph-carrying load for the one failure the engine will
-  /// not survive: a filter death, which mpv answers by stopping the
-  /// playback as if the file had ended. Armed on every landing that
-  /// carries the graph, for as long as the graph is in the pipeline —
-  /// a filter can die on any frame, not only the first. A real
-  /// end-of-song (position at the tail) passes it through untouched;
-  /// Stop and file switches never set `eof-reached` at all, so they
-  /// never trip it.
-  void _armKillWatch() {
-    final PlayerService player = PlayerService.instance;
-    _killPath = player.currentPath.value ?? '';
-    _killWatch = player.player.stream.completed.listen((bool done) {
-      if (!done) return;
-      final Duration dur = player.duration.value;
-      final Duration at = player.position.value;
-      // An "end" more than 2 s before the real end is the kill, not
-      // the song finishing.
-      if (dur <= Duration.zero || dur - at <= const Duration(seconds: 2)) {
-        return;
-      }
-      debugPrint('[SALU/viz] KILL detected — the engine ended "$_killPath" '
-          'at $at of $dur: the lavfi graph died; rolling back');
-      unawaited(_recoverFromKill(at));
-    });
-  }
-
-  void _disarmKillWatch() {
-    _killWatch?.cancel();
-    _killWatch = null;
-  }
-
-  /// The filter died mid-song: the graph off, the setting off (with
-  /// the toast that re-tries it), and the song back where it was —
-  /// the kill parked or advanced the engine like an end, so a plain
-  /// re-open of the same row restores it.
-  Future<void> _recoverFromKill(Duration at) async {
-    _disarmKillWatch();
-    final String path = _killPath;
-    final PlayerService player = PlayerService.instance;
-    final NativePlayer? native = _native;
-    if (native != null) {
-      try {
-        await native.setProperty('lavfi-complex', '');
-      } catch (_) {}
-    }
-    _graphLive = false;
-    await SettingsService.instance.setVisualizer(false);
-    final int index =
-        path.isEmpty ? -1 : QueueService.instance.indexOfUrl(path);
-    if (index >= 0) {
-      recovering = true;
-      try {
-        await player.reopenItemAt(index, at);
-      } finally {
-        recovering = false;
-      }
-    }
-    OsdController.instance.show(OsdUndoCard(
-      label: 'Visualizer off — it stopped playback',
-      onUndo: () => SettingsService.instance.setVisualizer(true),
-    ));
-  }
-
-  NativePlayer? get _native {
-    final PlatformPlayer? platform = PlayerService.instance.player.platform;
-    return platform is NativePlayer ? platform : null;
   }
 
   /// Mode C's text — the tags, but only THIS file's tags.
@@ -371,12 +167,19 @@ class AudioDisplayService {
     String title = '';
     String artist = '';
     String album = '';
+    Map<String, String> additional = <String, String>{};
     for (int i = 0; i < _metaTries; i++) {
       if (generation != _generation) return;
       title = await _readTag('title');
       artist = await _readTag('artist');
       album = await _readTag('album');
-      if (title.isNotEmpty || artist.isNotEmpty || album.isNotEmpty) break;
+      additional = await _readAllTags();
+      if (title.isNotEmpty ||
+          artist.isNotEmpty ||
+          album.isNotEmpty ||
+          additional.isNotEmpty) {
+        break;
+      }
       await Future<void>.delayed(_metaGap);
     }
     if (generation != _generation) return;
@@ -385,6 +188,7 @@ class AudioDisplayService {
       title: title.isEmpty ? fallback : title,
       artist: artist.isEmpty ? null : artist,
       album: album.isEmpty ? null : album,
+      additional: additional,
     );
   }
 
@@ -399,6 +203,42 @@ class AudioDisplayService {
     } catch (_) {
       return '';
     }
+  }
+
+  Future<Map<String, String>> _readAllTags() async {
+    final NativePlayer? native = _native;
+    if (native == null) return <String, String>{};
+    try {
+      final String raw = await native.getProperty('filtered-metadata');
+      final Map<String, String> tags = _parseMetadataMap(raw);
+      tags.removeWhere(
+        (String key, String value) =>
+            value.trim().isEmpty ||
+            value.trim().startsWith('(') ||
+            const <String>{'title', 'artist', 'album'}.contains(key.toLowerCase()),
+      );
+      return tags;
+    } catch (_) {
+      return <String, String>{};
+    }
+  }
+
+  /// mpv prints filtered metadata as a map such as `{genre=Rock, date=2024}`.
+  /// Values may contain commas, so only commas followed by another key are
+  /// treated as separators.
+  static Map<String, String> _parseMetadataMap(String raw) {
+    final String text = raw.trim();
+    if (text.isEmpty) return <String, String>{};
+    final Map<String, String> result = <String, String>{};
+    final RegExp entry = RegExp(
+      r'([A-Za-z0-9_.-]+)\s*=\s*(.*?)(?=,\s*[A-Za-z0-9_.-]+\s*=|\s*})',
+    );
+    for (final RegExpMatch match in entry.allMatches(text)) {
+      final String key = match.group(1)!.trim();
+      final String value = match.group(2)!.trim();
+      if (key.isNotEmpty && value.isNotEmpty) result[key] = value;
+    }
+    return result;
   }
 
   Future<void> _loadCover(String path, int generation) async {
