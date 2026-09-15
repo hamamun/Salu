@@ -41,7 +41,7 @@ the section where it is explained in full.
 |---|---|---|
 | L1 | Lyrics are audio-only, local-only, sidecar `.lrc` only, no online fetch | 1 |
 | L2 | Mode C shows album art + title/artist/album | 3 |
-| L3→L21 | Tag reader is for **cover-art bytes only**; text comes from mpv | 3 |
+| L3→L21 | Tag reader supplies cover-art bytes; all text metadata comes from mpv | 3 |
 | L4 | Text fallback to file name; never blank | 3 |
 | L5 | Missing art → SALU-logo placeholder (generated look) | 3 |
 | L6 | External `cover.jpg`/`folder.jpg` is a later phase | 3 |
@@ -123,8 +123,9 @@ metadata/cover dependency in `pubspec.yaml`, no tag-reading code); this
 section is net-new work.
 
 1. **L2 — the metadata + album art view.** When this mode is active, the
-   canvas shows album art (large, centered), then title / artist / album
-   underneath. It is not shown when lyrics are on.
+   canvas shows album art (large, centered), then every available non-empty
+   metadata field underneath. Missing fields are omitted; the file name is used
+   when the title is unavailable. It is not shown when lyrics are on.
 
 2. **L3 / L21 — the tag reader is for art bytes ONLY; text comes from mpv.**
    Embedded album art bytes (ID3 `APIC`, FLAC `METADATA_BLOCK_PICTURE`, MP4

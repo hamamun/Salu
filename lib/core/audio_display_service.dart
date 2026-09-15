@@ -14,19 +14,22 @@ import 'queue_service.dart';
 /// video keeps the plain mpv canvas, untouched.
 enum AudioCanvasMode { none, lyrics, metadata }
 
-/// Title / artist / album as shown in mode C. [title] is never empty
-/// (lrc.md L4) — the file name fills any gap.
+/// Audio metadata shown in mode C. [title] is never empty (lrc.md L4) —
+/// the file name fills any gap; other fields are shown only when present.
 class AudioTrackInfo {
   const AudioTrackInfo({
     required this.title,
     this.artist,
     this.album,
+    this.additional = const <String, String>{},
   });
 
   final String title;
   final String? artist;
   final String? album;
-}
+
+  /// Every other non-empty tag exposed by mpv for the current file.
+  final Map<String, String> additional;
 
 /// Cached cover-art bytes keyed by canonical path (lrc.md L27).
 class _CoverEntry {
@@ -164,12 +167,19 @@ class AudioDisplayService {
     String title = '';
     String artist = '';
     String album = '';
+    Map<String, String> additional = <String, String>{};
     for (int i = 0; i < _metaTries; i++) {
       if (generation != _generation) return;
       title = await _readTag('title');
       artist = await _readTag('artist');
       album = await _readTag('album');
-      if (title.isNotEmpty || artist.isNotEmpty || album.isNotEmpty) break;
+      additional = await _readAllTags();
+      if (title.isNotEmpty ||
+          artist.isNotEmpty ||
+          album.isNotEmpty ||
+          additional.isNotEmpty) {
+        break;
+      }
       await Future<void>.delayed(_metaGap);
     }
     if (generation != _generation) return;
@@ -178,6 +188,7 @@ class AudioDisplayService {
       title: title.isEmpty ? fallback : title,
       artist: artist.isEmpty ? null : artist,
       album: album.isEmpty ? null : album,
+      additional: additional,
     );
   }
 
@@ -192,6 +203,42 @@ class AudioDisplayService {
     } catch (_) {
       return '';
     }
+  }
+
+  Future<Map<String, String>> _readAllTags() async {
+    final NativePlayer? native = _native;
+    if (native == null) return <String, String>{};
+    try {
+      final String raw = await native.getProperty('filtered-metadata');
+      final Map<String, String> tags = _parseMetadataMap(raw);
+      tags.removeWhere(
+        (String key, String value) =>
+            value.trim().isEmpty ||
+            value.trim().startsWith('(') ||
+            const <String>{'title', 'artist', 'album'}.contains(key.toLowerCase()),
+      );
+      return tags;
+    } catch (_) {
+      return <String, String>{};
+    }
+  }
+
+  /// mpv prints filtered metadata as a map such as `{genre=Rock, date=2024}`.
+  /// Values may contain commas, so only commas followed by another key are
+  /// treated as separators.
+  static Map<String, String> _parseMetadataMap(String raw) {
+    final String text = raw.trim();
+    if (text.isEmpty) return <String, String>{};
+    final Map<String, String> result = <String, String>{};
+    final RegExp entry = RegExp(
+      r'([A-Za-z0-9_.-]+)\s*=\s*(.*?)(?=,\s*[A-Za-z0-9_.-]+\s*=|\s*})',
+    );
+    for (final RegExpMatch match in entry.allMatches(text)) {
+      final String key = match.group(1)!.trim();
+      final String value = match.group(2)!.trim();
+      if (key.isNotEmpty && value.isNotEmpty) result[key] = value;
+    }
+    return result;
   }
 
   Future<void> _loadCover(String path, int generation) async {
