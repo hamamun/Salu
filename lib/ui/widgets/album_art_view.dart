@@ -7,7 +7,7 @@ import '../../core/audio_display_service.dart';
 import '../../theme/app_theme.dart';
 
 /// Mode C (lrc.md L2–L6): album art + title / artist / album. Shown
-/// only when both the lyrics toggle and the visualizer toggle are off.
+/// when lyrics are not being shown.
 class AlbumArtView extends StatelessWidget {
   const AlbumArtView({super.key});
 

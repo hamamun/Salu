@@ -118,9 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
     // place the first media is opened, so a landed file re-lays its four
     // continua (and answers Auto EQ) before the panel can ever paint.
     TuneService.instance.startWatching();
-    // Lyrics + the audio canvas (lrc.md L26): clock listeners and the
-    // visualizer settings toggle, so a flip in Settings re-evaluates
-    // the three-mode table immediately.
+    // Start the audio canvas listener so lyric visibility updates the
+    // metadata/cover surface immediately.
     LyricService.instance.startWatching();
     AudioDisplayService.instance.startWatching();
     _restartHideTimer();

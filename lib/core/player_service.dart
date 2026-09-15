@@ -8,11 +8,11 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../ui/osd/osd_controller.dart';
-import 'audio_display_service.dart';
 import 'channel_favourites_service.dart';
 import 'channel_grouping.dart';
 import 'channel_load_service.dart';
 import 'channel_view_service.dart';
+import 'audio_display_service.dart';
 import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
@@ -327,11 +327,6 @@ class PlayerService {
   /// idle/stopped.
   final ValueNotifier<String?> currentPath = ValueNotifier<String?>(null);
 
-  /// Whether the last (or pending) load was armed with the visualizer
-  /// graph (lrc.md L16) — set by [_applyVisualizerForLoad] before every
-  /// open, so the audio canvas can tell "the graph is already in the
-  /// pipeline" from "it has to be installed" without a probe.
-  bool visualizerArmed = false;
 
   /// The parked position taken by Stop, until Play resumes it.
   final ValueNotifier<StopMemory?> stopMemory =
@@ -546,12 +541,8 @@ class PlayerService {
       // one dumb line by design (D6/D17: nothing on the player side is
       // ever forced).
       SubtitleService.instance.onMediaLanded(uri, channelMode: channelMode);
-      // Lyrics + audio canvas (lrc.md L26): the same start-file
-      // trigger, so a zapped-to track never inherits the previous
-      // track's lyric, art, or mode.
       LyricService.instance.onMediaLanded(uri, channelMode: channelMode);
-      AudioDisplayService.instance
-          .onMediaLanded(uri, channelMode: channelMode);
+      AudioDisplayService.instance.onMediaLanded(uri, channelMode: channelMode);
     });
 
     // The track surface (cc.md §6.2): every structural track change
@@ -724,32 +715,6 @@ class PlayerService {
     }
   }
 
-  /// The audio canvas (lrc.md L16) pre-load — the ONLY place the
-  /// `lavfi-complex` graph is installed. When the visualizer is on and
-  /// the target is a local audio file the graph is set BEFORE
-  /// `player.open`, so mpv folds it into the filter chain at first
-  /// init — never re-inited mid-pipeline (a runtime re-init is what
-  /// used to race the load and stop the playback). Every other target
-  /// gets an empty graph, so a previous audio load's bars never leak
-  /// into a film or a stream.
-  Future<void> _applyVisualizerForLoad(String target) async {
-    final bool wants = SettingsService.instance.visualizer.value &&
-        !target.contains('://') &&
-        MediaUtils.isAudio(target);
-    final PlatformPlayer? platform = player.platform;
-    if (platform is! NativePlayer) return;
-    try {
-      await platform.setProperty(
-          'lavfi-complex', wants ? AudioDisplayService.visualizerGraph : '');
-      visualizerArmed = wants;
-      debugPrint('[SALU/viz] pre-load: graph '
-          '${wants ? "ARMED" : "cleared"} for $target');
-    } catch (error) {
-      visualizerArmed = false;
-      debugPrint('[SALU/viz] pre-load FAILED for $target: $error');
-    }
-  }
-
   /// Per-load subtitle auto-load gate.
   ///
   /// mpv (0.35+) treats a sidecar `.lrc` as a subtitle candidate and
@@ -908,10 +873,6 @@ class PlayerService {
       if (!_shuffleDriving &&
           repeatMode.value == RepeatMode.off &&
           !queue.hasNext &&
-          // A visualizer kill-recovery re-open is in flight — the
-          // "end" that just fired was the filter dying, not the song
-          // finishing, and the restored item must not be parked.
-          !AudioDisplayService.instance.recovering &&
           hasMedia.value &&
           (transportState.value == TransportState.playing ||
               transportState.value == TransportState.paused)) {
@@ -1054,7 +1015,6 @@ class PlayerService {
       _refreshTransportState();
       // Streams never carry the graph — clear whatever an earlier
       // audio load installed.
-      await _applyVisualizerForLoad(channel.url);
       await _applySubAutoloadForLoad(channel.url);
       await player.open(Media(channel.url), play: play);
       if (play) _userPaused = false;
@@ -1123,7 +1083,6 @@ class PlayerService {
     _openingWithPlay = play;
     hasMedia.value = true;
     _refreshTransportState();
-    await _applyVisualizerForLoad(paths[idx]);
     await _applySubAutoloadForLoad(paths[idx]);
     await player.open(Playlist(medias, index: idx), play: play);
     if (play) _userPaused = false;
@@ -1236,16 +1195,6 @@ class PlayerService {
     if (pos < const Duration(seconds: 5)) return false;
     if (dur - pos < const Duration(seconds: 10)) return false;
     return true;
-  }
-
-  /// Re-open the item at [index] from [position] with no Resume toast
-  /// — the visualizer's switch and kill-recovery path. [play] carries
-  /// the transport state across the re-open (a paused song comes back
-  /// paused). Goes through the ordinary open path, so the pre-load
-  /// (graph, resume flush, …) runs exactly as for any other open.
-  Future<void> reopenItemAt(int index, Duration position,
-      {bool play = true}) {
-    return _openQueueAt(index, start: position, play: play, silent: true);
   }
 
   /// Whether Play-after-Stop will resume at the memory's position:
