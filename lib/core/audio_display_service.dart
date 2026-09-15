@@ -5,6 +5,7 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../ui/osd/osd_controller.dart';
 import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
@@ -50,6 +51,16 @@ class _CoverEntry {
 /// `lavfi-complex` (L16) and is told `audio-display=no` so an embedded
 /// cover never collides with mode C (L19). When lyrics win, the
 /// visualizer is actually stopped — not covered (L18).
+///
+/// **The graph is only ever in the pipeline when a load STARTED with
+/// it.** `PlayerService` sets `lavfi-complex` before `player.open`, so
+/// mpv folds the graph into the filter chain at first init. A running
+/// pipeline is never handed the graph: mpv re-inits the chain on a
+/// runtime change, and a failing re-init (or filter) STOPS the playback
+/// — the engine treats a dead lavfi filter as end-of-file, which is how
+/// the old toggle killed playback. The mid-playback switch therefore
+/// re-opens the current item at its position instead, and a kill-watch
+/// rolls any filter death back to exactly where the song was.
 class AudioDisplayService {
   AudioDisplayService._internal();
 
@@ -61,8 +72,14 @@ class AudioDisplayService {
       '[aid1]asplit[ao][a];[a]showfreqs=s=1280x720:mode=bar:ascale=log:fscale=log:win_func=gauss:averaging=5:colors=0x4C9EEB,format=yuv420p[vo]';
 
   static const int _cacheCap = 32;
-  static const int _metaTries = 8;
+  /// How long to wait for the engine to actually hold THIS file before
+  /// its tags may be read (25 × 120 ms ≈ 3 s).
+  static const int _fileTries = 25;
   static const Duration _metaGap = Duration(milliseconds: 120);
+  /// A pre-load install failure stays disqualifying for this long — a
+  /// re-open right after it would just re-open (the failure is a
+  /// build-level one, not a per-try flake).
+  static const Duration _installCooldown = Duration(seconds: 30);
 
   /// The mode the audio view reads. Nothing else in the file may imply
   /// a different combination (L15).
@@ -79,6 +96,24 @@ class AudioDisplayService {
   bool _watching = false;
   int _generation = 0;
   String? _path;
+
+  // ── Visualizer safety ────────────────────────────────────────────────
+
+  /// Whether the pipeline currently holds the graph — the pre-load's
+  /// decision, read on every landing and cleared by any runtime
+  /// removal.
+  bool _graphLive = false;
+
+  /// The path whose install the pre-load failed for, and when — a
+  /// re-open inside the cooldown would just loop.
+  DateTime? _installFailedAt;
+
+  StreamSubscription<bool>? _killWatch;
+  String _killPath = '';
+
+  /// `true` while a kill-recovery re-open is in flight — holds the
+  /// end-of-item parker off so the restored song is not parked again.
+  bool recovering = false;
 
   final Map<String, _CoverEntry> _coverCache = <String, _CoverEntry>{};
   final List<String> _coverOrder = <String>[];
@@ -105,12 +140,19 @@ class AudioDisplayService {
         QueueService.instance.isChannelList ||
         !MediaUtils.isAudio(uri)) {
       _path = null;
+      _graphLive = false;
       _resetSurface();
       unawaited(_applyEngine(AudioCanvasMode.none));
       return;
     }
     final String path = MediaUtils.canonicalPath(uri);
     _path = path;
+    // The pre-load (in PlayerService, before the open) already decided
+    // whether this load carries the graph — read the fact, then
+    // re-evaluate the table. A load that DID take with the graph
+    // clears any earlier install-failure marker.
+    _graphLive = PlayerService.instance.visualizerArmed;
+    if (_graphLive) _installFailedAt = null;
     // Never inherit the previous track's art or text (L26).
     coverBytes.value = null;
     info.value = AudioTrackInfo(title: MediaUtils.displayName(path));
@@ -122,6 +164,7 @@ class AudioDisplayService {
   void onStopped() {
     _generation++;
     _path = null;
+    _graphLive = false;
     _resetSurface();
     unawaited(_applyEngine(AudioCanvasMode.none));
   }
@@ -167,16 +210,112 @@ class AudioDisplayService {
   }
 
   Future<void> _setVisualizer(bool on) async {
+    _disarmKillWatch();
     final NativePlayer? native = _native;
     if (native == null) return;
-    try {
-      await native.setProperty(
-        'lavfi-complex',
-        on ? visualizerGraph : '',
+    if (on) {
+      if (_graphLive) {
+        // This load came with the graph — it is in the pipeline from
+        // init, nothing to install. All that is left is to watch for
+        // a filter death.
+        _armKillWatch();
+        return;
+      }
+      // A running pipeline cannot be handed the graph (class doc): the
+      // switch re-opens the current item at its position, and the load
+      // comes back with the graph pre-applied.
+      final PlayerService player = PlayerService.instance;
+      final String? path = player.currentPath.value;
+      if (path == null) return;
+      final int index = QueueService.instance.indexOfUrl(path);
+      if (index < 0) return;
+      final DateTime now = DateTime.now();
+      if (_installFailedAt != null &&
+          now.difference(_installFailedAt!) < _installCooldown) {
+        // The pre-load already failed for this file — a re-open would
+        // just re-open it. The canvas keeps the metadata.
+        mode.value = AudioCanvasMode.metadata;
+        return;
+      }
+      _installFailedAt = now;
+      await player.reopenItemAt(
+        index,
+        player.position.value,
+        play: player.isPlaying.value,
       );
-    } catch (error) {
-      debugPrint('[SALU/audio] lavfi-complex failed: $error');
+      return;
     }
+    _graphLive = false;
+    // A removal the pipeline tolerates — an empty graph has no filter
+    // that can fail.
+    try {
+      await native.setProperty('lavfi-complex', '');
+    } catch (error) {
+      debugPrint('[SALU/audio] lavfi-complex clear failed: $error');
+    }
+  }
+
+  // ── Kill watch — a dead lavfi filter is an "end of file" to mpv ─────
+
+  /// Watches a graph-carrying load for the one failure the engine will
+  /// not survive: a filter death, which mpv answers by stopping the
+  /// playback as if the file had ended. Armed on every landing that
+  /// carries the graph, for as long as the graph is in the pipeline —
+  /// a filter can die on any frame, not only the first. A real
+  /// end-of-song (position at the tail) passes it through untouched;
+  /// Stop and file switches never set `eof-reached` at all, so they
+  /// never trip it.
+  void _armKillWatch() {
+    final PlayerService player = PlayerService.instance;
+    _killPath = player.currentPath.value ?? '';
+    _killWatch = player.player.stream.completed.listen((bool done) {
+      if (!done) return;
+      final Duration dur = player.duration.value;
+      final Duration at = player.position.value;
+      // An "end" more than 2 s before the real end is the kill, not
+      // the song finishing.
+      if (dur <= Duration.zero || dur - at <= const Duration(seconds: 2)) {
+        return;
+      }
+      unawaited(_recoverFromKill(at));
+    });
+  }
+
+  void _disarmKillWatch() {
+    _killWatch?.cancel();
+    _killWatch = null;
+  }
+
+  /// The filter died mid-song: the graph off, the setting off (with
+  /// the toast that re-tries it), and the song back where it was —
+  /// the kill parked or advanced the engine like an end, so a plain
+  /// re-open of the same row restores it.
+  Future<void> _recoverFromKill(Duration at) async {
+    _disarmKillWatch();
+    final String path = _killPath;
+    final PlayerService player = PlayerService.instance;
+    final NativePlayer? native = _native;
+    if (native != null) {
+      try {
+        await native.setProperty('lavfi-complex', '');
+      } catch (_) {}
+    }
+    _graphLive = false;
+    await SettingsService.instance.setVisualizer(false);
+    final int index =
+        path.isEmpty ? -1 : QueueService.instance.indexOfUrl(path);
+    if (index >= 0) {
+      recovering = true;
+      try {
+        await player.reopenItemAt(index, at);
+      } finally {
+        recovering = false;
+      }
+    }
+    OsdController.instance.show(OsdUndoCard(
+      label: 'Visualizer off — it stopped playback',
+      onUndo: () => SettingsService.instance.setVisualizer(true),
+    ));
   }
 
   NativePlayer? get _native {
@@ -184,19 +323,40 @@ class AudioDisplayService {
     return platform is NativePlayer ? platform : null;
   }
 
+  /// Mode C's text — the tags, but only THIS file's tags.
+  ///
+  /// mpv's `metadata` outlives a file change: read it before the new
+  /// load has taken over and the PREVIOUS song's tags come back — the
+  /// stale title on a no-tag file. `path` flips the moment the new load
+  /// owns the engine, so it is the gate; until it matches, whatever is
+  /// readable belongs to someone else. A file whose load never takes
+  /// (failed open, or we already moved on) keeps the file name that
+  /// landed with it — the previous song's tags are never adopted.
   Future<void> _loadText(String path, int generation) async {
-    String title = '';
-    String artist = '';
-    String album = '';
-    for (int i = 0; i < _metaTries; i++) {
+    bool current = false;
+    for (int i = 0; i < _fileTries; i++) {
       if (generation != _generation) return;
-      title = await _readTag('title');
-      artist = await _readTag('artist');
-      album = await _readTag('album');
-      if (title.isNotEmpty || artist.isNotEmpty || album.isNotEmpty) break;
+      final NativePlayer? native = _native;
+      if (native != null) {
+        try {
+          final String raw = await native.getProperty('path');
+          if (raw.isNotEmpty && MediaUtils.canonicalPath(raw) == path) {
+            current = true;
+            break;
+          }
+        } catch (_) {}
+      }
       await Future<void>.delayed(_metaGap);
     }
+    if (!current) return;
+    // The demuxer's tags (or their absence) land a beat after `path`
+    // flips — one settle tick so a no-tag file reads as empty, not as
+    // the previous song's leftovers.
+    await Future<void>.delayed(_metaGap);
     if (generation != _generation) return;
+    final String title = await _readTag('title');
+    final String artist = await _readTag('artist');
+    final String album = await _readTag('album');
     final String fallback = MediaUtils.displayName(path);
     info.value = AudioTrackInfo(
       title: title.isEmpty ? fallback : title,

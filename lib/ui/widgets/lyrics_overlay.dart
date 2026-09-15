@@ -5,13 +5,38 @@ import '../../core/player_service.dart';
 import '../../theme/app_theme.dart';
 
 /// Mode A (lrc.md L11 / L28): full-window karaoke overlay. The current
-/// line is highlighted with a line or two of context; every rendered
-/// line is a tap target that seeks to its timestamp. No OSD — the jump
-/// is the feedback.
+/// line is highlighted with as much context as the window fits; every
+/// rendered line is a tap target that seeks to its timestamp. No OSD —
+/// the jump is the feedback.
 class LyricsOverlay extends StatelessWidget {
   const LyricsOverlay({super.key});
 
-  static const int _context = 2;
+  // The tile metrics mirror _LyricLineTile exactly (font × 1.35 leading
+  // + the tile's vertical padding × 2), so the fit count below never
+  // overflows the window.
+  static const double _currentTile = 24 * 1.35 + 20; // 52.4
+  static const double _nearTile = 16 * 1.35 + 12; // 33.6 (distance 1)
+  static const double _farTile = 14 * 1.35 + 12; // 30.9 (distance ≥ 2)
+
+  /// The context count the window height allows — never a fixed 2+1+2:
+  /// a tall window shows many lines above and below, a short one the
+  /// current line alone.
+  static int _contextFor(double height) {
+    // The canvas is always bounded in practice; an unbounded constraint
+    // would spin the fit loop forever, so fall back to the old 2+1+2.
+    if (!height.isFinite || height <= 0) return 2;
+    double remaining = height - _currentTile;
+    int k = 0;
+    while (true) {
+      // The first pair on each side is the distance-1 (16 px) tile;
+      // everything beyond it is the 14 px one.
+      final double pair = k == 0 ? _nearTile * 2 : _farTile * 2;
+      if (remaining < pair) break;
+      remaining -= pair;
+      k++;
+    }
+    return k;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,33 +53,45 @@ class LyricsOverlay extends StatelessWidget {
             final LyricDocument? doc = lyrics.document.value;
             if (doc == null || doc.isEmpty) return const SizedBox.expand();
             final int current = lyrics.currentIndex.value;
-            final int last = doc.lines.length - 1;
-            final int from = (current < 0 ? 0 : current - _context)
-                .clamp(0, last)
-                .toInt();
-            final int to = (current < 0 ? _context : current + _context)
-                .clamp(0, last)
-                .toInt();
+            return LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints box) {
+                final int last = doc.lines.length - 1;
+                final int k = _contextFor(box.maxHeight);
+                final int from =
+                    (current < 0 ? 0 : current - k).clamp(0, last).toInt();
+                // While no line is highlighted yet the window shows as
+                // many leading lines as it fits; otherwise k above and
+                // k below the current line.
+                final int to =
+                    (current < 0 ? 2 * k : current + k).clamp(0, last).toInt();
 
-            return Align(
-              alignment: Alignment.center,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      for (int i = from; i <= to; i++)
-                        _LyricLineTile(
-                          line: doc.lines[i],
-                          current: i == current,
-                          distance: current < 0 ? 1 : (i - current).abs(),
-                        ),
-                    ],
+                // Tiles are sized by distance from the current line
+                // only, so a full k-above/k-below window is symmetric
+                // and the centered column keeps the current line at the
+                // window's middle. At the document's head or tail the
+                // missing side simply doesn't exist — the current line
+                // drifts toward the edge instead of being pushed out.
+                return Align(
+                  alignment: Alignment.center,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          for (int i = from; i <= to; i++)
+                            _LyricLineTile(
+                              line: doc.lines[i],
+                              current: i == current,
+                              distance: current < 0 ? 1 : (i - current).abs(),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
         ),
