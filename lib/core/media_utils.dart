@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 
 /// The two playable kinds SALU distinguishes (autoload_imp.md §1 lock
@@ -58,12 +60,29 @@ class MediaUtils {
 
   /// ONE canonical spelling of a local path so resume memory, stop memory
   /// and the "is this the row that was playing?" checks never disagree:
-  /// forward slashes, no `file://` scheme, no leading `/` before a drive
-  /// letter. Streams / URLs (`://`) are returned untouched — a URL's
-  /// spelling is a key of its own and must never be rewritten.
+  /// forward slashes, no leading `/` before a drive letter, and no Windows
+  /// long-path prefix (`\\?\`). Streams / URLs (`://`) are returned
+  /// untouched — a URL's spelling is a key of its own and must never be
+  /// rewritten (`ChannelSource.localPath` unwraps a `file://` URI for the
+  /// same reason, and [samePath] peels one before comparing).
+  ///
+  /// The long-path prefix is not a cosmetic detail: on Windows media_kit
+  /// hands mpv the `\\?\C:\…` spelling (`safe_local_storage.addPrefix`)
+  /// and mpv's `path` property reports exactly what it was given, so the
+  /// prefix has to collapse away or the engine's spelling of a file would
+  /// never equal SALU's.
   static String canonicalPath(String path) {
     if (path.contains('://')) return path;
     String s = path.replaceAll('\\', '/');
+    // `\\?\C:\a.mp3` → `C:/a.mp3`; the UNC form keeps its network root:
+    // `\\?\UNC\srv\share\a.mp3` → `//srv/share/a.mp3`.
+    if (s.toUpperCase().startsWith('//?/UNC/')) {
+      s = '//${s.substring(8)}';
+    } else {
+      while (s.startsWith('//?/')) {
+        s = s.substring(4);
+      }
+    }
     const String scheme = 'file://';
     if (s.startsWith('$scheme/')) {
       s = s.substring(scheme.length + 1);
@@ -82,6 +101,37 @@ class MediaUtils {
 
   static bool _isAsciiLetter(int code) =>
       (code >= 0x41 && code <= 0x5A) || (code >= 0x61 && code <= 0x7A);
+
+  /// Do two spellings name the same local file?
+  ///
+  /// Both sides collapse to one spelling first, `file://` peeled off —
+  /// `\\?\C:\a.mp3`, `file:///C:/a.mp3` and `C:/a.mp3` are one file, which
+  /// is exactly the question the audio canvas asks when it compares the
+  /// engine's `path` with the file SALU queued. On Windows a difference in
+  /// case is still a match, because the filesystem is case-insensitive and
+  /// the engine can report a spelling SALU never typed. A stream URL is
+  /// only ever equal to the very same URL — its case is part of the key.
+  static bool samePath(String a, String b) {
+    final String ca = _localSpelling(a);
+    final String cb = _localSpelling(b);
+    if (ca == cb) return true;
+    if (ca.contains('://') || cb.contains('://')) return false;
+    return Platform.isWindows && ca.toLowerCase() == cb.toLowerCase();
+  }
+
+  /// [canonicalPath] with a `file://` scheme peeled first: a file URI is a
+  /// local file, not a URL, and has to meet the plain path on equal terms.
+  static String _localSpelling(String path) {
+    const String scheme = 'file://';
+    if (path.startsWith(scheme)) {
+      final String rest = path.substring(scheme.length);
+      final bool drive = rest.length >= 2 &&
+          _isAsciiLetter(rest.codeUnitAt(0)) &&
+          rest.codeUnitAt(1) == 0x3A;
+      if (rest.startsWith('/') || drive) return canonicalPath(rest);
+    }
+    return canonicalPath(path);
+  }
 
   static bool _isDigit(int code) => code >= 0x30 && code <= 0x39;
 
