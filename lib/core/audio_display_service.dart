@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
@@ -59,8 +60,10 @@ class AudioDisplayService {
   static const Duration _metaGap = Duration(milliseconds: 120);
   /// Settle polls once the file gate has passed — the new demuxer's
   /// header (and with it the tags, or their absence) lands within this
-  /// many ticks for a local file.
-  static const int _metaTries = 8;
+  /// many ticks for a local file (12 × 120 ms ≈ 1.4 s). `path` flips
+  /// before the header is parsed, so this window is what actually waits
+  /// for the tags; a tagless file just pays it once, invisibly.
+  static const int _metaTries = 12;
   /// The mode the audio view reads. Nothing else in the file may imply
   /// a different combination (L15).
   final ValueNotifier<AudioCanvasMode> mode =
@@ -228,55 +231,107 @@ class AudioDisplayService {
 
   /// Every tag mpv exposes for the file the engine now holds.
   ///
-  /// `metadata` is a `MPV_FORMAT_NODE_MAP`, and libmpv's manual is
-  /// explicit that trying to retrieve it as a raw string does not work —
-  /// media_kit's `getProperty` answers `''` for it, and for
-  /// `filtered-metadata` too (which would additionally hide every tag
-  /// outside mpv's `--display-tags` list). So the map is walked through
-  /// its own documented string sub-properties instead:
-  /// `metadata/list/count`, `metadata/list/N/key`, `metadata/list/N/value`.
-  /// `metadata` — never the filtered map: mode C shows every available
-  /// field (L2).
+  /// `metadata` is a `MPV_FORMAT_NODE_MAP` — a key/value map of the
+  /// current demuxer's tags — and mpv's manual says plainly of it:
+  /// "Trying to retrieve this property as a raw string doesn't work."
+  /// The one string the engine can produce for such a value is a JSON
+  /// blob, never the `{key=value, …}` listing the old parser looked for,
+  /// so that parse could only ever come back empty. The documented string
+  /// route is the property's own sub-properties, and that is what this
+  /// walks:
+  ///
+  ///   `metadata/list/count`  → how many tags the file actually has
+  ///   `metadata/list/N/key`  → the Nth tag's name
+  ///   `metadata/list/N/value`→ the Nth tag's text
+  ///
+  /// with the JSON string form and `metadata/by-key/<key>` probes as the
+  /// fallbacks for an engine build without the list route. The source is
+  /// `metadata` — never `filtered-metadata`, which is cut down
+  /// to mpv's `--display-tags` whitelist and would hide real tags: mode C
+  /// shows every field the file carries (L2).
   Future<Map<String, String>> _readTagMap() async {
     final String countRaw = await _readProperty('metadata/list/count');
     final int count = int.tryParse(countRaw) ?? -1;
-    if (count < 0) {
-      // An engine build without the list sub-properties — fall back to
-      // one string probe per common tag.
-      return _probeTags();
-    }
+    if (count < 0) return _readTagMapFallback();
     final Map<String, String> tags = <String, String>{};
     for (int i = 0; i < count; i++) {
       final String key = await _readProperty('metadata/list/$i/key');
       if (key.isEmpty) continue;
-      final String value = await _readProperty('metadata/list/$i/value');
+      // Two independent documented routes to the value: the list entry
+      // itself, then the exact key (`metadata/by-key/<key>` is a plain
+      // string property). Either one landing is enough to show the tag.
+      String value = await _readProperty('metadata/list/$i/value');
+      if (value.isEmpty) value = await _readProperty('metadata/by-key/$key');
       if (value.isEmpty) continue;
       tags[key] = value;
     }
-    if (tags.isEmpty && count > 0) {
-      // The list answered nothing although mpv counts entries — a build
-      // with only part of the sub-properties. The probes still get the
-      // common fields on screen.
-      return _probeTags();
-    }
+    if (tags.isEmpty && count > 0) return _readTagMapFallback();
     return tags;
   }
 
-  /// Safety net for a libmpv without `metadata/list/*`: mpv's own
-  /// `--display-tags` default set, one `metadata/by-key/…` probe each
-  /// (`metadata/by-key/<key>` IS a plain string property, so it always
-  /// answers — with `''` when the file has no such tag).
+  /// The list route is unavailable (an engine build without
+  /// `metadata/list/*`) or answered nothing although mpv counts entries:
+  /// the JSON string form first, then one probe per common tag.
+  Future<Map<String, String>> _readTagMapFallback() async {
+    final Map<String, String> viaJson = await _readTagJson();
+    if (viaJson.isNotEmpty) return viaJson;
+    return _probeTags();
+  }
+
+  /// The string form of `metadata`, decoded when the engine hands back a
+  /// JSON object (`{"Title":"…","Artist":"…"}`). Empty when there is
+  /// nothing to decode — including the documented case where the raw
+  /// string is unavailable.
+  Future<Map<String, String>> _readTagJson() async {
+    final String raw = await _readProperty('metadata');
+    final String text = raw.trim();
+    if (!text.startsWith('{')) return <String, String>{};
+    try {
+      final Object? decoded = jsonDecode(text);
+      if (decoded is! Map) return <String, String>{};
+      final Map<String, String> tags = <String, String>{};
+      for (final MapEntry<Object?, Object?> entry in decoded.entries) {
+        final String key = entry.key.toString();
+        final String value = entry.value?.toString() ?? '';
+        if (key.isNotEmpty && value.isNotEmpty) tags[key] = value;
+      }
+      return tags;
+    } catch (_) {
+      return <String, String>{};
+    }
+  }
+
+  /// Last-resort net, when neither the list route nor the JSON string
+  /// form answered: the tag names every common container writes (mpv's
+  /// `--display-tags` default set, plus the usual Vorbis comment / MP4
+  /// atoms), one `metadata/by-key/<key>` probe each — a plain string
+  /// property, so it answers `''` when the file has no such tag.
   static const List<String> _probeKeys = <String>[
-    'title', 'artist', 'album', 'album_artist', 'genre', 'date', 'year',
-    'track', 'disc', 'composer', 'performer', 'comment', 'publisher',
-    'copyright', 'language', 'encoder', 'bpm', 'lyricist',
+    'title', 'artist', 'album', 'album_artist', 'albumartist', 'genre',
+    'date', 'year', 'originaldate', 'track', 'tracknumber', 'disc',
+    'discnumber', 'totaltracks', 'totaldiscs', 'composer', 'writer',
+    'lyricist', 'performer', 'conductor', 'arranger', 'remixer', 'comment',
+    'description', 'publisher', 'organization', 'label', 'catalog_number',
+    'barcode', 'isrc', 'copyright', 'language', 'encoder', 'encoded_by',
+    'engineer', 'mixer', 'bpm', 'key', 'mood', 'grouping', 'work',
+    'compilation', 'media', 'website',
   ];
 
   Future<Map<String, String>> _probeTags() async {
     final Map<String, String> tags = <String, String>{};
     for (final String key in _probeKeys) {
       final String value = await _readProperty('metadata/by-key/$key');
-      if (value.isNotEmpty) tags[key] = value;
+      if (value.isNotEmpty) {
+        tags[key] = value;
+        continue;
+      }
+      // ID3v2 keeps tags lowercased, a FLAC/Ogg Vorbis comment keeps them
+      // uppercased — probe both spellings rather than bet on the lookup's
+      // case rule.
+      final String upper = key.toUpperCase();
+      if (upper == key) continue;
+      final String upperValue = await _readProperty('metadata/by-key/$upper');
+      if (upperValue.isNotEmpty) tags[upper] = upperValue;
     }
     return tags;
   }

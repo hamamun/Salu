@@ -161,14 +161,17 @@ section is net-new work.
    this is the concrete route that makes it work — do not "simplify" it back:
 
    - mpv's `metadata` and `filtered-metadata` are **NODE_MAPs**, and mpv's
-     own manual is explicit that such a property **cannot be retrieved as a
-     raw string**. media_kit's `NativePlayer.getProperty` answers `''` for
-     both (it returns `''` whenever `mpv_get_property_string` comes back
-     NULL), so a string parse of `filtered-metadata` yields nothing, ever.
+     own manual says of `metadata`: *"Trying to retrieve this property as a
+     raw string doesn't work."* The only string the engine can produce for
+     such a value is a JSON blob — never the `{key=value, …}` listing the
+     first implementation parsed, so that parse could only ever come back
+     empty and the extra fields never appeared.
    - The map is therefore walked through its **documented string
      sub-properties**: `metadata/list/count`, `metadata/list/N/key`,
-     `metadata/list/N/value`. `metadata/by-key/<key>` probes stay as the
-     fallback for a build without the list form.
+     `metadata/list/N/value` (verified against mpv's `player/command.c`:
+     `tag_property()` → `m_property_read_list()` → `get_tag_entry()`).
+     The JSON string form and `metadata/by-key/<key>` probes stay as the
+     fallbacks for a build without the list form.
    - The source is **`metadata`, never `filtered-metadata`**: the filtered
      map is cut down to mpv's `--display-tags` whitelist and would hide
      every tag outside it — mode C shows everything the file carries (L2).
@@ -176,11 +179,18 @@ section is net-new work.
      same map: ID3v2 delivers `title`, a FLAC Vorbis comment delivers
      `TITLE`, and both are the title line.
    - The "the engine now holds THIS file" gate compares the engine's `path`
-     with `MediaUtils.samePath`, **not** with `==`: on Windows media_kit
-     hands mpv the `\\?\C:\…` long-path spelling
-     (`safe_local_storage.addPrefix`), and mpv's `path` reports back
-     exactly what it was given. String equality therefore never matched a
-     local file and the gate timed out on every track.
+     with `MediaUtils.samePath`, **not** with `==`. On Windows media_kit
+     rewrites every local file URI before handing it to mpv:
+     `_sanitizeUri()` → `safe_local_storage.addPrefix()`, i.e.
+     `C:/Music/song.mp3` → `\\?\C:\Music\song.mp3` (media_kit's own 1.2.6
+     release commit is *"fix(win32): loading long file paths"*, and the
+     resolved version in `pubspec.lock` is 1.2.6). mpv then reports that
+     spelling back: the `path` property is `mpctx->filename`
+     (`player/command.c`), which `player/loadfile.c` copies verbatim from
+     the playlist entry it was given. So string equality never matched a
+     local file on Windows and the gate timed out on every track.
+     `MediaUtils.canonicalPath` now collapses the prefix and
+     `MediaUtils.samePath` compares the two spellings.
    - Cover-art bytes stay the tag reader's job (L3/L21) and are read from
      SALU's own path, so they never depended on the gate. No embedded
      picture → the SALU-logo placeholder (L5); a debug line says which.
