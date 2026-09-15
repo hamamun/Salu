@@ -435,8 +435,7 @@ a kept name still beats it; a stale key from the other line falls through to
 **Six deviations, all deliberate:**
 
 1. **Curve-on-video is painted by Flutter, not by ffmpeg's `curves`.** That
-   filter needs `--lavfi-complex` (a video pad wired to an audio filter) and
-   would darken the picture on pause — exactly what §1.9 forbids. An
+   filter would require a separate video filter graph and would darken the picture on pause — exactly what §1.9 forbids. An
    `IgnorePointer` layer under the chrome cannot.
 2. **The band sliders show their value by swapping the frequency label**, not
    by a 96 px `HoverChip` per band: ten of those would collide in a 34 px
