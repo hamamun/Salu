@@ -6,6 +6,7 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'audio_tag_fields.dart';
 import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'player_service.dart';
@@ -14,24 +15,6 @@ import 'queue_service.dart';
 /// Audio-canvas modes. `none` is everything that is not local audio —
 /// video keeps the plain mpv canvas, untouched.
 enum AudioCanvasMode { none, lyrics, metadata }
-
-/// Audio metadata shown in mode C. [title] is never empty (lrc.md L4) —
-/// the file name fills any gap; other fields are shown only when present.
-class AudioTrackInfo {
-  const AudioTrackInfo({
-    required this.title,
-    this.artist,
-    this.album,
-    this.additional = const <String, String>{},
-  });
-
-  final String title;
-  final String? artist;
-  final String? album;
-
-  /// Every other non-empty tag exposed by mpv for the current file.
-  final Map<String, String> additional;
-}
 
 /// Cached cover-art bytes keyed by canonical path (lrc.md L27).
 class _CoverEntry {
@@ -70,6 +53,10 @@ class AudioDisplayService {
       ValueNotifier<AudioCanvasMode>(AudioCanvasMode.none);
 
   /// Metadata text. `null` while not on a local audio file.
+  ///
+  /// Carries the four rendered rows *and* the full tag map the canvas does
+  /// not show ([AudioTrackInfo.rawTags]) — the parked set `info.md` is
+  /// about. The read is unfiltered on purpose (L29).
   final ValueNotifier<AudioTrackInfo?> info =
       ValueNotifier<AudioTrackInfo?>(null);
 
@@ -109,9 +96,14 @@ class AudioDisplayService {
     }
     final String path = MediaUtils.canonicalPath(uri);
     _path = path;
-    // Never inherit the previous track's art or text (L26).
+    // Never inherit the previous track's art or text (L26). The name that
+    // landed with the file is the whole canvas until the tags answer —
+    // the minimal state (L33), not a placeholder waiting to be replaced.
     coverBytes.value = null;
-    info.value = AudioTrackInfo(title: MediaUtils.displayName(path));
+    info.value = AudioTrackInfo(
+      title: MediaUtils.displayName(path),
+      minimal: true,
+    );
     _recompute();
     unawaited(_loadCover(path, generation));
     unawaited(_loadText(path, generation));
@@ -194,39 +186,13 @@ class AudioDisplayService {
       await Future<void>.delayed(_metaGap);
     }
     if (generation != _generation) return;
-    final String fallback = MediaUtils.displayName(path);
-    final String title = _pickTag(tags, 'title');
-    final String artist = _pickTag(tags, 'artist');
-    final String album = _pickTag(tags, 'album');
-    final Map<String, String> additional = <String, String>{};
-    for (final MapEntry<String, String> entry in tags.entries) {
-      if (_isPrimaryTag(entry.key)) continue;
-      additional[entry.key] = entry.value;
-    }
-    info.value = AudioTrackInfo(
-      title: title.isEmpty ? fallback : title,
-      artist: artist.isEmpty ? null : artist,
-      album: album.isEmpty ? null : album,
-      additional: additional,
+    // L29–L35 — the whole map goes to the field contract, which decides
+    // what the canvas shows and what stays parked. Nothing is filtered
+    // here: the read keeps everything, the render keeps the standard set.
+    info.value = buildAudioTrackInfo(
+      tags,
+      fallbackTitle: MediaUtils.displayName(path),
     );
-  }
-
-  /// The three fields the layout gives a line of their own (L2).
-  static const List<String> _primaryKeys = <String>['title', 'artist', 'album'];
-
-  static bool _isPrimaryTag(String key) =>
-      _primaryKeys.contains(key.toLowerCase());
-
-  /// First non-empty tag answering [key], matched case-insensitively:
-  /// ID3v2 tags arrive lowercased (`title`), a FLAC Vorbis comment
-  /// arrives uppercased (`TITLE`) — same field, same line.
-  static String _pickTag(Map<String, String> tags, String key) {
-    for (final MapEntry<String, String> entry in tags.entries) {
-      if (entry.key.toLowerCase() == key && entry.value.isNotEmpty) {
-        return entry.value;
-      }
-    }
-    return '';
   }
 
   /// Every tag mpv exposes for the file the engine now holds.
@@ -247,8 +213,9 @@ class AudioDisplayService {
   /// with the JSON string form and `metadata/by-key/<key>` probes as the
   /// fallbacks for an engine build without the list route. The source is
   /// `metadata` — never `filtered-metadata`, which is cut down
-  /// to mpv's `--display-tags` whitelist and would hide real tags: mode C
-  /// shows every field the file carries (L2).
+  /// to mpv's `--display-tags` whitelist and would hide real tags: the
+  /// read is the whole map so the parked set is complete, and the canvas'
+  /// standard-field selection happens at render instead (L29).
   Future<Map<String, String>> _readTagMap() async {
     final String countRaw = await _readProperty('metadata/list/count');
     final int count = int.tryParse(countRaw) ?? -1;
