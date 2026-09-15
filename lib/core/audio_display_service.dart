@@ -30,6 +30,7 @@ class AudioTrackInfo {
 
   /// Every other non-empty tag exposed by mpv for the current file.
   final Map<String, String> additional;
+}
 
 /// Cached cover-art bytes keyed by canonical path (lrc.md L27).
 class _CoverEntry {
@@ -78,6 +79,11 @@ class AudioDisplayService {
 
   final Map<String, _CoverEntry> _coverCache = <String, _CoverEntry>{};
   final List<String> _coverOrder = <String>[];
+
+  NativePlayer? get _native {
+    final PlatformPlayer? platform = PlayerService.instance.player.platform;
+    return platform is NativePlayer ? platform : null;
+  }
 
   /// Attach clock-independent listeners. Safe to call more than once.
   void startWatching() {
