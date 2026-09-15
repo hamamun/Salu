@@ -23,6 +23,9 @@ class LyricsOverlay extends StatelessWidget {
   static const double _nearTile = 16 * 1.35 + 12; // 33.6 (distance 1)
   static const double _farTile = 14 * 1.35 + 12; // 30.9 (distance ≥ 2)
 
+  static double _tileHeightForDistance(int distance) =>
+      distance == 1 ? _nearTile : _farTile;
+
   /// The context count the window height allows — never a fixed 2+1+2:
   /// a tall window shows many lines above and below, a short one the
   /// current line alone.
@@ -62,27 +65,30 @@ class LyricsOverlay extends StatelessWidget {
               builder: (BuildContext context, BoxConstraints box) {
                 final int last = doc.lines.length - 1;
                 final int k = _contextFor(box.maxHeight);
-                final int from =
-                    (current < 0 ? 0 : current - k).clamp(0, last).toInt();
-                // While no line is highlighted yet the window shows as
-                // many leading lines as it fits; otherwise k above and
-                // k below the current line.
-                final int to =
-                    (current < 0 ? 2 * k : current + k).clamp(0, last).toInt();
+                // When playback has not yet reached the first line (current < 0),
+                // line 0 sits at the middle of the screen ready for the first
+                // word, with k upcoming lines below and empty space above.
+                final int active =
+                    (current < 0 ? 0 : current).clamp(0, last).toInt();
+                final int from = (active - k).clamp(0, last).toInt();
+                final int to = (active + k).clamp(0, last).toInt();
 
-                // Tiles are sized by distance from the current line
-                // only, so a full k-above/k-below window is symmetric
-                // and the centered column keeps the current line at the
-                // window's middle. At the document's head or tail the
-                // missing side simply doesn't exist — the current line
-                // drifts toward the edge instead of being pushed out.
-                // The scroll view is the overflow safety net. The inner
-                // `minHeight` box + Center keep the block vertically
-                // centered exactly as before while it fits; only when the
-                // real text lands a few pixels taller than the fit
-                // estimate does the region become scrollable instead of
-                // throwing a RenderFlex overflow (the yellow/black
-                // stripes). Width stays bounded, so long lines still wrap.
+                // Balance missing context lines above and below the active line
+                // so that the active line (or line 0 before vocals begin)
+                // remains centered in the window rather than drifting to an edge.
+                double missingHeightAbove = 0;
+                for (int d = (active - from) + 1; d <= k; d++) {
+                  missingHeightAbove += _tileHeightForDistance(d);
+                }
+
+                double missingHeightBelow = 0;
+                for (int d = (to - active) + 1; d <= k; d++) {
+                  missingHeightBelow += _tileHeightForDistance(d);
+                }
+
+                // Tiles are sized by distance from the active line so that
+                // the active line remains centered with up to k lines context
+                // above and below. The scroll view is the overflow safety net.
                 return SingleChildScrollView(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
@@ -97,13 +103,16 @@ class LyricsOverlay extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: <Widget>[
+                              if (missingHeightAbove > 0)
+                                SizedBox(height: missingHeightAbove),
                               for (int i = from; i <= to; i++)
                                 _LyricLineTile(
                                   line: doc.lines[i],
                                   current: i == current,
-                                  distance:
-                                      current < 0 ? 1 : (i - current).abs(),
+                                  distance: (i - active).abs(),
                                 ),
+                              if (missingHeightBelow > 0)
+                                SizedBox(height: missingHeightBelow),
                             ],
                           ),
                         ),
@@ -141,7 +150,8 @@ class _LyricLineTileState extends State<_LyricLineTile> {
   @override
   Widget build(BuildContext context) {
     final bool current = widget.current;
-    final double size = current
+    final bool isCenter = widget.distance == 0;
+    final double size = isCenter
         ? 24
         : (widget.distance <= 1 ? 16 : 14);
     final FontWeight weight = current ? FontWeight.w600 : FontWeight.w400;
@@ -163,7 +173,7 @@ class _LyricLineTileState extends State<_LyricLineTile> {
           PlayerService.instance.seekTo(widget.line.timestamp);
         },
         child: Padding(
-          padding: EdgeInsets.symmetric(vertical: current ? 10 : 6),
+          padding: EdgeInsets.symmetric(vertical: isCenter ? 10 : 6),
           child: AnimatedDefaultTextStyle(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
