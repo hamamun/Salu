@@ -7,8 +7,10 @@
 > file only adds the lyrics/audio-display layer, and it never touches the
 > video subtitle pipeline.
 >
-> **Status:** DECISIONS LOCKED L1–L28 (owner 2026-09-14). **NOT YET
-> IMPLEMENTED** — this is the contract the implementation will be built
+> **Status:** DECISIONS LOCKED L1–L28 (owner 2026-09-14), and L29–L35
+> (owner 2026-09-15 — mode C's field contract, §3.8, **in code as of
+> 2026-09-15**). The lyric pipeline (L1–L14) is **not yet implemented** —
+> this is the contract the implementation will be built
 > against. `cc.md` remains the authority for subtitles; lyrics and the audio
 > display are a separate, audio-only feature by design (see §1 — lyrics are
 > NOT subtitles).
@@ -32,7 +34,7 @@ Lyrics take precedence when available and enabled.
 
 ---
 
-## 0.5 Reconfirmed decisions — the full index (L1–L28)
+## 0.5 Reconfirmed decisions — the full index (L1–L33)
 
 One line per locked decision, for at-a-glance reconfirmation. Each maps to
 the section where it is explained in full.
@@ -40,7 +42,7 @@ the section where it is explained in full.
 | # | Decision (one line) | § |
 |---|---|---|
 | L1 | Lyrics are audio-only, local-only, sidecar `.lrc` only, no online fetch | 1 |
-| L2 | Mode C shows album art + title/artist/album | 3 |
+| L2 | Mode C shows album art + title/artist/album (field set amended by L29–L33) | 3 |
 | L3→L21 | Tag reader supplies cover-art bytes; all text metadata comes from mpv | 3 |
 | L4 | Text fallback to file name; never blank | 3 |
 | L5 | Missing art → SALU-logo placeholder (generated look) | 3 |
@@ -65,6 +67,13 @@ the section where it is explained in full.
 | L26 | Mode/lyric/metadata re-evaluates every landing | 5 |
 | L27 | Cover-art bytes cached by canonical path | 3 |
 | L28 | Lyric lines are clickable → seek to that timestamp | 6 |
+| L29 | Collect everything, render the standard set — the selection happens at render, never at the read | 3.8 |
+| L30 | Album art is anchored: its size reads the canvas only, the text block is a reserved slot | 3.8 |
+| L31 | Four rows, one line each: no scroll, no wrap, long values ellipsize | 3.8 |
+| L32 | The context line is `Genre · Year · Track`, normalized; everything else is parked for `info.md` | 3.8 |
+| L33 | No standard metadata → SALU-logo in the art slot + the file name, nothing else | 3.8 |
+| L34 | Mode C never renders embedded lyric text (it is mode B's subject) | 3.8 |
+| L35 | A field the canvas refuses may still be engine input (replaygain PRIV → tune); parked, not deleted | 3.8 |
 
 ---
 
@@ -195,11 +204,65 @@ section is net-new work.
      SALU's own path, so they never depended on the gate. No embedded
      picture → the SALU-logo placeholder (L5); a debug line says which.
 
-**Layout (SALU's design language — `app_theme.dart`):** centered vertical
-stack — album art (rounded, faint `surfaceOutline` ring, soft shadow, roughly
-`min(55–60% of height, width-limited)`), then Title (`#EDEDED`, ~22–24px
-semibold), Artist (`#9A9A9A`, ~16px), Album (dimmer, ~14px). No icons, no new
-colors — text + thin marks only, consistent with the rest of the app.
+8. **L29–L35 — the field contract (owner 2026-09-15, locked).** What mode C
+   shows, and what it merely holds. Landed in `lib/core/audio_tag_fields.dart`
+   (pure, unit-tested) + `lib/ui/widgets/album_art_view.dart`.
+
+   - **L29 — collect everything, render the standard set.** The read stays
+     whole and unfiltered (point 7 above). The *selection* is a render-side
+     rule, so limiting the canvas never means losing data:
+     `AudioTrackInfo.rawTags` carries every tag mpv reported, junk included,
+     for the later work sketched in `info.md`.
+   - **L30 — the art is anchored.** Its size is a function of the canvas
+     alone (`min(H × 0.52, W − 160)`, clamped to 140–520, then to the room
+     left after the text block) and the text below it lives in a **reserved
+     slot of constant height**. The old view centered
+     `art + every tag the file had` as one column inside a scroll view, so a
+     file carrying an embedded lyrics blob visibly lifted the artwork; that
+     dependency is what this rule forbids. `follow.md` rule 5 (rows never
+     shift) in the audio canvas.
+   - **L31 — four rows, one line each.** Title (2 lines max, its own slot),
+     Artist, Album, one context line. No `SingleChildScrollView`, no
+     shrink-to-fit, no empty rows for missing fields: a long value
+     ellipsizes, a missing value is not drawn, and nothing outside its own
+     row moves.
+   - **L32 — the context line is `Genre · Year · Track`.** Nothing is
+     labelled on the canvas — the type size says which row is which (a
+     centered `Key: value` list reads as a bug report). Field lookup resolves
+     aliases case-insensitively against every container's spelling
+     (`title`/`TIT2`/`INAM`, `date`/`year`/`TDRC`, `track`/`TRACKNUMBER`/
+     `trkn`…), and each value is normalized: an ID3v2 `(17)Dance` keeps
+     `Dance`, a bare `17` (an ID3v1 index with no name attached) is dropped
+     rather than printed as a number, `2013-05-17` reads as `2013`, a track
+     value becomes `3/12` from any of `3/12` / `3 of 12` / `3/0` / `3`
+     (`0` = unknown total, and `totaltracks` may complete it). A value that
+     repeats a row above it is not shown twice.
+   - **L33 — the no-metadata state.** A file carrying none of the six
+     standard fields gets the SALU-logo in the art slot and **the file name
+     only** — an unlabelled empty block is not a design. A `Comment`, an
+     `Encoder` string or a binary PRIV frame does not count as metadata a
+     listener is owed, so such a file is in this state too. Embedded art is
+     *not* suppressed by it: a file whose tags are only a picture shows that
+     picture with the name under it (L5 governs the missing-art case).
+   - **L34 — embedded lyrics never reach mode C.** An unsynced `USLT` /
+     `©lyr` / `TXXX:lyrics` blob is mode B's subject (L1, L15: lyrics are a
+     layer of their own, with their own renderer). It stays in `rawTags`;
+     whether it should ever feed the lyric view is an open question
+     (`info.md`), not a canvas row.
+   - **L35 — refused on the canvas ≠ useless.** `Id3v2 PRIV:peak value` /
+     `average level` (mp3gain-era replaygain) are exactly the data a
+     normalization pass would want; they are parked for the tune layer, not
+     printed. Values holding control characters are dropped from the *canvas*
+     on content, not on key name, and remain in `rawTags` verbatim.
+
+**Layout (SALU's design language — `app_theme.dart`, amended by L30/L31):**
+centered stack of two constant boxes — album art (rounded, faint
+`surfaceOutline` ring, soft shadow, `min(52 % of height, width − 160)`,
+140–520) at a fixed anchor, then a reserved text block: Title (`#EDEDED`,
+23px semibold, 2 lines max, bottom-aligned in its slot), Artist (`#9A9A9A`,
+16px), Album (dimmer, 14px `withAlpha(170)`), context line (13px,
+`withAlpha(140)`). No icons, no new colors, no labels — text + thin marks
+only, consistent with the rest of the app.
 
 ---
 
@@ -356,6 +419,10 @@ track panel and is greyed out for audio (its enabled check literally requires
 
 ## 10. Out of scope / later phases (noted, not built)
 
+- **The parked metadata** — every field L29–L35 refuses on the canvas, plus
+  the technical facts mpv can answer (`audio-params`, `track-list`, the
+  video set). Inventoried in `info.md`, designed later. Nothing here is
+  decided, and nothing is discarded: the data is read and held today.
 - Embedded lyrics (ID3 `USLT`/`SYLT`, MP4 `©lyr`).
 - External art (`cover.jpg` / `folder.jpg`).
 - Online lyrics fetching (provider integration).
