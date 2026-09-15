@@ -17,6 +17,7 @@ import 'lyric_service.dart';
 import 'media_utils.dart';
 import 'queue_service.dart';
 import 'resume_service.dart';
+import 'settings_service.dart';
 import 'sub_delay_service.dart';
 import 'subtitle_service.dart';
 
@@ -325,6 +326,12 @@ class PlayerService {
   /// Absolute path (or URL) of the item the engine holds; `null` while
   /// idle/stopped.
   final ValueNotifier<String?> currentPath = ValueNotifier<String?>(null);
+
+  /// Whether the last (or pending) load was armed with the visualizer
+  /// graph (lrc.md L16) — set by [_applyVisualizerForLoad] before every
+  /// open, so the audio canvas can tell "the graph is already in the
+  /// pipeline" from "it has to be installed" without a probe.
+  bool visualizerArmed = false;
 
   /// The parked position taken by Stop, until Play resumes it.
   final ValueNotifier<StopMemory?> stopMemory =
@@ -717,6 +724,30 @@ class PlayerService {
     }
   }
 
+  /// The audio canvas (lrc.md L16) pre-load — the ONLY place the
+  /// `lavfi-complex` graph is installed. When the visualizer is on and
+  /// the target is a local audio file the graph is set BEFORE
+  /// `player.open`, so mpv folds it into the filter chain at first
+  /// init — never re-inited mid-pipeline (a runtime re-init is what
+  /// used to race the load and stop the playback). Every other target
+  /// gets an empty graph, so a previous audio load's bars never leak
+  /// into a film or a stream.
+  Future<void> _applyVisualizerForLoad(String target) async {
+    final bool wants = SettingsService.instance.visualizer.value &&
+        !target.contains('://') &&
+        MediaUtils.isAudio(target);
+    final PlatformPlayer? platform = player.platform;
+    if (platform is! NativePlayer) return;
+    try {
+      await platform.setProperty(
+          'lavfi-complex', wants ? AudioDisplayService.visualizerGraph : '');
+      visualizerArmed = wants;
+    } catch (error) {
+      visualizerArmed = false;
+      debugPrint('[SALU/audio] visualizer pre-load failed: $error');
+    }
+  }
+
   // ── Repeat & shuffle (playlist_imp.md §5) ─────────────────────────────
 
   /// Whether SALU must drive the advance itself: shuffle on, repeat is
@@ -854,6 +885,10 @@ class PlayerService {
       if (!_shuffleDriving &&
           repeatMode.value == RepeatMode.off &&
           !queue.hasNext &&
+          // A visualizer kill-recovery re-open is in flight — the
+          // "end" that just fired was the filter dying, not the song
+          // finishing, and the restored item must not be parked.
+          !AudioDisplayService.instance.recovering &&
           hasMedia.value &&
           (transportState.value == TransportState.playing ||
               transportState.value == TransportState.paused)) {
@@ -994,6 +1029,9 @@ class PlayerService {
       _openingWithPlay = play;
       hasMedia.value = true;
       _refreshTransportState();
+      // Streams never carry the graph — clear whatever an earlier
+      // audio load installed.
+      await _applyVisualizerForLoad(channel.url);
       await player.open(Media(channel.url), play: play);
       if (play) _userPaused = false;
       // A live stream carries no remembered offset (`resume_service`
@@ -1061,6 +1099,7 @@ class PlayerService {
     _openingWithPlay = play;
     hasMedia.value = true;
     _refreshTransportState();
+    await _applyVisualizerForLoad(paths[idx]);
     await player.open(Playlist(medias, index: idx), play: play);
     if (play) _userPaused = false;
     await _applyPlaylistMode();
@@ -1172,6 +1211,16 @@ class PlayerService {
     if (pos < const Duration(seconds: 5)) return false;
     if (dur - pos < const Duration(seconds: 10)) return false;
     return true;
+  }
+
+  /// Re-open the item at [index] from [position] with no Resume toast
+  /// — the visualizer's switch and kill-recovery path. [play] carries
+  /// the transport state across the re-open (a paused song comes back
+  /// paused). Goes through the ordinary open path, so the pre-load
+  /// (graph, resume flush, …) runs exactly as for any other open.
+  Future<void> reopenItemAt(int index, Duration position,
+      {bool play = true}) {
+    return _openQueueAt(index, start: position, play: play, silent: true);
   }
 
   /// Whether Play-after-Stop will resume at the memory's position:
