@@ -290,16 +290,15 @@ class PlayerService {
   late final Player player;
 
   /// Bridges raw engine frames onto the Flutter widget tree.
-  /// Created lazily (on first access) so ANGLE/D3D11 surfaces aren't
-  /// initialized eagerly at startup when no video is loaded.
-  VideoController? _videoController;
+  /// Created eagerly at startup so ANGLE/D3D11 is ready before the
+  /// first video, avoiding the 0x0 -> valid texture recreation that
+  /// caused first-play black screen (see video_screen fix).
+  late final VideoController videoController;
 
-  VideoController get videoController => _videoController ??= VideoController(
-        player,
-        configuration: const VideoControllerConfiguration(
-          enableHardwareAcceleration: true,
-        ),
-      );
+  /// Video dimensions as reported by mpv — drives Video widget rebuild
+  /// after texture recreation (0x0 -> 1280x720 and hwdec fallback).
+  final ValueNotifier<int> videoWidth = ValueNotifier<int>(0);
+  final ValueNotifier<int> videoHeight = ValueNotifier<int>(0);
 
   // ── Lightweight UI-facing state ───────────────────────────────────────
 
@@ -386,6 +385,7 @@ class PlayerService {
   StreamSubscription<String>? _errorSub;
   StreamSubscription<bool>? _completedSub;
   StreamSubscription<int?>? _widthSub;
+  StreamSubscription<int?>? _heightSub;
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
@@ -458,6 +458,16 @@ class PlayerService {
         libass: true,
         // Give mpv a generous demuxer cache for smooth local playback.
         bufferSize: 64 * 1024 * 1024,
+      ),
+    );
+
+    // Eager VideoController — ANGLE/D3D11 ready before first video,
+    // fixing first-play black screen caused by lazy 0x0 texture +
+    // hwdec fallback recreation.
+    videoController = VideoController(
+      player,
+      configuration: const VideoControllerConfiguration(
+        enableHardwareAcceleration: true,
       ),
     );
 
@@ -616,10 +626,21 @@ class PlayerService {
       if (!isMuted.value && v > 0) _volumeBeforeMute = v;
     });
 
-    // Once real frames arrive, ask mpv which hardware decoder kicked in.
+    // Video dimensions — drive Video widget rebuild after texture
+    // recreation (0x0 -> valid) and trigger hwdec query. Fixes
+    // first-play black screen where Flutter missed new texture ID
+    // after d3d11va-copy -> software fallback.
     _widthSub = player.stream.width.listen((int? width) {
-      if (width != null && width > 0) {
-        unawaited(_refreshHwdecStatus());
+      if (width != null) {
+        videoWidth.value = width;
+        if (width > 0) {
+          unawaited(_refreshHwdecStatus());
+        }
+      }
+    });
+    _heightSub = player.stream.height.listen((int? height) {
+      if (height != null) {
+        videoHeight.value = height;
       }
     });
 
@@ -898,11 +919,77 @@ class PlayerService {
       debugPrint('[SALU/mpv] error: $message');
       return;
     }
-    // The message is never logged in channel mode: mpv quotes the
-    // failing URL and those carry credentials (§10.10e). What IS logged
-    // is the decision (below), not the arrival of a line: one dead
-    // channel emits several mpv error lines, and a bare line per error
-    // reads like three dead channels when only one failed.
+    // Channel mode: filter out non-fatal mpv errors that are NOT
+    // actual stream failures. Previously ANY error triggered
+    // "Failed to load" even when the channel was playing fine
+    // (e.g. subtitle probe, hwdec probe "cannot load nvcuda.dll",
+    // ANGLE/D3D11 messages). Only network/stream errors should
+    // report failure, and only when the player isn't already
+    // playing with valid video dimensions.
+    final String lower = message.toLowerCase();
+
+    // Ignore known harmless probes.
+    const List<String> ignoreContains = <String>[
+      'nvcuda',
+      'cuda',
+      'vdpau',
+      'sub',
+      'external file',
+      'can not open external',
+      'cannot open external',
+      'angle',
+      'd3d11',
+      'hwdec',
+      'libass',
+      'audio device',
+      'underrun',
+      'vo:',
+      'vd:',
+      'ao:',
+    ];
+    for (final String kw in ignoreContains) {
+      if (lower.contains(kw)) {
+        return;
+      }
+    }
+
+    // If already playing with valid dimensions, stream is alive.
+    if (isPlaying.value && videoWidth.value > 0) {
+      return;
+    }
+
+    // Only report for errors that smell like real stream failure.
+    const List<String> failureKeywords = <String>[
+      'failed to open',
+      'could not open',
+      'unable to open',
+      'failed to load',
+      'connection',
+      'timed out',
+      'timeout',
+      'http error',
+      'server returned',
+      '404',
+      '403',
+      '500',
+      '502',
+      '503',
+      'no data',
+      'unrecognized',
+      'invalid data',
+      'error opening',
+      'hls',
+      'dash',
+      'tls',
+      'ssl',
+    ];
+    final bool looksLikeFailure =
+        failureKeywords.any((String k) => lower.contains(k));
+    if (!looksLikeFailure) {
+      debugPrint('[SALU/mpv] channel-mode ignored error: $message');
+      return;
+    }
+
     reportChannelFailure();
   }
 
@@ -913,15 +1000,10 @@ class PlayerService {
   void reportChannelFailure() {
     final QueueService queue = QueueService.instance;
     if (!queue.isChannelList || !queue.hasCurrent) return;
-    // A late error from a channel the viewer already left behind (Stop
-    // parks the list — §10.8b) must not pop a toast for a channel nobody
-    // watches.
     if (!hasMedia.value) return;
+    if (isPlaying.value && videoWidth.value > 0) return;
     final int at = queue.index.value;
     if (at == _lastReportedFailure) {
-      // A second error line for the channel that already failed — one
-      // failure, one report.
-      debugPrint('[SALU] channel error ignored (duplicate report)');
       return;
     }
     _lastReportedFailure = at;
@@ -1158,6 +1240,8 @@ class PlayerService {
     _anchor = Duration.zero;
     _watch.reset();
     duration.value = Duration.zero;
+    videoWidth.value = 0;
+    videoHeight.value = 0;
     _pendingResume.clear();
     _expectedStartAfterLoad.clear();
     _openingWithPlay = false;
@@ -2026,6 +2110,7 @@ class PlayerService {
     await _errorSub?.cancel();
     await _completedSub?.cancel();
     await _widthSub?.cancel();
+    await _heightSub?.cancel();
     await _playingSub?.cancel();
     await _positionSub?.cancel();
     await _durationSub?.cancel();

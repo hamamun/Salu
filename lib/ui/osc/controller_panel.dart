@@ -79,7 +79,7 @@ class ControllerPanel extends StatelessWidget {
                 Expanded(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: const TransportCluster(),
+                    child: TransportCluster(),
                   ),
                 ),
                 // Right zone · the Equalizer button (eq_imp.md §1.1 — the

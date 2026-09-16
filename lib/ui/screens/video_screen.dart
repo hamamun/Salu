@@ -33,43 +33,63 @@ class VideoScreen extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: service.hasMedia,
       builder: (BuildContext context, bool hasMedia, Widget? child) {
-        return Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            // The mpv canvas — mounted only when media is active so
-            // ANGLE/D3D11 surfaces aren't created eagerly at startup.
-            if (hasMedia)
-              Video(
-                controller: service.videoController,
-                fit: BoxFit.contain,
-                fill: AppColors.videoBackdrop,
-                // SALU builds its own OSC — the stock media_kit controls
-                // are disabled entirely.
-                controls: NoVideoControls,
-                // D16 (cc.md §5): mpv itself is the ONE subtitle
-                // renderer; media_kit's Flutter overlay stays mounted
-                // only so its state streams keep breathing (spec lock)
-                // and is never shown. The old style block retired with
-                // the overlay — the typography pass lives on mpv's side.
-                subtitleViewConfiguration:
-                    const SubtitleViewConfiguration(visible: false),
-              ),
-            if (hasMedia)
-              ValueListenableBuilder<AudioCanvasMode>(
-                valueListenable: audio.mode,
-                builder:
-                    (BuildContext context, AudioCanvasMode mode, Widget? _) {
-                  return switch (mode) {
-                    AudioCanvasMode.lyrics => const LyricsOverlay(),
-                    AudioCanvasMode.metadata => const AlbumArtView(),
-                    AudioCanvasMode.none => const SizedBox.shrink(),
-                  };
-                },
-              ),
-            // Landing state — until the first media loads, and again
-            // while stopped (the parked queue's canvas).
-            if (!hasMedia) const _EmptyState(),
-          ],
+        return ListenableBuilder(
+          listenable: Listenable.merge(<Listenable>[
+            service.videoWidth,
+            service.videoHeight,
+            service.activeHwdec,
+            audio.mode,
+          ]),
+          builder: (BuildContext context, Widget? _) {
+            final int w = service.videoWidth.value;
+            final int h = service.videoHeight.value;
+            final String? hw = service.activeHwdec.value;
+            return Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                // The mpv canvas — mounted only when media is active so
+                // the texture is freed on Stop (landing canvas is opaque).
+                // Controller itself is eager (PlayerService) so ANGLE/D3D11
+                // is ready before first video, and the key forces a rebuild
+                // when mpv recreates the texture (0x0 -> valid + hwdec
+                // fallback d3d11va-copy -> software) which previously left
+                // Flutter holding a dead texture ID -> black screen on first
+                // play.
+                if (hasMedia)
+                  Video(
+                    key: ValueKey<String>('video-${w}x${h}-$hw'),
+                    controller: service.videoController,
+                    fit: BoxFit.contain,
+                    fill: AppColors.videoBackdrop,
+                    // SALU builds its own OSC — the stock media_kit controls
+                    // are disabled entirely.
+                    controls: NoVideoControls,
+                    // D16 (cc.md §5): mpv itself is the ONE subtitle
+                    // renderer; media_kit's Flutter overlay stays mounted
+                    // only so its state streams keep breathing (spec lock)
+                    // and is never shown. The old style block retired with
+                    // the overlay — the typography pass lives on mpv's side.
+                    subtitleViewConfiguration:
+                        const SubtitleViewConfiguration(visible: false),
+                  ),
+                if (hasMedia)
+                  ValueListenableBuilder<AudioCanvasMode>(
+                    valueListenable: audio.mode,
+                    builder:
+                        (BuildContext context, AudioCanvasMode mode, Widget? _) {
+                      return switch (mode) {
+                        AudioCanvasMode.lyrics => const LyricsOverlay(),
+                        AudioCanvasMode.metadata => const AlbumArtView(),
+                        AudioCanvasMode.none => const SizedBox.shrink(),
+                      };
+                    },
+                  ),
+                // Landing state — until the first media loads, and again
+                // while stopped (the parked queue's canvas).
+                if (!hasMedia) const _EmptyState(),
+              ],
+            );
+          },
         );
       },
     );
