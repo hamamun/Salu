@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../player_service.dart';
+import '../window_state_service.dart';
 import 'eq_filter.dart';
 import 'tune_model.dart';
 
@@ -457,6 +458,14 @@ class MpvTuneEngine implements TuneEngine {
 
   @override
   Future<void> setSnapMode(bool on) async {
+    // While the bar owns the window the floor is NOT ours to move: mini
+    // locks `minSize = maxSize` to its own rect and takes the drag edges
+    // away (mini.md §2 · §8), so a minimum write here would hand a resize
+    // back to a window that must never be resized. The command is left
+    // un-recorded on purpose — `_snapModeOn` keeps saying what the full
+    // window last asked for, and the service re-declares it on the way
+    // out of mini.
+    if (WindowStateService.instance.isMini) return;
     if (_snapModeOn == on) return;
     _snapModeOn = on;
     try {
@@ -469,6 +478,10 @@ class MpvTuneEngine implements TuneEngine {
   @override
   Future<void> fitWindow(double ratio) async {
     if (!ratio.isFinite || ratio <= 0.05) return;
+    // Same rule as above: a mini session never resizes — size changes
+    // happen only on enter and exit (mini.md §9), so a fit would move a
+    // bar that must stay exactly where the viewer put it.
+    if (WindowStateService.instance.isMini) return;
     if (await isFullscreen()) return; // live cinema — the screen IS the shape
     late final double screenW, screenH;
     try {

@@ -14,6 +14,7 @@ import 'tune/tune_engine.dart';
 import 'tune/tune_model.dart';
 import 'tune/tune_presets.dart';
 import 'tune/tune_state.dart';
+import 'window_state_service.dart';
 
 /// The single owner of every value the Tune panel shows (eq_imp.md §6:
 /// "one core service owns all values — the button, the panel and the engine
@@ -279,7 +280,25 @@ class TuneService {
     _watching = true;
     PlayerService.instance.currentPath.addListener(_onMediaChanged);
     SettingsService.instance.autoEq.addListener(_onAutoEqChanged);
+    // The mini bar takes the window for itself while it is up
+    // (mini.md §2 · §9) — the engine stands down there, and the window's
+    // floor is said again when the full window comes back.
+    WindowStateService.instance.mode.addListener(_onWindowModeChanged);
     _onMediaChanged();
+  }
+
+  /// Leaving mini: the bar's exit hands back the app's own minimum, so the
+  /// snap floor has to be re-declared (the engine swallowed every window
+  /// write while the bar was up).
+  ///
+  /// Deliberately not `force`: the full geometry the bar just restored
+  /// stays exactly as it was (§4) — re-declaring the floor is not a
+  /// re-fit, and the next natural fit (a ratio change, a new file) takes
+  /// over from there.
+  void _onWindowModeChanged() {
+    if (WindowStateService.instance.isMini || !_snapActive) return;
+    _snapActive = false; // make `snapWindowToFit` say the mode again
+    snapWindowToFit();
   }
 
   void _onMediaChanged() => unawaited(onMediaLanded());

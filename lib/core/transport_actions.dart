@@ -63,6 +63,7 @@ class TransportActions {
 
   final PlayerService player = PlayerService.instance;
   final OsdController osd = OsdController.instance;
+
   final QueueService queue = QueueService.instance;
 
   /// Two independent seek ramps.
@@ -74,6 +75,24 @@ class TransportActions {
   void resetSeekRamps() {
     seekForwardRamp.reset();
     seekBackwardRamp.reset();
+  }
+
+  /// mini.md §6 — "only a ~1.2 s title-area swap. Zero toasts, zero OSD."
+  ///
+  /// Every action below builds its feedback card and hands it to [_show].
+  /// In full mode that is the OSD deck; while the mini bar owns the window
+  /// it is the bar's title swap instead, because the deck does not exist
+  /// there. The hook is set by the shell on enter and cleared on dispose,
+  /// so the full-mode path is byte-for-byte what it always was.
+  void Function(OsdCard card)? onCard;
+
+  void _show(OsdCard card) {
+    final void Function(OsdCard card)? swap = onCard;
+    if (swap != null) {
+      swap(card);
+      return;
+    }
+    osd.show(card);
   }
 
   // ── Actions ───────────────────────────────────────────────────────────
@@ -94,16 +113,16 @@ class TransportActions {
         final bool resumes = player.stopMemoryWillResume;
         _run(player.playFromStop().then((_) {
           if (!resumes) {
-            osd.show(const OsdTransportCard(mark: OsdMark.play));
+            _show(const OsdTransportCard(mark: OsdMark.play));
           }
         }));
       case TransportState.paused:
         osd.dismissResumeToast();
-        osd.show(const OsdTransportCard(mark: OsdMark.play));
+        _show(const OsdTransportCard(mark: OsdMark.play));
         _run(player.play());
       case TransportState.playing:
         osd.dismissResumeToast();
-        osd.show(const OsdTransportCard(mark: OsdMark.pause));
+        _show(const OsdTransportCard(mark: OsdMark.pause));
         _run(player.pause());
     }
   }
@@ -144,7 +163,7 @@ class TransportActions {
             ? queue.items.value[from - 1].label
             : '00:00:00';
       }
-      osd.show(OsdTransportCard(mark: OsdMark.previous, text: text));
+      _show(OsdTransportCard(mark: OsdMark.previous, text: text));
     }));
   }
 
@@ -160,7 +179,7 @@ class TransportActions {
           (to != null && to >= 0 && to < queue.length)
               ? queue.items.value[to].label
               : null;
-      osd.show(OsdTransportCard(mark: OsdMark.next, text: text));
+      _show(OsdTransportCard(mark: OsdMark.next, text: text));
     }));
   }
 
@@ -204,7 +223,7 @@ class TransportActions {
     final Duration magnitude =
         applied < Duration.zero ? -applied : applied;
     _run(player.seekBy(delta).then((_) {
-      osd.show(OsdTransportCard(
+      _show(OsdTransportCard(
         mark: mark,
         text:
             '${backwards ? '-' : '+'}${magnitude.inSeconds}s  ${formatClock(player.position.value)}',
@@ -231,13 +250,17 @@ class TransportActions {
     _run(player.stepVolume(-5).then((_) => _volumeCard()));
   }
 
-  /// Mute toggle (M key and the speaker mark).
+  /// Mute toggle (Ctrl+M and the speaker mark).
+  ///
+  /// The bare `M` used to land here; mini.md §4 gives `M` to the mode
+  /// toggle, so mute keeps its key with the modifier — the behavior is
+  /// unchanged in both modes.
   void toggleMute() {
     _run(player.toggleMute().then((_) => _volumeCard()));
   }
 
   void _volumeCard() {
-    osd.show(OsdVolumeCard(muted: player.isMuted.value));
+    _show(OsdVolumeCard(muted: player.isMuted.value));
   }
 
   /// Subtitle sync one step (Z / X — owner 2026-09-13).
@@ -259,7 +282,7 @@ class TransportActions {
         ? PlayerService.subDelayCoarseStep
         : PlayerService.subDelayStep;
     final double value = player.stepSubDelay(later ? step : -step);
-    osd.show(OsdSubDelayCard(delay: value));
+    _show(OsdSubDelayCard(delay: value));
   }
 
   /// The Resume toast's Restart action — the only way Stop ever becomes

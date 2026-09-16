@@ -64,11 +64,25 @@ Future<void> main(List<String> args) async {
 
   // ── Phase 1 · Step 2: borderless, centered, dark window. ─────────────
   await windowManager.ensureInitialized();
-  const WindowOptions windowOptions = WindowOptions(
+  // Phase 9 adds a second shape: a session closed in mini (mini.md §5)
+  // reopens AS the bar — at its fixed rect, always on top, later at the
+  // point it was left — and never as a full window that flashes and then
+  // shrinks. The memory is read before the options are built for exactly
+  // that reason; the point itself is applied once the window exists
+  // (`applyLoadedMode`, below).
+  await WindowStateService.instance.load();
+  final bool startInMini = WindowStateService.instance.isMini;
+  final WindowOptions windowOptions = WindowOptions(
     title: 'SALU',
-    size: Size(1280, 720),
-    minimumSize: Size(800, 600),
-    center: true,
+    size: startInMini
+        ? WindowStateService.miniWindowSize
+        : const Size(1280, 720),
+    minimumSize: startInMini
+        ? WindowStateService.miniWindowSize
+        : const Size(800, 600),
+    maximumSize: startInMini ? WindowStateService.miniWindowSize : null,
+    center: !startInMini,
+    alwaysOnTop: startInMini,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
     // Hide the default grey Windows title bar — SALU draws its own.
@@ -92,6 +106,9 @@ Future<void> main(List<String> args) async {
   // listener + live re-reads back both caption buttons, so fullscreen /
   // maximize can never disagree with the real window again.
   await WindowStateService.instance.ensureInitialized();
+  // The bar's lock goes back on — always-on-top, min = max, and the point
+  // it was left at, clamped into the visible screen (mini.md §2).
+  await WindowStateService.instance.applyLoadedMode();
   await SettingsService.instance.load();
   await ResumeService.instance.load();
   await SubDelayService.instance.load();
@@ -156,6 +173,14 @@ class _CloseGuard with WindowListener {
       // An equalizer dragged seconds before the × must never be lost — the
       // panel state and the learning map both ride the same flush.
       await TuneService.instance.flush().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
+    try {
+      // Where the window lives — the bar's point or the full rect, and the
+      // mode itself — so the next launch reopens exactly here (§5).
+      await WindowStateService.instance.saveOnClose().timeout(
         const Duration(seconds: 2),
         onTimeout: () {},
       );

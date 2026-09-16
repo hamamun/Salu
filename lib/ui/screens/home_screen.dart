@@ -18,7 +18,9 @@ import '../../core/transport_actions.dart';
 import '../../core/tune/tune_model.dart';
 import '../../core/tune_service.dart';
 import '../../core/ui_lock.dart';
+import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
+import '../mini/mini_shell.dart';
 import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
 import '../osc/open_url_dialog.dart';
 import '../osd/osd_controller.dart';
@@ -57,6 +59,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final PlayerService _player = PlayerService.instance;
   final SettingsService _settings = SettingsService.instance;
   final OsdController _osd = OsdController.instance;
+
+  /// The one owner of the window's shape (mini.md §9).
+  final WindowStateService _windows = WindowStateService.instance;
 
   /// Unified global activity state: moving the mouse anywhere over the
   /// window — or pressing a non-transport key — reveals the chrome;
@@ -107,6 +112,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     // Follow title bar mode changes made from the settings window.
     _settings.titleBarMode.addListener(_onTitleBarModeChanged);
+    // The full window and the mini bar are two different trees — swapping
+    // between them tears one down and builds the other (mini.md §8 · §9).
+    _windows.mode.addListener(_onWindowModeChanged);
     // While transient UI (open pill, URL modal) is up, the chrome must
     // not auto-hide beneath it; when the last lock releases, restart the
     // countdown fresh.
@@ -145,6 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _hideTimer?.cancel();
     _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
+    _windows.mode.removeListener(_onWindowModeChanged);
     ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
     _player.transportState.removeListener(_onTransportStateChanged);
     super.dispose();
@@ -172,6 +181,23 @@ class _HomeScreenState extends State<HomeScreen> {
   void _wakeChrome() {
     if (!_chromeVisible) setState(() => _chromeVisible = true);
     _restartHideTimer();
+  }
+
+  /// A mode switch changes what EXISTS (mini.md §8 · §9): mini has no
+  /// panels and no OSD deck, so the full window's surfaces are closed on
+  /// the way in — otherwise the playlist would be waiting, still open,
+  /// behind a window that is 32 px tall.
+  ///
+  /// The deck is emptied on BOTH switches: a card raised while the bar was
+  /// up (a drop's whisper, a fetch result) must never be left in the slot
+  /// to flash the moment the full window returns.
+  void _onWindowModeChanged() {
+    if (_windows.isMini) {
+      PanelService.instance.closePlaylist();
+      PanelService.instance.closeTrackPanel();
+      PanelService.instance.closeTunePanel();
+    }
+    _osd.dismiss();
   }
 
   /// The pointer entered the chrome block — keep it visible while the user
@@ -300,6 +326,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final LogicalKeyboardKey key = event.logicalKey;
 
+    // Mini has its own, smaller keyboard: the transport set stays live
+    // (§5), `M` toggles the bar back to the full window, `Esc` restores it
+    // (§4), and every key that would summon a surface mini does not have is
+    // simply out of work — nothing below this line is reachable there.
+    if (_windows.isMini) {
+      return _onMiniKeyEvent(key, down: down, repeat: repeat);
+    }
+
     // Esc — dismisses the topmost popup first (follow.md rule 3):
     // resume toast → tune panel → track panel (its Search window is a
     // dialog route and closes itself above this) → playlist panel. With
@@ -394,7 +428,18 @@ class _HomeScreenState extends State<HomeScreen> {
       TransportActions.instance.volumeDown();
       return KeyEventResult.handled;
     }
-    if (!typing && key == LogicalKeyboardKey.keyM) {
+    // `M` means MINI (mini.md §4 — the preview spells the intent out:
+    // "M toggles mini ↔ full"). The old bare-key mute keeps a binding as
+    // Ctrl+M so the keyboard never loses it, and the speaker mark in the
+    // cluster is unchanged in both modes.
+    if (!typing &&
+        key == LogicalKeyboardKey.keyM &&
+        !HardwareKeyboard.instance.isControlPressed) {
+      unawaited(_windows.toggleMini());
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyM &&
+        HardwareKeyboard.instance.isControlPressed) {
       TransportActions.instance.toggleMute();
       return KeyEventResult.handled;
     }
@@ -459,10 +504,143 @@ class _HomeScreenState extends State<HomeScreen> {
     return KeyEventResult.ignored;
   }
 
+  /// Mini's keyboard (mini.md §4 · §5).
+  ///
+  /// LIVE: the transport set — Space, ←/→ (ramp seeks), ↑/↓ (volume),
+  /// S, PageUp/PageDown, and the subtitle-sync pair Z/X, whose OSD card
+  /// becomes the bar's own title swap (the shell owns the mapping).
+  ///
+  /// MODE: `M` toggles back to the full window, `Esc` restores it — the
+  /// keyboard twins of the Restore glyph.
+  ///
+  /// OUT OF WORK: everything that opens a surface the bar does not have
+  /// (§8) — Ctrl+E's Tune panel, Ctrl+L's playlist, Ctrl+U's URL modal,
+  /// the Ctrl+arrows tune tier, and the settings window. `typing` still
+  /// stands the bare single keys down, so the guard survives even if a
+  /// field is ever focused inside mini.
+  ///
+  /// `M` here means the same thing it means in full mode (mini.md §4's
+  /// toggle, back to the full window); `Ctrl+M` is the mute, kept
+  /// identical in both modes.
+  KeyEventResult _onMiniKeyEvent(
+    LogicalKeyboardKey key, {
+    required bool down,
+    required bool repeat,
+  }) {
+    final bool typing = _isTyping;
+
+    if (key == LogicalKeyboardKey.escape) {
+      if (!repeat) unawaited(_windows.exitMini());
+      return KeyEventResult.handled;
+    }
+    if (!typing &&
+        down &&
+        key == LogicalKeyboardKey.keyM &&
+        !HardwareKeyboard.instance.isControlPressed) {
+      unawaited(_windows.toggleMini());
+      return KeyEventResult.handled;
+    }
+    // Mute keeps its key with the modifier, and the bar's speaker mark
+    // answers the same gesture it answers in full mode. `down` only, so a
+    // held key cannot flap the mute the way a repeat would.
+    if (!typing &&
+        down &&
+        key == LogicalKeyboardKey.keyM &&
+        HardwareKeyboard.instance.isControlPressed) {
+      TransportActions.instance.toggleMute();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.space) {
+      TransportActions.instance.playOrPause();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.arrowLeft) {
+      TransportActions.instance.seekBackward();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.arrowRight) {
+      TransportActions.instance.seekForward();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.arrowUp) {
+      TransportActions.instance.volumeUp();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.arrowDown) {
+      TransportActions.instance.volumeDown();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.keyS) {
+      TransportActions.instance.stop();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.pageUp) {
+      TransportActions.instance.previous();
+      return KeyEventResult.handled;
+    }
+    if (!typing && key == LogicalKeyboardKey.pageDown) {
+      TransportActions.instance.next();
+      return KeyEventResult.handled;
+    }
+    if (!typing &&
+        (key == LogicalKeyboardKey.keyZ || key == LogicalKeyboardKey.keyX)) {
+      final bool bare = !HardwareKeyboard.instance.isControlPressed &&
+          !HardwareKeyboard.instance.isAltPressed;
+      if (bare) {
+        TransportActions.instance.subtitleSync(
+          later: key == LogicalKeyboardKey.keyX,
+          coarse: HardwareKeyboard.instance.isShiftPressed,
+        );
+        return KeyEventResult.handled;
+      }
+    }
+    // Nothing else has a surface to talk to here (no chrome, no panels, no
+    // deck), so the key is simply left alone.
+    return KeyEventResult.ignored;
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    // The mode swap IS the tree swap (mini.md §9): in mini the full tree —
+    // video canvas, chrome, panels, deck — is simply not built (§8).
+    return ValueListenableBuilder<WindowMode>(
+      valueListenable: _windows.mode,
+      builder: (BuildContext context, WindowMode mode, Widget? _) {
+        return mode == WindowMode.mini ? _buildMini() : _buildFull();
+      },
+    );
+  }
+
+  /// The mini bar's root: the bar itself, under the same drop + keyboard
+  /// surface the full window has (mini.md §5 — dropping stays, hotkeys stay
+  /// live while the bar has focus). Everything else is absent on purpose.
+  Widget _buildMini() {
+    return Scaffold(
+      // Transparent: the bar paints its own rounded surface, so the 8 px
+      // corners let the desktop through (mini.md §2 · the preview's own
+      // look).
+      backgroundColor: Colors.transparent,
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: _onKeyEvent,
+        child: DropTarget(
+          // Drop follows full mode's rules exactly, panels included: with
+          // no playlist open a drop plays, and `_onDropDone` reads the same
+          // service the full window does.
+          onDragEntered: (_) => setState(() => _dropHovering = true),
+          onDragExited: (_) => setState(() => _dropHovering = false),
+          onDragDone: _onDropDone,
+          child: MiniShell(dropHovering: _dropHovering),
+        ),
+      ),
+    );
+  }
+
+  /// The full window: video canvas, fused top chrome, panels, deck — the
+  /// tree that has always been there.
+  Widget _buildFull() {
     final bool chromeVisible = _chromeVisible || _dropHovering;
 
     return Scaffold(
