@@ -57,7 +57,7 @@ class VideoScreen extends StatelessWidget {
                 // play.
                 if (hasMedia)
                   Video(
-                    key: ValueKey<String>('video-${w}x${h}-$hw'),
+                    key: ValueKey<String>('video-${w}x$h-$hw'),
                     controller: service.videoController,
                     fit: BoxFit.contain,
                     fill: AppColors.videoBackdrop,
