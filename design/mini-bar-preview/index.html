@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU · Mini Bar — interactive preview</title>
+<style>
+  :root{
+    --bg:#1E1E1E; --outline:#333336; --txt:#EDEDED; --idle:#A6A6A6;
+    --sec:#9A9A9A; --track:#35353C; --fill:rgba(255,255,255,.5);
+    --thumb:#F2F2F2; --accent:#4C9EEB;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:#0d0f12;
+    font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+
+  /* ── fake desktop so always-on-top reads visually ─────────────────── */
+  .wall{position:absolute;inset:0;
+    background:
+      radial-gradient(1200px 800px at 20% 10%, #161a20 0%, transparent 60%),
+      radial-gradient(1000px 700px at 85% 80%, #14161c 0%, transparent 55%),
+      #0d0f12}
+  .bgwin{position:absolute;border-radius:10px;border:1px solid #23262b;
+    background:rgba(22,24,28,.72);box-shadow:0 18px 50px rgba(0,0,0,.45);
+    color:#4c525a;font-size:11px;padding:12px 14px;line-height:1.7;
+    filter:saturate(.6)}
+  .bgwin .bghead{display:flex;gap:6px;margin-bottom:8px}
+  .bgwin .bghead i{width:9px;height:9px;border-radius:50%;background:#2e3237}
+  .w1{left:5vw;top:8vh;width:30vw;min-width:300px;height:46vh}
+  .w2{right:6vw;top:30vh;width:34vw;min-width:340px;height:44vh}
+
+  #stage{position:absolute;inset:0}
+
+  /* ── THE BAR ─────────────────────────────────────────────────────── */
+  .bar{position:absolute;left:88px;top:72px;height:32px;width:488px;
+    display:flex;align-items:center;z-index:50;
+    background:rgba(30,30,31,.97);border:1px solid var(--outline);
+    border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);
+    user-select:none;touch-action:none;cursor:default}
+  .bar .controls{display:flex;align-items:center;padding:0 4px;width:100%}
+
+  .drag{cursor:grab}
+  .drag:active{cursor:grabbing}
+
+  .icon{height:32px;padding:0 3px;display:grid;place-items:center;flex:none}
+  .icon .mark{width:19px;height:19px;border-radius:5px;border:1px solid #3a3a3c;
+    background:linear-gradient(135deg,#25303c 0%,#222427 70%);
+    display:grid;place-items:center;color:var(--accent);
+    font-size:11px;font-weight:600}
+
+  /* SaluIconButton recipe: no box — the mark itself lights up         */
+  .tbtn{width:26px;height:30px;border:0;background:transparent;
+    display:grid;place-items:center;color:var(--idle);cursor:pointer;flex:none;
+    transition:color .12s ease,transform .12s ease}
+  .tbtn svg{width:18px;height:18px;stroke:currentColor;fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block}
+  .tbtn:hover{color:var(--txt);transform:scale(1.06)}
+  .tbtn:active{transform:scale(.90)}
+  .tbtn.dead{color:rgba(166,166,166,.37);pointer-events:none}
+
+  .g6{width:5px;flex:none}.g14{width:11px;flex:none}.g26{width:20px;flex:none}
+
+  /* the volume wheel — a thin ring dial right after ⊂)) · wheel ±5 % only */
+  .vwheel{width:22px;height:22px;flex:none;color:var(--idle);cursor:default;
+    transition:color .12s ease,transform .12s ease}
+  .vwheel:hover{color:var(--txt);transform:scale(1.06)}
+  .vwheel svg{width:20px;height:20px;display:block;
+    stroke-linecap:round;fill:none}
+  .vwheel .vtrack{stroke:var(--track);stroke-width:1.7}
+  .vwheel .vfill{stroke:currentColor;stroke-width:1.7;opacity:.75}
+  .vwheel:hover .vfill{opacity:1}
+  .vwheel .vdot{fill:#F2F2F2;stroke:none}
+  .vwheel.mute{opacity:.35}
+
+  .title{min-width:0;flex:1;margin:0 4px 0 8px;
+    font-size:11.5px;color:var(--sec);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;transition:color .25s}
+  .title.swap{color:var(--txt)}
+
+  /* position rides the TOP edge: 2 px line, 11 px invisible hit zone  */
+  .prog{position:absolute;left:7px;right:7px;top:1.5px;height:2px;
+    background:var(--track);border-radius:1px;z-index:2}
+  .pfill{height:100%;background:var(--fill);border-radius:1px}
+  .head{position:absolute;top:50%;width:6px;height:6px;border-radius:50%;
+    background:var(--thumb);transform:translate(-50%,-50%);
+    opacity:0;transition:opacity .15s}
+  .bar:hover .head,.bar.scrubbing .head{opacity:1}
+  .seekhit{position:absolute;left:0;right:0;top:0;height:11px;
+    cursor:pointer;z-index:3}
+
+  /* restore pulse ghost */
+  .ghostring{position:absolute;border:1px solid var(--accent);border-radius:8px;
+    pointer-events:none;z-index:48;opacity:0}
+
+  /* ── page furniture (NOT part of the design) ─────────────────────── */
+  .page-title{position:absolute;left:26px;top:22px;color:#6d727a;
+    font-size:12px;letter-spacing:.04em;z-index:40}
+  .page-title b{color:#9aa0a8;font-weight:600}
+  .legend{position:absolute;left:26px;bottom:20px;color:#575d65;font-size:11px;
+    line-height:1.9;z-index:40;max-width:430px}
+  .legend b{color:#868c94;font-weight:600}
+  .note{position:absolute;right:26px;top:24px;max-width:330px;padding:12px 14px;
+    border:1px solid #26292e;border-radius:10px;background:rgba(24,26,30,.9);
+    color:#7d838c;font-size:11.5px;line-height:1.65;z-index:60;
+    opacity:0;transform:translateY(-4px);transition:.3s}
+  .note.show{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div class="wall">
+  <div class="bgwin w1"><div class="bghead"><i></i><i></i><i></i></div>
+    browser · slack · whatever you're doing<br>…the bar floats above it all (always-on-top)</div>
+  <div class="bgwin w2"><div class="bghead"><i></i><i></i><i></i></div>
+    editor window<br>typing away while SALU sits at the top<br>of the screen in mini mode</div>
+</div>
+
+<div class="page-title"><b>SALU</b> — mini bar · interactive preview (design/mini-bar-preview)</div>
+<div class="note" id="note"></div>
+
+<div id="stage">
+  <div class="bar" id="bar">
+    <div class="controls" id="controls">
+
+      <div class="icon drag" title="SALU — drag from here">
+        <div class="mark">S</div>
+      </div>
+      <div class="g14 drag" style="width:8px"></div>
+
+      <!-- group 1 · playback — exact Salu marks (transport_marks.dart) -->
+      <button class="tbtn" id="play" title="Play / Pause">
+        <svg id="iPlay" viewBox="0 0 20 20">
+          <path d="M6.8 4.4 L13.2 10 L6.8 15.6"/></svg>
+        <svg id="iPause" viewBox="0 0 20 20" style="display:none">
+          <path d="M7.2 4.8 V15.2 M12.8 4.8 V15.2"/></svg>
+      </button>
+      <div class="g6 drag"></div>
+      <button class="tbtn dead" id="stop" title="Stop — park the queue">
+        <svg viewBox="0 0 20 20"><rect x="4.2" y="4.2" width="11.6" height="11.6" rx="2.6"/></svg>
+      </button>
+      <div class="g14 drag"></div>
+
+      <!-- group 2 · items: the bar always rides the POINTING edge.
+           Previous = exact mirror of Next (transport_marks.dart) -->
+      <button class="tbtn" id="prev" title="Previous">
+        <svg viewBox="0 0 20 20"><g transform="translate(20 0) scale(-1 1)">
+          <path d="M3.6 4.4 L8.4 10 L3.6 15.6"/>
+          <path d="M10 4.4 L14.8 10 L10 15.6"/>
+          <path d="M18 4.8 V15.2"/></g></svg>
+      </button>
+      <div class="g6 drag"></div>
+      <button class="tbtn" id="next" title="Next">
+        <svg viewBox="0 0 20 20">
+          <path d="M3.6 4.4 L8.4 10 L3.6 15.6"/>
+          <path d="M10 4.4 L14.8 10 L10 15.6"/>
+          <path d="M18 4.8 V15.2"/></svg>
+      </button>
+      <div class="g14 drag"></div>
+
+      <!-- group 3 · seeks: double chevron, no bar -->
+      <button class="tbtn" id="sback" title="Seek backward (hold to climb)">
+        <svg viewBox="0 0 20 20"><g transform="translate(20 0) scale(-1 1)">
+          <path d="M4.4 4.4 L9.2 10 L4.4 15.6"/>
+          <path d="M11.6 4.4 L16.4 10 L11.6 15.6"/></g></svg>
+      </button>
+      <div class="g6 drag"></div>
+      <button class="tbtn" id="sfwd" title="Seek forward (hold to climb)">
+        <svg viewBox="0 0 20 20">
+          <path d="M4.4 4.4 L9.2 10 L4.4 15.6"/>
+          <path d="M11.6 4.4 L16.4 10 L11.6 15.6"/></svg>
+      </button>
+      <div class="g26 drag"></div>
+
+      <!-- group 4 · sound: horn + level arcs, then the bar, 6 px apart -->
+      <button class="tbtn" id="mute" title="Mute · wheel over the sound group = ±5 %">
+        <svg viewBox="0 0 20 20">
+          <path d="M2.4 8 L5.6 8 L8.8 4.6 L8.8 15.4 L5.6 12 L2.4 12 Z"/>
+          <path id="arc1" d="M12.11 6.60 A4 4 0 0 1 12.11 13.40"/>
+          <path id="arc2" d="M13.79 3.88 A7.2 7.2 0 0 1 13.79 16.12"/>
+          <path id="slash" d="M11.2 6 L17.6 14" style="display:none"/></svg>
+      </button>
+      <div class="g6 drag"></div>
+      <div class="vwheel" id="vwheel" title="Volume 45 % — wheel ±5 %">
+        <svg viewBox="0 0 20 20">
+          <circle class="vtrack" cx="10" cy="10" r="7"/>
+          <circle class="vfill" id="varc" cx="10" cy="10" r="7"
+            stroke-dasharray="43.98" stroke-dashoffset="24.19"
+            transform="rotate(-90 10 10)"/>
+          <circle class="vdot" id="vdot" cx="10" cy="3" r="1.1"/>
+        </svg>
+      </div>
+
+      <div class="title drag" id="title" title=""></div>
+
+      <button class="tbtn" id="restore" title="Restore full window (Esc)">
+        <svg viewBox="0 0 20 20"><path d="M8.6 4.8 H5 V8.4 M11.4 15.2 H15 V11.6"/></svg>
+      </button>
+      <div class="g6" style="width:2px"></div>
+    </div>
+
+    <!-- the only edge meter -->
+    <div class="prog"><div class="pfill" id="pfill" style="width:0%"></div>
+      <div class="head" id="phead" style="left:0%"></div></div>
+    <div class="seekhit" id="seekhit" title="Seek — click to jump"></div>
+  </div>
+</div>
+
+<div class="legend">
+  <b>try it:</b> drag from the icon, gaps or title · <b>space</b> play/pause ·
+  click the TOP edge line to seek · <b>wheel</b> over the speaker or the volume
+  ring = ±5 % (the % rides the title) · <b>Esc / ⤢</b> = restore demo.
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const bar=$('bar'), stage=$('stage'), note=$('note'),
+  titleEl=$('title'), pfill=$('pfill'), phead=$('phead'),
+  varc=$('varc'), vdot=$('vdot'), vwheel=$('vwheel'), muteBtn=$('mute');
+const RING=2*Math.PI*7;   /* circumference of the volume dial */
+const min=Math.min,max=Math.max;
+
+/* fake queue */
+const tracks=[
+  {t:"Nocturne — Midnight Atlas (Live Session).flac", d:222},
+  {t:"Somoy TV · Bangladeshi · IPTV",                 d:0},
+  {t:"Aro Minar — Dhaka Ambient Mix Vol. 2.mp3",      d:201},
+];
+let idx=0, dur=tracks[0].d, pos=0, playing=false, vol=45, muted=false,
+    last=performance.now(), swapTimer=null, scrub=false, drag=null;
+
+function fmt(s){s=max(0,Math.round(s));
+  const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+  return h?`${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`
+          :`${m}:${String(x).padStart(2,'0')}`}
+function baseTitle(){return tracks[idx].t}
+function setTitle(){titleEl.textContent=baseTitle();titleEl.title=baseTitle()}
+function swapTitle(msg,ms=1300){
+  titleEl.textContent=msg; titleEl.classList.add('swap');
+  clearTimeout(swapTimer);
+  swapTimer=setTimeout(()=>{setTitle();titleEl.classList.remove('swap')},ms)}
+function say(msg){note.textContent=msg;note.classList.add('show');
+  clearTimeout(note._t);note._t=setTimeout(()=>note.classList.remove('show'),2800)}
+
+/* transport */
+function setPlayIcon(){$('iPlay').style.display=playing?'none':'block';
+  $('iPause').style.display=playing?'block':'none'}
+function setStopDim(){$('stop').classList.toggle('dead',!playing&&pos===0)}
+$('play').onclick=()=>{playing=!playing;setPlayIcon();setStopDim();
+  swapTitle(playing?`▶ ${fmt(pos)}`:`❚❚ paused · ${fmt(pos)}`)};
+$('stop').onclick=()=>{playing=false;pos=0;setPlayIcon();setStopDim();
+  swapTitle('Stopped — queue parked')};
+function switchTrack(d){idx=(idx+tracks.length+d)%tracks.length;dur=tracks[idx].d;
+  pos=0;playing=true;setPlayIcon();setStopDim();
+  swapTitle((d<0?'⇤ ':'⇥ ')+baseTitle())}
+$('prev').onclick=()=>(switchTrack(-1));
+$('next').onclick=()=>(switchTrack(1));
+$('sback').onclick=()=>{pos=max(0,pos-15);swapTitle('−15 s · '+fmt(pos))};
+$('sfwd').onclick=()=>{pos=dur?min(dur,pos+15):pos+15;swapTitle('+15 s · '+fmt(pos))};
+
+/* volume — the dial is wheel-only by design (number rides the title) */
+function paintVol(){
+  const silent=muted||vol===0, frac=muted?0:vol/100;
+  varc.setAttribute('stroke-dashoffset', RING*(1-frac));
+  /* tick at the head of the level arc (12 o'clock, clockwise) */
+  const a=(-90+frac*360)*Math.PI/180;
+  vdot.setAttribute('cx',10+7*Math.cos(a));
+  vdot.setAttribute('cy',10+7*Math.sin(a));
+  vdot.style.display=silent?'none':'block';
+  vwheel.classList.toggle('mute',silent);
+  vwheel.title=`Volume ${muted?0:vol} % — wheel ±5 %`;
+  $('slash').style.display=silent?'block':'none';
+  $('arc1').style.display=(!silent&&vol<50)?'block':'none';
+  $('arc2').style.display=(!silent&&vol>=50)?'block':'none'}
+muteBtn.onclick=()=>{muted=!muted;paintVol();
+  swapTitle(muted?'Muted':'Volume '+vol+' %')};
+for(const el of [muteBtn,vwheel])
+  el.addEventListener('wheel',e=>{e.preventDefault();
+    vol=min(100,max(0,vol+(e.deltaY<0?5:-5)));muted=false;paintVol();
+    swapTitle('Volume '+vol+' %')},{passive:false});
+paintVol();
+
+/* seek line — TOP edge */
+function seekFromEvent(e){const r=bar.getBoundingClientRect();
+  const x=min(max(e.clientX-r.left-7,0),r.width-14);
+  if(dur){pos=x/(r.width-14)*dur;swapTitle(`→ ${fmt(pos)} · ${fmt(dur-pos)} left`)}}
+$('seekhit').addEventListener('pointerdown',e=>{scrub=true;bar.classList.add('scrubbing');
+  $('seekhit').setPointerCapture(e.pointerId);seekFromEvent(e);e.stopPropagation()});
+$('seekhit').addEventListener('pointermove',e=>scrub&&seekFromEvent(e));
+$('seekhit').addEventListener('pointerup',()=>{scrub=false;bar.classList.remove('scrubbing')});
+
+/* restore */
+function restoreDemo(){
+  swapTitle('Restoring…');playing=false;setPlayIcon();setStopDim();
+  const g=document.createElement('div');g.className='ghostring';
+  const r=bar.getBoundingClientRect(),s=stage.getBoundingClientRect();
+  Object.assign(g.style,{left:r.left-s.left+'px',top:r.top-s.top+'px',
+    width:r.width+'px',height:r.height+'px',opacity:.9});
+  stage.appendChild(g);
+  g.animate([{width:r.width+'px',height:'32px',opacity:.9},
+    {width:min(900,innerWidth*.62)+'px',height:min(540,innerHeight*.6)+'px',opacity:0}],
+    {duration:650,easing:'cubic-bezier(.2,.8,.2,1)'})
+   .onfinish=()=>g.remove();
+  say('In real SALU this exits mini and restores your saved full window — exact size, '+
+      'position, maximized state. Exit paths: ⤢ button, double-click dead space, Esc.')}
+$('restore').onclick=restoreDemo;
+bar.addEventListener('dblclick',e=>{if(e.target.closest('.drag'))restoreDemo()});
+
+/* drag from icon / dead space (gaps + title) */
+bar.addEventListener('pointerdown',e=>{
+  if(!e.target.closest('.drag'))return;
+  drag={dx:e.clientX-bar.offsetLeft,dy:e.clientY-bar.offsetTop};
+  e.target.setPointerCapture(e.pointerId)});
+addEventListener('pointermove',e=>{if(!drag)return;
+  const pad=40;
+  bar.style.left=min(innerWidth-pad,max(pad-bar.offsetWidth,e.clientX-drag.dx))+'px';
+  bar.style.top =min(innerHeight-pad,max(2,e.clientY-drag.dy))+'px'});
+addEventListener('pointerup',()=>drag=null);
+
+/* keys */
+addEventListener('keydown',e=>{
+  if(e.code==='Escape'){e.preventDefault();restoreDemo()}
+  if(e.code==='Space'){e.preventDefault();$('play').click()}
+  if(e.code==='KeyM'){say('M toggles mini ↔ full in real SALU. Here: demo only.')}});
+
+/* fake playback clock */
+function tick(now){const dt=(now-last)/1000;last=now;
+  if(playing&&dur){pos+=dt;if(pos>=dur)pos=0}
+  if(dur){const p=pos/dur*100;pfill.style.width=p+'%';phead.style.left=p+'%'}
+  requestAnimationFrame(tick)}
+setTitle();setPlayIcon();setStopDim();requestAnimationFrame(tick);
+say('v5 (final): padding compressed — hits 26×30, pitch 5/11/20 (same rhythm as the full '+
+    'cluster), tighter margins. Bar 543 → 488 px and the title keeps its full width. '+
+    'Rule of the trim: shrink the space, never the glyphs.');
+</script>
+</body>
+</html>
