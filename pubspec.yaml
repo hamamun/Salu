@@ -43,6 +43,14 @@ dependencies:
   # fields come from mpv; this package is used for embedded artwork.
   audio_metadata_reader: ^1.4.0
 
+  # ── Phase 9 · Mini bar mode (mini.md §2) ────────────────────────────────
+  # Display geometry for the bar's remembered point: the ONLY query that
+  # answers with each monitor's origin as well as its size, which is what
+  # "clamped inside the visible screen (multi-monitor + DPI safe)" needs.
+  # Already in the tree as window_manager's own dependency; declared here
+  # because SALU now calls it directly.
+  screen_retriever: ^0.2.2
+
   # ── Settings & persistence ──────────────────────────────────────────────
   # Lightweight key-value storage for settings (title bar mode, …).
   shared_preferences: ^2.3.0

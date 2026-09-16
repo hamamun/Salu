@@ -30,6 +30,7 @@ class SaluIconButton extends StatefulWidget {
     required this.onTap,
     this.tooltip,
     this.size = 34,
+    this.hitSize,
     this.active = false,
     this.enabled = true,
     this.badge = false,
@@ -44,8 +45,15 @@ class SaluIconButton extends StatefulWidget {
   /// OS-convention tooltip (names the control — never teaches).
   final String? tooltip;
 
-  /// Square hit-target side length.
+  /// Square hit-target side length — 34 □ in full mode everywhere.
   final double size;
+
+  /// A non-square hit box, when one is asked for: the mini bar's transport
+  /// hits are 26 × 30 (mini.md §3 — "SaluIconButton with a 26×30 hit for
+  /// the identical hover recipe"). Overrides [size] when set; everything
+  /// else — the mark's glide, the 1.06 hover, the 0.90 press, the missing
+  /// background box — stays exactly the same recipe.
+  final Size? hitSize;
 
   /// Toggled-on state: full white + faint static glow.
   final bool active;
@@ -100,6 +108,7 @@ class _SaluIconButtonState extends State<SaluIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    final Size hit = widget.hitSize ?? Size.square(widget.size);
     final bool on = widget.enabled;
     final bool lit = on && (_hovered || widget.active);
     final double scale =
@@ -195,8 +204,8 @@ class _SaluIconButtonState extends State<SaluIconButton> {
                 if (_pressed) setState(() => _pressed = false);
               },
               child: SizedBox(
-                width: widget.size,
-                height: widget.size,
+                width: hit.width,
+                height: hit.height,
                 child: Center(child: mark),
               ),
             )
@@ -207,8 +216,8 @@ class _SaluIconButtonState extends State<SaluIconButton> {
               onTapUp: (_) => setState(() => _pressed = false),
               onTap: on ? widget.onTap : null,
               child: SizedBox(
-                width: widget.size,
-                height: widget.size,
+                width: hit.width,
+                height: hit.height,
                 child: Center(child: mark),
               ),
             ),

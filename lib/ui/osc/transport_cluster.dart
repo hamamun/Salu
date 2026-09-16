@@ -75,7 +75,7 @@ class TransportCluster extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             // ── Group 1 · playback: play/pause + stop ─────────────────
-            _PlayPauseButton(state: state),
+            PlayPauseButton(state: state),
             const SizedBox(width: _inGroup),
             SaluIconButton(
               tooltip: 'Stop',
@@ -164,16 +164,34 @@ class TransportCluster extends StatelessWidget {
 
 /// `>` ↔ `II` with the shared swap motion (fade + 0.96 → 1.0, 130 ms —
 /// no morphing gimmick). Dims while idle and while stopped.
-class _PlayPauseButton extends StatelessWidget {
-  const _PlayPauseButton({required this.state});
+///
+/// Public because the mini bar renders this very control: mini.md §3 asks
+/// for "identical glyphs, one source of truth", so the swap motion and the
+/// two marks live in ONE place and mini only changes their size.
+class PlayPauseButton extends StatelessWidget {
+  const PlayPauseButton({
+    super.key,
+    required this.state,
+    this.hitSize,
+    this.markSize,
+  });
 
   final TransportState state;
+
+  /// Non-square hit box — the mini bar's 26 × 30. `null` keeps full mode's
+  /// square 34 px hit.
+  final Size? hitSize;
+
+  /// Mark size. `null` keeps each mark's own default — the play chevron's
+  /// 20 px and the pause rules' 18 px, which is what full mode shows.
+  final double? markSize;
 
   @override
   Widget build(BuildContext context) {
     final bool playing = state == TransportState.playing;
     return SaluIconButton(
       tooltip: playing ? 'Pause' : 'Play',
+      hitSize: hitSize,
       enabled: state != TransportState.idle,
       onTap: TransportActions.instance.playOrPause,
       child: AnimatedSwitcher(
@@ -190,8 +208,14 @@ class _PlayPauseButton extends StatelessWidget {
           );
         },
         child: playing
-            ? const PauseMark(key: ValueKey<String>('pause'))
-            : const PlayChevronMark(key: ValueKey<String>('play')),
+            ? PauseMark(
+                key: const ValueKey<String>('pause'),
+                size: markSize ?? 18,
+              )
+            : PlayChevronMark(
+                key: const ValueKey<String>('play'),
+                size: markSize ?? 20,
+              ),
       ),
     );
   }

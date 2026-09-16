@@ -3,6 +3,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
+import '../mini/mini_marks.dart';
 import 'dot_grid_icon.dart';
 
 /// SALU's invisible-until-activity title bar.
@@ -111,6 +112,19 @@ class CustomTitleBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
+                // Mini bar mode — one glyph IMMEDIATELY left of Settings
+                // (mini.md §4). A wide, thin rounded strip: the bar itself,
+                // drawn in the caption family's ink and stroke, naming the
+                // action by shape — never by text (tooltips name controls,
+                // they never teach shortcuts; follow.md rule 2).
+                _CaptionButton(
+                  tooltip: 'Mini bar mode',
+                  child: const MiniBarMark(
+                    size: 18,
+                    color: AppColors.textPrimary,
+                  ),
+                  onPressed: windows.toggleMini,
+                ),
                 // SALU settings — six dots in two lines (left of Minimize).
                 _CaptionButton(
                   tooltip: 'Settings',
