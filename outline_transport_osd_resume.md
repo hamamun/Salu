@@ -63,6 +63,11 @@ One stroke language, one painter for five of them.
 - Order after `+`: **Play/Pause · Stop · Previous · Next · Seek backward ·
   Seek forward**, then the sound group (speaker + volume bar), attached to
   the cluster; the row's right edge stays free for future controls.
+- **Narrow windows (snap mode lowers the floor to 320 px):** the end
+  controls keep their natural widths, the cluster takes the space left
+  between them, and — when that is less than the cluster's 456 px — the
+  whole cluster scales down as one piece (`FittedBox`, `scaleDown`).
+  Nothing is ever clipped and the control row never overflows.
 - Pitch is the grouping: **6 px inside a group, 14 px between groups,
   26 px before the sound group**, 6 px between speaker and bar. Nothing
   is ever drawn around a group or an icon (`follow.md` §2 stands).

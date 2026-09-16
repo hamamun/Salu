@@ -13,8 +13,9 @@ import 'mini_metrics.dart';
 /// A thin ring dial, 20 px inside the row's 22 px slot: a dim track ring, a
 /// level arc filling clockwise from 12 o'clock, and a tiny tick at the head
 /// of the arc. **Wheel ±5 % only** — no click, no drag, and no number on the
-/// dial: the exact value rides the title swap (§6) and the hover tooltip,
-/// exactly as the full window's [VolumeBar] prints it inside its own fill.
+/// dial: the exact value rides the title swap (§6), exactly as the full
+/// window's [VolumeBar] prints it inside its own fill. (No hover tooltip —
+/// the 32 px bar has no room for a popup, §3.)
 ///
 /// The wheel is not a [SaluIconButton] — it has no tap — but it obeys the
 /// same recipe for motion: the mark itself glides `iconIdle → textPrimary`
@@ -54,34 +55,31 @@ class _VolumeWheelState extends State<VolumeWheel> {
         // The muted dial keeps its shape and drops its voice.
         final Color quiet = ink.withAlpha(90); // ~35 %
 
-        return Tooltip(
-          message:
-              'Volume ${muted ? 0 : level.round().clamp(0, 100)} % — wheel ±5 %',
-          waitDuration: const Duration(milliseconds: 600),
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
-            child: AnimatedScale(
-              scale: _hovered ? 1.06 : 1.0,
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOut,
-              child: SizedBox(
-                width: MiniMetrics.wheelBox,
-                height: MiniMetrics.wheelBox,
-                child: Center(
-                  child: CustomPaint(
-                    size: const Size.square(MiniMetrics.wheelDial),
-                    painter: _WheelPainter(
-                      track: silent
-                          ? AppColors.barTrack.withAlpha(90)
-                          : AppColors.barTrack,
-                      // The level arc sits at ~75 % ink at rest, full ink
-                      // under the pointer (the preview's own recipe).
-                      arc: silent ? quiet : ink.withAlpha(_hovered ? 255 : 190),
-                      head: silent ? quiet : AppColors.barThumb,
-                      stroke: markStrokeFor(MiniMetrics.wheelDial),
-                      frac: frac,
-                    ),
+        // No tooltip: the bar has no room for a popup (§3) — the value
+        // rides the title swap instead (§6).
+        return MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: AnimatedScale(
+            scale: _hovered ? 1.06 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            child: SizedBox(
+              width: MiniMetrics.wheelBox,
+              height: MiniMetrics.wheelBox,
+              child: Center(
+                child: CustomPaint(
+                  size: const Size.square(MiniMetrics.wheelDial),
+                  painter: _WheelPainter(
+                    track: silent
+                        ? AppColors.barTrack.withAlpha(90)
+                        : AppColors.barTrack,
+                    // The level arc sits at ~75 % ink at rest, full ink
+                    // under the pointer (the preview's own recipe).
+                    arc: silent ? quiet : ink.withAlpha(_hovered ? 255 : 190),
+                    head: silent ? quiet : AppColors.barThumb,
+                    stroke: markStrokeFor(MiniMetrics.wheelDial),
+                    frac: frac,
                   ),
                 ),
               ),

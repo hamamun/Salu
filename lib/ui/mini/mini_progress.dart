@@ -1,5 +1,3 @@
-import 'package:flutter/gestures.dart'
-    show PointerCancelEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent;
 import 'package:flutter/material.dart';
 
 import '../../core/clock_format.dart';
@@ -216,19 +214,16 @@ class _MiniSeekLineState extends State<MiniSeekLine> {
                       : MouseCursor.defer,
                   onEnter: (_) => setState(() => _hovering = true),
                   onExit: (_) => setState(() => _hovering = false),
-                  child: Tooltip(
-                    message: 'Seek',
-                    waitDuration: const Duration(milliseconds: 600),
-                    child: CustomPaint(
-                      painter: MiniProgressStrip(
-                        frac: _pressFrac ?? live,
-                        head: usable &&
-                            (widget.barHovered ||
-                                _hovering ||
-                                _pressFrac != null),
-                      ),
-                      child: const SizedBox.expand(),
+                  // No tooltip: the bar has no room for a popup (§3).
+                  child: CustomPaint(
+                    painter: MiniProgressStrip(
+                      frac: _pressFrac ?? live,
+                      head: usable &&
+                          (widget.barHovered ||
+                              _hovering ||
+                              _pressFrac != null),
                     ),
+                    child: const SizedBox.expand(),
                   ),
                 ),
               ),

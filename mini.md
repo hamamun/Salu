@@ -71,9 +71,15 @@ the full window.
      12 o'clock, and a tiny tick at the head of the arc. **Wheel ±5 %
      only** (rolling over the speaker or the ring both work) — no
      click/drag, and no number printed on the dial: the exact value
-     rides the title swap (§6) and the hover tooltip.
-3. **Track title** — full width of what remains, ellipsis truncation, tooltip shows the complete text. Channel mode shows the **channel name** (group lands in the tooltip).
+     rides the title swap (§6).
+3. **Track title** — full width of what remains, ellipsis truncation. Channel mode shows the **channel name**.
 4. **Restore button** — icon-only glyph in its own slot at the far right. Exits mini mode. This is the bar's only "caption" control.
+
+**No tooltips in mini.** The bar is 32 px tall — a hover popup cannot fit
+inside a window that tall, it renders cut off — so the bar drops every
+tooltip: transport buttons, seek line, volume wheel, title. Full mode
+keeps its hover-delay tooltips; in the bar the marks speak for themselves
+and the title swap (§6) stays the only feedback.
 
 **Group spacing** reads from pitch alone — mini's compressed 5 / 11 / 20
 keeps the same visual law as the full cluster (6 / 14 / 26).
@@ -220,7 +226,8 @@ Hard bans — if it's on this list it does not exist in mini mode:
 - [ ] Progress line on the TOP edge, click/drag seeks, hit zone ≥ 8 px
 - [ ] Volume wheel sits in the row right after the speaker — thin ring
       dial, level arc + head tick, wheel ±5 % only; value via title swap
-- [ ] Title truncates with "…", tooltip complete; channel name in IPTV
+- [ ] Title truncates with "…"; no tooltips anywhere in the bar (32 px
+      has no room for a popup); channel name in IPTV
 - [ ] Restore button, double-click dead space, and `Esc` all exit mini
 - [ ] Full geometry restored exactly on exit; both geometries persisted
 - [ ] Always-on-top the entire mini session

@@ -119,20 +119,20 @@ class CustomTitleBar extends StatelessWidget {
                 // they never teach shortcuts; follow.md rule 2).
                 _CaptionButton(
                   tooltip: 'Mini bar mode',
+                  onPressed: windows.toggleMini,
                   child: const MiniBarMark(
                     size: 18,
                     color: AppColors.textPrimary,
                   ),
-                  onPressed: windows.toggleMini,
                 ),
                 // SALU settings — six dots in two lines (left of Minimize).
                 _CaptionButton(
                   tooltip: 'Settings',
+                  onPressed: () => onSettings?.call(),
                   child: const DotGridIcon(
                     size: 18,
                     color: AppColors.textPrimary,
                   ),
-                  onPressed: () => onSettings?.call(),
                 ),
                 _CaptionButton(
                   glyph: '\uE921', // Minimize

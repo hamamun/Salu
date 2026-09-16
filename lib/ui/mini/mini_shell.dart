@@ -46,6 +46,11 @@ import 'volume_wheel.dart';
 /// surface, no lyrics, no album art, no subtitles, no playlist/fetch/tune/
 /// settings panels, no caption buttons, no resize, no maximize (§8). mpv
 /// keeps running underneath — a video file simply plays as audio.
+///
+/// And no tooltips (§3): the bar is 32 px tall, and a hover popup simply
+/// cannot fit inside a window that tall — it would render cut off. Every
+/// control therefore drops its tooltip in the bar (transport buttons,
+/// seek line, volume wheel, title); full mode keeps its hover tooltips.
 class MiniShell extends StatefulWidget {
   const MiniShell({super.key, this.dropHovering = false});
 
@@ -152,17 +157,9 @@ class _MiniShellState extends State<MiniShell> {
 
   /// The playing item — the CHANNEL's display name in channel mode, never a
   /// URL (§10.10e) — falling back to `SALU` while idle, as full mode does.
+  /// (Full mode's title tooltip — complete text plus the channel's group —
+  /// does not exist here: the bar has no room for a popup, §3.)
   String get _title => _player.currentTitle.value ?? 'SALU';
-
-  /// The tooltip carries the whole text; in channel mode it also names the
-  /// group the playing channel sits in (§3 item 3).
-  String get _tooltip {
-    final String title = _title;
-    final QueueItem? item = _queue.isChannelList ? _queue.current : null;
-    final String? group = item?.group;
-    if (group == null || group.isEmpty) return title;
-    return '$title — $group';
-  }
 
   // ── Build ─────────────────────────────────────────────────────────────
 
@@ -268,14 +265,15 @@ class _MiniShellState extends State<MiniShell> {
       _DragGap(MiniMetrics.iconGap, onDoubleTap: _exit),
 
       // ── Group 1 · playback: play/pause + stop ────────────────────────
+      // No tooltips in the bar (§3) — a popup cannot fit a 32 px window.
       PlayPauseButton(
         state: state,
         hitSize: MiniMetrics.hit,
         markSize: MiniMetrics.markSize,
+        tooltipEnabled: false,
       ),
       const SizedBox(width: MiniMetrics.inGroupGap),
       SaluIconButton(
-        tooltip: 'Stop',
         hitSize: MiniMetrics.hit,
         // Stop dims while stopped and while idle; it is never a
         // "start over" — full mode's rule, unchanged.
@@ -288,7 +286,6 @@ class _MiniShellState extends State<MiniShell> {
 
       // ── Group 2 · items: previous + next ─────────────────────────────
       SaluIconButton(
-        tooltip: 'Previous',
         hitSize: MiniMetrics.hit,
         enabled: _player.hasPreviousItem,
         onTap: _transport.previous,
@@ -296,7 +293,6 @@ class _MiniShellState extends State<MiniShell> {
       ),
       const SizedBox(width: MiniMetrics.inGroupGap),
       SaluIconButton(
-        tooltip: 'Next',
         hitSize: MiniMetrics.hit,
         enabled: _player.hasNextItem,
         onTap: _transport.next,
@@ -308,7 +304,6 @@ class _MiniShellState extends State<MiniShell> {
       // ── Group 3 · time: seek backward + forward ──────────────────────
       //     Hold-to-climb is the full window's own press-and-hold ramp.
       SaluIconButton(
-        tooltip: 'Seek backward',
         hitSize: MiniMetrics.hit,
         enabled: seeksLive,
         onTap: () {}, // hold-repeat drives the ramp
@@ -317,7 +312,6 @@ class _MiniShellState extends State<MiniShell> {
       ),
       const SizedBox(width: MiniMetrics.inGroupGap),
       SaluIconButton(
-        tooltip: 'Seek forward',
         hitSize: MiniMetrics.hit,
         enabled: seeksLive,
         onTap: () {}, // hold-repeat drives the ramp
@@ -338,7 +332,6 @@ class _MiniShellState extends State<MiniShell> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             SaluIconButton(
-              tooltip: _player.isMuted.value ? 'Unmute' : 'Mute',
               hitSize: MiniMetrics.hit,
               onTap: _transport.toggleMute,
               // The speaker follows the volume exactly like full mode:
@@ -356,6 +349,8 @@ class _MiniShellState extends State<MiniShell> {
       ),
 
       // ── The title — everything left over, ellipsized (§3 item 3) ─────
+      // No tooltip: the complete text used to ride the hover popup, but
+      // the bar has no room for one (§3).
       Expanded(
         child: Padding(
           padding: const EdgeInsets.only(
@@ -368,11 +363,7 @@ class _MiniShellState extends State<MiniShell> {
               height: MiniMetrics.hitHeight,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Tooltip(
-                  message: _tooltip,
-                  waitDuration: const Duration(milliseconds: 600),
-                  child: _buildTitle(),
-                ),
+                child: _buildTitle(),
               ),
             ),
           ),
@@ -381,7 +372,6 @@ class _MiniShellState extends State<MiniShell> {
 
       // ── Restore — the bar's only "caption" control (§3 item 4) ───────
       SaluIconButton(
-        tooltip: 'Restore full window',
         hitSize: MiniMetrics.hit,
         onTap: _exit,
         child: const MiniRestoreMark(size: MiniMetrics.markSize),
