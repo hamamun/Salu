@@ -174,6 +174,7 @@ class PlayPauseButton extends StatelessWidget {
     required this.state,
     this.hitSize,
     this.markSize,
+    this.tooltipEnabled = true,
   });
 
   final TransportState state;
@@ -186,11 +187,16 @@ class PlayPauseButton extends StatelessWidget {
   /// 20 px and the pause rules' 18 px, which is what full mode shows.
   final double? markSize;
 
+  /// Full mode keeps its Play/Pause tooltip; the 32 px mini bar has no
+  /// room for a popup (no tooltips in mini — mini.md §3), so the bar
+  /// switches it off.
+  final bool tooltipEnabled;
+
   @override
   Widget build(BuildContext context) {
     final bool playing = state == TransportState.playing;
     return SaluIconButton(
-      tooltip: playing ? 'Pause' : 'Play',
+      tooltip: tooltipEnabled ? (playing ? 'Pause' : 'Play') : null,
       hitSize: hitSize,
       enabled: state != TransportState.idle,
       onTap: TransportActions.instance.playOrPause,
