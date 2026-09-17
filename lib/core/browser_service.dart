@@ -6,6 +6,7 @@ import 'player_service.dart';
 import 'web/web_data_control.dart';
 import 'web/web_favourites_service.dart';
 import 'web/web_history_service.dart';
+import 'web/web_popup_service.dart';
 import 'window_state_service.dart';
 
 /// Which surface owns the window (web.md · the Player/Web toggle, LOCKED
@@ -86,11 +87,12 @@ class BrowserService {
   /// web mode simply awaits it.
   Future<void> warmUp() => _warm ??= WebDataControlService.instance.prepare();
 
-  /// Reads the browser's own stores (favourites + history) alongside the
-  /// other services, before the first frame.
+  /// Reads the browser's own stores (favourites + history + pop-up
+  /// rules) alongside the other services, before the first frame.
   Future<void> load() async {
     await WebFavouritesService.instance.load();
     await WebHistoryService.instance.load();
+    await WebPopupService.instance.load();
   }
 
   /// Applies [next] mode. Entering Web pauses the player — in this mode
@@ -196,6 +198,9 @@ class BrowserService {
     } catch (_) {}
     try {
       await WebFavouritesService.instance.flush();
+    } catch (_) {}
+    try {
+      await WebPopupService.instance.flush();
     } catch (_) {}
   }
 

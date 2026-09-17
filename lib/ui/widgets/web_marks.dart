@@ -20,6 +20,12 @@ import 'salu_marks.dart';
 ///   · tabbed rect     — Folder             [FolderMark]
 ///   · circle + hands  — History row        [ClockMark]
 ///   · handle+bristles — Clear browsing data [BroomMark]
+///   · body + shackle  — Site information   [PadlockMark] (closed = https,
+///                       open = the line is not private)
+///   · window + window — Held-back pop-ups  [PopupMark] (the address bar's
+///                       badge — Chrome's blocked-pop-up icon, SALU-drawn)
+///   · three dots      — Browser menu       [MenuMark] (the ⋮ at the row's
+///                       right edge, next to Clear)
 
 /// Home — a house: roof rule, body, a small door.
 class HomeMark extends StatelessWidget {
@@ -497,4 +503,163 @@ class _BroomPainter extends CustomPainter {
   @override
   bool shouldRepaint(_BroomPainter old) =>
       old.ink != ink || old.stroke != stroke;
+}
+
+/// Site information — a padlock: the address bar's left-most mark
+/// (Chrome's 🔒 slot). Closed = the page came over https; open = the line
+/// is not private.
+class PadlockMark extends StatelessWidget {
+  const PadlockMark({super.key, this.size = 14, this.open = false});
+
+  final double size;
+  final bool open;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _PadlockPainter(markInk(context), markStrokeFor(size), open),
+    );
+  }
+}
+
+class _PadlockPainter extends CustomPainter {
+  const _PadlockPainter(this.ink, this.stroke, this.open);
+
+  final Color ink;
+  final double stroke;
+  final bool open;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(s * 7 / 24, s * 10.5 / 24, s * 17 / 24, s * 19 / 24),
+        Radius.circular(s * 1.6 / 24),
+      ),
+      paint,
+    );
+    final Path shackle = Path()
+      ..moveTo(s * 8.6 / 24, s * 10.5 / 24)
+      ..lineTo(s * 8.6 / 24, s * 9 / 24)
+      ..arcToPoint(
+        Offset(s * 15.4 / 24, s * 9 / 24),
+        radius: Radius.circular(s * 3.4 / 24),
+      );
+    if (open) {
+      // The arm ends in the air — the page is not private.
+      shackle.lineTo(s * 15.4 / 24, s * 7.6 / 24);
+    } else {
+      shackle.lineTo(s * 15.4 / 24, s * 10.5 / 24);
+    }
+    canvas.drawPath(shackle, paint);
+    canvas.drawCircle(
+      Offset(s * 12 / 24, s * 14.6 / 24),
+      stroke * 0.85,
+      Paint()..color = ink,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PadlockPainter old) =>
+      old.ink != ink || old.stroke != stroke || old.open != open;
+}
+
+/// Held-back pop-ups — two overlapping window rects: the badge in the
+/// address bar's right corner (Chrome's blocked-pop-up icon, SALU-drawn).
+class PopupMark extends StatelessWidget {
+  const PopupMark({super.key, this.size = 14});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _PopupPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _PopupPainter extends CustomPainter {
+  const _PopupPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(s * 4 / 24, s * 5 / 24, s * 14.5 / 24, s * 13.5 / 24),
+        Radius.circular(s * 1.6 / 24),
+      ),
+      paint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(s * 9.5 / 24, s * 10.5 / 24, s * 20 / 24, s * 19 / 24),
+        Radius.circular(s * 1.6 / 24),
+      ),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PopupPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Browser menu — three dots in a column: the ⋮ at the row's right edge
+/// (Chrome's ⋮ slot), opening zoom, find, history, downloads and the rest.
+class MenuMark extends StatelessWidget {
+  const MenuMark({super.key, this.size = 16});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _MenuPainter(markInk(context)),
+    );
+  }
+}
+
+class _MenuPainter extends CustomPainter {
+  const _MenuPainter(this.ink);
+
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint paint = Paint()
+      ..color = ink
+      ..style = PaintingStyle.fill;
+    for (final double y in <double>[6, 12, 18]) {
+      canvas.drawCircle(
+        Offset(s * 12 / 24, s * y / 24),
+        s * 1.7 / 24,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MenuPainter old) => old.ink != ink;
 }

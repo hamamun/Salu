@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +9,9 @@ import '../../core/browser_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/web/web_address.dart';
 import '../../core/web/web_favourites_service.dart';
+import '../../core/web/web_find.dart';
 import '../../core/web/web_history_service.dart';
+import '../../core/web/web_popup_service.dart';
 import '../../core/web/web_suggestions.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
@@ -17,6 +20,10 @@ import '../widgets/browser_address_bar.dart';
 import '../widgets/browser_clear_dialog.dart';
 import '../widgets/browser_favourite_sheet.dart';
 import '../widgets/browser_favourites_hub.dart';
+import '../widgets/browser_find_bar.dart';
+import '../widgets/browser_history_panel.dart';
+import '../widgets/browser_menu.dart';
+import '../widgets/browser_site_panel.dart';
 import '../widgets/browser_tab_strip.dart';
 import '../widgets/browser_views.dart';
 import '../widgets/salu_icon_button.dart';
@@ -42,9 +49,17 @@ const int kWebMaxTabs = 10;
 /// caches cleared — so "coming back is a clean start" holds without a
 /// single bookkeeping thread (web.md · key function 8).
 class BrowserScreen extends StatefulWidget {
-  const BrowserScreen({super.key, this.chromeVisible = true});
+  const BrowserScreen({
+    super.key,
+    this.chromeVisible = true,
+    this.onOpenSettings,
+  });
 
   final bool chromeVisible;
+
+  /// Opens SALU's Settings window (the ⋮ menu's "Settings" row) — owned
+  /// by the home screen, which is where the window lives.
+  final VoidCallback? onOpenSettings;
 
   @override
   State<BrowserScreen> createState() => _BrowserScreenState();
@@ -71,9 +86,28 @@ class _BrowserScreenState extends State<BrowserScreen> {
   bool _hubOpen = false;
   bool _sheetOpen = false;
   int? _sheetIndex;
+  bool _siteOpen = false;
+  bool _blockedOpen = false;
+  bool _menuOpen = false;
+  bool _historyOpen = false;
+
+  /// Find-in-page (the ⋮ menu's "Find in page…"): the bar, the query, and
+  /// the {total, index} count the script answers with. [_findSeq] drops
+  /// late answers when keystrokes outrun the engine.
+  bool _findOpen = false;
+  final TextEditingController _findQuery = TextEditingController();
+  final FocusNode _findFocus = FocusNode();
+  final ValueNotifier<int> _findTotal = ValueNotifier<int>(0);
+  final ValueNotifier<int> _findIndex = ValueNotifier<int>(0);
+  Timer? _findTimer;
+  int _findSeq = 0;
 
   /// The star's two-state mirror (web.md · "the star knows").
   final ValueNotifier<bool> _saved = ValueNotifier<bool>(false);
+
+  /// The badge's count — the active tab's held-back list, mirrored so the
+  /// address bar never has to chase tab switches itself.
+  final ValueNotifier<int> _blockedCount = ValueNotifier<int>(0);
 
   WebTab? get _tab =>
       _active >= 0 && _active < _tabs.length ? _tabs[_active] : null;
@@ -115,6 +149,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
     _tabs.clear();
     _saved.dispose();
+    _blockedCount.dispose();
+    _findTimer?.cancel();
+    _findQuery.dispose();
+    _findFocus.dispose();
+    _findTotal.dispose();
+    _findIndex.dispose();
+    // The surface is gone — the visit-only pop-up memories go with it.
+    WebPopupService.instance.endSession();
     _address.dispose();
     _addressFocus.dispose();
     super.dispose();
@@ -134,6 +176,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     bool focusAddress = false,
   }) {
     final WebTab tab = WebTab(initialUrl: url, initialTitle: title);
+    tab.onPopupAllowed = (String popupUrl) => _openPopupTab(tab, popupUrl);
     setState(() {
       _tabs.add(tab);
       _selectLocked(tab);
@@ -163,9 +206,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   void _select(WebTab tab) {
     if (identical(tab, _tab)) return;
+    if (_findOpen) _dropFind();
     _tab?.deactivate();
     _unbindActive();
     setState(() {
+      _menuOpen = false;
+      _historyOpen = false;
       _selectLocked(tab);
     });
     tab.activate();
@@ -187,8 +233,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (wasActive) _unbindActive();
     if (index < _active) _active -= 1;
     unawaited(tab.destroy());
+    if (wasActive && _findOpen) {
+      // The marks die with the engine — only the state needs dropping.
+      _findTimer?.cancel();
+      _findOpen = false;
+      _findTotal.value = 0;
+      _findIndex.value = 0;
+    }
     setState(() {
       _hideSuggestions();
+      _menuOpen = false;
+      _historyOpen = false;
       if (_tabs.isEmpty) {
         // Last tab closed — Web mode STAYS (web.md lock): the strip keeps
         // its `+`, the content is the start page.
@@ -218,6 +273,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       tab.startMode,
       tab.failed,
       tab.loading,
+      tab.blocked,
     ]) {
       n.addListener(_onActiveChanged);
       _bound.add((n, _onActiveChanged));
@@ -237,12 +293,21 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (!mounted) return;
     final WebTab? tab = _tab;
     if (tab == null) return;
+    if (_findOpen && tab.loading.value) {
+      // A navigation replaced the document mid-find — the marks died
+      // with it, so the session ends silently (no script left to run).
+      _findTimer?.cancel();
+      _findOpen = false;
+      _findTotal.value = 0;
+      _findIndex.value = 0;
+    }
     if (tab.loading.value && _suggestionsShown) _hideSuggestions();
     if (!_addressFocus.hasFocus) {
       final bool start = tab.startMode.value;
       _syncAddressTo(start ? '' : (tab.url.value ?? ''));
     }
     _updateStar();
+    _blockedCount.value = tab.blocked.value.length;
     _service.setStripTitle(tab.displayTitle);
     setState(() {});
   }
@@ -306,6 +371,13 @@ class _BrowserScreenState extends State<BrowserScreen> {
       );
       _cursor = -1;
       _suggestionsShown = _suggestions.isNotEmpty;
+      // The dropdown owns the stage — every panel steps aside for it
+      // (the one-popup world).
+      _siteOpen = false;
+      _blockedOpen = false;
+      _menuOpen = false;
+      _historyOpen = false;
+      _dropFind();
     });
   }
 
@@ -381,12 +453,22 @@ class _BrowserScreenState extends State<BrowserScreen> {
       return KeyEventResult.ignored; // onSubmitted navigates the bar
     }
     if (key == LogicalKeyboardKey.escape) {
-      if (_suggestionsShown || _hubOpen || _sheetOpen) {
+      if (_suggestionsShown ||
+          _hubOpen ||
+          _sheetOpen ||
+          _siteOpen ||
+          _blockedOpen ||
+          _menuOpen ||
+          _historyOpen) {
         setState(() {
           _hideSuggestions();
           _hubOpen = false;
           _sheetOpen = false;
           _sheetIndex = null;
+          _siteOpen = false;
+          _blockedOpen = false;
+          _menuOpen = false;
+          _historyOpen = false;
         });
         return KeyEventResult.handled;
       }
@@ -460,7 +542,326 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _sheetIndex = existing == null
           ? null
           : _favourites.favourites.value.indexOf(existing);
+      _siteOpen = false;
+      _blockedOpen = false;
+      _menuOpen = false;
+      _historyOpen = false;
+      _dropFind();
     });
+  }
+
+  void _toggleSitePanel() {
+    if (_tab?.hasPage != true) return; // no page, no site to name
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _blockedOpen = false;
+      _menuOpen = false;
+      _historyOpen = false;
+      _dropFind();
+      _siteOpen = !_siteOpen;
+    });
+  }
+
+  void _toggleBlockedList() {
+    final WebTab? tab = _tab;
+    if (tab == null || tab.blocked.value.isEmpty) return;
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _siteOpen = false;
+      _menuOpen = false;
+      _historyOpen = false;
+      _dropFind();
+      _blockedOpen = !_blockedOpen;
+    });
+  }
+
+  /// An allowed pop-up asked to exist — it gets a new foreground tab
+  /// (Chrome parity). At the tab cap it parks in the held-back list
+  /// instead: a pop-up must never take over the tab being looked at.
+  void _openPopupTab(WebTab from, String url) {
+    if (!mounted) return;
+    if (_tabs.length >= kWebMaxTabs) {
+      if (_tabs.contains(from)) from.noteBlocked(url);
+      return;
+    }
+    _newTab(url: url);
+  }
+
+  /// One held-back row's "Open" — the pop-up becomes a real tab, and only
+  /// then leaves the list.
+  void _openBlockedUrl(String url) {
+    final WebTab? tab = _tab;
+    if (tab == null || _tabs.length >= kWebMaxTabs) return;
+    tab.dropBlocked(url);
+    setState(() => _blockedOpen = false);
+    _newTab(url: url);
+  }
+
+  /// The site panel's Allow/Block rows — a permanent rule for this site.
+  void _setSitePopups(bool allow) {
+    final String? url = _tab?.url.value;
+    if (url == null) return;
+    WebPopupService.instance.setFor(url, allow);
+    setState(() {}); // the panel reads the effective state at build
+  }
+
+  /// "Allow just for this visit" — no permanent rule for a disposable
+  /// domain; the memory evaporates with the browsing session.
+  void _visitAllowSite() {
+    final String? url = _tab?.url.value;
+    if (url == null) return;
+    WebPopupService.instance.allowVisit(url);
+    setState(() {});
+  }
+
+  // ── Menu · history · find (the ⋮ shelf) ────────────────────────────────
+
+  void _toggleMenu() {
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _siteOpen = false;
+      _blockedOpen = false;
+      _historyOpen = false;
+      _dropFind();
+      _menuOpen = !_menuOpen;
+    });
+  }
+
+  void _openHistory() {
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _siteOpen = false;
+      _blockedOpen = false;
+      _menuOpen = false;
+      _dropFind();
+      _historyOpen = true;
+    });
+  }
+
+  void _openHistoryEntry(WebHistoryEntry entry) {
+    setState(() => _historyOpen = false);
+    final WebTab? tab = _tab;
+    if (tab == null) {
+      _newTab(url: entry.url);
+    } else {
+      unawaited(tab.navigate(entry.url));
+    }
+  }
+
+  /// The ⋮ menu's "Open in Edge" — the escape door for pages that will
+  /// never run inside SALU (bank logins, heavy portals): the URL rides
+  /// the OS's `microsoft-edge:` protocol, quoted so cmd never reads
+  /// its `&`s.
+  Future<void> _openInEdge() async {
+    final String? url = _tab?.url.value;
+    setState(() => _menuOpen = false);
+    if (url == null || url.isEmpty) return;
+    try {
+      await Process.start(
+          'cmd', <String>['/c', 'start', '', '"microsoft-edge:$url"']);
+    } catch (_) {}
+  }
+
+  /// The menu's "Show in folder" — downloads land silently in the
+  /// Downloads folder (no progress events reach this plugin), so the
+  /// honest answer is the folder itself, opened in Explorer.
+  Future<void> _showDownloadsFolder() async {
+    setState(() => _menuOpen = false);
+    final String home = Platform.environment['USERPROFILE'] ?? '';
+    if (home.isEmpty) return;
+    try {
+      await Process.start('explorer', <String>['$home\\Downloads']);
+    } catch (_) {}
+  }
+
+  void _openFind() {
+    if (_tab?.hasPage != true) return;
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _siteOpen = false;
+      _blockedOpen = false;
+      _menuOpen = false;
+      _historyOpen = false;
+      _findOpen = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_findOpen) return;
+      _findFocus.requestFocus();
+      _findQuery.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _findQuery.text.length,
+      );
+    });
+    if (_findQuery.text.trim().isNotEmpty) {
+      unawaited(_runFind(_findQuery.text, 1));
+    }
+  }
+
+  void _onFindQueryChanged(String text) {
+    _findTimer?.cancel();
+    if (text.trim().isEmpty) {
+      _findTotal.value = 0;
+      _findIndex.value = 0;
+      _clearFindMarks(_tab); // highlights lift live as the query empties
+      return;
+    }
+    _findTimer = Timer(
+      const Duration(milliseconds: 180),
+      () => unawaited(_runFind(text, 1)),
+    );
+  }
+
+  /// Runs one find pass: highlight every match, make [want] current.
+  /// Late answers (keystrokes outran the engine, tab moved on) fall out
+  /// by sequence — the bar never shows another query's count.
+  Future<void> _runFind(String query, int want) async {
+    final int seq = ++_findSeq;
+    final WebTab? tab = _tab;
+    final WebviewController? c = tab?.controller;
+    if (tab == null || c == null || !_findOpen) return;
+    final String q = query.trim();
+    if (q.isEmpty) return;
+    try {
+      final Object? raw = await c
+          .executeScript(WebFind.buildScript(q, want))
+          .timeout(const Duration(seconds: 3));
+      if (!mounted || seq != _findSeq || !_findOpen || !identical(_tab, tab)) {
+        return;
+      }
+      final WebFindResult r = WebFindResult.parse(raw);
+      _findTotal.value = r.total;
+      _findIndex.value = r.index;
+    } catch (_) {}
+  }
+
+  void _findNext() {
+    final String q = _findQuery.text.trim();
+    if (q.isEmpty) return;
+    final int t = _findTotal.value;
+    if (t == 0) {
+      unawaited(_runFind(q, 1));
+      return;
+    }
+    unawaited(_runFind(q, _findIndex.value >= t ? 1 : _findIndex.value + 1));
+  }
+
+  void _findPrev() {
+    final String q = _findQuery.text.trim();
+    if (q.isEmpty) return;
+    final int t = _findTotal.value;
+    if (t == 0) {
+      unawaited(_runFind(q, 1));
+      return;
+    }
+    unawaited(_runFind(q, _findIndex.value <= 1 ? t : _findIndex.value - 1));
+  }
+
+  void _closeFind() {
+    _findTimer?.cancel();
+    _clearFindMarks(_tab);
+    setState(() {
+      _findOpen = false;
+      _findTotal.value = 0;
+      _findIndex.value = 0;
+    });
+  }
+
+  /// Drops the find session (marks lifted, counts zeroed) — the caller
+  /// owns the setState. Every menu opener calls it: the one-popup world
+  /// has no room for a second focused face.
+  void _dropFind() {
+    if (!_findOpen) return;
+    _findTimer?.cancel();
+    _findOpen = false;
+    _findTotal.value = 0;
+    _findIndex.value = 0;
+    _clearFindMarks(_tab);
+  }
+
+  void _clearFindMarks(WebTab? tab) {
+    final WebviewController? c = tab?.controller;
+    if (c == null) return;
+    unawaited(() async {
+      try {
+        await c
+            .executeScript(WebFind.clearScript)
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {}
+    }());
+  }
+
+  /// Browser keyboard (Chrome's shelf): new / close / reload tab, jump to
+  /// the bar, find, zoom. It answers while Flutter holds the focus — a
+  /// page with native focus eats keystrokes before Flutter ever sees
+  /// them (the plugin exposes no accelerator hook), so these are the
+  /// chrome's keys, not the page's.
+  KeyEventResult _onBrowserKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (!HardwareKeyboard.instance.isControlPressed) {
+      return KeyEventResult.ignored;
+    }
+    final LogicalKeyboardKey key = event.logicalKey;
+    if (key == LogicalKeyboardKey.keyT) {
+      if (_tabs.length < kWebMaxTabs) {
+        _closePopups();
+        _newTab(focusAddress: true);
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyW) {
+      if (_active >= 0) {
+        _closePopups();
+        _closeTab(_active);
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyR) {
+      unawaited(_tab?.reload() ?? Future<void>.value());
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyL) {
+      _addressFocus.requestFocus();
+      _address.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _address.text.length,
+      );
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyF) {
+      _openFind();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.equal ||
+        key == LogicalKeyboardKey.numpadAdd) {
+      unawaited(_tab?.zoomIn() ?? Future<void>.value());
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.minus ||
+        key == LogicalKeyboardKey.numpadSubtract) {
+      unawaited(_tab?.zoomOut() ?? Future<void>.value());
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit0 ||
+        key == LogicalKeyboardKey.numpad0) {
+      unawaited(_tab?.resetZoom() ?? Future<void>.value());
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _saveFavourite(String name, String folder) {
@@ -486,11 +887,23 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   void _closePopups() {
-    if (_hubOpen || _sheetOpen || _suggestionsShown) {
+    if (_hubOpen ||
+        _sheetOpen ||
+        _suggestionsShown ||
+        _siteOpen ||
+        _blockedOpen ||
+        _menuOpen ||
+        _historyOpen ||
+        _findOpen) {
       setState(() {
         _hubOpen = false;
         _sheetOpen = false;
         _sheetIndex = null;
+        _siteOpen = false;
+        _blockedOpen = false;
+        _menuOpen = false;
+        _historyOpen = false;
+        _dropFind();
         _hideSuggestions();
       });
     }
@@ -539,11 +952,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
       // While the page owns the screen, this focus owns its Esc:
       // the first Esc RELEASES the hand-off (browser convention) —
       // the window only goes back to SALU's strip on the second, and only
-      // because the page itself let go.
+      // because the page itself let go. While the chrome shows, the same
+      // root answers the browser keyboard (Ctrl+T/W/R/L/F, zoom).
       autofocus: !_chrome,
       canRequestFocus: !_chrome,
       onKeyEvent: _chrome
-          ? null
+          ? _onBrowserKey
           : (FocusNode n, KeyEvent e) {
               if (e is KeyDownEvent &&
                   e.logicalKey == LogicalKeyboardKey.escape) {
@@ -577,6 +991,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
                           _sheetOpen = false;
                           _sheetIndex = null;
                           _hideSuggestions();
+                          _siteOpen = false;
+                          _blockedOpen = false;
+                          _menuOpen = false;
+                          _historyOpen = false;
+                          _dropFind();
                           _hubOpen = !_hubOpen;
                         }),
                       ),
@@ -587,10 +1006,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       addressFocus: _addressFocus,
                       suggestionsShown: _suggestionsShown,
                       saved: _saved,
+                      blockedCount: _blockedCount,
                       onSubmit: _submitAddress,
                       onQueryChanged: _onQueryChanged,
                       onCancel: _closePopups,
                       onFavourite: _toggleFavouritePanel,
+                      onSiteInfo: _toggleSitePanel,
+                      onBlockedTap: _toggleBlockedList,
+                      onMenu: _toggleMenu,
                       onClearData: () => showWebClearDialog(context),
                       onBack: () => tab?.goBack(),
                       onForward: () => tab?.goForward(),
@@ -605,7 +1028,16 @@ class _BrowserScreenState extends State<BrowserScreen> {
               ),
               // One translucent sheet over everything for outside-taps —
               // menus die with the next click anywhere, like Chrome's.
-              if (_chrome && (_hubOpen || _sheetOpen || _suggestionsShown))
+              // Find is not a menu (Chrome keeps it while the page is
+              // clicked), so it stays out of the sheet.
+              if (_chrome &&
+                  (_hubOpen ||
+                      _sheetOpen ||
+                      _suggestionsShown ||
+                      _siteOpen ||
+                      _blockedOpen ||
+                      _menuOpen ||
+                      _historyOpen))
                 Positioned.fill(
                   child: Listener(
                     behavior: HitTestBehavior.translucent,
@@ -662,6 +1094,120 @@ class _BrowserScreenState extends State<BrowserScreen> {
                         return KeyEventResult.ignored;
                       },
                       child: _buildSheet(),
+                    ),
+                  ),
+                ),
+              if (_chrome && _siteOpen && _tab?.hasPage == true)
+                Positioned(
+                  left: 150,
+                  top: kWebStripHeight + kWebRowHeight + 2,
+                  child: _PopGrow(
+                    child: BrowserSitePanel(
+                      pageUrl: _tab!.url.value!,
+                      secure: _tab!.url.value!
+                          .toLowerCase()
+                          .startsWith('https://'),
+                      popupsAllowed: WebPopupService.instance
+                          .resolve(_tab!.url.value),
+                      blockedCount: _tab!.blocked.value.length,
+                      onPopupsChanged: _setSitePopups,
+                      onVisitAllow: _visitAllowSite,
+                      onShowBlocked: () => setState(() {
+                        _siteOpen = false;
+                        _blockedOpen = true;
+                      }),
+                      onClose: () =>
+                          setState(() => _siteOpen = false),
+                    ),
+                  ),
+                ),
+              if (_chrome &&
+                  _blockedOpen &&
+                  _tab != null &&
+                  _tab!.blocked.value.isNotEmpty)
+                Positioned(
+                  right: 48,
+                  top: kWebStripHeight + kWebRowHeight - 4,
+                  width: 380,
+                  child: _PopGrow(
+                    child: BlockedPopupList(
+                      items: _tab!.blocked.value,
+                      host: WebAddress.hostOf(_tab!.url.value ?? ''),
+                      canOpen: _tabs.length < kWebMaxTabs,
+                      onOpen: _openBlockedUrl,
+                      onAllowSite: () {
+                        final String? url = _tab?.url.value;
+                        if (url != null) {
+                          WebPopupService.instance.setFor(url, true);
+                        }
+                        setState(() => _blockedOpen = false);
+                      },
+                      onClose: () =>
+                          setState(() => _blockedOpen = false),
+                    ),
+                  ),
+                ),
+              if (_chrome && _menuOpen)
+                Positioned(
+                  right: 8,
+                  top: kWebStripHeight + kWebRowHeight + 2,
+                  child: _PopGrow(
+                    child: BrowserMenu(
+                      tab: _tab,
+                      onNewTab: () {
+                        setState(() => _menuOpen = false);
+                        if (_tabs.length < kWebMaxTabs) {
+                          _newTab(focusAddress: true);
+                        }
+                      },
+                      onFind: _openFind,
+                      onHistory: _openHistory,
+                      onClearData: () {
+                        setState(() => _menuOpen = false);
+                        showWebClearDialog(context);
+                      },
+                      onOpenInEdge: () => unawaited(_openInEdge()),
+                      onSettings: () {
+                        setState(() => _menuOpen = false);
+                        widget.onOpenSettings?.call();
+                      },
+                      onDownloadsFolder: () =>
+                          unawaited(_showDownloadsFolder()),
+                      onClose: () =>
+                          setState(() => _menuOpen = false),
+                    ),
+                  ),
+                ),
+              if (_chrome && _historyOpen)
+                Positioned(
+                  right: 8,
+                  top: kWebStripHeight + kWebRowHeight + 2,
+                  child: _PopGrow(
+                    child: BrowserHistoryPanel(
+                      onOpen: _openHistoryEntry,
+                      onRemove: (int i) =>
+                          WebHistoryService.instance.removeAt(i),
+                      onClearAll: () =>
+                          WebHistoryService.instance.clear(),
+                      onClose: () =>
+                          setState(() => _historyOpen = false),
+                    ),
+                  ),
+                ),
+              if (_chrome && _findOpen && _tab?.hasPage == true)
+                Positioned(
+                  right: 8,
+                  top: kWebStripHeight + kWebRowHeight + 2,
+                  child: _PopGrow(
+                    child: BrowserFindBar(
+                      query: _findQuery,
+                      queryFocus: _findFocus,
+                      total: _findTotal,
+                      index: _findIndex,
+                      onQueryChanged: _onFindQueryChanged,
+                      onNext: _findNext,
+                      onPrev: _findPrev,
+                      onClose: _closeFind,
                     ),
                   ),
                 ),
