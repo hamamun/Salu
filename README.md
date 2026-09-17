@@ -13,7 +13,7 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 | 3 |  -Style UI & OSC | 🔄 In progress — controller + transport + OSD deck done (see `outline_transport_osd_resume.md`) |
 | 4 | Slide-Out Panels & Menus | ⏳ Not started |
 | 5 | Media Intelligence | 🔄 In progress — resume memory done |
-| 6 | Web & Stream Manager | ⏳ Not started |
+| 6 | Web & Stream Manager | 🚧 Built-in browser implemented (`web.md` ✅); M3U/IPTV sidebar pending |
 | 7 | Advanced Player Tools & Search Logic | ⏳ Not started |
 | 8 | Android Remote Server | ⏳ Not started |
 | 9 | Branding & About Section | ⏳ Not started |

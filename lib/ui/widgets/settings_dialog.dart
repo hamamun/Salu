@@ -24,7 +24,7 @@ class SettingsDialog extends StatefulWidget {
   State<SettingsDialog> createState() => _SettingsDialogState();
 }
 
-enum _SettingsTab { general, subtitles }
+enum _SettingsTab { general, subtitles, web }
 
 class _SettingsDialogState extends State<SettingsDialog> {
   _SettingsTab _tab = _SettingsTab.general;
@@ -112,6 +112,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
             selected: _tab == _SettingsTab.subtitles,
             onTap: () => setState(() => _tab = _SettingsTab.subtitles),
           ),
+          // web.md — the Web tab: the browser's two settings
+          // (Search suggestions + the auto-clear schedule).
+          _TabButton(
+            label: 'Web',
+            selected: _tab == _SettingsTab.web,
+            onTap: () => setState(() => _tab = _SettingsTab.web),
+          ),
         ],
       ),
     );
@@ -121,7 +128,296 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return switch (_tab) {
       _SettingsTab.general => const _GeneralTab(),
       _SettingsTab.subtitles => const _SubtitlesTab(),
+      _SettingsTab.web => const _WebTab(),
     };
+  }
+}
+
+// ── Web tab (web.md) ───────────────────────────────────────────────────────
+
+/// The browser's settings, and only the browser's: the address bar's
+/// Google leg (web.md · "controlled by a Settings 'Search suggestions'
+/// toggle") and the auto-clear schedule (web.md · Auto-clear — LOCKED:
+/// off by default, every 7/15/30 days, at opening / closing / both).
+/// Everything else the browser does is a lock, not a setting.
+class _WebTab extends StatelessWidget {
+  const _WebTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 22, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Address bar',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'What typing into the bar may offer.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _WebSearchSuggestionsSwitch(),
+          SizedBox(height: 28),
+          Text(
+            'Auto-clear',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Sweep the browser’s own footprint on a schedule — history, '
+            'cookies, cached files, downloads. SALU’s memory is never part '
+            'of it.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _WebAutoClearPicker(),
+          SizedBox(height: 28),
+          Text(
+            'When to run',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Closing is the reliable moment.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _WebAutoClearTimingPicker(),
+        ],
+      ),
+    );
+  }
+}
+
+/// The Google leg of the address bar. Off, the dropdown still answers —
+/// it just only knows the user's own pages (history + favourites).
+class _WebSearchSuggestionsSwitch extends StatelessWidget {
+  const _WebSearchSuggestionsSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: SettingsService.instance.webSearchSuggestions,
+      builder: (BuildContext context, bool on, Widget? _) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () =>
+              SettingsService.instance.setWebSearchSuggestions(!on),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: on ? const Color(0x144C9EEB) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: on ? const Color(0x404C9EEB) : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color:
+                        on ? const Color(0x264C9EEB) : AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: IconTheme.merge(
+                    data: IconThemeData(
+                      color:
+                          on ? AppColors.accent : AppColors.textSecondary,
+                    ),
+                    child: const Icon(Icons.public,
+                        size: 20, color: AppColors.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Search suggestions',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'While you type, Google offers — merged under your '
+                        'own pages.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _SaluSwitch(on: on),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// How often the sweep runs. Off is the default and Off is silent: switching
+/// it never wipes anything, and switching back resumes the schedule — the
+/// same safety rule the Resume mode follows.
+class _WebAutoClearPicker extends StatelessWidget {
+  const _WebAutoClearPicker();
+
+  static const List<({WebAutoClearInterval interval, IconData icon, String label, String helper, bool isDefault})>
+      _options = <({WebAutoClearInterval interval, IconData icon, String label, String helper, bool isDefault})>[
+    (
+      interval: WebAutoClearInterval.off,
+      icon: Icons.block_outlined,
+      label: 'Off',
+      helper: 'The browser keeps what it collected until you clear it.',
+      isDefault: true,
+    ),
+    (
+      interval: WebAutoClearInterval.days7,
+      icon: Icons.cleaning_services_outlined,
+      label: 'Every 7 days',
+      helper: 'A weekly sweep of the whole browser footprint.',
+      isDefault: false,
+    ),
+    (
+      interval: WebAutoClearInterval.days15,
+      icon: Icons.cleaning_services_outlined,
+      label: 'Every 15 days',
+      helper: 'Two weeks between sweeps.',
+      isDefault: false,
+    ),
+    (
+      interval: WebAutoClearInterval.days30,
+      icon: Icons.cleaning_services_outlined,
+      label: 'Every 30 days',
+      helper: 'A monthly sweep.',
+      isDefault: false,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<WebAutoClearInterval>(
+      valueListenable: SettingsService.instance.webAutoClearDays,
+      builder: (BuildContext context, WebAutoClearInterval interval,
+          Widget? _) {
+        return Column(
+          children: <Widget>[
+            for (final ({
+              WebAutoClearInterval interval,
+              IconData icon,
+              String label,
+              String helper,
+              bool isDefault
+            }) option in _options)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionTile(
+                  icon: option.icon,
+                  label: option.label,
+                  helper: option.helper,
+                  isDefault: option.isDefault,
+                  selected: interval == option.interval,
+                  onTap: () => SettingsService.instance
+                      .setWebAutoClearDays(option.interval),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The two moments the sweep can run at — the app opening, the app closing,
+/// or either. The close-time sweep is the reliable one (a locked profile
+/// folder is released when the process ends), so its rows say so plainly.
+class _WebAutoClearTimingPicker extends StatelessWidget {
+  const _WebAutoClearTimingPicker();
+
+  static const List<
+      ({
+        WebAutoClearTiming timing,
+        IconData icon,
+        String label,
+        String helper,
+      })> _options =
+      <({
+        WebAutoClearTiming timing,
+        IconData icon,
+        String label,
+        String helper,
+      })>[
+    (
+      timing: WebAutoClearTiming.onOpen,
+      icon: Icons.login_outlined,
+      label: 'On opening',
+      helper: 'The sweep lands at startup, before the first page.',
+    ),
+    (
+      timing: WebAutoClearTiming.onClose,
+      icon: Icons.logout_outlined,
+      label: 'On closing',
+      helper: 'The most reliable moment — the browser is done with it.',
+    ),
+    (
+      timing: WebAutoClearTiming.both,
+      icon: Icons.swap_vert_outlined,
+      label: 'Both',
+      helper: 'Closing sweeps; opening sweeps if anything was missed.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<WebAutoClearTiming>(
+      valueListenable: SettingsService.instance.webAutoClearTiming,
+      builder: (BuildContext context, WebAutoClearTiming timing, Widget? _) {
+        return Column(
+          children: <Widget>[
+            for (final ({WebAutoClearTiming timing, IconData icon, String label, String helper}) option in _options)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionTile(
+                  icon: option.icon,
+                  label: option.label,
+                  helper: option.helper,
+                  selected: timing == option.timing,
+                  onTap: () => SettingsService.instance
+                      .setWebAutoClearTiming(option.timing),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 }
 

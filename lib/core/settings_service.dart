@@ -48,6 +48,44 @@ enum FolderAutoloadMode {
   off,
 }
 
+/// How often the built-in browser sweeps its own footprint automatically
+/// (Settings → Web → Auto-clear; web.md · "Auto-clear — LOCKED"). The
+/// interval is a cadence: when it elapses, the next matching timing runs
+/// the full clear (history · cookies & site data · cached files ·
+/// downloads). **Off by default** — the lock.
+enum WebAutoClearInterval {
+  off,
+  days7,
+  days15,
+  days30,
+}
+
+/// Interval length in days, 0 for [WebAutoClearInterval.off].
+extension WebAutoClearIntervalDays on WebAutoClearInterval {
+  int get days => switch (this) {
+        WebAutoClearInterval.off => 0,
+        WebAutoClearInterval.days7 => 7,
+        WebAutoClearInterval.days15 => 15,
+        WebAutoClearInterval.days30 => 30,
+      };
+}
+
+/// When the auto-clear runs ("player" here is SALU itself — web.md's note;
+/// the close-time sweep is the reliable one, so the rest of its work is
+/// handed to the next startup).
+enum WebAutoClearTiming {
+  onOpen,
+  onClose,
+  both,
+}
+
+/// The app lifecycle event the timing is matched against — the two moments
+/// [WebAutoClearTiming] can speak about, spelled with the same words.
+enum WebAutoClearTrigger {
+  open,
+  close,
+}
+
 /// SALU's persisted settings, backed by `shared_preferences`.
 ///
 /// UI-facing state lives in [ValueNotifier]s so widgets can react instantly;
@@ -61,6 +99,11 @@ class SettingsService {
   static const String _keyTitleBarMode = 'title_bar_mode';
   static const String _keyResumeMode = 'resume_mode';
   static const String _keyFolderAutoloadMode = 'folder_autoload_mode';
+
+  // ── Web browser (web.md) ───────────────────────────────────────────────
+  static const String _keyWebSearchSuggestions = 'web_search_suggestions';
+  static const String _keyWebAutoClearInterval = 'web_auto_clear_interval';
+  static const String _keyWebAutoClearTiming = 'web_auto_clear_timing';
 
   // ── Auto EQ (eq_imp.md §5) ─────────────────────────────────────────────
   static const String _keyAutoEq = 'auto_eq';
@@ -91,6 +134,25 @@ class SettingsService {
   /// Off is remembered across sessions.
   final ValueNotifier<FolderAutoloadMode> folderAutoloadMode =
       ValueNotifier<FolderAutoloadMode>(FolderAutoloadMode.allVideos);
+
+  // ── Web browser (web.md · address bar + auto-clear locks) ──────────────
+
+  /// Live keystrokes to Google while typing the address bar (web.md ·
+  /// address bar lock: "keystroke-to-Google is controlled by a Settings
+  /// 'Search suggestions' toggle"). Off = the dropdown shows only the
+  /// user's own history + favourites. Default ON.
+  final ValueNotifier<bool> webSearchSuggestions = ValueNotifier<bool>(true);
+
+  /// How often the browser auto-clears its footprint (see
+  /// [WebAutoClearInterval]). **Off by default** (web.md · Auto-clear lock).
+  final ValueNotifier<WebAutoClearInterval> webAutoClearDays =
+      ValueNotifier<WebAutoClearInterval>(WebAutoClearInterval.off);
+
+  /// When the auto-clear runs (see [WebAutoClearTiming]). Default on open —
+  /// the timing that can act immediately; the close timing hands its purge
+  /// to the next startup (`WebDataControlService`).
+  final ValueNotifier<WebAutoClearTiming> webAutoClearTiming =
+      ValueNotifier<WebAutoClearTiming>(WebAutoClearTiming.onOpen);
 
   /// Auto EQ (eq_imp.md §5) — SALU picks a preset the moment a file loads
   /// and learns from the viewer's corrections. Default **Off**, and turning
@@ -171,6 +233,21 @@ class SettingsService {
             FolderAutoloadMode.values.asNameMap()[rawAutoload] ??
                 FolderAutoloadMode.allVideos;
       }
+      webSearchSuggestions.value =
+          prefs.getBool(_keyWebSearchSuggestions) ?? true;
+      final String? rawAutoClear = prefs.getString(_keyWebAutoClearInterval);
+      if (rawAutoClear != null) {
+        webAutoClearDays.value =
+            WebAutoClearInterval.values.asNameMap()[rawAutoClear] ??
+                WebAutoClearInterval.off;
+      }
+      final String? rawAutoClearTiming =
+          prefs.getString(_keyWebAutoClearTiming);
+      if (rawAutoClearTiming != null) {
+        webAutoClearTiming.value =
+            WebAutoClearTiming.values.asNameMap()[rawAutoClearTiming] ??
+                WebAutoClearTiming.onOpen;
+      }
       autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
       mouseOverPreview.value = prefs.getBool(_keyMouseOverPreview) ?? false;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
@@ -197,6 +274,9 @@ class SettingsService {
       titleBarMode.value = TitleBarMode.borderless;
       resumeMode.value = ResumeMode.all;
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
+      webSearchSuggestions.value = true;
+      webAutoClearDays.value = WebAutoClearInterval.off;
+      webAutoClearTiming.value = WebAutoClearTiming.onOpen;
       autoEq.value = false;
       mouseOverPreview.value = false;
       subtitleApiKey.value = '';
@@ -239,6 +319,44 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyFolderAutoloadMode, mode.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Web browser — the Settings → Web "Search suggestions" toggle (web.md ·
+  /// address bar lock). Applies instantly and persists; it gates ONLY the
+  /// keystrokes-to-Google leg of the address bar — history + favourites
+  /// keep answering either way.
+  Future<void> setWebSearchSuggestions(bool on) async {
+    webSearchSuggestions.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyWebSearchSuggestions, on);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Web browser — the auto-clear interval (see [WebAutoClearInterval]).
+  /// Switching it Off never wipes anything, and switching it back resumes
+  /// the schedule (the same safety rule the Resume mode follows).
+  Future<void> setWebAutoClearDays(WebAutoClearInterval interval) async {
+    webAutoClearDays.value = interval;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyWebAutoClearInterval, interval.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Web browser — the auto-clear timing (see [WebAutoClearTiming]).
+  Future<void> setWebAutoClearTiming(WebAutoClearTiming timing) async {
+    webAutoClearTiming.value = timing;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyWebAutoClearTiming, timing.name);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }

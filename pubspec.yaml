@@ -55,6 +55,14 @@ dependencies:
   # Lightweight key-value storage for settings (title bar mode, …).
   shared_preferences: ^2.3.0
 
+  # ── Phase 6: built-in web browser (web.md) ──────────────────────────────
+  # SALU's browser wraps the WebView2 runtime every Windows 10/11 already
+  # ships — SALU never bundles its own browser engine. The package talks to
+  # the system Edge/Chromium through `WebView2Loader.dll`; when the runtime
+  # is missing, tab startup fails per-tab and the browser stays on its
+  # start page (never crashes the player).
+  webview_windows: ^0.4.0
+
   # Utilities.
   path: ^1.9.0
 

@@ -200,6 +200,27 @@ class WindowStateService with WindowListener {
     }
   }
 
+  /// Fullscreen SET (web.md · "Fullscreen is handed to the web page").
+  /// The browser's page-fullscreen hand-off commands a STATE, not a flip:
+  /// reality already matching [on] makes this a no-op, so a late "exit"
+  /// can never fire against a window that was never handed over.
+  Future<void> setFullscreen(bool on) async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await syncState();
+      if (isFullscreen.value != on) {
+        await windowManager.setFullScreen(on);
+        await syncState();
+      }
+    } catch (_) {
+      // A window command that can't land leaves reality as the truth —
+      // the next [syncState] keeps every notifier honest.
+    } finally {
+      _busy = false;
+    }
+  }
+
   /// Maximize / restore toggle. While fullscreen it takes the clean
   /// path — `setFullScreen(false)` back to the pre-fullscreen state — and
   /// never restores around the fullscreen system.

@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/browser_service.dart';
 import 'core/channel_favourites_service.dart';
 import 'core/channel_load_service.dart';
 import 'core/folder_autoload_service.dart';
@@ -117,8 +118,18 @@ Future<void> main(List<String> args) async {
   // read before the first frame, so a launch straight into a file lands on
   // the remembered curve instead of flashing a Flat one (eq_imp.md §6).
   await TuneService.instance.load();
+  // The browser's two stores — favourites + browsing history — read the
+  // same way, before the first frame (web.md: the star and the dropdown
+  // must be complete the moment Web mode can first be picked).
+  await BrowserService.instance.load();
 
   runApp(SaluApp(initialFilePath: extractMediaPathFromArgs(args)));
+
+  // The WebView2 environment is heavy and Web mode may never be picked —
+  // so it boots AFTER the first frame, never blocking it, exactly once
+  // (BrowserService.warmUp caches). By the time the toggle can be clicked
+  // the first page is ready to start instantly.
+  BrowserService.instance.scheduleStartupWarmUp();
 }
 
 /// Intercepts the window close: flush the resume store so the last
@@ -165,6 +176,17 @@ class _CloseGuard with WindowListener {
     try {
       // A bookmark tapped seconds before the × must never be lost.
       await ChannelFavouritesService.instance.flush().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
+    try {
+      // The browser's own stores flush, and the auto-clear "on player
+      // closing" timing runs here: the due-date check + the browser's
+      // own data go now, the locked profile folder is handed to the next
+      // startup (web.md · Auto-clear). SALU's own memory is a different
+      // store — touched by the steps above, never by this one.
+      await BrowserService.instance.prepareClose().timeout(
         const Duration(seconds: 2),
         onTimeout: () {},
       );

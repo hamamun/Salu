@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/audio_display_service.dart';
+import '../../core/browser_service.dart';
 import '../../core/channel_load_service.dart';
 import '../../core/drop_handler.dart';
 import '../../core/folder_autoload_service.dart';
@@ -32,6 +33,8 @@ import '../widgets/custom_title_bar.dart';
 import '../widgets/eq_curve_overlay.dart';
 import '../widgets/live_light.dart';
 import '../widgets/settings_dialog.dart';
+import '../widgets/web_mode_toggle.dart';
+import 'browser_screen.dart';
 import 'video_screen.dart';
 
 /// SALU's primary (and only) screen — a borderless dark canvas hosting the
@@ -62,6 +65,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// The one owner of the window's shape (mini.md §9).
   final WindowStateService _windows = WindowStateService.instance;
+
+  /// Player · Web — which surface owns the window (web.md). In Web mode
+  /// the video tree is not built at all, exactly like mini's rule: the
+  /// browser fills the stage, the OSC and panels are out of work.
+  final BrowserService _browser = BrowserService.instance;
 
   /// Unified global activity state: moving the mouse anywhere over the
   /// window — or pressing a non-transport key — reveals the chrome;
@@ -115,6 +123,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // The full window and the mini bar are two different trees — swapping
     // between them tears one down and builds the other (mini.md §8 · §9).
     _windows.mode.addListener(_onWindowModeChanged);
+    // Player · Web swaps the full tree's CONTENT the same way: the video
+    // canvas, the OSC and the panels step out while the browser is on
+    // stage (web.md — "No SALU media controls in Web mode").
+    _browser.mode.addListener(_onSaluModeChanged);
     // While transient UI (open pill, URL modal) is up, the chrome must
     // not auto-hide beneath it; when the last lock releases, restart the
     // countdown fresh.
@@ -154,6 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _hideTimer?.cancel();
     _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
     _windows.mode.removeListener(_onWindowModeChanged);
+    _browser.mode.removeListener(_onSaluModeChanged);
     ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
     _player.transportState.removeListener(_onTransportStateChanged);
     super.dispose();
@@ -200,6 +213,71 @@ class _HomeScreenState extends State<HomeScreen> {
     _osd.dismiss();
   }
 
+  /// Player · Web — entering Web mode closes every player surface the same
+  /// way mini does (web.md: "No SALU media controls in the browser"; the
+  /// panels would be waiting behind a page otherwise) and empties the
+  /// deck, so no whisper flashes over the first navigation.
+  void _onSaluModeChanged() {
+    if (_browser.isWeb) {
+      PanelService.instance.closePlaylist();
+      PanelService.instance.closeTrackPanel();
+      PanelService.instance.closeTunePanel();
+      _osd.dismiss();
+    }
+    setState(() {});
+    // Coming back to Player mode re-arms the chrome countdown the web
+    // branch paused; entering Web the call is simply ignored.
+    _restartHideTimer();
+  }
+
+  /// The full window in Web mode: the title strip — Player · Web switch at
+  /// its LEFT end, the active tab's title centered, settings and the window
+  /// buttons unchanged — and below it the browser, all the way to the
+  /// edges. While a page owns the screen (the fullscreen hand-off) even the
+  /// strip yields; only the web view remains (web.md).
+  Widget _buildWeb() {
+    return Scaffold(
+      backgroundColor: AppColors.videoBackdrop,
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: _onKeyEvent,
+        child: ListenableBuilder(
+          listenable: _browser.pageFullscreen,
+          builder: (BuildContext context, Widget? _) {
+            final bool pageOwnsScreen = _browser.pageFullscreen.value;
+            return Column(
+              children: <Widget>[
+                if (!pageOwnsScreen)
+                  Container(
+                    color: const Color(0xF0121212),
+                    child: ValueListenableBuilder<String?>(
+                      valueListenable: _browser.stripTitle,
+                      builder:
+                          (BuildContext context, String? title, Widget? _) {
+                        return CustomTitleBar(
+                          visible: true,
+                          immersive: true,
+                          title: title,
+                          onSettings: _openSettings,
+                          leading: const WebModeToggle(),
+                          showMini: false,
+                        );
+                      },
+                    ),
+                  ),
+                Expanded(
+                  child: BrowserScreen(
+                    chromeVisible: !pageOwnsScreen,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   /// The pointer entered the chrome block — keep it visible while the user
   /// works the controls, no matter how still the mouse is.
   void _onChromeEnter() {
@@ -215,6 +293,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _restartHideTimer() {
     _hideTimer?.cancel();
+
+    // Web mode's title strip never auto-hides — there is no OSC block to
+    // tuck away; the strip stays until the page takes the screen (which
+    // hides it by force, not by timer).
+    if (_browser.isWeb) return;
 
     final TitleBarMode mode = _settings.titleBarMode.value;
     // "Locked" — the bar never hides itself; no timer needed.
@@ -332,6 +415,20 @@ class _HomeScreenState extends State<HomeScreen> {
     // simply out of work — nothing below this line is reachable there.
     if (_windows.isMini) {
       return _onMiniKeyEvent(key, down: down, repeat: repeat);
+    }
+
+    if (_browser.isWeb) {
+      if (key == LogicalKeyboardKey.keyM) {
+        // No room for a browser in a 32-px strip (mini.md §8) — while Web
+        // holds the stage the mini toggle deliberately does nothing.
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.escape) {
+        _wakeChrome();
+      }
+      // Everything else a player key could have done (space, arrows,
+      // Ctrl+E…) is out of work while the browser has the stage.
+      return KeyEventResult.ignored;
     }
 
     // Esc — dismisses the topmost popup first (follow.md rule 3):
@@ -639,8 +736,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// The full window: video canvas, fused top chrome, panels, deck — the
-  /// tree that has always been there.
+  /// tree that has always been there. In Web mode the browser paints this
+  /// window instead (web.md) — a tree swap, mini's rule reused.
   Widget _buildFull() {
+    if (_browser.isWeb) return _buildWeb();
+
     final bool chromeVisible = _chromeVisible || _dropHovering;
 
     return Scaffold(
