@@ -29,8 +29,10 @@ Implementation notes, lock by lock:
   edit + delete. Store ≤ 15 Web Bookmarks, `shared_preferences`, instant.
 - **Clear** — accessible via the standard browser (⋮) menu ("Clear browsing
   data…"); the dialog is styled in SALU's clean dark palette with a dedicated
-  header, icon chips, Segoe typography, and live data footprint badges
-  (item counts / KB / MB) for each category like Edge and Chrome;
+  header, Segoe typography, and live data footprint badges
+  (item counts / KB / MB) for each category like Edge and Chrome; every mark
+  is SALU-drawn and monochrome (the follow.md recipe — nothing is ever boxed
+  behind an icon);
   history/cookies/cache/own-store deletes apply instantly, and everything a
   live WebView2 profile locks is purged at the next startup (the only moment
   a folder delete is guaranteed). Footprint badges measure only SALU's own

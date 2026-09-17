@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
+import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 
 /// The browser menu — the ⋮ at the row's right edge (Chrome's ⋮ slot):
 /// the standard shelf every browser carries: new tab, zoom, desktop
@@ -74,7 +76,6 @@ class _BrowserMenuState extends State<BrowserMenu> {
             children: <Widget>[
               _MenuRow(
                 label: 'New tab',
-                hint: 'Ctrl+T',
                 onTap: widget.onNewTab,
               ),
               const _MenuDivider(),
@@ -85,7 +86,6 @@ class _BrowserMenuState extends State<BrowserMenu> {
               ],
               _MenuRow(
                 label: 'Find in page…',
-                hint: 'Ctrl+F',
                 enabled: page,
                 onTap: widget.onFind,
               ),
@@ -95,12 +95,14 @@ class _BrowserMenuState extends State<BrowserMenu> {
               ),
               _MenuRow(
                 label: 'Downloads',
-                trailing: Icon(
-                  _downloadsOpen
-                      ? Icons.expand_less
-                      : Icons.expand_more,
-                  size: 16,
-                  color: AppColors.textSecondary,
+                trailing: IconTheme(
+                  data: const IconThemeData(color: AppColors.textSecondary),
+                  child: AnimatedRotation(
+                    turns: _downloadsOpen ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOut,
+                    child: const RevealChevronMark(up: false, size: 13),
+                  ),
                 ),
                 onTap: () =>
                     setState(() => _downloadsOpen = !_downloadsOpen),
@@ -191,14 +193,12 @@ class _MenuDivider extends StatelessWidget {
 class _MenuRow extends StatefulWidget {
   const _MenuRow({
     required this.label,
-    this.hint,
     this.trailing,
     this.enabled = true,
     this.onTap,
   });
 
   final String label;
-  final String? hint;
   final Widget? trailing;
   final bool enabled;
   final VoidCallback? onTap;
@@ -237,16 +237,6 @@ class _MenuRowState extends State<_MenuRow> {
                   ),
                 ),
               ),
-              if (widget.hint != null)
-                Text(
-                  widget.hint!,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: live
-                        ? AppColors.textSecondary
-                        : AppColors.textSecondary.withAlpha(140),
-                  ),
-                ),
               if (widget.trailing != null) ...<Widget>[
                 const SizedBox(width: 6),
                 widget.trailing!,
@@ -312,43 +302,27 @@ class _ZoomRow extends StatelessWidget {
   }
 }
 
-class _ZoomBtn extends StatefulWidget {
+/// Zoom − / + — glyphs, not marks, but they keep the one SALU recipe:
+/// light up + grow on hover, sink on press, nothing ever drawn behind
+/// them (follow.md · §2; no hover box).
+class _ZoomBtn extends StatelessWidget {
   const _ZoomBtn({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
 
   @override
-  State<_ZoomBtn> createState() => _ZoomBtnState();
-}
-
-class _ZoomBtnState extends State<_ZoomBtn> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.surfaceHighlight : null,
-            borderRadius: BorderRadius.circular(7),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            widget.label,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+    return SaluIconButton(
+      size: 28,
+      onTap: onTap,
+      child: Builder(
+        builder: (BuildContext context) => Text(
+          label,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: IconTheme.of(context).color ?? AppColors.iconIdle,
           ),
         ),
       ),

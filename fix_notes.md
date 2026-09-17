@@ -275,3 +275,41 @@ tests in `test/web_data_footprint_test.dart`.
   wiped next time SALU starts" note. Next startup's purge then
   physically removes the folder before the environment exists, and the
   badges measure the fresh profile.
+
+## 10 · Web section button audit: hover boxes + stock icons off-contract
+**Status:** FIXED 2026-09-17 — audit of every web-section control against
+follow.md §1.4/§2/§6; touches `browser_clear_dialog.dart`, `browser_menu.dart`,
+`browser_find_bar.dart`, `browser_address_bar.dart`, `browser_tab_strip.dart`,
+`web_marks.dart` (+4 new marks).
+
+**Symptom:** most web buttons were SALU-styled, but a few painted filled
+colour / hover boxes around their icons and used stock Material glyphs.
+
+**Fixes (icon by icon):**
+- Clear dialog × — had a rounded hover box → now `SaluIconButton` +
+  `CloseMark` (the box-having `_CloseIconButton` class is deleted).
+- Clear dialog header — accent chip + stock "cleaning services" icon →
+  the family `BroomMark` leading the title, like every other panel header.
+- Clear dialog category rows — accent stock icons → monochrome SALU marks
+  (history `ClockMark` · cookies new `CookieMark` · cache `ReloadMark` ·
+  downloads new `DownloadMark`); the size badge's blue-tint border goes
+  neutral; checkbox tick is `TickMark`.
+- Clear dialog notes — stock shield / hourglass in accent → new `ShieldMark`
+  / `HourglassMark`, monochrome.
+- ⋮ menu Zoom −/+ — rounded hover boxes → SALU recipe via `SaluIconButton`
+  (light-up + 1.06 hover + 0.90 press, nothing behind).
+- ⋮ menu Downloads twist — stock expand arrows → `RevealChevronMark` with
+  the family's animated half-turn.
+- ⋮ menu printed "Ctrl+T / Ctrl+F" hints — removed (follow.md hard rule 2:
+  shortcuts work silently, never printed).
+- Find bar prev/next — stock keyboard arrows → `RevealChevronMark` up/down.
+- Address-bar blocked-pop-up badge — a permanently filled pill behind the
+  mark → bare `PopupMark` + count on the SALU recipe (mark and number light
+  up together, nothing drawn behind).
+- Tab strip + — fixed-ink painter (never glowed on hover) → the family
+  `PlusMark`, IconTheme-driven.
+
+**Deliberately untouched:** the shared `settings_dialog.dart` (its tile/switch
+language is one design across every tab — player tabs included), modal
+confirm text buttons (Chrome/Edge-style confirmation pattern), and the
+logo-missing fallback glyph on the start page.

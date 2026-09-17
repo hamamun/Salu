@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
 import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 import 'web_marks.dart';
 
 /// Find-in-page — the ⋮ menu's "Find in page…" (Chrome's `Ctrl+F` bar):
@@ -103,13 +104,13 @@ class BrowserFindBar extends StatelessWidget {
                 size: 26,
                 onTap: onPrev,
                 tooltip: 'Previous',
-                child: const Icon(Icons.keyboard_arrow_up, size: 18),
+                child: const RevealChevronMark(up: true, size: 15),
               ),
               SaluIconButton(
                 size: 26,
                 onTap: onNext,
                 tooltip: 'Next',
-                child: const Icon(Icons.keyboard_arrow_down, size: 18),
+                child: const RevealChevronMark(up: false, size: 15),
               ),
               SaluIconButton(
                 size: 26,

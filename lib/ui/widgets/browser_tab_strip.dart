@@ -6,6 +6,7 @@ import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
 import '../screens/browser_screen.dart' show kWebStripHeight;
 import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 import 'web_marks.dart';
 
 /// The tab strip — directly below the title bar (web.md), chromeless like
@@ -244,39 +245,16 @@ class _PlusTab extends StatelessWidget {
     return SizedBox(
       width: 34,
       child: Center(
+        // The family's thin plus, reading the ambient IconTheme so the
+        // SALU hover recipe lights it up (never a fixed-ink painter).
         child: SaluIconButton(
           size: 26,
           enabled: enabled,
           onTap: onTap,
           tooltip: 'New tab',
-          child: CustomPaint(
-            size: const Size.square(13),
-            painter: _PlusPainter(
-                enabled ? AppColors.textPrimary : AppColors.iconIdle),
-          ),
+          child: const PlusMark(size: 14),
         ),
       ),
     );
   }
-}
-
-class _PlusPainter extends CustomPainter {
-  const _PlusPainter(this.ink);
-
-  final Color ink;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..color = ink
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round;
-    final double a = size.width * 0.16, b = size.width * 0.84;
-    final double m = size.width * 0.5;
-    canvas.drawLine(Offset(m, a), Offset(m, b), paint);
-    canvas.drawLine(Offset(a, m), Offset(b, m), paint);
-  }
-
-  @override
-  bool shouldRepaint(_PlusPainter old) => old.ink != ink;
 }

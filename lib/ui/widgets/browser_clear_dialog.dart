@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/web/web_data_control.dart';
 import '../../theme/app_theme.dart';
+import 'salu_icon_button.dart';
+import 'salu_marks.dart';
+import 'web_marks.dart';
 
 /// The Clear dialog — Chrome/Edge-shaped, SALU-skinned (web.md · Clear data —
 /// LOCKED): exactly four items, all of it browser-owned data —
@@ -160,11 +163,11 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Padding(
-                              padding: EdgeInsets.only(top: 1),
-                              child: Icon(
-                                Icons.shield_outlined,
-                                size: 16,
-                                color: AppColors.accent,
+                              padding: EdgeInsets.only(top: 2),
+                              child: IconTheme(
+                                data: IconThemeData(
+                                    color: AppColors.textSecondary),
+                                child: ShieldMark(size: 14),
                               ),
                             ),
                             SizedBox(width: 10),
@@ -187,7 +190,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                         title: 'Browsing history',
                         subtitle: 'Clears visits from history and omnibox suggestions',
                         sizeText: _measuring ? '…' : _footprint.historyLabel,
-                        icon: Icons.history_rounded,
+                        mark: const ClockMark(size: 15),
                         value: _history,
                         onChanged: (bool v) => setState(() => _history = v),
                       ),
@@ -196,7 +199,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                         title: 'Cookies & site data',
                         subtitle: 'Signs you out of most websites',
                         sizeText: _measuring ? '…' : _footprint.cookiesLabel,
-                        icon: Icons.cookie_outlined,
+                        mark: const CookieMark(size: 15),
                         value: _cookies,
                         onChanged: (bool v) => setState(() => _cookies = v),
                       ),
@@ -205,7 +208,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                         title: 'Cached images & files',
                         subtitle: 'Frees up disk space; some sites may load slower next visit',
                         sizeText: _measuring ? '…' : _footprint.cacheLabel,
-                        icon: Icons.cached_rounded,
+                        mark: const ReloadMark(size: 15),
                         value: _cache,
                         onChanged: (bool v) => setState(() => _cache = v),
                       ),
@@ -214,7 +217,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                         title: 'Downloads history',
                         subtitle: 'Clears the list of downloaded files (files stay on PC)',
                         sizeText: 'Records only',
-                        icon: Icons.download_done_rounded,
+                        mark: const DownloadMark(size: 15),
                         value: _downloads,
                         onChanged: (bool v) => setState(() => _downloads = v),
                       ),
@@ -233,11 +236,11 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
                               Padding(
-                                padding: EdgeInsets.only(top: 1),
-                                child: Icon(
-                                  Icons.hourglass_top_rounded,
-                                  size: 14,
-                                  color: AppColors.accent,
+                                padding: EdgeInsets.only(top: 2),
+                                child: IconTheme(
+                                  data: IconThemeData(
+                                      color: AppColors.textSecondary),
+                                  child: HourglassMark(size: 13),
                                 ),
                               ),
                               SizedBox(width: 9),
@@ -279,21 +282,10 @@ class _WebClearDialogState extends State<_WebClearDialog> {
       padding: const EdgeInsets.fromLTRB(20, 16, 12, 14),
       child: Row(
         children: <Widget>[
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: const Color(0x1F4C9EEB),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.cleaning_services_rounded,
-              size: 17,
-              color: AppColors.accent,
-            ),
-          ),
-          const SizedBox(width: 12),
+          // The family's own mark leads the header, exactly like the
+          // History / Favourites / Site panels — no chip, no stock icon.
+          const BroomMark(size: 16),
+          const SizedBox(width: 10),
           const Text(
             'Clear browsing data',
             style: TextStyle(
@@ -304,8 +296,11 @@ class _WebClearDialogState extends State<_WebClearDialog> {
             ),
           ),
           const Spacer(),
-          _CloseIconButton(
-            onPressed: () => Navigator.of(context).pop(),
+          SaluIconButton(
+            size: 28,
+            onTap: () => Navigator.of(context).pop(),
+            tooltip: 'Close',
+            child: const CloseMark(size: 12),
           ),
         ],
       ),
@@ -376,7 +371,7 @@ class _ItemRow extends StatefulWidget {
     required this.title,
     required this.subtitle,
     required this.sizeText,
-    required this.icon,
+    required this.mark,
     required this.value,
     required this.onChanged,
   });
@@ -384,7 +379,10 @@ class _ItemRow extends StatefulWidget {
   final String title;
   final String subtitle;
   final String sizeText;
-  final IconData icon;
+
+  /// The category's SALU mark (monochrome — never a stock icon, never a
+  /// coloured chip; follow.md · rules 4 + 6).
+  final Widget mark;
   final bool value;
   final ValueChanged<bool> onChanged;
 
@@ -417,11 +415,15 @@ class _ItemRowState extends State<_ItemRow> {
               // Checkbox mark
               _SaluCheckbox(checked: widget.value),
               const SizedBox(width: 12),
-              // Leading category icon
-              Icon(
-                widget.icon,
-                size: 18,
-                color: widget.value ? AppColors.accent : AppColors.textSecondary,
+              // Leading category mark — monochrome, SALU-drawn; it lights
+              // with the row's checked state, it is never coloured.
+              IconTheme(
+                data: IconThemeData(
+                  color: widget.value
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                ),
+                child: widget.mark,
               ),
               const SizedBox(width: 12),
               // Titles
@@ -450,17 +452,13 @@ class _ItemRowState extends State<_ItemRow> {
                 ),
               ),
               const SizedBox(width: 12),
-              // Footprint badge
+              // Footprint badge — quiet and monochrome like everything else
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: widget.sizeText == 'None'
-                        ? AppColors.surfaceOutline
-                        : const Color(0x334C9EEB),
-                  ),
+                  border: Border.all(color: AppColors.surfaceOutline),
                 ),
                 child: Text(
                   widget.sizeText,
@@ -503,53 +501,13 @@ class _SaluCheckbox extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: checked
-          ? const Icon(
-              Icons.check_rounded,
-              size: 14,
-              color: Colors.white,
+          ? const IconTheme(
+              data: IconThemeData(color: Colors.white),
+              child: TickMark(size: 12),
             )
           : null,
     );
   }
 }
 
-class _CloseIconButton extends StatefulWidget {
-  const _CloseIconButton({required this.onPressed});
 
-  final VoidCallback onPressed;
-
-  @override
-  State<_CloseIconButton> createState() => _CloseIconButtonState();
-}
-
-class _CloseIconButtonState extends State<_CloseIconButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.surfaceHighlight : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.close,
-            size: 17,
-            color: _hovered ? Colors.white : AppColors.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-}

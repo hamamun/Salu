@@ -326,38 +326,34 @@ class _BlockedBadge extends StatelessWidget {
       valueListenable: count,
       builder: (BuildContext context, int n, Widget? _) {
         if (n <= 0) return const SizedBox.shrink();
-        return Tooltip(
-          message: 'Pop-ups blocked',
-          waitDuration: const Duration(milliseconds: 400),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onTap,
-              child: Container(
-                margin: const EdgeInsets.only(right: 4),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceHighlight,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Row(
+        // The badge is a mark + its count, lit by the one SALU recipe —
+        // nothing is drawn behind it (follow.md · §2, no filled pill).
+        return Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: SaluIconButton(
+            size: 26,
+            onTap: onTap,
+            tooltip: 'Pop-ups blocked',
+            child: Builder(
+              builder: (BuildContext context) {
+                final Color ink =
+                    IconTheme.of(context).color ?? AppColors.iconIdle;
+                return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    const PopupMark(size: 12),
-                    const SizedBox(width: 5),
+                    const PopupMark(size: 13),
+                    const SizedBox(width: 4),
                     Text(
                       '$n',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: ink,
                       ),
                     ),
                   ],
-                ),
-              ),
+                );
+              },
             ),
           ),
         );

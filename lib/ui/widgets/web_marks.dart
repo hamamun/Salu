@@ -663,3 +663,199 @@ class _MenuPainter extends CustomPainter {
   @override
   bool shouldRepaint(_MenuPainter old) => old.ink != ink;
 }
+
+/// Cookie — the Clear dialog's "Cookies & site data" category: a stroked
+/// circle with three filled crumbs. Monochrome like the whole family.
+class CookieMark extends StatelessWidget {
+  const CookieMark({super.key, this.size = 15});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _CookiePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _CookiePainter extends CustomPainter {
+  const _CookiePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint line = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..style = PaintingStyle.stroke;
+    final Paint dot = Paint()
+      ..color = ink
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(s * 0.5, s * 0.5), s * 0.40, line);
+    canvas.drawCircle(Offset(s * 0.38, s * 0.36), s * 0.055, dot);
+    canvas.drawCircle(Offset(s * 0.62, s * 0.47), s * 0.055, dot);
+    canvas.drawCircle(Offset(s * 0.44, s * 0.63), s * 0.055, dot);
+  }
+
+  @override
+  bool shouldRepaint(_CookiePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Download — the Clear dialog's "Downloads history" category: a stem
+/// falling into a tray rule.
+class DownloadMark extends StatelessWidget {
+  const DownloadMark({super.key, this.size = 15});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _DownloadPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _DownloadPainter extends CustomPainter {
+  const _DownloadPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(p(12, 4.5), p(12, 14.5), paint);
+    canvas.drawPath(
+      Path()
+        ..moveTo(p(8.5, 11).dx, p(8.5, 11).dy)
+        ..lineTo(p(12, 14.5).dx, p(12, 14.5).dy)
+        ..lineTo(p(15.5, 11).dx, p(15.5, 11).dy),
+      paint,
+    );
+    canvas.drawLine(p(5.5, 19), p(18.5, 19), paint);
+  }
+
+  @override
+  bool shouldRepaint(_DownloadPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Shield — the Clear dialog's protection note: a faceted outline, drawn
+/// in the family's straight-rule language (never a stock badge).
+class ShieldMark extends StatelessWidget {
+  const ShieldMark({super.key, this.size = 15});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _ShieldPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _ShieldPainter extends CustomPainter {
+  const _ShieldPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawPath(
+      Path()
+        ..moveTo(p(12, 3.5).dx, p(12, 3.5).dy)
+        ..lineTo(p(18.5, 5.8).dx, p(18.5, 5.8).dy)
+        ..lineTo(p(18.5, 11).dx, p(18.5, 11).dy)
+        ..lineTo(p(12, 20.5).dx, p(12, 20.5).dy)
+        ..lineTo(p(5.5, 11).dx, p(5.5, 11).dy)
+        ..lineTo(p(5.5, 5.8).dx, p(5.5, 5.8).dy)
+        ..close(),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ShieldPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Hourglass — the Clear dialog's queued-purge note: two bars, two
+/// triangles meeting in the pinch.
+class HourglassMark extends StatelessWidget {
+  const HourglassMark({super.key, this.size = 14});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _HourglassPainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _HourglassPainter extends CustomPainter {
+  const _HourglassPainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(p(7, 4.5), p(17, 4.5), paint);
+    canvas.drawLine(p(7, 19.5), p(17, 19.5), paint);
+    canvas.drawPath(
+      Path()
+        ..moveTo(p(8.5, 4.5).dx, p(8.5, 4.5).dy)
+        ..lineTo(p(12, 12).dx, p(12, 12).dy)
+        ..lineTo(p(15.5, 19.5).dx, p(15.5, 19.5).dy),
+      paint,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(p(15.5, 4.5).dx, p(15.5, 4.5).dy)
+        ..lineTo(p(12, 12).dx, p(12, 12).dy)
+        ..lineTo(p(8.5, 19.5).dx, p(8.5, 19.5).dy),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HourglassPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
