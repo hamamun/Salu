@@ -27,14 +27,17 @@ Implementation notes, lock by lock:
   Change folder · Remove), removals answer with the standard 5 s Undo.
   Hub = ♥ left of the tab row, slide-down list with search, folder groups,
   edit + delete. Store ≤ 15 Web Bookmarks, `shared_preferences`, instant.
-- **Clear** — broom mark just OUTSIDE the URL bar's right edge; the dialog
-  is the four locked checkboxes; history/cookies/cache/own-store deletes
-  apply instantly, and everything a live WebView2 profile locks is purged
-  at the next startup (the only moment a folder delete is guaranteed).
-  SALU's own data (resume, saved streams) lives in different stores and is
-  never in scope. Auto-clear = Settings → Web (off default · 7/15/30 days ·
-  open/close/both; “on closing” = the due-date sweep + stores flush at the
-  close guard, the locked-folder part running at next open).
+- **Clear** — accessible via the standard browser (⋮) menu ("Clear browsing
+  data…"); the dialog is styled in SALU's clean dark palette with a dedicated
+  header, icon chips, Segoe typography, and live data footprint badges
+  (item counts / KB / MB) for each category like Edge and Chrome;
+  history/cookies/cache/own-store deletes apply instantly, and everything a
+  live WebView2 profile locks is purged at the next startup (the only moment
+  a folder delete is guaranteed). SALU's own data (resume, saved streams)
+  lives in different stores and is never in scope. Auto-clear = Settings → Web
+  (off default · 7/15/30 days · open/close/both; “on closing” = the due-date
+  sweep + stores flush at the close guard, the locked-folder part running at
+  next open).
 - **Mode + window** — Player · Web switch top-left of the strip in both
   modes; Web draws no SALU media controls and pauses playback on entry;
   page fullscreen hides SALU's whole chrome for the web view and Esc
@@ -100,7 +103,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 | 2026-09-16 | **Navigation buttons — LOCKED** | **Home · Back · Forward · Reload** (icons), outside and **left** of the URL bar. Home navigates the current website to its root page (for example, a YouTube video returns to YouTube home); a fresh tab remains on SALU Web's own start page. |
 | 2026-09-16 | **Favourite star — LOCKED** | **Inside the URL bar, left corner.** **Two-state:** outline = not saved, filled = saved (chosen left, not right, so the user doesn't cross a big screen). Clicking either state **slides out the favourite panel**: outline → save flow; filled → edit flow (Rename / Change folder / Remove). |
 | 2026-09-16 | **Favourites hub — LOCKED** | Icon button on the **left of the tab bar** opens a **slide-down list** of all favourites, with **edit / delete / grouping** and search. |
-| 2026-09-16 | **Clear data — LOCKED** | "Clear" button at the **right edge, outside** the URL bar → dialog with **checkboxes** (Chrome/Edge style): *Browsing history · Cookies & site data · Cached images & files · Downloads*. Clearing never touches SALU's own data (resume history / saved streams). |
+| 2026-09-16 | **Clear data — LOCKED** | Accessed via the **⋮ browser menu** ("Clear browsing data…") → dialog with **checkboxes and size metrics** (Chrome/Edge style): *Browsing history · Cookies & site data · Cached images & files · Downloads history*. Clearing never touches SALU's own data (resume history / saved streams). |
 | 2026-09-16 | **Auto-clear — LOCKED** | Settings option, **Off by default**. Interval choices: **7 / 15 / 30 days**. Timing choice: **on player opening / on player closing / both**. ("Player" here = SALU the app; close-time clearing is the most reliable.) |
 | 2026-09-16 | **Web view area — LOCKED** | The main WebView fills everything **below the URL bar**. |
 | 2026-09-16 | **Empty state / last tab — LOCKED** | When the **last tab closes**, SALU stays in Web mode: the tab bar shows **only the `+`**, and the web view area shows a **start page with the SALU logo + "SALU Web Browser" text**. That start page is a plain Flutter widget (not a WebView), so it uses no WebView/RAM. |
@@ -120,7 +123,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 ├──────────────────────────────────────────────────────────┤
 │  ♥Fav  ▢ Tab  ▢ Tab  ▢ Tab  [ + ]                       │
 ├──────────────────────────────────────────────────────────┤
-│  ⌂ ⇦ ⇨ ⟳   [ 🔒 ☆ URL + suggestions………… ⧉ ]   🧹Clear  ⋮  │
+│  ⌂ ⇦ ⇨ ⟳   [ 🔒 ☆ URL + suggestions………… ⧉ ]         ⋮  │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
 │                    WebView (the page)                    │

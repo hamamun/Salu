@@ -190,7 +190,10 @@ class WebTab {
   }
 
   /// Shows SALU's own start page for a fresh tab or an empty browser state.
-  void showStartPage() => startMode.value = true;
+  void showStartPage() {
+    startMode.value = true;
+    if (blocked.value.isNotEmpty) blocked.value = const <BlockedPopup>[];
+  }
 
   // ── Zoom + Desktop mode (the ⋮ menu) ───────────────────────────────────
 

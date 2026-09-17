@@ -12,8 +12,7 @@ import 'web_marks.dart';
 /// navigation to its LEFT (Home · Back · Forward · Reload), the site
 /// padlock + the favourite STAR inside its LEFT corner (the padlock names
 /// the site, the star saves it), the held-back pop-up badge in its RIGHT
-/// corner while a page has any, and the Clear button just OUTSIDE its
-/// right edge — because it clears the data of whatever the bar holds.
+/// corner while a page has any, and the ⋮ menu beside it.
 ///
 /// Typing NEVER loads a page (the lock): keystrokes debounce into the
 /// suggestion dropdown — Google while-they-type merged with SALU's own
@@ -36,7 +35,7 @@ class BrowserAddressBar extends StatefulWidget {
     required this.onSiteInfo,
     required this.onBlockedTap,
     required this.onMenu,
-    required this.onClearData,
+    this.onClearData,
     required this.onBack,
     required this.onForward,
     required this.onReload,
@@ -77,7 +76,7 @@ class BrowserAddressBar extends StatefulWidget {
 
   /// ⋮ tap: the browser menu (zoom, find, history, …).
   final VoidCallback onMenu;
-  final VoidCallback onClearData;
+  final VoidCallback? onClearData;
   final VoidCallback onBack;
   final VoidCallback onForward;
   final VoidCallback onReload;
@@ -158,15 +157,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           const SizedBox(width: 7),
           Expanded(child: _buildField()),
           const SizedBox(width: 7),
-          // Clear, right at the edge and OUTSIDE the bar (web.md) — and
-          // the ⋮ menu beside it (zoom, find, history, …).
-          SaluIconButton(
-            size: 27,
-            onTap: widget.onClearData,
-            tooltip: 'Clear browsing data',
-            child: const BroomMark(size: 16),
-          ),
-          const SizedBox(width: 2),
+          // ⋮ menu beside the omnibox (zoom, find, history, clear, settings).
           SaluIconButton(
             size: 27,
             onTap: widget.onMenu,
