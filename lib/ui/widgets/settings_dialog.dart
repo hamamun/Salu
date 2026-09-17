@@ -170,6 +170,23 @@ class _WebTab extends StatelessWidget {
           _WebSearchSuggestionsSwitch(),
           SizedBox(height: 28),
           Text(
+            'Page colours',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'What sites are told you prefer. SALU itself stays dark either '
+            'way. Takes effect the next time SALU starts.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _WebPageSchemePicker(),
+          SizedBox(height: 28),
+          Text(
             'Pop-ups',
             style: TextStyle(
               fontSize: 15,
@@ -355,6 +372,72 @@ class _WebPopupDefaultPicker extends StatelessWidget {
               onTap: () => SettingsService.instance
                   .setWebPopupDefault(WebPopupDefault.allow),
             ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Page colours — what `prefers-color-scheme` answers inside the browser.
+/// Light is the default so pages match Edge; "Follow Windows" is the raw
+/// WebView2 behaviour (dark app mode ⇒ dark sites).
+class _WebPageSchemePicker extends StatelessWidget {
+  const _WebPageSchemePicker();
+
+  static const List<
+      ({
+        WebPageScheme scheme,
+        IconData icon,
+        String label,
+        String helper,
+      })> _options =
+      <({
+        WebPageScheme scheme,
+        IconData icon,
+        String label,
+        String helper,
+      })>[
+    (
+      scheme: WebPageScheme.light,
+      icon: Icons.light_mode_outlined,
+      label: 'Light',
+      helper: 'Pages look the way Edge shows them.',
+    ),
+    (
+      scheme: WebPageScheme.dark,
+      icon: Icons.dark_mode_outlined,
+      label: 'Dark',
+      helper: 'Sites that carry a dark theme use it.',
+    ),
+    (
+      scheme: WebPageScheme.system,
+      icon: Icons.brightness_auto_outlined,
+      label: 'Follow Windows',
+      helper: 'Whatever Windows app mode says — dark PC, dark sites.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<WebPageScheme>(
+      valueListenable: SettingsService.instance.webPageScheme,
+      builder: (BuildContext context, WebPageScheme current, Widget? _) {
+        return Column(
+          children: <Widget>[
+            for (final ({WebPageScheme scheme, IconData icon, String label, String helper}) option in _options)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionTile(
+                  icon: option.icon,
+                  label: option.label,
+                  helper: option.helper,
+                  isDefault: option.scheme == WebPageScheme.light,
+                  selected: current == option.scheme,
+                  onTap: () => SettingsService.instance
+                      .setWebPageScheme(option.scheme),
+                ),
+              ),
           ],
         );
       },

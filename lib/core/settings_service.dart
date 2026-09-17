@@ -95,6 +95,32 @@ enum WebPopupDefault {
   allow,
 }
 
+/// What web pages are told about the viewer's colour preference
+/// (`prefers-color-scheme`) — Settings → Web → Page colours.
+///
+/// Left alone, WebView2 answers with the **Windows app mode**, so on a
+/// dark-mode PC every site that ships a dark theme (Pixabay, GitHub, …)
+/// renders dark inside SALU while Edge — which carries its own Appearance
+/// setting — shows the same page white. SALU's chrome is always dark; the
+/// pages it shows should look the way Edge shows them, so **Light is the
+/// default**. Takes effect when the browser engine next starts (SALU
+/// restart) — the WebView2 environment is created once per process.
+enum WebPageScheme {
+  light,
+  dark,
+  system,
+}
+
+/// Blink's `PreferredColorScheme` enum value for the scheme (kDark = 0,
+/// kLight = 1), or `null` for [WebPageScheme.system] — nothing overridden.
+extension WebPageSchemeBlinkValue on WebPageScheme {
+  int? get blinkValue => switch (this) {
+        WebPageScheme.light => 1,
+        WebPageScheme.dark => 0,
+        WebPageScheme.system => null,
+      };
+}
+
 /// SALU's persisted settings, backed by `shared_preferences`.
 ///
 /// UI-facing state lives in [ValueNotifier]s so widgets can react instantly;
@@ -114,6 +140,7 @@ class SettingsService {
   static const String _keyWebAutoClearInterval = 'web_auto_clear_interval';
   static const String _keyWebAutoClearTiming = 'web_auto_clear_timing';
   static const String _keyWebPopupDefault = 'web_popup_default';
+  static const String _keyWebPageScheme = 'web_page_scheme';
 
   // ── Auto EQ (eq_imp.md §5) ─────────────────────────────────────────────
   static const String _keyAutoEq = 'auto_eq';
@@ -169,6 +196,12 @@ class SettingsService {
   /// way, and held-back pop-ups count into the address bar's badge.
   final ValueNotifier<WebPopupDefault> webPopupDefault =
       ValueNotifier<WebPopupDefault>(WebPopupDefault.block);
+
+  /// What pages are told about the viewer's colour preference (see
+  /// [WebPageScheme]). **Light by default** — pages look the way Edge
+  /// shows them, whatever Windows app mode says.
+  final ValueNotifier<WebPageScheme> webPageScheme =
+      ValueNotifier<WebPageScheme>(WebPageScheme.light);
 
   /// Auto EQ (eq_imp.md §5) — SALU picks a preset the moment a file loads
   /// and learns from the viewer's corrections. Default **Off**, and turning
@@ -270,6 +303,12 @@ class SettingsService {
             WebPopupDefault.values.asNameMap()[rawPopupDefault] ??
                 WebPopupDefault.block;
       }
+      final String? rawPageScheme = prefs.getString(_keyWebPageScheme);
+      if (rawPageScheme != null) {
+        webPageScheme.value =
+            WebPageScheme.values.asNameMap()[rawPageScheme] ??
+                WebPageScheme.light;
+      }
       autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
       mouseOverPreview.value = prefs.getBool(_keyMouseOverPreview) ?? false;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
@@ -300,6 +339,7 @@ class SettingsService {
       webAutoClearDays.value = WebAutoClearInterval.off;
       webAutoClearTiming.value = WebAutoClearTiming.onOpen;
       webPopupDefault.value = WebPopupDefault.block;
+      webPageScheme.value = WebPageScheme.light;
       autoEq.value = false;
       mouseOverPreview.value = false;
       subtitleApiKey.value = '';
@@ -394,6 +434,19 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyWebPopupDefault, policy.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Web browser — what pages are told about the viewer's colour
+  /// preference (see [WebPageScheme]). Persists at once; the engine reads
+  /// it when its environment is next created (SALU restart).
+  Future<void> setWebPageScheme(WebPageScheme scheme) async {
+    webPageScheme.value = scheme;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyWebPageScheme, scheme.name);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }

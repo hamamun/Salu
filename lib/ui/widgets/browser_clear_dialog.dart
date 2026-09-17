@@ -314,52 +314,122 @@ class _WebClearDialogState extends State<_WebClearDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.textSecondary,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-            ),
+          _DialogAction(
+            label: 'Cancel',
+            onTap: () => Navigator.of(context).pop(),
           ),
           const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: (_busy || !anySelected) ? null : _clear,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: const Color(0x334C9EEB),
-              disabledForegroundColor: Colors.white38,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: _busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    'Clear data',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+          _DialogAction(
+            label: 'Clear data',
+            primary: true,
+            enabled: !_busy && anySelected,
+            busy: _busy,
+            onTap: _clear,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The dialog's labelled action — the same outlined pill the History panel
+/// uses for "Clear all history", so the family's one text-shaped control
+/// looks the same everywhere: `surfaceOutline` border, 9px radius, Segoe
+/// 12px semibold, hover fills with `surfaceHighlight` and the label lights
+/// to white (~120 ms), press sinks to 0.97× — no Material ripple, ink or
+/// elevation. Primary is carried by the label (white vs. secondary) and a
+/// brighter outline, never by a filled block behind it (follow.md · §6).
+/// Disabled simply dims and stops answering the cursor.
+class _DialogAction extends StatefulWidget {
+  const _DialogAction({
+    required this.label,
+    required this.onTap,
+    this.primary = false,
+    this.enabled = true,
+    this.busy = false,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final bool primary;
+  final bool enabled;
+
+  /// Shows a small monochrome spinner in place of the label.
+  final bool busy;
+
+  @override
+  State<_DialogAction> createState() => _DialogActionState();
+}
+
+class _DialogActionState extends State<_DialogAction> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool on = widget.enabled;
+    final bool lit = on && _hovered;
+    final Color rest =
+        widget.primary ? AppColors.textPrimary : AppColors.textSecondary;
+    final Color ink = !on
+        ? AppColors.textSecondary.withAlpha(110)
+        : (lit ? Colors.white : rest);
+    final Color outline = !on
+        ? AppColors.surfaceOutline.withAlpha(140)
+        : (widget.primary || lit
+            ? AppColors.divider
+            : AppColors.surfaceOutline);
+
+    return MouseRegion(
+      cursor: on ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: on ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: on ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: on ? () => setState(() => _pressed = false) : null,
+        onTap: on ? widget.onTap : null,
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : 1.0,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            height: 32,
+            constraints: const BoxConstraints(minWidth: 84),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: lit ? AppColors.surfaceHighlight : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: outline),
+            ),
+            alignment: Alignment.center,
+            child: widget.busy
+                ? SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: ink,
+                    ),
+                  )
+                : AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 120),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                      color: ink,
+                    ),
+                    child: Text(widget.label),
+                  ),
+          ),
+        ),
       ),
     );
   }

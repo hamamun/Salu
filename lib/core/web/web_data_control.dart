@@ -155,12 +155,32 @@ class WebDataControlService {
     return path != null && Directory(path).existsSync();
   }
 
+  /// Chromium switches handed to the shared environment.
+  ///
+  /// `--blink-settings=preferredColorScheme=N` pins what every page is
+  /// told by `prefers-color-scheme`. Without it WebView2 mirrors the
+  /// Windows app mode, so on a dark-mode PC a site like pixabay.com — light
+  /// in Edge, which follows its own Appearance setting — renders its dark
+  /// theme inside SALU. Same engine, different answer to one media query;
+  /// this makes SALU answer the way Edge does (light, by default).
+  /// `null` when the viewer chose "Follow Windows" — nothing overridden.
+  static String? environmentArguments(WebPageScheme scheme) {
+    final int? blink = scheme.blinkValue;
+    if (blink == null) return null;
+    return '--blink-settings=preferredColorScheme=$blink';
+  }
+
   Future<void> _ensureEnvironment() async {
     if (!Platform.isWindows) return;
     final String? path = profilePath();
     if (path == null) return; // no known writable spot — take the default
+    final String? args =
+        environmentArguments(SettingsService.instance.webPageScheme.value);
     try {
-      await WebviewController.initializeEnvironment(userDataPath: path);
+      await WebviewController.initializeEnvironment(
+        userDataPath: path,
+        additionalArguments: args,
+      );
     } catch (_) {
       // Older runtime / locked path — controllers fall back to whatever
       // environment the plugin itself can build (or fail per-tab, visibly).
