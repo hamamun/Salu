@@ -140,16 +140,25 @@ ship its own browser engine — it *wraps* the one Windows already has.
 
 ## 📌 Status notes
 
-- **Phase 6 is "Not Started."** No browser code exists yet — only this plan.
-- This file (`web.md`) now holds the **locked** detailed browser design. It
+- **Phase 6 browser is ✅ Implemented (PR #81 → main).** All locks in this
+  file are built: Player·Web toggle top-left in BOTH modes (fixed 2026-09-17),
+  capped lazy tabs, omnibox with merged Google+history+favourites, two-state
+  star + hub, Clear dialog (4 boxes), auto-clear schedule, start page,
+  fullscreen hand-off + Esc, popup block + permission cards, memory cleanup.
+- This file (`web.md`) holds the **locked** detailed browser design. It
   **supersedes** the simpler 4-button description in `phase_6_details.md`
   Step 4 (Home / Back / Forward / Close Browser) — the old plan's
   "Close Browser" is replaced by the Player/Web toggle.
-- `lib/ui/screens/` currently contains only `home_screen.dart` and
-  `video_screen.dart`. `browser_screen.dart` does not exist yet.
+- `lib/ui/screens/` now contains `browser_screen.dart`; `lib/ui/widgets/`
+  holds `browser_tab_strip.dart`, `browser_address_bar.dart`,
+  `browser_favourite_sheet.dart`, `browser_favourites_hub.dart`,
+  `browser_clear_dialog.dart`, `browser_views.dart`, `web_marks.dart`,
+  `web_mode_toggle.dart`.
 - `follow.md` records that the web browser, bookmarks, and Stream Library
   panel were **postponed** to be designed separately (they are not mpv work).
-- Related pieces planned across phases:
+  Browser part is done; Stream Library / M3U sidebar remains Phase 6 pending.
+- Related pieces:
   - **Phase 4** — Settings → Updates button (manual WebView2 / yt-dlp update).
   - **Phase 5** — Auto-update function for the WebView2 `.dll` linker files.
-  - **Phase 6** — The browser itself + saved streams/bookmarks sidebar.
+  - **Phase 6** — Browser done; saved streams/bookmarks Library panel still
+    pending (uses `BrowserService.openInBrowser()` as its entry point).
