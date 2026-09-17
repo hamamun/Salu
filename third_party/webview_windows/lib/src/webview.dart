@@ -777,10 +777,10 @@ class _WebviewState extends State<Webview> {
     final box = _key.currentContext?.findRenderObject() as RenderBox?;
     if (box != null) {
       await _controller.ready;
-      final BuildContext? ctx = _key.currentContext;
-      final double fallbackRatio =
+      final ctx = _key.currentContext;
+      final fallbackRatio =
           WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
-      final double devicePixelRatio =
+      final devicePixelRatio =
           ctx != null ? View.of(ctx).devicePixelRatio : fallbackRatio;
       unawaited(_controller._setSize(
           box.size, widget.scaleFactor ?? devicePixelRatio));
