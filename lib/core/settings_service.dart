@@ -98,27 +98,19 @@ enum WebPopupDefault {
 /// What web pages are told about the viewer's colour preference
 /// (`prefers-color-scheme`) — Settings → Web → Page colours.
 ///
-/// Left alone, WebView2 answers with the **Windows app mode**, so on a
+/// Left alone, WebView2 answers with the **Windows app mode** (the engine's
+/// `PreferredColorScheme` defaults to Auto = follow the OS), so on a
 /// dark-mode PC every site that ships a dark theme (Pixabay, GitHub, …)
 /// renders dark inside SALU while Edge — which carries its own Appearance
 /// setting — shows the same page white. SALU's chrome is always dark; the
 /// pages it shows should look the way Edge shows them, so **Light is the
-/// default**. Takes effect when the browser engine next starts (SALU
-/// restart) — the WebView2 environment is created once per process.
+/// default**. The choice rides on the engine's own profile API
+/// (`WebDataControlService.pageSchemeValue` / `applyPageScheme`) and
+/// applies **immediately** — pages re-theme in place, no SALU restart.
 enum WebPageScheme {
   light,
   dark,
   system,
-}
-
-/// Blink's `PreferredColorScheme` enum value for the scheme (kDark = 0,
-/// kLight = 1), or `null` for [WebPageScheme.system] — nothing overridden.
-extension WebPageSchemeBlinkValue on WebPageScheme {
-  int? get blinkValue => switch (this) {
-        WebPageScheme.light => 1,
-        WebPageScheme.dark => 0,
-        WebPageScheme.system => null,
-      };
 }
 
 /// SALU's persisted settings, backed by `shared_preferences`.
@@ -440,8 +432,9 @@ class SettingsService {
   }
 
   /// Web browser — what pages are told about the viewer's colour
-  /// preference (see [WebPageScheme]). Persists at once; the engine reads
-  /// it when its environment is next created (SALU restart).
+  /// preference (see [WebPageScheme]). Persists at once and applies to the
+  /// browser at once: the setter's value change is what
+  /// `WebDataControlService` listens on to re-theme every live page.
   Future<void> setWebPageScheme(WebPageScheme scheme) async {
     webPageScheme.value = scheme;
     try {

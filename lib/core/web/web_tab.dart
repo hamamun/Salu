@@ -386,6 +386,17 @@ if (!window.__saluEsc) {
             .addScriptToExecuteOnDocumentCreated(_popupShimJs)
             .timeout(const Duration(seconds: 2));
       } catch (_) {}
+      // Page colours (web.md · Page colours): the engine's own
+      // PreferredColorScheme — the profile control Edge's Appearance
+      // setting drives. Set before the first load so the first paint
+      // already answers `prefers-color-scheme` with the viewer's choice;
+      // later changes reach this view live via WebDataControlService.
+      try {
+        await c
+            .setPreferredColorScheme(WebDataControlService.pageSchemeValue(
+                WebDataControlService.currentPageScheme))
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {}
       // A lazy tab may have chosen its zoom / dress before the engine
       // existed — apply the memory now that there is something to wear.
       if (zoom.value != 1.0) {

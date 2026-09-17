@@ -180,7 +180,7 @@ class _WebTab extends StatelessWidget {
           SizedBox(height: 4),
           Text(
             'What sites are told you prefer. SALU itself stays dark either '
-            'way. Takes effect the next time SALU starts.',
+            'way. Applies right away — pages re-theme in place.',
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
           SizedBox(height: 16),
@@ -381,7 +381,9 @@ class _WebPopupDefaultPicker extends StatelessWidget {
 
 /// Page colours — what `prefers-color-scheme` answers inside the browser.
 /// Light is the default so pages match Edge; "Follow Windows" is the raw
-/// WebView2 behaviour (dark app mode ⇒ dark sites).
+/// WebView2 behaviour (dark app mode ⇒ dark sites). Applied to the engine
+/// live through its own profile colour-scheme control — pages re-theme in
+/// place when a choice is picked.
 class _WebPageSchemePicker extends StatelessWidget {
   const _WebPageSchemePicker();
 

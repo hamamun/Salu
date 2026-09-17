@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -104,6 +105,44 @@ class WebDataControlService {
   static const String _profileFolder = 'WebView2';
   static const String _appFolder = 'SALU';
 
+  /// The viewer's current page-colours choice (Settings → Web → Page
+  /// colours) — what `prefers-color-scheme` is told, engine-wide.
+  static WebPageScheme get currentPageScheme =>
+      SettingsService.instance.webPageScheme.value;
+
+  /// [WebPageScheme] in the engine's own numbers — the
+  /// `CoreWebView2PreferredColorScheme` values exactly (auto = 0,
+  /// light = 1, dark = 2). This is the browser-profile control Edge's own
+  /// Appearance setting drives; it decides what `prefers-color-scheme`
+  /// answers and applies live, no reload or restart.
+  static int pageSchemeValue(WebPageScheme scheme) => switch (scheme) {
+        WebPageScheme.system => 0,
+        WebPageScheme.light => 1,
+        WebPageScheme.dark => 2,
+      };
+
+  /// Pushes [scheme] into every live engine view right now. The engine
+  /// re-evaluates `prefers-color-scheme` in place — the page re-themes
+  /// itself the way it would on an OS theme flip. Views started later read
+  /// [currentPageScheme] at birth ([WebTab._start]), so one call covers
+  /// the whole browser.
+  Future<void> applyPageScheme(WebPageScheme scheme) async {
+    final int value = pageSchemeValue(scheme);
+    for (final WebviewController controller in List.of(_live)) {
+      try {
+        await controller.setPreferredColorScheme(value);
+      } catch (_) {
+        // A controller that died between the snapshot and the call, or a
+        // runtime too old for the profile API — it simply keeps following
+        // the OS. Nothing to clean up.
+      }
+    }
+  }
+
+  void _onPageSchemeChanged() {
+    unawaited(applyPageScheme(SettingsService.instance.webPageScheme.value));
+  }
+
   bool _purgePending = false;
   bool _prepared = false;
   Future<void>? _prepare;
@@ -127,6 +166,7 @@ class WebDataControlService {
       try {
         await _purgePendingProfile();
         await runAutoClearOnOpen();
+        _registerPageSchemeListener();
         await _ensureEnvironment();
       } catch (_) {
         // A failing warm-up must not strand the browser in `await` forever;
@@ -155,32 +195,25 @@ class WebDataControlService {
     return path != null && Directory(path).existsSync();
   }
 
-  /// Chromium switches handed to the shared environment.
-  ///
-  /// `--blink-settings=preferredColorScheme=N` pins what every page is
-  /// told by `prefers-color-scheme`. Without it WebView2 mirrors the
-  /// Windows app mode, so on a dark-mode PC a site like pixabay.com — light
-  /// in Edge, which follows its own Appearance setting — renders its dark
-  /// theme inside SALU. Same engine, different answer to one media query;
-  /// this makes SALU answer the way Edge does (light, by default).
-  /// `null` when the viewer chose "Follow Windows" — nothing overridden.
-  static String? environmentArguments(WebPageScheme scheme) {
-    final int? blink = scheme.blinkValue;
-    if (blink == null) return null;
-    return '--blink-settings=preferredColorScheme=$blink';
+  /// Registers the one live listener that carries a Page colours change
+  /// into every running engine view the moment it is picked (Settings →
+  /// Web → Page colours). Idempotent — `prepare` runs once per process.
+  void _registerPageSchemeListener() {
+    SettingsService.instance.webPageScheme.addListener(_onPageSchemeChanged);
   }
 
+  /// Creates the shared environment — the per-process home of the one
+  /// WebView2 browser instance SALU runs. No browser-process flags are
+  /// passed: page colours go through the engine's own profile API
+  /// ([applyPageScheme] / [pageSchemeValue]), which is the supported
+  /// control and applies live; the earlier `--blink-settings` command-line
+  /// switch was both undocumented and ineffective for this.
   Future<void> _ensureEnvironment() async {
     if (!Platform.isWindows) return;
     final String? path = profilePath();
     if (path == null) return; // no known writable spot — take the default
-    final String? args =
-        environmentArguments(SettingsService.instance.webPageScheme.value);
     try {
-      await WebviewController.initializeEnvironment(
-        userDataPath: path,
-        additionalArguments: args,
-      );
+      await WebviewController.initializeEnvironment(userDataPath: path);
     } catch (_) {
       // Older runtime / locked path — controllers fall back to whatever
       // environment the plugin itself can build (or fail per-tab, visibly).
