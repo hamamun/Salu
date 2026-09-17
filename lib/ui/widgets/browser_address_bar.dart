@@ -110,9 +110,10 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
       child: Row(
         children: <Widget>[
           // Navigation lives to the left of the URL bar (web.md). Home
-          // returns to SALU's start page; Back/Forward read the engine's
-          // own truth; Reload swaps into Stop while a page travels — the
-          // player's Play⇄Pause logic wearing another suit.
+          // takes the current website to its root page; a fresh tab stays
+          // on SALU's start page. Back/Forward read the engine's own truth;
+          // Reload swaps into Stop while a page travels — the player's
+          // Play⇄Pause logic wearing another suit.
           SaluIconButton(
             size: 27,
             onTap: widget.onHome,

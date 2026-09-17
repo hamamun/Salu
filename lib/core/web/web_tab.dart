@@ -104,8 +104,8 @@ class WebTab {
     }
   }
 
-  /// The engine's own Back — also leaves the start page overlay (Home
-  /// parked on top of a loaded page must be escapable the browser way).
+  /// The engine's own Back — also leaves the start page (Home on top of a
+  /// loaded page must be escapable the browser way).
   Future<void> goBack() async {
     startMode.value = false;
     final WebviewController? c = _controller;
@@ -134,9 +134,22 @@ class WebTab {
     } catch (_) {}
   }
 
-  /// The Home button (web.md · navigation buttons): the tab returns to
-  /// SALU's start page. A loaded engine keeps its page — going back
-  /// through [goBack] re-reveals it; the view itself is [suspend]ed.
+  /// The browser Home button navigates the active website to its own root
+  /// page — for example, a YouTube video becomes `youtube.com/` — while
+  /// staying in the same tab. A fresh tab has no website home, so it keeps
+  /// SALU's Flutter start page instead.
+  Future<void> goHome() async {
+    if (_disposed) return;
+    final String? target =
+        url.value == null ? null : WebAddress.homeUrl(url.value!);
+    if (target == null) {
+      showStartPage();
+      return;
+    }
+    await navigate(target);
+  }
+
+  /// Shows SALU's own start page for a fresh tab or an empty browser state.
   void showStartPage() => startMode.value = true;
 
   // ── Stage management (tab switching) ──────────────────────────────────

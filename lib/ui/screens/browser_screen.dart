@@ -93,7 +93,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       if (pending != null) {
         _newTab(url: pending.url, title: pending.title);
       } else {
-        _newTab();
+        _newTab(focusAddress: true);
       }
     });
   }
@@ -128,13 +128,37 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   // ── Tabs ───────────────────────────────────────────────────────────────
 
-  void _newTab({String? url, String? title}) {
+  void _newTab({
+    String? url,
+    String? title,
+    bool focusAddress = false,
+  }) {
     final WebTab tab = WebTab(initialUrl: url, initialTitle: title);
     setState(() {
       _tabs.add(tab);
       _selectLocked(tab);
     });
+    // A fresh tab always starts with an empty omnibox, even when the old
+    // tab's address field already had focus (the active-tab sync deliberately
+    // leaves user-entered text alone while that field is focused).
+    if (url == null) _syncAddressTo('');
     tab.activate();
+    if (focusAddress) _focusAddressBar();
+  }
+
+  /// Put the caret in the omnibox after a blank tab has been added. The
+  /// address field is rebuilt as part of [_newTab]'s setState, so waiting for
+  /// that frame makes the focus request reliable even when the new tab is
+  /// created by the strip's `+` button.
+  void _focusAddressBar() {
+    if (!_chrome) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_chrome) return;
+      _addressFocus.requestFocus();
+      _address.selection = TextSelection.collapsed(
+        offset: _address.text.length,
+      );
+    });
   }
 
   void _select(WebTab tab) {
@@ -472,6 +496,21 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
+  /// Navigate the active website to its own home page without leaving Web
+  /// mode. For example, YouTube's `/watch?...` page becomes YouTube's root
+  /// page in the same tab. A fresh tab has no website home, so it remains on
+  /// SALU Web's own start page.
+  void _goHome() {
+    final WebTab? tab = _tab;
+    if (tab?.hasPage == true) {
+      unawaited(tab!.goHome());
+    } else if (tab != null) {
+      tab.showStartPage();
+      _syncAddressTo('');
+    }
+    _closePopups();
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────
 
   @override
@@ -480,23 +519,20 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final WebTab? tab = _tab;
     final Widget content = !supported || tab == null
         ? const WebStartPage()
-        : Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              WebTabView(tab: tab),
-              // Home parks over a live page — the engine keeps its place
-              // (suspended), the start page wears the stage.
-              ValueListenableBuilder<bool>(
-                valueListenable: tab.startMode,
-                builder: (BuildContext context, bool start, Widget? _) {
-                  if (!start) return const SizedBox.shrink();
-                  return const ColoredBox(
-                    color: AppColors.videoBackdrop,
-                    child: WebStartPage(),
-                  );
-                },
-              ),
-            ],
+        : ValueListenableBuilder<bool>(
+            valueListenable: tab.startMode,
+            builder: (BuildContext context, bool start, Widget? _) {
+              // Home is a browser page, not a player-mode switch. Select the
+              // Flutter start page itself instead of stacking it over a live
+              // native WebView, so the WebView can never cover the home page.
+              if (start) {
+                return const ColoredBox(
+                  color: AppColors.videoBackdrop,
+                  child: WebStartPage(),
+                );
+              }
+              return WebTabView(tab: tab);
+            },
           );
 
     return Focus(
@@ -534,7 +570,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       maxTabs: kWebMaxTabs,
                       onSelect: (int i) => _select(_tabs[i]),
                       onClose: _closeTab,
-                      onNewTab: () => _newTab(),
+                      onNewTab: () => _newTab(focusAddress: true),
                       hub: _HubButton(
                         open: _hubOpen,
                         onTap: () => setState(() {
@@ -560,10 +596,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       onForward: () => tab?.goForward(),
                       onReload: () => tab?.reload(),
                       onStop: () => tab?.controller?.stop(),
-                      onHome: () {
-                        tab?.showStartPage();
-                        _closePopups();
-                      },
+                      onHome: _goHome,
                       onKeyEvent: _onAddressKey,
                     ),
                   ],

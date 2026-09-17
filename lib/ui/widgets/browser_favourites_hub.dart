@@ -5,14 +5,15 @@ import '../../core/web/web_address.dart';
 import '../../core/web/web_favourites_service.dart';
 import '../../theme/app_theme.dart';
 import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 import 'web_marks.dart';
 
 /// The favourites hub — the ♥ left of the tab bar opens this slide-down
 /// list (web.md · favourites hub). Entries live at ≤15; the list groups
 /// them by folder, searches name / URL / folder, and carries a row's whole
-/// life: tap opens, right-click edits (the same sheet the star opens),
-/// the trailing ✕ removes instantly with a 5-second Undo handed to the
-/// screen — no confirmation dialog anywhere (follow.md).
+/// life: tap opens, the pencil button or right-click edits (the same sheet
+/// the star opens), and the trailing ✕ removes instantly with a 5-second
+/// Undo handed to the screen — no confirmation dialog anywhere (follow.md).
 class BrowserFavouritesHub extends StatefulWidget {
   const BrowserFavouritesHub({
     super.key,
@@ -277,7 +278,14 @@ class _HubRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
+              SaluIconButton(
+                size: 22,
+                onTap: onEdit,
+                tooltip: 'Edit',
+                child: const PencilMark(size: 14),
+              ),
+              const SizedBox(width: 2),
               SaluIconButton(
                 size: 22,
                 onTap: onRemove,
