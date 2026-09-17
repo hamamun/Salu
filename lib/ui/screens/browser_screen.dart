@@ -496,6 +496,20 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
+  /// Return to SALU Web's own start page without leaving Web mode. Home is a
+  /// browser navigation action, not the Player · Web mode switch in the
+  /// title strip.
+  void _goHome() {
+    final WebTab? tab = _tab;
+    if (tab != null) {
+      tab.showStartPage();
+      // Home has no page URL, including when the address field was still
+      // focused on the page we just left.
+      _syncAddressTo('');
+    }
+    _closePopups();
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────
 
   @override
@@ -504,23 +518,20 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final WebTab? tab = _tab;
     final Widget content = !supported || tab == null
         ? const WebStartPage()
-        : Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              WebTabView(tab: tab),
-              // Home parks over a live page — the engine keeps its place
-              // (suspended), the start page wears the stage.
-              ValueListenableBuilder<bool>(
-                valueListenable: tab.startMode,
-                builder: (BuildContext context, bool start, Widget? _) {
-                  if (!start) return const SizedBox.shrink();
-                  return const ColoredBox(
-                    color: AppColors.videoBackdrop,
-                    child: WebStartPage(),
-                  );
-                },
-              ),
-            ],
+        : ValueListenableBuilder<bool>(
+            valueListenable: tab.startMode,
+            builder: (BuildContext context, bool start, Widget? _) {
+              // Home is a browser page, not a player-mode switch. Select the
+              // Flutter start page itself instead of stacking it over a live
+              // native WebView, so the WebView can never cover the home page.
+              if (start) {
+                return const ColoredBox(
+                  color: AppColors.videoBackdrop,
+                  child: WebStartPage(),
+                );
+              }
+              return WebTabView(tab: tab);
+            },
           );
 
     return Focus(
@@ -584,10 +595,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       onForward: () => tab?.goForward(),
                       onReload: () => tab?.reload(),
                       onStop: () => tab?.controller?.stop(),
-                      onHome: () {
-                        tab?.showStartPage();
-                        _closePopups();
-                      },
+                      onHome: _goHome,
                       onKeyEvent: _onAddressKey,
                     ),
                   ],
