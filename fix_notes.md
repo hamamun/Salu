@@ -232,3 +232,84 @@ event (focus heals external Win+Down/taskbar changes); restore-while-
 fullscreen diverts through the clean `setFullScreen(false)` path; fullscreen
 toggle reads live state before acting so "exit" can never fire while
 windowed. The step-4 trigger is unreachable.
+
+## 9 · Clear browsing data dialog: Cookies & cache badges stuck at the pre-clean sizes
+**Status:** FIXED 2026-09-17 — `lib/core/web/web_data_control.dart`
+(discovery-based footprint + live cache sweep + purge-aware reporting),
+`lib/ui/widgets/browser_clear_dialog.dart` (queued-purge note),
+tests in `test/web_data_footprint_test.dart`.
+
+**Symptom:** after "Clear data", Browsing history correctly drops to
+"None", but Cookies & site data stays at e.g. "46 MB" and Cached images
+& files at "1.8 MB" forever — the cleaning looked like it did nothing.
+
+**Cause (traced):**
+- While the engine runs, the profile folder cannot be deleted, so the
+  clear marks it for the next-startup purge — but the reopened dialog
+  re-scanned the unchanged folder and reported the stale pre-clean size,
+  never the pending purge.
+- The plugin's `clearCookies` / `clearCache` are only DevTools calls
+  (`Network.clearBrowserCookies` / `Network.clearBrowserCache`): they
+  empty the live cookie jar and the in-memory HTTP cache, but never
+  touch Local Storage / IndexedDB / Service Workers (the bulk of the
+  "cookies" size) or GPUCache / ShaderCache / Code Cache (the leftover
+  "cache" size).
+- The cookies measurement had a bogus fallback: when the hardcoded
+  paths didn't match, it reported **whole profile size minus cache** —
+  counting Crashpad, preferences, runtime internals — a permanently
+  inflated number no clean could ever reduce ("not proper SALU data").
+
+**Fix:**
+- Footprint now discovers stores by their well-known Chromium names
+  (cookie jars, Local/Session Storage, IndexedDB, Service Worker,
+  Shared Storage · Cache, Code Cache, GPUCache, ShaderCache, DawnCache)
+  wherever the runtime parked them in the profile, depth-capped; the
+  whole-profile fallback is gone, so only real browsing data is ever
+  measured.
+- `clear(cache)` additionally deletes on-disk cache files the running
+  engine does not hold locked (Chromium cache entries are
+  delete-shareable), so the cache badge genuinely shrinks mid-session.
+- When a purge is queued, `measureFootprint` reports the locked
+  cookie/cache stores as cleaned ("None") instead of the stale size,
+  and the dialog shows a short "Already cleaned — locked files are
+  wiped next time SALU starts" note. Next startup's purge then
+  physically removes the folder before the environment exists, and the
+  badges measure the fresh profile.
+
+## 10 · Web section button audit: hover boxes + stock icons off-contract
+**Status:** FIXED 2026-09-17 — audit of every web-section control against
+follow.md §1.4/§2/§6; touches `browser_clear_dialog.dart`, `browser_menu.dart`,
+`browser_find_bar.dart`, `browser_address_bar.dart`, `browser_tab_strip.dart`,
+`web_marks.dart` (+4 new marks).
+
+**Symptom:** most web buttons were SALU-styled, but a few painted filled
+colour / hover boxes around their icons and used stock Material glyphs.
+
+**Fixes (icon by icon):**
+- Clear dialog × — had a rounded hover box → now `SaluIconButton` +
+  `CloseMark` (the box-having `_CloseIconButton` class is deleted).
+- Clear dialog header — accent chip + stock "cleaning services" icon →
+  the family `BroomMark` leading the title, like every other panel header.
+- Clear dialog category rows — accent stock icons → monochrome SALU marks
+  (history `ClockMark` · cookies new `CookieMark` · cache `ReloadMark` ·
+  downloads new `DownloadMark`); the size badge's blue-tint border goes
+  neutral; checkbox tick is `TickMark`.
+- Clear dialog notes — stock shield / hourglass in accent → new `ShieldMark`
+  / `HourglassMark`, monochrome.
+- ⋮ menu Zoom −/+ — rounded hover boxes → SALU recipe via `SaluIconButton`
+  (light-up + 1.06 hover + 0.90 press, nothing behind).
+- ⋮ menu Downloads twist — stock expand arrows → `RevealChevronMark` with
+  the family's animated half-turn.
+- ⋮ menu printed "Ctrl+T / Ctrl+F" hints — removed (follow.md hard rule 2:
+  shortcuts work silently, never printed).
+- Find bar prev/next — stock keyboard arrows → `RevealChevronMark` up/down.
+- Address-bar blocked-pop-up badge — a permanently filled pill behind the
+  mark → bare `PopupMark` + count on the SALU recipe (mark and number light
+  up together, nothing drawn behind).
+- Tab strip + — fixed-ink painter (never glowed on hover) → the family
+  `PlusMark`, IconTheme-driven.
+
+**Deliberately untouched:** the shared `settings_dialog.dart` (its tile/switch
+language is one design across every tab — player tabs included), modal
+confirm text buttons (Chrome/Edge-style confirmation pattern), and the
+logo-missing fallback glyph on the start page.
