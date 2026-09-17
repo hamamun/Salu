@@ -77,6 +77,19 @@ class WebTab {
   /// by the screen at tab birth; null anywhere else.
   void Function(String url)? onPopupAllowed;
 
+  /// Page zoom, 1.0 = 100% — per tab, applied through the engine's own
+  /// zoom factor the moment it changes (the ⋮ menu's − / % / +).
+  final ValueNotifier<double> zoom = ValueNotifier<double>(1.0);
+
+  /// Desktop mode — when true the tab identifies as Edge-on-Windows no
+  /// matter what the runtime reports, for sites that serve WebView2 a
+  /// broken mobile page. Takes a reload to re-dress the page.
+  final ValueNotifier<bool> desktopMode = ValueNotifier<bool>(false);
+
+  /// The runtime's own User-Agent, caught from a live document the first
+  /// time one answers — what Desktop-off restores.
+  String? _nativeUserAgent;
+
   WebviewController? _controller;
   final List<StreamSubscription<Object?>> _subs = <StreamSubscription<Object?>>[];
   Future<void>? _starting;
@@ -178,6 +191,77 @@ class WebTab {
 
   /// Shows SALU's own start page for a fresh tab or an empty browser state.
   void showStartPage() => startMode.value = true;
+
+  // ── Zoom + Desktop mode (the ⋮ menu) ───────────────────────────────────
+
+  /// Chrome's zoom ladder, low to high — zoomIn/zoomOut climb it.
+  static const List<double> zoomSteps = <double>[
+    0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9,
+    1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0,
+  ];
+
+  /// What a Desktop-mode tab claims to be — Edge on Windows 10/11.
+  static const String desktopUserAgent =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0';
+
+  /// Sets this tab's zoom ([zoomSteps] bounds it) and applies it to the
+  /// engine when one exists — a lazy tab simply remembers it for boot.
+  Future<void> setZoom(double factor) async {
+    final double next =
+        factor.clamp(zoomSteps.first, zoomSteps.last).toDouble();
+    zoom.value = next;
+    final WebviewController? c = _controller;
+    if (c == null) return;
+    _fire(() => c.setZoomFactor(next));
+  }
+
+  Future<void> zoomIn() async {
+    double next = zoomSteps.last;
+    for (final double s in zoomSteps) {
+      if (s > zoom.value + 0.001) {
+        next = s;
+        break;
+      }
+    }
+    await setZoom(next);
+  }
+
+  Future<void> zoomOut() async {
+    double next = zoomSteps.first;
+    for (final double s in zoomSteps.reversed) {
+      if (s < zoom.value - 0.001) {
+        next = s;
+        break;
+      }
+    }
+    await setZoom(next);
+  }
+
+  Future<void> resetZoom() => setZoom(1.0);
+
+  /// Flips Desktop mode for this tab. Turning it on re-dresses an
+  /// already-loaded page with a reload; turning it off restores the
+  /// runtime's own User-Agent (caught from the first live document — or
+  /// an empty string, which hands the choice back to the engine).
+  Future<void> setDesktopMode(bool on) async {
+    desktopMode.value = on;
+    final WebviewController? c = _controller;
+    if (c == null) return; // applied at boot, when the engine arrives
+    if (on && _nativeUserAgent == null && !startMode.value) {
+      try {
+        final Object? raw = await c
+            .executeScript('navigator.userAgent')
+            .timeout(const Duration(seconds: 2));
+        if (raw is String && raw.trim().isNotEmpty) {
+          _nativeUserAgent = raw;
+        }
+      } catch (_) {}
+    }
+    final String dress = on ? desktopUserAgent : (_nativeUserAgent ?? '');
+    _fire(() => c.setUserAgent(dress));
+    if (!startMode.value) unawaited(reload());
+  }
 
   // ── Stage management (tab switching) ──────────────────────────────────
 
@@ -299,6 +383,20 @@ if (!window.__saluEsc) {
             .addScriptToExecuteOnDocumentCreated(_popupShimJs)
             .timeout(const Duration(seconds: 2));
       } catch (_) {}
+      // A lazy tab may have chosen its zoom / dress before the engine
+      // existed — apply the memory now that there is something to wear.
+      if (zoom.value != 1.0) {
+        try {
+          await c.setZoomFactor(zoom.value).timeout(const Duration(seconds: 2));
+        } catch (_) {}
+      }
+      if (desktopMode.value) {
+        try {
+          await c
+              .setUserAgent(desktopUserAgent)
+              .timeout(const Duration(seconds: 2));
+        } catch (_) {}
+      }
       _fire(() => c.setBackgroundColor(const Color(0xFF121212)));
     } catch (_) {
       // No runtime / plugin failure — the tab stays visibly unstarted and
@@ -344,6 +442,20 @@ if (!window.__saluEsc) {
           // document itself. The `__saluEsc` flag keeps it one listener a
           // page, however many navigations this tab survives.
           _fire(() => c.executeScript(_escapeListenerJs));
+          // Catch the runtime's own User-Agent from the first live
+          // document that answers — Desktop-off restores exactly this.
+          if (_nativeUserAgent == null && !desktopMode.value) {
+            _fire(() async {
+              try {
+                final Object? raw = await c
+                    .executeScript('navigator.userAgent')
+                    .timeout(const Duration(seconds: 2));
+                if (raw is String && raw.trim().isNotEmpty) {
+                  _nativeUserAgent = raw;
+                }
+              } catch (_) {}
+            });
+          }
         }
       }))
       ..add(c.onLoadError.listen((WebErrorStatus _) {
@@ -456,5 +568,7 @@ if (!window.__saluEsc) {
     wantsFullscreen.dispose();
     startMode.dispose();
     blocked.dispose();
+    zoom.dispose();
+    desktopMode.dispose();
   }
 }

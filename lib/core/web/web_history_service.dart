@@ -221,6 +221,16 @@ class WebHistoryService {
     _set(const <WebHistoryEntry>[]);
   }
 
+  /// Removes one row (the history panel's per-row ×) — no undo, like the
+  /// Clear tool: browser data never grows an undo path.
+  void removeAt(int index) {
+    final List<WebHistoryEntry> list =
+        List<WebHistoryEntry>.of(entries.value);
+    if (index < 0 || index >= list.length) return;
+    list.removeAt(index);
+    _set(list);
+  }
+
   static bool _isWebPage(String url) =>
       url.startsWith('http://') || url.startsWith('https://');
 }

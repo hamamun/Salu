@@ -35,6 +35,7 @@ class BrowserAddressBar extends StatefulWidget {
     required this.onFavourite,
     required this.onSiteInfo,
     required this.onBlockedTap,
+    required this.onMenu,
     required this.onClearData,
     required this.onBack,
     required this.onForward,
@@ -73,6 +74,9 @@ class BrowserAddressBar extends StatefulWidget {
 
   /// Badge tap: the held-back pop-up list.
   final VoidCallback onBlockedTap;
+
+  /// ⋮ tap: the browser menu (zoom, find, history, …).
+  final VoidCallback onMenu;
   final VoidCallback onClearData;
   final VoidCallback onBack;
   final VoidCallback onForward;
@@ -154,12 +158,20 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           const SizedBox(width: 7),
           Expanded(child: _buildField()),
           const SizedBox(width: 7),
-          // Clear, right at the edge and OUTSIDE the bar (web.md).
+          // Clear, right at the edge and OUTSIDE the bar (web.md) — and
+          // the ⋮ menu beside it (zoom, find, history, …).
           SaluIconButton(
             size: 27,
             onTap: widget.onClearData,
             tooltip: 'Clear browsing data',
             child: const BroomMark(size: 16),
+          ),
+          const SizedBox(width: 2),
+          SaluIconButton(
+            size: 27,
+            onTap: widget.onMenu,
+            tooltip: 'Menu',
+            child: const MenuMark(size: 16),
           ),
         ],
       ),

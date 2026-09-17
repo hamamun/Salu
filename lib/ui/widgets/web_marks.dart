@@ -24,6 +24,8 @@ import 'salu_marks.dart';
 ///                       open = the line is not private)
 ///   · window + window — Held-back pop-ups  [PopupMark] (the address bar's
 ///                       badge — Chrome's blocked-pop-up icon, SALU-drawn)
+///   · three dots      — Browser menu       [MenuMark] (the ⋮ at the row's
+///                       right edge, next to Clear)
 
 /// Home — a house: roof rule, body, a small door.
 class HomeMark extends StatelessWidget {
@@ -620,4 +622,44 @@ class _PopupPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PopupPainter old) =>
       old.ink != ink || old.stroke != stroke;
+}
+
+/// Browser menu — three dots in a column: the ⋮ at the row's right edge
+/// (Chrome's ⋮ slot), opening zoom, find, history, downloads and the rest.
+class MenuMark extends StatelessWidget {
+  const MenuMark({super.key, this.size = 16});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _MenuPainter(markInk(context)),
+    );
+  }
+}
+
+class _MenuPainter extends CustomPainter {
+  const _MenuPainter(this.ink);
+
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint paint = Paint()
+      ..color = ink
+      ..style = PaintingStyle.fill;
+    for (final double y in <double>[6, 12, 18]) {
+      canvas.drawCircle(
+        Offset(s * 12 / 24, s * y / 24),
+        s * 1.7 / 24,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MenuPainter old) => old.ink != ink;
 }
