@@ -93,7 +93,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       if (pending != null) {
         _newTab(url: pending.url, title: pending.title);
       } else {
-        _newTab();
+        _newTab(focusAddress: true);
       }
     });
   }
@@ -128,13 +128,37 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   // ── Tabs ───────────────────────────────────────────────────────────────
 
-  void _newTab({String? url, String? title}) {
+  void _newTab({
+    String? url,
+    String? title,
+    bool focusAddress = false,
+  }) {
     final WebTab tab = WebTab(initialUrl: url, initialTitle: title);
     setState(() {
       _tabs.add(tab);
       _selectLocked(tab);
     });
+    // A fresh tab always starts with an empty omnibox, even when the old
+    // tab's address field already had focus (the active-tab sync deliberately
+    // leaves user-entered text alone while that field is focused).
+    if (url == null) _syncAddressTo('');
     tab.activate();
+    if (focusAddress) _focusAddressBar();
+  }
+
+  /// Put the caret in the omnibox after a blank tab has been added. The
+  /// address field is rebuilt as part of [_newTab]'s setState, so waiting for
+  /// that frame makes the focus request reliable even when the new tab is
+  /// created by the strip's `+` button.
+  void _focusAddressBar() {
+    if (!_chrome) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_chrome) return;
+      _addressFocus.requestFocus();
+      _address.selection = TextSelection.collapsed(
+        offset: _address.text.length,
+      );
+    });
   }
 
   void _select(WebTab tab) {
@@ -534,7 +558,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       maxTabs: kWebMaxTabs,
                       onSelect: (int i) => _select(_tabs[i]),
                       onClose: _closeTab,
-                      onNewTab: () => _newTab(),
+                      onNewTab: () => _newTab(focusAddress: true),
                       hub: _HubButton(
                         open: _hubOpen,
                         onTap: () => setState(() {
