@@ -33,7 +33,14 @@ Implementation notes, lock by lock:
   (item counts / KB / MB) for each category like Edge and Chrome;
   history/cookies/cache/own-store deletes apply instantly, and everything a
   live WebView2 profile locks is purged at the next startup (the only moment
-  a folder delete is guaranteed). SALU's own data (resume, saved streams)
+  a folder delete is guaranteed). Footprint badges measure only SALU's own
+  profile stores — cookie jars · Local/Session Storage · IndexedDB · Service
+  Workers · HTTP/code/GPU/shader caches — discovered by their well-known
+  names wherever the runtime parked them (never whole-folder guesswork, so
+  runtime internals never count as browsing data); cache files the running
+  engine does not lock are deleted immediately mid-session, and once a purge
+  is queued the locked categories report "None" + a queued-purge note instead
+  of the stale pre-clean size. SALU's own data (resume, saved streams)
   lives in different stores and is never in scope. Auto-clear = Settings → Web
   (off default · 7/15/30 days · open/close/both; “on closing” = the due-date
   sweep + stores flush at the close guard, the locked-folder part running at

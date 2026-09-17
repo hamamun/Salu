@@ -31,6 +31,10 @@ class WebDataClearFlags {
   final bool downloads;
 }
 
+/// What a WebView2 profile entry on disk is: browser cache, cookies &
+/// site data, or neither (runtime internals SALU never reports).
+enum WebProfileStoreKind { none, cache, siteData }
+
 /// Data footprint summary for browsing data items.
 @immutable
 class WebDataFootprint {
@@ -39,12 +43,19 @@ class WebDataFootprint {
     this.historyBytes = 0,
     this.cookiesBytes = 0,
     this.cacheBytes = 0,
+    this.profilePurgePending = false,
   });
 
   final int historyCount;
   final int historyBytes;
   final int cookiesBytes;
   final int cacheBytes;
+
+  /// True when a full profile purge is already promised for the next
+  /// startup (a Clear or auto-clear ran while the engine held the
+  /// folder). The locked cookies/cache leftovers behind it count as
+  /// cleaned — the badge says "None", never the stale pre-clear size.
+  final bool profilePurgePending;
 
   String get historyLabel {
     if (historyCount == 0) return 'None';
@@ -239,11 +250,26 @@ class WebDataControlService {
         if (flags.cache) await c.clearCache().timeout(_perTabTimeout);
       } catch (_) {}
     }
+
+    // The engine-side calls above only reach the live cookie jar and the
+    // in-memory HTTP cache. Whatever cache files they leave on disk that
+    // the running engine does not hold locked goes now too, so a reopened
+    // dialog measures a genuinely smaller cache — not the stale size.
+    // (Before the first environment there is nothing live to sweep — the
+    // folder delete above already took everything.)
+    if (flags.cache && _prepared) await sweepUnlockedCacheFiles();
   }
 
   static const Duration _perTabTimeout = Duration(seconds: 3);
 
   // ── Data Footprint Measurement ──────────────────────────────────────────
+  //
+  // The badges measure SALU's own WebView2 profile — nothing else. Stores
+  // are recognised by what they ARE (well-known Chromium store names),
+  // wherever the runtime parked them inside the profile (`EBWebView\Default`,
+  // `Default`, future layouts) — never by subtracting one guess from
+  // another, and never by counting runtime internals (Crashpad, prefs,
+  // updaters) as browsing data.
 
   /// Formats byte count into a clean human-readable string (Edge/Chrome style).
   static String formatBytes(int bytes) {
@@ -257,6 +283,56 @@ class WebDataControlService {
     }
     if (digitGroups == 0) return '${bytes.toInt()} B';
     return '${size.toStringAsFixed(size >= 10 || digitGroups == 1 ? 0 : 1)} ${units[digitGroups]}';
+  }
+
+  /// Directory names that ARE browser cache inside the profile.
+  static const Set<String> _cacheStoreNames = <String>{
+    'cache',
+    'code cache',
+    'gpucache',
+    'shadercache',
+    'dawncache',
+  };
+
+  /// Directory names that ARE cookies & site data (storage the sites own).
+  static const Set<String> _siteDataDirNames = <String>{
+    'local storage',
+    'session storage',
+    'indexeddb',
+    'databases',
+    'service worker',
+    'shared storage',
+  };
+
+  /// File names that ARE cookies & site data.
+  static const Set<String> _siteDataFileNames = <String>{
+    'cookies',
+    'cookies-journal',
+    'cookies-wal',
+    'cookies-shm',
+  };
+
+  /// Deep enough for `EBWebView\<profile>\Network\Cookies` and friends,
+  /// shallow enough to never wander into a store's own contents.
+  static const int _scanMaxDepth = 5;
+
+  /// Classifies one profile entry (already lower-cased basename).
+  static WebProfileStoreKind classifyProfileEntry(
+    String lowerName, {
+    required bool isDirectory,
+  }) {
+    if (isDirectory) {
+      if (_cacheStoreNames.contains(lowerName)) {
+        return WebProfileStoreKind.cache;
+      }
+      if (_siteDataDirNames.contains(lowerName)) {
+        return WebProfileStoreKind.siteData;
+      }
+      return WebProfileStoreKind.none;
+    }
+    return _siteDataFileNames.contains(lowerName)
+        ? WebProfileStoreKind.siteData
+        : WebProfileStoreKind.none;
   }
 
   /// Calculates the total size in bytes of all files in [dir], recursively.
@@ -277,109 +353,128 @@ class WebDataControlService {
     return total;
   }
 
-  /// Estimates the size of WebView2 cache files.
-  /// Common subdirectories in the user profile for cache:
-  /// EBWebView/Default/Cache, EBWebView/Default/Code Cache, etc.
+  /// Walks the profile once and sums every store [kind] entry; a matched
+  /// directory is measured whole, so its contents are never double-counted
+  /// and never misclassified.
+  static int _scanProfileStores(Directory root, WebProfileStoreKind kind) {
+    int total = 0;
+    void walk(Directory dir, int depth) {
+      if (depth > _scanMaxDepth) return;
+      List<FileSystemEntity> entries;
+      try {
+        entries = dir.listSync(followLinks: false);
+      } catch (_) {
+        return;
+      }
+      for (final FileSystemEntity entity in entries) {
+        final String lower = p.basename(entity.path).toLowerCase();
+        if (entity is Directory) {
+          final WebProfileStoreKind found =
+              classifyProfileEntry(lower, isDirectory: true);
+          if (found == kind) {
+            total += _calculateDirSize(entity);
+          } else if (found == WebProfileStoreKind.none) {
+            walk(entity, depth + 1);
+          }
+          // A store of the OTHER kind: leave it to its own scan.
+        } else if (entity is File) {
+          if (classifyProfileEntry(lower, isDirectory: false) == kind) {
+            try {
+              total += entity.lengthSync();
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    walk(root, 0);
+    return total;
+  }
+
+  /// On-disk size of the profile's browser caches (HTTP cache, code cache,
+  /// GPU/shader caches) — discovered, not assumed.
   static int getCacheBytes() {
     final String? profile = profilePath();
     if (profile == null) return 0;
     final Directory dir = Directory(profile);
     if (!dir.existsSync()) return 0;
-
-    int total = 0;
-    final List<String> candidateRelPaths = <String>[
-      p.join('EBWebView', 'Default', 'Cache'),
-      p.join('EBWebView', 'Default', 'Code Cache'),
-      p.join('EBWebView', 'Default', 'GPUCache'),
-      p.join('EBWebView', 'ShaderCache'),
-      p.join('Default', 'Cache'),
-      p.join('Default', 'Code Cache'),
-      p.join('Default', 'GPUCache'),
-    ];
-
-    bool foundSpecific = false;
-    for (final String rel in candidateRelPaths) {
-      final Directory target = Directory(p.join(profile, rel));
-      if (target.existsSync()) {
-        foundSpecific = true;
-        total += _calculateDirSize(target);
-      }
-    }
-
-    // If standard subfolder structure isn't matched directly, scan for any 'Cache' dir
-    if (!foundSpecific) {
-      try {
-        final List<FileSystemEntity> entities =
-            dir.listSync(recursive: false, followLinks: false);
-        for (final FileSystemEntity entity in entities) {
-          if (entity is Directory && p.basename(entity.path).toLowerCase().contains('cache')) {
-            total += _calculateDirSize(entity);
-          }
-        }
-      } catch (_) {}
-    }
-
-    return total;
+    return _scanProfileStores(dir, WebProfileStoreKind.cache);
   }
 
-  /// Estimates the size of cookies and site data (storage, IndexedDB, WebSQL, etc).
+  /// On-disk size of cookies & site data (cookie jars, local/session
+  /// storage, IndexedDB, Service Workers) — discovered, not assumed.
   static int getCookiesAndSiteDataBytes() {
     final String? profile = profilePath();
     if (profile == null) return 0;
     final Directory dir = Directory(profile);
     if (!dir.existsSync()) return 0;
+    return _scanProfileStores(dir, WebProfileStoreKind.siteData);
+  }
 
-    final List<String> siteDataRelPaths = <String>[
-      p.join('EBWebView', 'Default', 'Cookies'),
-      p.join('EBWebView', 'Default', 'Cookies-journal'),
-      p.join('EBWebView', 'Default', 'Network', 'Cookies'),
-      p.join('EBWebView', 'Default', 'Local Storage'),
-      p.join('EBWebView', 'Default', 'IndexedDB'),
-      p.join('EBWebView', 'Default', 'Session Storage'),
-      p.join('EBWebView', 'Default', 'databases'),
-      p.join('EBWebView', 'Default', 'Service Worker'),
-      p.join('Default', 'Cookies'),
-      p.join('Default', 'Cookies-journal'),
-      p.join('Default', 'Network', 'Cookies'),
-      p.join('Default', 'Local Storage'),
-      p.join('Default', 'IndexedDB'),
-      p.join('Default', 'Session Storage'),
-      p.join('Default', 'databases'),
-    ];
+  /// Best-effort immediate drop of cache files the running engine does not
+  /// hold locked — Chromium keeps HTTP-cache entries open with delete
+  /// sharing, so these go even mid-session. Locked stragglers simply wait
+  /// for the startup purge like everything else the engine owns.
+  Future<void> sweepUnlockedCacheFiles() async {
+    if (!Platform.isWindows) return;
+    final String? profile = profilePath();
+    if (profile == null) return;
+    final Directory root = Directory(profile);
+    if (!root.existsSync()) return;
 
-    int total = 0;
-    bool foundSpecific = false;
-    for (final String rel in siteDataRelPaths) {
-      final String full = p.join(profile, rel);
-      if (FileSystemEntity.isFileSync(full)) {
-        foundSpecific = true;
-        try {
-          total += File(full).lengthSync();
-        } catch (_) {}
-      } else if (FileSystemEntity.isDirectorySync(full)) {
-        foundSpecific = true;
-        total += _calculateDirSize(Directory(full));
+    final List<Directory> cacheDirs = <Directory>[];
+    void walk(Directory dir, int depth) {
+      if (depth > _scanMaxDepth) return;
+      List<FileSystemEntity> entries;
+      try {
+        entries = dir.listSync(followLinks: false);
+      } catch (_) {
+        return;
+      }
+      for (final FileSystemEntity entity in entries) {
+        if (entity is! Directory) continue;
+        final WebProfileStoreKind kind = classifyProfileEntry(
+          p.basename(entity.path).toLowerCase(),
+          isDirectory: true,
+        );
+        if (kind == WebProfileStoreKind.cache) {
+          cacheDirs.add(entity);
+        } else if (kind == WebProfileStoreKind.none) {
+          walk(entity, depth + 1);
+        }
       }
     }
 
-    // If specific folders not found but profile exists and not cache,
-    // take profile size minus cache
-    if (!foundSpecific && total == 0) {
-      final int allProfile = _calculateDirSize(dir);
-      final int cache = getCacheBytes();
-      if (allProfile > cache) {
-        total = allProfile - cache;
+    walk(root, 0);
+
+    for (final Directory cacheDir in cacheDirs) {
+      List<FileSystemEntity> entries;
+      try {
+        entries = cacheDir.listSync(recursive: true, followLinks: false);
+      } catch (_) {
+        continue;
+      }
+      for (final FileSystemEntity entity in entries) {
+        if (entity is File) {
+          try {
+            entity.deleteSync();
+          } catch (_) {
+            // Still locked by the live engine — the startup purge takes it.
+          }
+        }
       }
     }
-
-    return total;
   }
 
   /// Returns the estimate of browsing data footprint for all categories:
   /// - history count (number of visits) and JSON size
   /// - cookies & site data size in bytes
   /// - cached images & files size in bytes
-  /// - downloads record count / folder hint
+  ///
+  /// When a profile purge is already promised (a Clear or auto-clear ran
+  /// while the engine held the folder), the locked cookie/cache stores
+  /// report as cleaned — never the stale pre-clear size that made the
+  /// badges look frozen after cleaning.
   static Future<WebDataFootprint> measureFootprint() async {
     // 1. History
     final int historyCount = WebHistoryService.instance.entries.value.length;
@@ -390,23 +485,26 @@ class WebDataControlService {
       if (raw != null) historyBytes = raw.length;
     } catch (_) {}
 
-    // 2. Cache
+    // 2. Cache + 3. Cookies & site data
     int cacheBytes = 0;
-    // 3. Cookies & Site Data
     int cookiesBytes = 0;
+    final bool purgePending = instance.purgePending;
 
-    if (Platform.isWindows) {
+    if (Platform.isWindows && !purgePending) {
       try {
         cacheBytes = getCacheBytes();
         cookiesBytes = getCookiesAndSiteDataBytes();
       } catch (_) {}
     }
+    // purgePending → both stay 0 ("None"): that data is already promised
+    // to the next-startup purge, so it counts as cleaned.
 
     return WebDataFootprint(
       historyCount: historyCount,
       historyBytes: historyBytes,
       cookiesBytes: cookiesBytes,
       cacheBytes: cacheBytes,
+      profilePurgePending: purgePending,
     );
   }
 

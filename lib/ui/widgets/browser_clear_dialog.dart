@@ -218,6 +218,45 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                         value: _downloads,
                         onChanged: (bool v) => setState(() => _downloads = v),
                       ),
+                      if (_footprint.profilePurgePending) ...<Widget>[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border:
+                                Border.all(color: AppColors.surfaceOutline),
+                          ),
+                          child: const Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Padding(
+                                padding: EdgeInsets.only(top: 1),
+                                child: Icon(
+                                  Icons.hourglass_top_rounded,
+                                  size: 14,
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                              SizedBox(width: 9),
+                              Expanded(
+                                child: Text(
+                                  'Already cleaned. Files locked by the running '
+                                  'browser are queued and will be wiped the next '
+                                  'time SALU starts.',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    height: 1.35,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

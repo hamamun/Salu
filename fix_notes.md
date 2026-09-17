@@ -232,3 +232,46 @@ event (focus heals external Win+Down/taskbar changes); restore-while-
 fullscreen diverts through the clean `setFullScreen(false)` path; fullscreen
 toggle reads live state before acting so "exit" can never fire while
 windowed. The step-4 trigger is unreachable.
+
+## 9 · Clear browsing data dialog: Cookies & cache badges stuck at the pre-clean sizes
+**Status:** FIXED 2026-09-17 — `lib/core/web/web_data_control.dart`
+(discovery-based footprint + live cache sweep + purge-aware reporting),
+`lib/ui/widgets/browser_clear_dialog.dart` (queued-purge note),
+tests in `test/web_data_footprint_test.dart`.
+
+**Symptom:** after "Clear data", Browsing history correctly drops to
+"None", but Cookies & site data stays at e.g. "46 MB" and Cached images
+& files at "1.8 MB" forever — the cleaning looked like it did nothing.
+
+**Cause (traced):**
+- While the engine runs, the profile folder cannot be deleted, so the
+  clear marks it for the next-startup purge — but the reopened dialog
+  re-scanned the unchanged folder and reported the stale pre-clean size,
+  never the pending purge.
+- The plugin's `clearCookies` / `clearCache` are only DevTools calls
+  (`Network.clearBrowserCookies` / `Network.clearBrowserCache`): they
+  empty the live cookie jar and the in-memory HTTP cache, but never
+  touch Local Storage / IndexedDB / Service Workers (the bulk of the
+  "cookies" size) or GPUCache / ShaderCache / Code Cache (the leftover
+  "cache" size).
+- The cookies measurement had a bogus fallback: when the hardcoded
+  paths didn't match, it reported **whole profile size minus cache** —
+  counting Crashpad, preferences, runtime internals — a permanently
+  inflated number no clean could ever reduce ("not proper SALU data").
+
+**Fix:**
+- Footprint now discovers stores by their well-known Chromium names
+  (cookie jars, Local/Session Storage, IndexedDB, Service Worker,
+  Shared Storage · Cache, Code Cache, GPUCache, ShaderCache, DawnCache)
+  wherever the runtime parked them in the profile, depth-capped; the
+  whole-profile fallback is gone, so only real browsing data is ever
+  measured.
+- `clear(cache)` additionally deletes on-disk cache files the running
+  engine does not hold locked (Chromium cache entries are
+  delete-shareable), so the cache badge genuinely shrinks mid-session.
+- When a purge is queued, `measureFootprint` reports the locked
+  cookie/cache stores as cleaned ("None") instead of the stale size,
+  and the dialog shows a short "Already cleaned — locked files are
+  wiped next time SALU starts" note. Next startup's purge then
+  physically removes the folder before the environment exists, and the
+  badges measure the fresh profile.
