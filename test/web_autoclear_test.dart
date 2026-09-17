@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:salu/core/settings_service.dart';
 import 'package:salu/core/web/web_autoclear_policy.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The auto-clear schedule's two pure halves (web.md · Auto-clear —
 /// LOCKED): which moment the timing names, and whether the interval is

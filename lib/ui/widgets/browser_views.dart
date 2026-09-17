@@ -29,13 +29,15 @@ class WebStartPage extends StatelessWidget {
               'assets/images/salu_logo.png',
               width: 96,
               height: 96,
-              errorBuilder: (BuildContext c, Widget w, Object e) => Container(
-                width: 96,
-                height: 96,
-                alignment: Alignment.center,
-                child: const Icon(Icons.public,
-                    size: 48, color: AppColors.textSecondary),
-              ),
+              errorBuilder: (BuildContext c, Object e, StackTrace? st) {
+                return Container(
+                  width: 96,
+                  height: 96,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.public,
+                      size: 48, color: AppColors.textSecondary),
+                );
+              },
             ),
           ),
           const SizedBox(height: 18),

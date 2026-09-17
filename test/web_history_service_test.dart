@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:salu/core/web/web_history_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The browser's own memory of visits — the second suggestion source and
 /// the data the Clear dialog's first checkbox wipes (web.md).

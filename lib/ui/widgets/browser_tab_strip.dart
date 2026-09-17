@@ -97,54 +97,60 @@ class _TabChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        onSecondaryTap: onClose,
+      child: Listener(
+        // Middle-click closes the tab — a browser idiom the strip never
+        // labels (web.md). It rides a [Listener] because the middle button
+        // never reaches the tap recognizers [GestureDetector] owns.
+        behavior: HitTestBehavior.opaque,
         onPointerDown: (PointerDownEvent e) {
           if (e.buttons & kMiddleMouseButton != 0) onClose();
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          constraints: const BoxConstraints(maxWidth: 208, minWidth: 118),
-          padding: const EdgeInsets.only(left: 10, right: 6),
-          decoration: BoxDecoration(
-            color: active ? AppColors.surfaceHighlight : AppColors.surface,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: active ? AppColors.accent : AppColors.surfaceOutline,
+        child: GestureDetector(
+          onTap: onTap,
+          onSecondaryTap: onClose,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(maxWidth: 208, minWidth: 118),
+            padding: const EdgeInsets.only(left: 10, right: 6),
+            decoration: BoxDecoration(
+              color: active ? AppColors.surfaceHighlight : AppColors.surface,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: active ? AppColors.accent : AppColors.surfaceOutline,
+              ),
             ),
-          ),
-          child: Row(
-            children: <Widget>[
-              _TabBadge(tab: tab, active: active),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ValueListenableBuilder<String?>(
-                  valueListenable: tab.title,
-                  builder: (BuildContext context, String? _, Widget? __) {
-                    return Text(
-                      tab.displayTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.4,
-                        color: active
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
-                      ),
-                    );
-                  },
+            child: Row(
+              children: <Widget>[
+                _TabBadge(tab: tab, active: active),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: tab.title,
+                    builder: (BuildContext context, String? _, Widget? __) {
+                      return Text(
+                        tab.displayTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: active
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-              // The close × sits on the RIGHT side of the tab (web.md).
-              SaluIconButton(
-                size: 22,
-                onTap: onClose,
-                child: const CloseMark(size: 10),
-              ),
-            ],
+                // The close × sits on the RIGHT side of the tab (web.md).
+                SaluIconButton(
+                  size: 22,
+                  onTap: onClose,
+                  child: const CloseMark(size: 10),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -192,7 +198,7 @@ class _TabBadge extends StatelessWidget {
                 height: 14,
                 gaplessPlayback: true,
                 errorBuilder:
-                    (BuildContext c, Widget w, Object e) => letter,
+                    (BuildContext c, Object e, StackTrace? st) => letter,
               );
             },
           );
