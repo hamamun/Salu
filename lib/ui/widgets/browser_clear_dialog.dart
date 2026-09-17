@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/web/web_data_control.dart';
 import '../../theme/app_theme.dart';
-import '../osd/osd_controller.dart';
-import 'salu_marks.dart';
 
 /// The Clear dialog — Chrome/Edge-shaped, SALU-skinned (web.md · Clear data —
 /// LOCKED): exactly four items, all of it browser-owned data —
@@ -83,8 +81,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
   }
 
   Future<void> _loadFootprint() async {
-    final WebDataFootprint fp =
-        await WebDataControlService.instance.measureFootprint();
+    final WebDataFootprint fp = await WebDataControlService.measureFootprint();
     if (!mounted) return;
     setState(() {
       _footprint = fp;
@@ -103,12 +100,11 @@ class _WebClearDialogState extends State<_WebClearDialog> {
       downloads: _downloads,
     ));
 
-    if (mounted) {
-      Navigator.of(context).pop();
-      OsdController.instance.show(
-        const OsdUndoCard(label: 'Browsing data cleared'),
-      );
-    }
+    // The dialog itself is the confirmation (web.md · Clear data — LOCKED):
+    // it closes, and a reopened dialog shows the reduced, cleaned footprint.
+    // No Undo toast — the folder purge and per-view clears have no honest
+    // undo to offer.
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
