@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:salu/core/web/web_favourites_service.dart';
 import 'package:salu/core/web/web_suggestions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The 15-slot Web Bookmark store (web.md · key function 9): saved
 /// instantly, deduped by page identity, removable with an Undo path.

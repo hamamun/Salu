@@ -33,7 +33,10 @@ class WebAddress {
       return null;
     }
 
-    final RegExpMatch? schemeMatch = _schemePattern.matchAsPrefix(text);
+    // `Pattern.matchAsPrefix` answers with a plain [Match] (only
+    // `RegExp.firstMatch` narrows to [RegExpMatch]) — [Match.group] is all
+    // this branch needs.
+    final Match? schemeMatch = _schemePattern.matchAsPrefix(text);
     if (schemeMatch != null) {
       final String scheme = schemeMatch.group(1)!.toLowerCase();
       if (scheme != 'http' && scheme != 'https' && scheme != 'ftp') {

@@ -214,7 +214,7 @@ if (!window.__saluEsc) {
 
   void _wire(WebviewController c) {
     _subs
-      ..add(c.title.stream.listen((String t) {
+      ..add(c.title.listen((String t) {
         final String trimmed = t.trim();
         title.value = trimmed.isEmpty ? null : trimmed;
         final String? u = url.value;
@@ -222,14 +222,14 @@ if (!window.__saluEsc) {
           WebHistoryService.instance.retitle(u, trimmed);
         }
       }))
-      ..add(c.url.stream.listen((String u) {
+      ..add(c.url.listen((String u) {
         url.value = u.isEmpty ? null : u;
       }))
-      ..add(c.historyChanged.stream.listen((HistoryChanged h) {
+      ..add(c.historyChanged.listen((HistoryChanged h) {
         canGoBack.value = h.canGoBack;
         canGoForward.value = h.canGoForward;
       }))
-      ..add(c.loadingState.stream.listen((LoadingState state) {
+      ..add(c.loadingState.listen((LoadingState state) {
         if (state == LoadingState.loading) {
           loading.value = true;
           failed.value = false;
@@ -249,11 +249,11 @@ if (!window.__saluEsc) {
           _fire(() => c.executeScript(_escapeListenerJs));
         }
       }))
-      ..add(c.onLoadError.stream.listen((WebErrorStatus _) {
+      ..add(c.onLoadError.listen((WebErrorStatus _) {
         failed.value = true;
         loading.value = false;
       }))
-      ..add(c.containsFullScreenElementChanged.stream.listen((bool v) {
+      ..add(c.containsFullScreenElementChanged.listen((bool v) {
         wantsFullscreen.value = v;
       }));
   }

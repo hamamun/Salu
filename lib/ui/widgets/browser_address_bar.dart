@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/web/web_suggestions.dart';
 import '../../core/web/web_tab.dart';
@@ -406,10 +405,9 @@ class WebSuggestionMenu extends StatelessWidget {
               itemBuilder: (BuildContext context, int i) {
                 final WebSuggestion item = items[i];
                 final bool hot = i == cursorIndex;
-                return GestureDetector(
+                final Widget row = GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => onPick(item),
-                  onPointerEnter: (_) => onHover(i),
                   child: Container(
                     color: hot ? AppColors.surfaceHighlight : null,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -450,6 +448,12 @@ class WebSuggestionMenu extends StatelessWidget {
                       ],
                     ),
                   ),
+                );
+                // The pointer lights the row it rests on; ↑/↓ move the
+                // very same cursor through [onHover].
+                return MouseRegion(
+                  onEnter: (_) => onHover(i),
+                  child: row,
                 );
               },
             ),
