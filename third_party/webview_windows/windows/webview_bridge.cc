@@ -40,6 +40,7 @@ constexpr auto kMethodClearCookies = "clearCookies";
 constexpr auto kMethodClearCache = "clearCache";
 constexpr auto kMethodSetCacheDisabled = "setCacheDisabled";
 constexpr auto kMethodSetPopupWindowPolicy = "setPopupWindowPolicy";
+constexpr auto kMethodSetPreferredColorScheme = "setPreferredColorScheme";
 constexpr auto kMethodSetFpsLimit = "setFpsLimit";
 
 constexpr auto kEventType = "type";
