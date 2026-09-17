@@ -113,8 +113,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
             selected: _tab == _SettingsTab.subtitles,
             onTap: () => setState(() => _tab = _SettingsTab.subtitles),
           ),
-          // web.md — the Web tab: the browser's two settings
-          // (Search suggestions + the auto-clear schedule).
+          // web.md — the Web tab: the browser's settings (Search
+          // suggestions + pop-ups + the auto-clear schedule).
           _TabButton(
             label: 'Web',
             selected: _tab == _SettingsTab.web,

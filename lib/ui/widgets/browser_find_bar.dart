@@ -73,7 +73,12 @@ class BrowserFindBar extends StatelessWidget {
                   controller: query,
                   focusNode: queryFocus,
                   onChanged: onQueryChanged,
-                  onSubmitted: (_) => onNext(),
+                  // Shift is still physically down when Enter submits,
+                  // so the direction reads true here.
+                  onSubmitted: (_) => HardwareKeyboard
+                          .instance.isShiftPressed
+                      ? onPrev()
+                      : onNext(),
                   style: const TextStyle(
                     fontSize: 12.5,
                     color: AppColors.textPrimary,

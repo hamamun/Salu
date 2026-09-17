@@ -120,7 +120,9 @@ class WebFindResult {
       final Object? t = raw['total'];
       final Object? i = raw['index'];
       if (t is int && i is int && t >= 0) {
-        return WebFindResult(total: t, index: i.clamp(0, t));
+        // `clamp` answers `num` even for ints — the `.toInt()` is load-
+        // bearing, not decoration.
+        return WebFindResult(total: t, index: i.clamp(0, t).toInt());
       }
     }
     return none;
