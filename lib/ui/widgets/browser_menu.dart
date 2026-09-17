@@ -98,7 +98,7 @@ class _BrowserMenuState extends State<BrowserMenu> {
                 trailing: IconTheme(
                   data: const IconThemeData(color: AppColors.textSecondary),
                   child: AnimatedRotation(
-                    turns: _downloadsOpen ? 0.5 : 0,
+                    turns: _downloadsOpen ? 0.5 : 0.0,
                     duration: const Duration(milliseconds: 160),
                     curve: Curves.easeOut,
                     child: const RevealChevronMark(up: false, size: 13),
