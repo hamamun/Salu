@@ -179,6 +179,10 @@ class _TabBadge extends StatelessWidget {
           return ValueListenableBuilder<bool>(
             valueListenable: tab.loading,
             builder: (BuildContext context, bool loading, Widget? _) {
+              // No page yet — the chip simply reads "New tab"; a letter
+              // avatar would only stand in front of the words ("N New tab"),
+              // so the slot stays empty until a real page arrives.
+              if (url == null) return const SizedBox.shrink();
               if (active && loading) {
                 return const Padding(
                   padding: EdgeInsets.all(1.5),
@@ -189,7 +193,7 @@ class _TabBadge extends StatelessWidget {
                 );
               }
               final Widget letter = _Letter(tab: tab, active: active);
-              if (!tab.started || url == null || !url.startsWith('http')) {
+              if (!tab.started || !url.startsWith('http')) {
                 return letter;
               }
               return Image.network(
