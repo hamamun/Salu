@@ -335,7 +335,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
 /// The dialog's labelled action — the same outlined pill the History panel
 /// uses for "Clear all history", so the family's one text-shaped control
 /// looks the same everywhere: `surfaceOutline` border, 9px radius, Segoe
-/// 12px semibold, hover fills with `surfaceHighlight` and the label lights
+/// 12.5px semibold, hover fills with `surfaceHighlight` and the label lights
 /// to white (~120 ms), press sinks to 0.97× — no Material ripple, ink or
 /// elevation. Primary is carried by the label (white vs. secondary) and a
 /// brighter outline, never by a filled block behind it (follow.md · §6).
