@@ -249,6 +249,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         // its `+`, the content is the start page.
         _active = -1;
         _syncAddressTo('');
+        _blockedCount.value = 0;
         unawaited(_service.setWebFullscreen(false));
         _service.setStripTitle(null);
         _updateStar();
@@ -307,7 +308,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _syncAddressTo(start ? '' : (tab.url.value ?? ''));
     }
     _updateStar();
-    _blockedCount.value = tab.blocked.value.length;
+    _blockedCount.value =
+        tab.startMode.value ? 0 : tab.blocked.value.length;
     _service.setStripTitle(tab.displayTitle);
     setState(() {});
   }
@@ -1014,7 +1016,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       onSiteInfo: _toggleSitePanel,
                       onBlockedTap: _toggleBlockedList,
                       onMenu: _toggleMenu,
-                      onClearData: () => showWebClearDialog(context),
                       onBack: () => tab?.goBack(),
                       onForward: () => tab?.goForward(),
                       onReload: () => tab?.reload(),

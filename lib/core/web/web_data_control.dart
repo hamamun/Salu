@@ -31,6 +31,38 @@ class WebDataClearFlags {
   final bool downloads;
 }
 
+/// Data footprint summary for browsing data items.
+@immutable
+class WebDataFootprint {
+  const WebDataFootprint({
+    this.historyCount = 0,
+    this.historyBytes = 0,
+    this.cookiesBytes = 0,
+    this.cacheBytes = 0,
+  });
+
+  final int historyCount;
+  final int historyBytes;
+  final int cookiesBytes;
+  final int cacheBytes;
+
+  String get historyLabel {
+    if (historyCount == 0) return 'None';
+    final String items = historyCount == 1 ? '1 item' : '$historyCount items';
+    return items;
+  }
+
+  String get cookiesLabel {
+    if (cookiesBytes <= 0) return 'None';
+    return WebDataControlService.formatBytes(cookiesBytes);
+  }
+
+  String get cacheLabel {
+    if (cacheBytes <= 0) return 'None';
+    return WebDataControlService.formatBytes(cacheBytes);
+  }
+}
+
 /// Owner of everything the browser leaves BEHIND on disk: the WebView2
 /// profile (cookies, site storage, download bookkeeping), the browsing
 /// history store, and the auto-clear schedule.
@@ -210,6 +242,173 @@ class WebDataControlService {
   }
 
   static const Duration _perTabTimeout = Duration(seconds: 3);
+
+  // ── Data Footprint Measurement ──────────────────────────────────────────
+
+  /// Formats byte count into a clean human-readable string (Edge/Chrome style).
+  static String formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const List<String> units = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+    int digitGroups = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024.0 && digitGroups < units.length - 1) {
+      size /= 1024.0;
+      digitGroups++;
+    }
+    if (digitGroups == 0) return '${bytes.toInt()} B';
+    return '${size.toStringAsFixed(size >= 10 || digitGroups == 1 ? 0 : 1)} ${units[digitGroups]}';
+  }
+
+  /// Calculates the total size in bytes of all files in [dir], recursively.
+  static int _calculateDirSize(Directory dir) {
+    if (!dir.existsSync()) return 0;
+    int total = 0;
+    try {
+      final List<FileSystemEntity> entities =
+          dir.listSync(recursive: true, followLinks: false);
+      for (final FileSystemEntity entity in entities) {
+        if (entity is File) {
+          try {
+            total += entity.lengthSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return total;
+  }
+
+  /// Estimates the size of WebView2 cache files.
+  /// Common subdirectories in the user profile for cache:
+  /// EBWebView/Default/Cache, EBWebView/Default/Code Cache, etc.
+  static int getCacheBytes() {
+    final String? profile = profilePath();
+    if (profile == null) return 0;
+    final Directory dir = Directory(profile);
+    if (!dir.existsSync()) return 0;
+
+    int total = 0;
+    final List<String> candidateRelPaths = <String>[
+      p.join('EBWebView', 'Default', 'Cache'),
+      p.join('EBWebView', 'Default', 'Code Cache'),
+      p.join('EBWebView', 'Default', 'GPUCache'),
+      p.join('EBWebView', 'ShaderCache'),
+      p.join('Default', 'Cache'),
+      p.join('Default', 'Code Cache'),
+      p.join('Default', 'GPUCache'),
+    ];
+
+    bool foundSpecific = false;
+    for (final String rel in candidateRelPaths) {
+      final Directory target = Directory(p.join(profile, rel));
+      if (target.existsSync()) {
+        foundSpecific = true;
+        total += _calculateDirSize(target);
+      }
+    }
+
+    // If standard subfolder structure isn't matched directly, scan for any 'Cache' dir
+    if (!foundSpecific) {
+      try {
+        final List<FileSystemEntity> entities =
+            dir.listSync(recursive: false, followLinks: false);
+        for (final FileSystemEntity entity in entities) {
+          if (entity is Directory && p.basename(entity.path).toLowerCase().contains('cache')) {
+            total += _calculateDirSize(entity);
+          }
+        }
+      } catch (_) {}
+    }
+
+    return total;
+  }
+
+  /// Estimates the size of cookies and site data (storage, IndexedDB, WebSQL, etc).
+  static int getCookiesAndSiteDataBytes() {
+    final String? profile = profilePath();
+    if (profile == null) return 0;
+    final Directory dir = Directory(profile);
+    if (!dir.existsSync()) return 0;
+
+    final List<String> siteDataRelPaths = <String>[
+      p.join('EBWebView', 'Default', 'Cookies'),
+      p.join('EBWebView', 'Default', 'Cookies-journal'),
+      p.join('EBWebView', 'Default', 'Network', 'Cookies'),
+      p.join('EBWebView', 'Default', 'Local Storage'),
+      p.join('EBWebView', 'Default', 'IndexedDB'),
+      p.join('EBWebView', 'Default', 'Session Storage'),
+      p.join('EBWebView', 'Default', 'databases'),
+      p.join('EBWebView', 'Default', 'Service Worker'),
+      p.join('Default', 'Cookies'),
+      p.join('Default', 'Cookies-journal'),
+      p.join('Default', 'Network', 'Cookies'),
+      p.join('Default', 'Local Storage'),
+      p.join('Default', 'IndexedDB'),
+      p.join('Default', 'Session Storage'),
+      p.join('Default', 'databases'),
+    ];
+
+    int total = 0;
+    bool foundSpecific = false;
+    for (final String rel in siteDataRelPaths) {
+      final String full = p.join(profile, rel);
+      if (FileSystemEntity.isFileSync(full)) {
+        foundSpecific = true;
+        try {
+          total += File(full).lengthSync();
+        } catch (_) {}
+      } else if (FileSystemEntity.isDirectorySync(full)) {
+        foundSpecific = true;
+        total += _calculateDirSize(Directory(full));
+      }
+    }
+
+    // If specific folders not found but profile exists and not cache,
+    // take profile size minus cache
+    if (!foundSpecific && total == 0) {
+      final int allProfile = _calculateDirSize(dir);
+      final int cache = getCacheBytes();
+      if (allProfile > cache) {
+        total = allProfile - cache;
+      }
+    }
+
+    return total;
+  }
+
+  /// Returns the estimate of browsing data footprint for all categories:
+  /// - history count (number of visits) and JSON size
+  /// - cookies & site data size in bytes
+  /// - cached images & files size in bytes
+  /// - downloads record count / folder hint
+  static Future<WebDataFootprint> measureFootprint() async {
+    // 1. History
+    final int historyCount = WebHistoryService.instance.entries.value.length;
+    int historyBytes = 0;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? raw = prefs.getString(WebHistoryService.prefsKey);
+      if (raw != null) historyBytes = raw.length;
+    } catch (_) {}
+
+    // 2. Cache
+    int cacheBytes = 0;
+    // 3. Cookies & Site Data
+    int cookiesBytes = 0;
+
+    if (Platform.isWindows) {
+      try {
+        cacheBytes = getCacheBytes();
+        cookiesBytes = getCookiesAndSiteDataBytes();
+      } catch (_) {}
+    }
+
+    return WebDataFootprint(
+      historyCount: historyCount,
+      historyBytes: historyBytes,
+      cookiesBytes: cookiesBytes,
+      cacheBytes: cacheBytes,
+    );
+  }
 
   // ── Auto-clear schedule (web.md · Auto-clear — LOCKED) ─────────────────
 

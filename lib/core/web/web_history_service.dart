@@ -62,7 +62,8 @@ class WebHistoryService {
   static final WebHistoryService instance = WebHistoryService._internal();
 
   static const int maxEntries = 500;
-  static const String _prefsKey = 'web_browsing_history';
+  static const String prefsKey = 'web_browsing_history';
+  static const String _prefsKey = prefsKey;
 
   /// Consecutive visits to the SAME page collapse while the title keeps
   /// arriving (redirects, in-page pushes); beyond this window a real
