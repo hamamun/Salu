@@ -467,7 +467,7 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     }
     assert(value.isInitialized);
     return _methodChannel.invokeMethod(
-        'setBackgroundColor', color.value.toSigned(32));
+        'setBackgroundColor', color.toARGB32().toSigned(32));
   }
 
   /// Sets the zoom factor.
@@ -777,8 +777,13 @@ class _WebviewState extends State<Webview> {
     final box = _key.currentContext?.findRenderObject() as RenderBox?;
     if (box != null) {
       await _controller.ready;
+      final BuildContext? ctx = _key.currentContext;
+      final double fallbackRatio =
+          WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+      final double devicePixelRatio =
+          ctx != null ? View.of(ctx).devicePixelRatio : fallbackRatio;
       unawaited(_controller._setSize(
-          box.size, widget.scaleFactor ?? window.devicePixelRatio));
+          box.size, widget.scaleFactor ?? devicePixelRatio));
     }
   }
 
