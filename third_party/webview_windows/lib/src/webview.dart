@@ -656,7 +656,7 @@ class _WebviewState extends State<Webview> {
   void initState() {
     super.initState();
 
-    // TODO: Refactor callback and event handling and
+    
     // remove this line
     _controller._permissionRequested = widget.permissionRequested;
 
