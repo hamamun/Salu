@@ -54,6 +54,26 @@ void main() {
     });
   });
 
+  group('browser Home target', () {
+    test('returns the current website root and drops page details', () {
+      expect(
+        WebAddress.homeUrl(
+            'https://www.youtube.com/watch?v=dQw4w9WgXcQ#comments'),
+        'https://www.youtube.com/',
+      );
+    });
+
+    test('preserves the scheme and port for local sites', () {
+      expect(WebAddress.homeUrl('http://localhost:8080/docs/start'),
+          'http://localhost:8080/');
+    });
+
+    test('non-web destinations have no website home', () {
+      expect(WebAddress.homeUrl('about:blank'), isNull);
+      expect(WebAddress.homeUrl('file:///C:/home.html'), isNull);
+    });
+  });
+
   group('labels + identity', () {
     test('hostOf strips www and lowercases', () {
       expect(WebAddress.hostOf('https://www.Example.com/x'), 'example.com');

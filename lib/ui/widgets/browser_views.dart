@@ -11,9 +11,9 @@ import 'web_marks.dart';
 
 /// SALU's start page — plain Flutter, no HTML, no engine (web.md · "the
 /// start page is plain Flutter: the SALU logo and the words SALU Web
-/// Browser"). It is what the last closed tab leaves behind, what Home
-/// returns to, and what a new tab greets you with: nothing is initialized
-/// until the address bar sends a page off.
+/// Browser"). It is what the last closed tab leaves behind, what a fresh
+/// tab greets you with, and what Home keeps visible when there is no loaded
+/// website: nothing is initialized until the address bar sends a page off.
 class WebStartPage extends StatelessWidget {
   const WebStartPage({super.key});
 

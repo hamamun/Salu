@@ -82,6 +82,28 @@ class WebAddress {
   static String searchUrl(String query) =>
       'https://www.google.com/search?q=${Uri.encodeComponent(query.trim())}';
 
+  /// The current website's home URL: keep its scheme, host, and port while
+  /// dropping the page path, query, and fragment. This is what the browser's
+  /// Home button uses once a page is loaded (for example, a YouTube video
+  /// becomes `https://www.youtube.com/`).
+  ///
+  /// Non-web destinations have no website home, so callers can leave the
+  /// SALU start page visible instead.
+  static String? homeUrl(String raw) {
+    final Uri? uri = Uri.tryParse(raw.trim());
+    if (uri == null || uri.host.isEmpty) return null;
+    final String scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https' && scheme != 'ftp') {
+      return null;
+    }
+    return Uri(
+      scheme: scheme,
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
+      path: '/',
+    ).toString();
+  }
+
   /// Host without the leading `www.` — the label shown in tab tooltips
   /// and empty-title rows.
   static String hostOf(String url) {

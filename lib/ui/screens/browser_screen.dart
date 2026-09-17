@@ -496,15 +496,16 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
-  /// Return to SALU Web's own start page without leaving Web mode. Home is a
-  /// browser navigation action, not the Player · Web mode switch in the
-  /// title strip.
+  /// Navigate the active website to its own home page without leaving Web
+  /// mode. For example, YouTube's `/watch?...` page becomes YouTube's root
+  /// page in the same tab. A fresh tab has no website home, so it remains on
+  /// SALU Web's own start page.
   void _goHome() {
     final WebTab? tab = _tab;
-    if (tab != null) {
+    if (tab?.hasPage == true) {
+      unawaited(tab!.goHome());
+    } else if (tab != null) {
       tab.showStartPage();
-      // Home has no page URL, including when the address field was still
-      // focused on the page we just left.
       _syncAddressTo('');
     }
     _closePopups();
