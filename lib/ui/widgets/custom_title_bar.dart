@@ -35,6 +35,8 @@ class CustomTitleBar extends StatelessWidget {
     this.title,
     this.onSettings,
     this.immersive = false,
+    this.leading,
+    this.showMini = true,
   });
 
   /// Whether the bar is currently shown (parent-driven global hover logic).
@@ -49,6 +51,17 @@ class CustomTitleBar extends StatelessWidget {
   /// When true the bar renders plain content only: no gradient backdrop
   /// and no slide/fade wrapper (the fused parent block drives both).
   final bool immersive;
+
+  /// A widget pinned to the bar's top-left — web mode's Player · Web
+  /// switch lives in this slot, beside where the SALU mark sits in
+  /// Player mode (web.md · the toggle lock). The centered title is
+  /// untouched by it.
+  final Widget? leading;
+
+  /// false hides the Mini-bar glyph: there is no room for a browser
+  /// inside a 32-px strip (mini.md §8), so in web mode that button
+  /// simply does not stand on the stage.
+  final bool showMini;
 
   /// Fixed height of the caption area.
   static const double height = 40;
@@ -106,6 +119,21 @@ class CustomTitleBar extends StatelessWidget {
               ),
             ),
           ),
+          // The left slot — drawn above the drag area so its controls
+          // answer clicks while the rest of the bar still drags.
+          if (leading != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: leading!,
+                ),
+              ),
+            ),
           // Caption buttons — right aligned.
           Align(
             alignment: Alignment.centerRight,
@@ -117,14 +145,17 @@ class CustomTitleBar extends StatelessWidget {
                 // drawn in the caption family's ink and stroke, naming the
                 // action by shape — never by text (tooltips name controls,
                 // they never teach shortcuts; follow.md rule 2).
-                _CaptionButton(
-                  tooltip: 'Mini bar mode',
-                  onPressed: windows.toggleMini,
-                  child: const MiniBarMark(
-                    size: 18,
-                    color: AppColors.textPrimary,
+                // Web mode hides it (mini.md §8 — the browser does not fit
+                // a 32-px strip), so it never appears to lie.
+                if (showMini)
+                  _CaptionButton(
+                    tooltip: 'Mini bar mode',
+                    onPressed: windows.toggleMini,
+                    child: const MiniBarMark(
+                      size: 18,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
                 // SALU settings — six dots in two lines (left of Minimize).
                 _CaptionButton(
                   tooltip: 'Settings',

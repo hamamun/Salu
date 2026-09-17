@@ -1,6 +1,61 @@
 # SALU — Built-in Web Browser (WebView2)
 
-**Status:** ⏳ Not Started
+**Status:** ✅ Implemented — built against every lock in this file;
+the on-device checklist below still runs on a Windows build (first code
+touch requires `flutter pub get` — it pulls `webview_windows` and
+regenerates the Windows plugin glue; the app is Windows-only from here on
+for Web mode, and every other platform keeps Player mode).
+
+Where the code lives: `lib/core/web/` (address rules, suggestions, tabs,
+favourites, history, data control, auto-clear policy),
+`lib/core/browser_service.dart` (the Player · Web mode itself),
+`lib/ui/screens/browser_screen.dart` + `lib/ui/widgets/browser_*.dart`
+(the strip, bar, hub, sheet, dialog).
+
+Implementation notes, lock by lock:
+- **Tabs** — capped (`+` goes quiet past the cap), inactive tabs lazy: no
+  engine until first activation, `suspend()` while offstage;
+  × on the tab's right, `+` right of the last tab, middle/right-click also
+  closes. Last tab closed → Web mode stays, strip keeps its `+`, the
+  content is the plain-Flutter start page (logo + “SALU Web Browser”).
+- **Address bar** — typing only ever fills the dropdown (debounced),
+  Enter/row-pick navigates; Google suggest + history + favourites merged,
+  own data first; the Settings “Search suggestions” toggle mutes the
+  Google leg only; Google is the only search engine SALU ever navigates to.
+- **Favourite star** — the URL bar's left-corner two-state mark: outline
+  opens the save flow, filled opens the same sheet as an edit (Rename ·
+  Change folder · Remove), removals answer with the standard 5 s Undo.
+  Hub = ♥ left of the tab row, slide-down list with search, folder groups,
+  edit + delete. Store ≤ 15 Web Bookmarks, `shared_preferences`, instant.
+- **Clear** — broom mark just OUTSIDE the URL bar's right edge; the dialog
+  is the four locked checkboxes; history/cookies/cache/own-store deletes
+  apply instantly, and everything a live WebView2 profile locks is purged
+  at the next startup (the only moment a folder delete is guaranteed).
+  SALU's own data (resume, saved streams) lives in different stores and is
+  never in scope. Auto-clear = Settings → Web (off default · 7/15/30 days ·
+  open/close/both; “on closing” = the due-date sweep + stores flush at the
+  close guard, the locked-folder part running at next open).
+- **Mode + window** — Player · Web switch top-left of the strip in both
+  modes; Web draws no SALU media controls and pauses playback on entry;
+  page fullscreen hides SALU's whole chrome for the web view and Esc
+  (page-side listener + Flutter fallback) releases it; popups blocked by
+  default, permission prompts are one tidy card (camera/mic/location/
+  notifications/clipboard/sensors), downloads go to the WebView2 default
+  (Windows Downloads).
+- **Memory** — leaving for Player mode tears every `WebviewController`
+  down (session cache cleared before dispose); coming back starts clean.
+- `BrowserService.openInBrowser()` is the ready door for the Phase 6
+  Library panel (key function 3/6) when that lands.
+- Settings → Updates WebView2/yt-dlp detection stays Phase 4/5 scope —
+  intentionally not part of this cut.
+- PARKED: the floating mini-player in Web mode. OUT: drag & drop between
+  player and browser.
+
+**On-device checklist** (needs a Windows run): toggle in both modes ·
+tab cap + laziness · suggestion merge (and the Settings toggle) ·
+star ↔ sheet ↔ hub round-trip incl. Undo · clear dialog incl. next-startup
+purge · auto-clear all three timings · fullscreen hand-off + Esc ·
+popup/permission cards · resume memory untouched by any of it.
 
 **Source of truth:** `phase_6_details.md` (Phase 6: Web & Stream Manager), `salu_context.md`, `phase_4_details.md`, `phase_5_details.md`.
 
