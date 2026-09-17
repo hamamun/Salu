@@ -535,17 +535,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       onSelect: (int i) => _select(_tabs[i]),
                       onClose: _closeTab,
                       onNewTab: () => _newTab(),
-                      hub: _tabs.isEmpty
-                          ? null
-                          : _HubButton(
-                              open: _hubOpen,
-                              onTap: () => setState(() {
-                                _sheetOpen = false;
-                                _sheetIndex = null;
-                                _hideSuggestions();
-                                _hubOpen = !_hubOpen;
-                              }),
-                            ),
+                      hub: _HubButton(
+                        open: _hubOpen,
+                        onTap: () => setState(() {
+                          _sheetOpen = false;
+                          _sheetIndex = null;
+                          _hideSuggestions();
+                          _hubOpen = !_hubOpen;
+                        }),
+                      ),
                     ),
                     BrowserAddressBar(
                       tab: tab,
