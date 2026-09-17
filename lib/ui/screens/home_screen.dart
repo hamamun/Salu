@@ -389,13 +389,13 @@ class _HomeScreenState extends State<HomeScreen> {
   // down entirely — see [_isTyping] — so the keystroke reaches the
   // field instead of muting, stopping, seeking, or paging.
 
-  /// Whether the keyboard focus currently sits inside a text field — the
-  /// playlist filter is the only one living under this handler (dialog
-  /// fields sit on their own routes above it). While true, the bare
-  /// single-key shortcuts below stand down so typing reaches the field:
-  /// `m` lands in the filter instead of muting, arrows move the caret
-  /// instead of seeking, Space types a space instead of pausing. Ctrl
-  /// combinations stay global — they never insert text.
+  /// Whether the keyboard focus currently sits inside an editable field
+  /// under this screen (playlist filter, or a browser URL/search field).
+  /// While true, the bare single-key shortcuts below stand down so typing
+  /// reaches the field: `m` lands in the field instead of triggering a
+  /// global binding, arrows move the caret instead of seeking, and Space
+  /// types a space instead of pausing. Ctrl combinations stay global —
+  /// they never insert text.
   bool get _isTyping {
     final BuildContext? context = FocusManager.instance.primaryFocus?.context;
     if (context == null) return false;
@@ -418,6 +418,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (_browser.isWeb) {
+      // The browser owns every editable field in Web mode (URL bar,
+      // suggestions search, and favourite editor). Let those fields receive
+      // all ordinary keystrokes before considering SALU's global shortcuts;
+      // otherwise the global M/mini binding swallows the letter "m" in the
+      // address bar.
+      if (_isTyping) return KeyEventResult.ignored;
       if (key == LogicalKeyboardKey.keyM) {
         // No room for a browser in a 32-px strip (mini.md §8) — while Web
         // holds the stage the mini toggle deliberately does nothing.
