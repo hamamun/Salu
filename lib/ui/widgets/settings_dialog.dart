@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/language_names.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
+import '../../core/web/web_popup_service.dart';
 import '../../core/tune_service.dart';
 import '../../theme/app_theme.dart';
 import '../osd/osd_controller.dart';
@@ -137,9 +138,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
 /// The browser's settings, and only the browser's: the address bar's
 /// Google leg (web.md · "controlled by a Settings 'Search suggestions'
-/// toggle") and the auto-clear schedule (web.md · Auto-clear — LOCKED:
-/// off by default, every 7/15/30 days, at opening / closing / both).
-/// Everything else the browser does is a lock, not a setting.
+/// toggle"), the pop-up default + per-site exceptions (web.md · pop-ups
+/// lock, 2026-09-17 cut), and the auto-clear schedule (web.md ·
+/// Auto-clear — LOCKED: off by default, every 7/15/30 days, at opening /
+/// closing / both). Everything else the browser does is a lock, not a
+/// setting.
 class _WebTab extends StatelessWidget {
   const _WebTab();
 
@@ -165,6 +168,39 @@ class _WebTab extends StatelessWidget {
           ),
           SizedBox(height: 16),
           _WebSearchSuggestionsSwitch(),
+          SizedBox(height: 28),
+          Text(
+            'Pop-ups',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'What sites may open on their own. Held-back pop-ups show in '
+            'the address bar.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _WebPopupDefaultPicker(),
+          SizedBox(height: 20),
+          Text(
+            'Exceptions',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Sites that ignore the default — made in the padlock panel.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 12),
+          _WebPopupExceptions(),
           SizedBox(height: 28),
           Text(
             'Auto-clear',
@@ -278,6 +314,135 @@ class _WebSearchSuggestionsSwitch extends StatelessWidget {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+/// What sites may open on their own. Block is the default and Block is
+/// quiet: held-back pop-ups count into the address bar's badge instead of
+/// rendering anywhere, and flipping the default never opens or closes
+/// anything already held back.
+class _WebPopupDefaultPicker extends StatelessWidget {
+  const _WebPopupDefaultPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<WebPopupDefault>(
+      valueListenable: SettingsService.instance.webPopupDefault,
+      builder: (BuildContext context, WebPopupDefault policy, Widget? _) {
+        return Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _OptionTile(
+                icon: Icons.block_outlined,
+                label: 'Block',
+                helper:
+                    'Sites must ask — held-back pop-ups show in the address bar.',
+                isDefault: true,
+                selected: policy == WebPopupDefault.block,
+                onTap: () => SettingsService.instance
+                    .setWebPopupDefault(WebPopupDefault.block),
+              ),
+            ),
+            _OptionTile(
+              icon: Icons.open_in_new_outlined,
+              label: 'Allow',
+              helper: 'Sites may open new tabs on their own.',
+              selected: policy == WebPopupDefault.allow,
+              onTap: () => SettingsService.instance
+                  .setWebPopupDefault(WebPopupDefault.allow),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The per-site pop-up rules, made in the padlock panel (Chrome's Allowed
+/// / Blocked lists). Removing one hands the site back to the default.
+class _WebPopupExceptions extends StatelessWidget {
+  const _WebPopupExceptions();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<WebPopupException>>(
+      valueListenable: WebPopupService.instance.exceptions,
+      builder: (BuildContext context, List<WebPopupException> rules,
+          Widget? _) {
+        if (rules.isEmpty) {
+          return const Text(
+            'No exceptions — every site follows the default.',
+            style:
+                TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          );
+        }
+        return Column(
+          children: <Widget>[
+            for (final WebPopupException rule in rules)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          rule.host,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: rule.allow
+                              ? const Color(0x1F4C9EEB)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: rule.allow
+                                ? const Color(0x404C9EEB)
+                                : const Color(0xFF3A3A3C),
+                          ),
+                        ),
+                        child: Text(
+                          rule.allow ? 'Allow' : 'Block',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: rule.allow
+                                ? AppColors.accent
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      _HoverIconButton(
+                        icon: Icons.close,
+                        tooltip: 'Remove',
+                        onPressed: () => WebPopupService.instance
+                            .removeFor(rule.host),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         );
       },
     );

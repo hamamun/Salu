@@ -9,6 +9,7 @@ import '../../core/settings_service.dart';
 import '../../core/web/web_address.dart';
 import '../../core/web/web_favourites_service.dart';
 import '../../core/web/web_history_service.dart';
+import '../../core/web/web_popup_service.dart';
 import '../../core/web/web_suggestions.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
@@ -17,6 +18,7 @@ import '../widgets/browser_address_bar.dart';
 import '../widgets/browser_clear_dialog.dart';
 import '../widgets/browser_favourite_sheet.dart';
 import '../widgets/browser_favourites_hub.dart';
+import '../widgets/browser_site_panel.dart';
 import '../widgets/browser_tab_strip.dart';
 import '../widgets/browser_views.dart';
 import '../widgets/salu_icon_button.dart';
@@ -71,9 +73,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
   bool _hubOpen = false;
   bool _sheetOpen = false;
   int? _sheetIndex;
+  bool _siteOpen = false;
+  bool _blockedOpen = false;
 
   /// The star's two-state mirror (web.md · "the star knows").
   final ValueNotifier<bool> _saved = ValueNotifier<bool>(false);
+
+  /// The badge's count — the active tab's held-back list, mirrored so the
+  /// address bar never has to chase tab switches itself.
+  final ValueNotifier<int> _blockedCount = ValueNotifier<int>(0);
 
   WebTab? get _tab =>
       _active >= 0 && _active < _tabs.length ? _tabs[_active] : null;
@@ -115,6 +123,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
     _tabs.clear();
     _saved.dispose();
+    _blockedCount.dispose();
+    // The surface is gone — the visit-only pop-up memories go with it.
+    WebPopupService.instance.endSession();
     _address.dispose();
     _addressFocus.dispose();
     super.dispose();
@@ -134,6 +145,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     bool focusAddress = false,
   }) {
     final WebTab tab = WebTab(initialUrl: url, initialTitle: title);
+    tab.onPopupAllowed = (String popupUrl) => _openPopupTab(tab, popupUrl);
     setState(() {
       _tabs.add(tab);
       _selectLocked(tab);
@@ -218,6 +230,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       tab.startMode,
       tab.failed,
       tab.loading,
+      tab.blocked,
     ]) {
       n.addListener(_onActiveChanged);
       _bound.add((n, _onActiveChanged));
@@ -243,6 +256,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _syncAddressTo(start ? '' : (tab.url.value ?? ''));
     }
     _updateStar();
+    _blockedCount.value = tab.blocked.value.length;
     _service.setStripTitle(tab.displayTitle);
     setState(() {});
   }
@@ -306,6 +320,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
       );
       _cursor = -1;
       _suggestionsShown = _suggestions.isNotEmpty;
+      // The dropdown owns the stage — the site panel and the held-back
+      // list step aside for it (the one-popup world).
+      _siteOpen = false;
+      _blockedOpen = false;
     });
   }
 
@@ -381,12 +399,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
       return KeyEventResult.ignored; // onSubmitted navigates the bar
     }
     if (key == LogicalKeyboardKey.escape) {
-      if (_suggestionsShown || _hubOpen || _sheetOpen) {
+      if (_suggestionsShown || _hubOpen || _sheetOpen ||
+          _siteOpen || _blockedOpen) {
         setState(() {
           _hideSuggestions();
           _hubOpen = false;
           _sheetOpen = false;
           _sheetIndex = null;
+          _siteOpen = false;
+          _blockedOpen = false;
         });
         return KeyEventResult.handled;
       }
@@ -460,7 +481,73 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _sheetIndex = existing == null
           ? null
           : _favourites.favourites.value.indexOf(existing);
+      _siteOpen = false;
+      _blockedOpen = false;
     });
+  }
+
+  void _toggleSitePanel() {
+    if (_tab?.hasPage != true) return; // no page, no site to name
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _blockedOpen = false;
+      _siteOpen = !_siteOpen;
+    });
+  }
+
+  void _toggleBlockedList() {
+    final WebTab? tab = _tab;
+    if (tab == null || tab.blocked.value.isEmpty) return;
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _siteOpen = false;
+      _blockedOpen = !_blockedOpen;
+    });
+  }
+
+  /// An allowed pop-up asked to exist — it gets a new foreground tab
+  /// (Chrome parity). At the tab cap it parks in the held-back list
+  /// instead: a pop-up must never take over the tab being looked at.
+  void _openPopupTab(WebTab from, String url) {
+    if (!mounted) return;
+    if (_tabs.length >= kWebMaxTabs) {
+      if (_tabs.contains(from)) from.noteBlocked(url);
+      return;
+    }
+    _newTab(url: url);
+  }
+
+  /// One held-back row's "Open" — the pop-up becomes a real tab, and only
+  /// then leaves the list.
+  void _openBlockedUrl(String url) {
+    final WebTab? tab = _tab;
+    if (tab == null || _tabs.length >= kWebMaxTabs) return;
+    tab.dropBlocked(url);
+    setState(() => _blockedOpen = false);
+    _newTab(url: url);
+  }
+
+  /// The site panel's Allow/Block rows — a permanent rule for this site.
+  void _setSitePopups(bool allow) {
+    final String? url = _tab?.url.value;
+    if (url == null) return;
+    WebPopupService.instance.setFor(url, allow);
+    setState(() {}); // the panel reads the effective state at build
+  }
+
+  /// "Allow just for this visit" — no permanent rule for a disposable
+  /// domain; the memory evaporates with the browsing session.
+  void _visitAllowSite() {
+    final String? url = _tab?.url.value;
+    if (url == null) return;
+    WebPopupService.instance.allowVisit(url);
+    setState(() {});
   }
 
   void _saveFavourite(String name, String folder) {
@@ -486,11 +573,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   void _closePopups() {
-    if (_hubOpen || _sheetOpen || _suggestionsShown) {
+    if (_hubOpen ||
+        _sheetOpen ||
+        _suggestionsShown ||
+        _siteOpen ||
+        _blockedOpen) {
       setState(() {
         _hubOpen = false;
         _sheetOpen = false;
         _sheetIndex = null;
+        _siteOpen = false;
+        _blockedOpen = false;
         _hideSuggestions();
       });
     }
@@ -577,6 +670,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                           _sheetOpen = false;
                           _sheetIndex = null;
                           _hideSuggestions();
+                          _siteOpen = false;
+                          _blockedOpen = false;
                           _hubOpen = !_hubOpen;
                         }),
                       ),
@@ -587,10 +682,13 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       addressFocus: _addressFocus,
                       suggestionsShown: _suggestionsShown,
                       saved: _saved,
+                      blockedCount: _blockedCount,
                       onSubmit: _submitAddress,
                       onQueryChanged: _onQueryChanged,
                       onCancel: _closePopups,
                       onFavourite: _toggleFavouritePanel,
+                      onSiteInfo: _toggleSitePanel,
+                      onBlockedTap: _toggleBlockedList,
                       onClearData: () => showWebClearDialog(context),
                       onBack: () => tab?.goBack(),
                       onForward: () => tab?.goForward(),
@@ -605,7 +703,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
               ),
               // One translucent sheet over everything for outside-taps —
               // menus die with the next click anywhere, like Chrome's.
-              if (_chrome && (_hubOpen || _sheetOpen || _suggestionsShown))
+              if (_chrome &&
+                  (_hubOpen ||
+                      _sheetOpen ||
+                      _suggestionsShown ||
+                      _siteOpen ||
+                      _blockedOpen))
                 Positioned.fill(
                   child: Listener(
                     behavior: HitTestBehavior.translucent,
@@ -662,6 +765,56 @@ class _BrowserScreenState extends State<BrowserScreen> {
                         return KeyEventResult.ignored;
                       },
                       child: _buildSheet(),
+                    ),
+                  ),
+                ),
+              if (_chrome && _siteOpen && _tab?.hasPage == true)
+                Positioned(
+                  left: 150,
+                  top: kWebStripHeight + kWebRowHeight + 2,
+                  child: _PopGrow(
+                    child: BrowserSitePanel(
+                      pageUrl: _tab!.url.value!,
+                      secure: _tab!.url.value!
+                          .toLowerCase()
+                          .startsWith('https://'),
+                      popupsAllowed: WebPopupService.instance
+                          .resolve(_tab!.url.value),
+                      blockedCount: _tab!.blocked.value.length,
+                      onPopupsChanged: _setSitePopups,
+                      onVisitAllow: _visitAllowSite,
+                      onShowBlocked: () => setState(() {
+                        _siteOpen = false;
+                        _blockedOpen = true;
+                      }),
+                      onClose: () =>
+                          setState(() => _siteOpen = false),
+                    ),
+                  ),
+                ),
+              if (_chrome &&
+                  _blockedOpen &&
+                  _tab != null &&
+                  _tab!.blocked.value.isNotEmpty)
+                Positioned(
+                  right: 48,
+                  top: kWebStripHeight + kWebRowHeight - 4,
+                  width: 380,
+                  child: _PopGrow(
+                    child: BlockedPopupList(
+                      items: _tab!.blocked.value,
+                      host: WebAddress.hostOf(_tab!.url.value ?? ''),
+                      canOpen: _tabs.length < kWebMaxTabs,
+                      onOpen: _openBlockedUrl,
+                      onAllowSite: () {
+                        final String? url = _tab?.url.value;
+                        if (url != null) {
+                          WebPopupService.instance.setFor(url, true);
+                        }
+                        setState(() => _blockedOpen = false);
+                      },
+                      onClose: () =>
+                          setState(() => _blockedOpen = false),
                     ),
                   ),
                 ),

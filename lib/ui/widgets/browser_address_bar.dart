@@ -9,10 +9,11 @@ import 'salu_icon_button.dart';
 import 'web_marks.dart';
 
 /// The address bar — the browser's one omnibox (web.md · address bar):
-/// navigation to its LEFT (Home · Back · Forward · Reload), the favourite
-/// STAR inside its LEFT corner as the two-state saved mark, and the Clear
-/// button just OUTSIDE its right edge — because it clears the data of
-/// whatever the bar holds.
+/// navigation to its LEFT (Home · Back · Forward · Reload), the site
+/// padlock + the favourite STAR inside its LEFT corner (the padlock names
+/// the site, the star saves it), the held-back pop-up badge in its RIGHT
+/// corner while a page has any, and the Clear button just OUTSIDE its
+/// right edge — because it clears the data of whatever the bar holds.
 ///
 /// Typing NEVER loads a page (the lock): keystrokes debounce into the
 /// suggestion dropdown — Google while-they-type merged with SALU's own
@@ -27,10 +28,13 @@ class BrowserAddressBar extends StatefulWidget {
     required this.addressFocus,
     required this.suggestionsShown,
     required this.saved,
+    required this.blockedCount,
     required this.onSubmit,
     required this.onQueryChanged,
     required this.onCancel,
     required this.onFavourite,
+    required this.onSiteInfo,
+    required this.onBlockedTap,
     required this.onClearData,
     required this.onBack,
     required this.onForward,
@@ -52,6 +56,10 @@ class BrowserAddressBar extends StatefulWidget {
   /// true = this very page is a favourite.
   final ValueListenable<bool> saved;
 
+  /// How many pop-ups the active page has had held back — the badge's
+  /// count, kept by the screen from the active tab's list.
+  final ValueListenable<int> blockedCount;
+
   final VoidCallback onSubmit;
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onCancel;
@@ -59,6 +67,12 @@ class BrowserAddressBar extends StatefulWidget {
   /// Star tap: the slide-out favourite panel — save flow when outline,
   /// edit flow when filled. One door, two states.
   final VoidCallback onFavourite;
+
+  /// Padlock tap: the site panel (who this page is, pop-up rule).
+  final VoidCallback onSiteInfo;
+
+  /// Badge tap: the held-back pop-up list.
+  final VoidCallback onBlockedTap;
   final VoidCallback onClearData;
   final VoidCallback onBack;
   final VoidCallback onForward;
@@ -172,8 +186,9 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
             padding: const EdgeInsets.only(left: 2, right: 6),
             child: Row(
               children: <Widget>[
-                // The two-state saved mark in the bar's LEFT corner:
-                // outline = not saved, filled = already saved.
+                // The padlock names the site; the star saves it. The
+                // badge at the far end counts held-back pop-ups.
+                _SiteButton(tab: widget.tab, onTap: widget.onSiteInfo),
                 SaluIconButton(
                   size: 26,
                   active: focused,
@@ -208,11 +223,142 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
                     ),
                   ),
                 ),
+                _BlockedBadge(
+                  count: widget.blockedCount,
+                  onTap: widget.onBlockedTap,
+                ),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+/// The padlock in the bar's LEFT corner (Chrome's 🔒 slot): closed on
+/// https, open anywhere else, quiet while no page is showing. Taps open
+/// the site panel.
+class _SiteButton extends StatefulWidget {
+  const _SiteButton({required this.tab, required this.onTap});
+
+  final WebTab? tab;
+  final VoidCallback onTap;
+
+  @override
+  State<_SiteButton> createState() => _SiteButtonState();
+}
+
+class _SiteButtonState extends State<_SiteButton> {
+  ValueNotifier<String?>? _url;
+  ValueNotifier<bool>? _start;
+
+  @override
+  void initState() {
+    super.initState();
+    _attach();
+  }
+
+  @override
+  void didUpdateWidget(_SiteButton old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.tab, widget.tab)) {
+      _detach();
+      _attach();
+    }
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
+  }
+
+  void _attach() {
+    _url = widget.tab?.url;
+    _start = widget.tab?.startMode;
+    _url?.addListener(_onChange);
+    _start?.addListener(_onChange);
+  }
+
+  void _detach() {
+    _url?.removeListener(_onChange);
+    _start?.removeListener(_onChange);
+    _url = null;
+    _start = null;
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final WebTab? tab = widget.tab;
+    final bool alive = tab?.hasPage == true;
+    final String u = tab?.url.value ?? '';
+    final bool secure = u.toLowerCase().startsWith('https://');
+    return SaluIconButton(
+      size: 26,
+      enabled: alive,
+      onTap: widget.onTap,
+      tooltip: 'Site information',
+      child: PadlockMark(size: 13, open: !secure),
+    );
+  }
+}
+
+/// The held-back badge in the bar's RIGHT corner (Chrome's blocked-pop-up
+/// icon + count): present only while the page has pop-ups SALU held back.
+/// Taps open the held-back list.
+class _BlockedBadge extends StatelessWidget {
+  const _BlockedBadge({required this.count, required this.onTap});
+
+  final ValueListenable<int> count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: count,
+      builder: (BuildContext context, int n, Widget? _) {
+        if (n <= 0) return const SizedBox.shrink();
+        return Tooltip(
+          message: 'Pop-ups blocked',
+          waitDuration: const Duration(milliseconds: 400),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: Container(
+                margin: const EdgeInsets.only(right: 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceHighlight,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const PopupMark(size: 12),
+                    const SizedBox(width: 5),
+                    Text(
+                      '$n',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

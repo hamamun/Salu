@@ -86,6 +86,15 @@ enum WebAutoClearTrigger {
   close,
 }
 
+/// What sites may open on their own (Settings → Web → Pop-ups; web.md ·
+/// pop-ups lock, 2026-09-17 cut). Block is the default — held-back pop-ups
+/// count into the address bar's badge instead of rendering anywhere — and
+/// per-site rules (`WebPopupService`) override it in either direction.
+enum WebPopupDefault {
+  block,
+  allow,
+}
+
 /// SALU's persisted settings, backed by `shared_preferences`.
 ///
 /// UI-facing state lives in [ValueNotifier]s so widgets can react instantly;
@@ -104,6 +113,7 @@ class SettingsService {
   static const String _keyWebSearchSuggestions = 'web_search_suggestions';
   static const String _keyWebAutoClearInterval = 'web_auto_clear_interval';
   static const String _keyWebAutoClearTiming = 'web_auto_clear_timing';
+  static const String _keyWebPopupDefault = 'web_popup_default';
 
   // ── Auto EQ (eq_imp.md §5) ─────────────────────────────────────────────
   static const String _keyAutoEq = 'auto_eq';
@@ -153,6 +163,12 @@ class SettingsService {
   /// to the next startup (`WebDataControlService`).
   final ValueNotifier<WebAutoClearTiming> webAutoClearTiming =
       ValueNotifier<WebAutoClearTiming>(WebAutoClearTiming.onOpen);
+
+  /// What sites may open on their own (see [WebPopupDefault]). **Block by
+  /// default** — per-site rules in `WebPopupService` override it either
+  /// way, and held-back pop-ups count into the address bar's badge.
+  final ValueNotifier<WebPopupDefault> webPopupDefault =
+      ValueNotifier<WebPopupDefault>(WebPopupDefault.block);
 
   /// Auto EQ (eq_imp.md §5) — SALU picks a preset the moment a file loads
   /// and learns from the viewer's corrections. Default **Off**, and turning
@@ -248,6 +264,12 @@ class SettingsService {
             WebAutoClearTiming.values.asNameMap()[rawAutoClearTiming] ??
                 WebAutoClearTiming.onOpen;
       }
+      final String? rawPopupDefault = prefs.getString(_keyWebPopupDefault);
+      if (rawPopupDefault != null) {
+        webPopupDefault.value =
+            WebPopupDefault.values.asNameMap()[rawPopupDefault] ??
+                WebPopupDefault.block;
+      }
       autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
       mouseOverPreview.value = prefs.getBool(_keyMouseOverPreview) ?? false;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
@@ -277,6 +299,7 @@ class SettingsService {
       webSearchSuggestions.value = true;
       webAutoClearDays.value = WebAutoClearInterval.off;
       webAutoClearTiming.value = WebAutoClearTiming.onOpen;
+      webPopupDefault.value = WebPopupDefault.block;
       autoEq.value = false;
       mouseOverPreview.value = false;
       subtitleApiKey.value = '';
@@ -357,6 +380,20 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyWebAutoClearTiming, timing.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Web browser — what sites may open on their own (see
+  /// [WebPopupDefault]). Applies instantly and persists; per-site rules
+  /// keep overriding it either way, and flipping the default never opens
+  /// or closes anything already held back.
+  Future<void> setWebPopupDefault(WebPopupDefault policy) async {
+    webPopupDefault.value = policy;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyWebPopupDefault, policy.name);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }

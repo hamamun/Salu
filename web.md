@@ -38,10 +38,11 @@ Implementation notes, lock by lock:
 - **Mode + window** — Player · Web switch top-left of the strip in both
   modes; Web draws no SALU media controls and pauses playback on entry;
   page fullscreen hides SALU's whole chrome for the web view and Esc
-  (page-side listener + Flutter fallback) releases it; popups blocked by
-  default, permission prompts are one tidy card (camera/mic/location/
-  notifications/clipboard/sensors), downloads go to the WebView2 default
-  (Windows Downloads).
+  (page-side listener + Flutter fallback) releases it; pop-ups captured
+  by the document-start shim into the badge + per-site rules (2026-09-17
+  cut — the lock below), permission prompts are one tidy card
+  (camera/mic/location/notifications/clipboard/sensors), downloads go to
+  the WebView2 default (Windows Downloads).
 - **Memory** — leaving for Player mode tears every `WebviewController`
   down (session cache cleared before dispose); coming back starts clean.
 - `BrowserService.openInBrowser()` is the ready door for the Phase 6
@@ -55,7 +56,9 @@ Implementation notes, lock by lock:
 tab cap + laziness · suggestion merge (and the Settings toggle) ·
 star ↔ sheet ↔ hub round-trip incl. Undo · clear dialog incl. next-startup
 purge · auto-clear all three timings · fullscreen hand-off + Esc ·
-popup/permission cards · resume memory untouched by any of it.
+pop-up capture (stub defeats gates · badge + held-back list · per-site
+Allow/Block/visit · Settings default + exceptions) · permission cards ·
+resume memory untouched by any of it.
 
 **Source of truth:** `phase_6_details.md` (Phase 6: Web & Stream Manager), `salu_context.md`, `phase_4_details.md`, `phase_5_details.md`.
 
@@ -101,6 +104,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 | 2026-09-16 | **No SALU media controls — LOCKED** | Pure browser: no SALU play/pause/volume/transport. Sites (YouTube, Netflix, Prime, …) use their **own** player controls. **Fullscreen is handed to the web page** (like Edge) — the WebView takes the whole screen and HIDES SALU chin. |
 | 2026-09-16 | **Downloads — LOCKED** | Standard browser behaviour: send the file to **Windows File Explorer** (user's Downloads folder) — like Edge/Chrome. |
 | 2026-09-16 | **Popups & permissions — LOCKED** | Edge/Chrome-style: block popups by default + tidy prompts for site permissions (location, camera, notifications…). |
+| 2026-09-17 | **Pop-up system: capture + badge + per-site — LOCKED** | Engine policy stays `deny` (nothing ever escapes to an OS window); a document-start shim reports every `window.open` / `target=_blank` to Dart over `webMessage` and returns a stub handle, so ad-gates pass with nothing rendered. Held-back pop-ups count into an address-bar badge (⧉) with per-URL Open; allowed sites open in a new foreground SALU tab (at the tab cap they park in the list instead — never a hijack). Per-site Allow/Block lives in the padlock panel (+ "just for this visit", session-only); the global default + exceptions list live in Settings → Web. |
 
 ---
 
@@ -112,7 +116,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 ├──────────────────────────────────────────────────────────┤
 │  ♥Fav  ▢ Tab  ▢ Tab  ▢ Tab  [ + ]                       │
 ├──────────────────────────────────────────────────────────┤
-│  ⌂ ⇦ ⇨ ⟳   [ ☆  URL + suggestions…………………… ]   🧹Clear  │
+│  ⌂ ⇦ ⇨ ⟳   [ 🔒 ☆ URL + suggestions………… ⧉ ]   🧹Clear  │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
 │                    WebView (the page)                    │
@@ -152,8 +156,11 @@ ship its own browser engine — it *wraps* the one Windows already has.
 - `lib/ui/screens/` now contains `browser_screen.dart`; `lib/ui/widgets/`
   holds `browser_tab_strip.dart`, `browser_address_bar.dart`,
   `browser_favourite_sheet.dart`, `browser_favourites_hub.dart`,
+  `browser_site_panel.dart` (padlock panel + held-back list),
   `browser_clear_dialog.dart`, `browser_views.dart`, `web_marks.dart`,
-  `web_mode_toggle.dart`.
+  `web_mode_toggle.dart`; `lib/core/web/` holds `web_popup_service.dart`
+  (per-site rules + visit memories; the global default is
+  `SettingsService.webPopupDefault`).
 - `follow.md` records that the web browser, bookmarks, and Stream Library
   panel were **postponed** to be designed separately (they are not mpv work).
   Browser part is done; Stream Library / M3U sidebar remains Phase 6 pending.
