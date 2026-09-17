@@ -895,6 +895,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             immersive: true,
                             title: title,
                             onSettings: _openSettings,
+                            leading: BrowserService.browserSupported
+                                ? const WebModeToggle()
+                                : null,
                           );
                         },
                       ),
