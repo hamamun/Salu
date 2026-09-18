@@ -27,8 +27,10 @@ class BlockedPopup {
 /// A tab is LAZY: it holds no controller until it is first activated with
 /// something to show ([navigate] or a re-show of a loaded page), which is
 /// what keeps RAM in check while the hub keeps ten tabs alive. While a
-/// tab loses the stage, its engine is [suspend]ed rather than destroyed —
-/// the page keeps its place, the memory gives it up.
+/// tab loses the stage — a tab switch, or the whole browser going behind
+/// the player on a mode switch (web.md · mode keep-alive) — its engine is
+/// suspended rather than destroyed: the page keeps its place, the memory
+/// gives it up.
 ///
 /// The notifiers below are the single source of truth for the whole browser
 /// UI (tab chips, address bar, back/forward state, the fullscreen hand-off
@@ -266,7 +268,12 @@ class WebTab {
     if (!startMode.value) unawaited(reload());
   }
 
-  // ── Stage management (tab switching) ──────────────────────────────────
+  // ── Stage management (tab switching · mode switching) ─────────────────
+
+  /// Whether the engine view is suspended right now — an off-stage tab,
+  /// or a tab the mode switch parked (web.md · mode keep-alive). The page
+  /// keeps its place; the renderer gives up its memory.
+  bool _suspended = false;
 
   void activate() {
     final WebviewController? c = _controller;
@@ -277,12 +284,35 @@ class WebTab {
       if (pending != null) unawaited(navigate(pending));
       return;
     }
+    _suspended = false;
     _fire(() => c.resume());
   }
 
   void deactivate() {
     final WebviewController? c = _controller;
     if (c == null) return;
+    _suspended = true;
+    _fire(() => c.suspend());
+  }
+
+  /// The mode switch's leaving leg (web.md · mode keep-alive): the whole
+  /// browser goes behind the player, so every RUNNING page parks instead
+  /// of dying. The page's own media pauses first — a mode exit must never
+  /// leave a site playing behind the player, the same courtesy SALU's
+  /// player gets when Web mode opens — and only then the renderer
+  /// suspends (the off-stage tabs' contract, extended to the stage
+  /// itself). A tab that already gave up its renderer stays exactly as it
+  /// is. Coming back to Web mode, [activate] on the active tab brings the
+  /// page back — intact, and paused.
+  Future<void> park() async {
+    final WebviewController? c = _controller;
+    if (c == null || _suspended) return;
+    try {
+      await c
+          .executeScript(_pauseAllMediaJs)
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    _suspended = true;
     _fire(() => c.suspend());
   }
 
@@ -350,6 +380,27 @@ if (!window.__saluEsc) {
     }
   }, true);
 }''';
+
+  /// The mode switch's courtesy (web.md · mode keep-alive): every media
+  /// element in the page — and in every same-origin frame — pauses before
+  /// the renderer suspends. A cross-origin frame refuses the reach-in and
+  /// is skipped; its media stops with the freeze, like the page's own.
+  static const String _pauseAllMediaJs = r'''
+(function () {
+  function pauseAll(doc) {
+    if (!doc) return;
+    var media = doc.querySelectorAll('video, audio');
+    for (var i = 0; i < media.length; i++) {
+      try { if (!media[i].paused) media[i].pause(); } catch (e) {}
+    }
+    var frames = doc.querySelectorAll('iframe');
+    for (var j = 0; j < frames.length; j++) {
+      try { pauseAll(frames[j].contentDocument); } catch (e) {}
+    }
+  }
+  pauseAll(document);
+})();
+''';
 
   // ── Engine lifecycle ───────────────────────────────────────────────────
 

@@ -32,10 +32,13 @@ class WebOpenRequest {
 /// borrows (page fullscreen, the strip's title text).
 ///
 /// The service holds NO tab state — tabs live and die inside
-/// `BrowserScreen`'s tree, so leaving for Player mode tears the whole
-/// surface down: every `WebviewController` is destroyed and each engine's
-/// session cache is cleared before disposal (web.md · key function 8).
-/// Coming back to Web mode starts clean.
+/// `BrowserScreen`'s tree. That tree now outlives the mode switch
+/// (web.md · mode keep-alive): leaving for Player mode HIDES the surface
+/// (Offstage) and parks its running pages — media paused, renderers
+/// suspended — and coming back finds every page intact and paused. Only
+/// an app close tears it down: every `WebviewController` destroyed and
+/// each engine's session cache cleared before disposal (web.md · key
+/// function 8).
 class BrowserService {
   BrowserService._internal();
 
