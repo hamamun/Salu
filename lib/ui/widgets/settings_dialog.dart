@@ -15,21 +15,34 @@ import 'dot_grid_icon.dart';
 import 'salu_marks.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
-/// backdrop, opened by the 6-dot button in the title bar.
+/// backdrop, opened by the 6-dot button in the title bar and by the
+/// browser's own ⋮ menu.
 ///
-/// Current tabs: General. The tab strip is structured so later phases'
-/// Video / Audio / Subtitles tabs can slot right in.
+/// Current tabs: General · Subtitles · Web. The tab strip is structured
+/// so later phases' Video / Audio tabs can slot right in.
 class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key});
+  const SettingsDialog({super.key, this.initialTab = SettingsTab.general});
+
+  /// The tab the window opens on. General is the default at every door;
+  /// the browser's own doors ask for Web — a viewer who came from the web
+  /// section is after the web settings and should not have to hunt for
+  /// them through General first.
+  final SettingsTab initialTab;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
 }
 
-enum _SettingsTab { general, subtitles, web }
+/// The window's three tabs. Public because a caller picks the one to open
+/// on ([SettingsDialog.initialTab]).
+enum SettingsTab { general, subtitles, web }
 
 class _SettingsDialogState extends State<SettingsDialog> {
-  _SettingsTab _tab = _SettingsTab.general;
+  /// Opens on the door the viewer came through, then moves only by their
+  /// own taps. `late` because a field initializer cannot reach `widget`
+  /// any other way — and it is read once, at the first build, so a later
+  /// rebuild never throws the viewer back to the tab they arrived on.
+  late SettingsTab _tab = widget.initialTab;
 
   @override
   Widget build(BuildContext context) {
@@ -105,21 +118,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
         children: <Widget>[
           _TabButton(
             label: 'General',
-            selected: _tab == _SettingsTab.general,
-            onTap: () => setState(() => _tab = _SettingsTab.general),
+            selected: _tab == SettingsTab.general,
+            onTap: () => setState(() => _tab = SettingsTab.general),
           ),
           // cc.md §2 — the Subtitles tab (D1…D5, D13).
           _TabButton(
             label: 'Subtitles',
-            selected: _tab == _SettingsTab.subtitles,
-            onTap: () => setState(() => _tab = _SettingsTab.subtitles),
+            selected: _tab == SettingsTab.subtitles,
+            onTap: () => setState(() => _tab = SettingsTab.subtitles),
           ),
           // web.md — the Web tab: the browser's settings (Search
           // suggestions + pop-ups + the auto-clear schedule).
           _TabButton(
             label: 'Web',
-            selected: _tab == _SettingsTab.web,
-            onTap: () => setState(() => _tab = _SettingsTab.web),
+            selected: _tab == SettingsTab.web,
+            onTap: () => setState(() => _tab = SettingsTab.web),
           ),
         ],
       ),
@@ -128,9 +141,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Widget _buildBody() {
     return switch (_tab) {
-      _SettingsTab.general => const _GeneralTab(),
-      _SettingsTab.subtitles => const _SubtitlesTab(),
-      _SettingsTab.web => const _WebTab(),
+      SettingsTab.general => const _GeneralTab(),
+      SettingsTab.subtitles => const _SubtitlesTab(),
+      SettingsTab.web => const _WebTab(),
     };
   }
 }

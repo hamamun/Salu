@@ -333,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           visible: true,
                           immersive: true,
                           title: title,
-                          onSettings: _openSettings,
+                          onSettings: _openWebSettings,
                           leading: const WebModeToggle(),
                           badge: _downloadBadge,
                           showMini: false,
@@ -344,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: BrowserScreen(
                     chromeVisible: !pageOwnsScreen,
-                    onOpenSettings: _openSettings,
+                    onOpenSettings: _openWebSettings,
                   ),
                 ),
               ],
@@ -407,7 +407,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Settings window ────────────────────────────────────────────────────
 
-  void _openSettings() {
+  /// SALU's settings window. [tab] is the tab it opens on: General at the
+  /// player's own doors, Web at the browser's (its ⋮ menu and the Web-mode
+  /// title strip) — you came from the web section, so the web settings are
+  /// the ones already on screen when the window lands.
+  void _openSettings({SettingsTab tab = SettingsTab.general}) {
     _wakeChrome();
     // `showGeneralDialog` — unlike `showDialog` — accepts the transition
     // knobs below, so SALU's own fade + scale can drive the dialog in.
@@ -432,9 +436,15 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
       pageBuilder: (BuildContext context, Animation<double> animation,
-          Animation<double> secondaryAnimation) => const SettingsDialog(),
+          Animation<double> secondaryAnimation) =>
+          SettingsDialog(initialTab: tab),
     );
   }
+
+  /// The browser's two settings doors — its ⋮ menu's "Settings" row and
+  /// the Web-mode title strip's button — opening the same window on the
+  /// Web tab. Player mode's own door ([_openSettings]) still opens General.
+  void _openWebSettings() => _openSettings(tab: SettingsTab.web);
 
   // ── Drag & drop ────────────────────────────────────────────────────────
 

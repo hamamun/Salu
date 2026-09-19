@@ -64,7 +64,8 @@ class BrowserScreen extends StatefulWidget {
   final bool chromeVisible;
 
   /// Opens SALU's Settings window (the ⋮ menu's "Settings" row) — owned
-  /// by the home screen, which is where the window lives.
+  /// by the home screen, which is where the window lives and which tab a
+  /// door opens on: this one is the browser's, so it lands on Web.
   final VoidCallback? onOpenSettings;
 
   @override
