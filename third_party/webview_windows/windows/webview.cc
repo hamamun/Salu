@@ -482,13 +482,18 @@ void Webview::RegisterEventHandlers() {
                             download->get_BytesReceived(&recvd);
                             wil::unique_cotaskmem_string landed;
                             download->get_ResultFilePath(&landed);
+                            // The engine's own landing path is UTF-16 and
+                            // the fallback is the viewer's UTF-8 choice —
+                            // pick between them as UTF-8 so no char type
+                            // mixes (a `const char *` arm would not even
+                            // compile against this UTF-16 API).
+                            const std::string landedPath = landed.get()
+                                ? util::Utf8FromUtf16(landed.get())
+                                : finalPath;
                             download_event_callback_(
                                 {WebviewDownloadEventKind::DownloadCompleted,
-                                 url,
-                                 util::Utf8FromUtf16(
-                                     landed.get() ? landed.get()
-                                                  : finalPath.c_str()),
-                                 recvd, totalBytesToReceive});
+                                 url, landedPath, recvd,
+                                 totalBytesToReceive});
                           } else {
                             download_event_callback_(
                                 {WebviewDownloadEventKind::DownloadStarted,
