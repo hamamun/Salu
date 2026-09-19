@@ -336,7 +336,6 @@ class WebDownloadService {
     _lastProgressMs.clear();
     _promptTail = Future<WebSaveAnswer>.value(
         const WebSaveAnswer.engineDefault());
-    _askingNow = false;
     debugSaveLocationPicker = null;
     debugFolderPicker = null;
     _loaded = false;
@@ -597,12 +596,6 @@ class WebDownloadService {
   Future<WebSaveAnswer> _promptTail =
       Future<WebSaveAnswer>.value(const WebSaveAnswer.engineDefault());
 
-  /// True while a Save As is on screen — the one moment a download exists
-  /// for the engine but not yet for SALU's log, so the badge stays quiet
-  /// exactly as Chrome's shelf does until a file has a place to go.
-  bool get isAsking => _askingNow;
-  bool _askingNow = false;
-
   /// Asks where one download should land, and answers with what the
   /// viewer decided ([WebSaveAnswer]).
   ///
@@ -624,7 +617,6 @@ class WebDownloadService {
   }
 
   Future<WebSaveAnswer> _askOnce(String suggestedPath) async {
-    _askingNow = true;
     try {
       // The switch may have been flipped while this prompt waited in the
       // queue — the latest word wins, and "off" means stop asking.
@@ -647,8 +639,6 @@ class WebDownloadService {
       // No picker here, a window that will not open, a path the shell
       // refused — the engine's own folder takes the file instead.
       return const WebSaveAnswer.engineDefault();
-    } finally {
-      _askingNow = false;
     }
   }
 

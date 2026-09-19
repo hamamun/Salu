@@ -625,8 +625,8 @@ bool Webview::SetPreferredColorScheme(int scheme) {
       static_cast<COREWEBVIEW2_PREFERRED_COLOR_SCHEME>(scheme)));
 }
 
-bool Webview::SetDownloadPreferences(bool ask_where_to_save,
-                                     const std::string& default_download_folder) {
+bool Webview::SetDownloadPreferences(
+    bool ask_where_to_save, const std::string& default_download_folder) {
   // SALU addition (VENDOR_NOTES.md): Settings -> Web -> Downloads, the two
   // halves of "where do files land".
   //

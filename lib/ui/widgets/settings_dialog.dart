@@ -499,8 +499,8 @@ class _WebAskDownloadSwitch extends StatelessWidget {
       builder: (BuildContext context, bool on, Widget? _) {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () =>
-              unawaited(SettingsService.instance.setWebAskDownloadLocation(!on)),
+          onTap: () => unawaited(
+              SettingsService.instance.setWebAskDownloadLocation(!on)),
           child: Container(
             padding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
