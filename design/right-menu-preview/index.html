@@ -117,6 +117,35 @@
   .panel .row.now{color:var(--text)}
   .panel .row.now .dot{background:var(--text)}
 
+  /* ── the Info panel — left edge, below the control bar (info.md §0.2) ── */
+  .infopanel{position:absolute;left:0;top:40px;bottom:0;width:322px;z-index:8;
+    background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border-right:1px solid var(--outline);border-top-right-radius:14px;
+    display:flex;flex-direction:column;opacity:0;transform:translateX(-102%);
+    transition:transform .22s cubic-bezier(.2,.7,.3,1),opacity .22s ease}
+  .infopanel.open{opacity:1;transform:none}
+  .ihead{height:30px;flex:none;display:flex;align-items:center;gap:9px;padding:0 12px;
+    color:var(--idle)}
+  .ihead svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round}
+  .ihead svg .solid{fill:currentColor;stroke:none}
+  .ihead .sp{flex:1}
+  .ihead button{border:0;background:transparent;color:var(--idle);cursor:pointer;
+    width:22px;height:22px;display:grid;place-items:center;padding:0;
+    transition:color .12s ease,transform .12s ease}
+  .ihead button:hover{color:var(--text);transform:scale(1.06)}
+  .ihead button:active{transform:scale(.9)}
+  .ibody{flex:1;overflow-y:auto;padding:0 14px 14px;scrollbar-width:none}
+  .ibody::-webkit-scrollbar{display:none}
+  .igrp{margin-top:10px;padding-top:10px;border-top:1px solid var(--divider)}
+  .igrp:first-child{border-top:0;margin-top:2px;padding-top:0}
+  .igrp .iname{font-size:10.5px;color:var(--sec);letter-spacing:.08em;text-transform:uppercase;
+    margin-bottom:4px}
+  .irow{height:22px;display:flex;align-items:center}
+  .irow .il{width:78px;flex:none;font-size:11.5px;color:var(--sec)}
+  .irow .iv{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;font-feature-settings:"tnum"}
+
   /* ── the menu itself — two concepts, one box ─────────────────────────── */
   .menu{position:absolute;left:0;top:0;z-index:9;opacity:0;pointer-events:none;
     transition:opacity .14s ease,transform .16s cubic-bezier(.2,.8,.3,1)}
@@ -300,6 +329,11 @@
       <button data-c="row" class="on">A · the second row &nbsp;·&nbsp; LOCKED</button>
       <button data-c="ring">B · the ring &nbsp;·&nbsp; parked</button>
     </div>
+    <div class="seg" id="mediaSeg">
+      <button data-m="video" class="on">a video file</button>
+      <button data-m="audio">an audio file</button>
+      <button data-m="live">a live channel</button>
+    </div>
     <button class="tgl" id="panelTgl">Playlist panel</button>
     <button class="tgl" id="resetTgl">Reset states</button>
     <div class="hint">Stage: <b>right-click</b> · close: <b>Esc</b> or left-click the picture</div>
@@ -339,6 +373,15 @@
       <div class="row"><span class="dot"></span>Northbound</div>
       <div class="row"><span class="dot"></span>Slow Tide</div>
       <div class="row"><span class="dot"></span>Winter Ferry</div>
+    </div>
+
+    <div class="infopanel" id="infoPanel">
+      <div class="ihead">
+        <span id="infoHeadMark"></span>
+        <span class="sp"></span>
+        <button id="infoClose" title="Close info"></button>
+      </div>
+      <div class="ibody" id="infoBody"></div>
     </div>
 
     <div class="anchor" id="anchor"></div>
@@ -551,7 +594,9 @@ const state = {
   anchor: { x: 0, y: 0 },
   shuffle: false,
   repeat: 'off',       // off | all | one
-  door: null,          // info | remote | settings
+  door: null,          // remote | settings (centred cards)
+  infoOpen: false,     // the left panel (info.md §0)
+  media: 'video',      // video | audio | live — drives the Info rows
   panel: false,
   busy: false          // true while the fake web page owns the window
 };
@@ -716,17 +761,71 @@ function closeMenu(msg){
 
 /* Doors — dashed placeholders. Info and Remote are unbuilt on purpose:
    Info is parked in info.md, Remote waits on the Phase 8 server. */
+/* ── info.md §0 — the rows, per kind of media. A group with nothing to say
+   is not drawn, and a row with no truth is not drawn (§0.3/§0.5). ────────── */
+const INFO_SETS = {
+  video: { title: 'The Quiet Harbour — 2019 · 01:42:37', groups: [
+    ['Identity', [['Title','The Quiet Harbour'],['Year','2019'],['Genre','Drama']]],
+    ['Picture',  [['Resolution','1920 × 1080'],['Frame rate','23.976 fps'],
+                  ['Codec','h264 (High)'],['Decoder','d3d11va'],['Bitrate','8.4 Mbps']]],
+    ['Sound',    [['Codec','aac (LC)'],['Channels','5.1'],['Sample rate','48 kHz'],
+                  ['Bitrate','384 kbps'],['Language','English']]],
+    ['Clock & file', [['Duration','02:19:49'],['Position','01:42:37'],['Remaining','00:37:12'],
+                  ['File size','4.2 GB'],['Container','Matroska']]],
+    ['SALU',     [['Queue','4 of 12'],['Played from','resumed 12:34'],['EQ','Film'],
+                  ['Subtitles','+0.4 s']]]
+  ]},
+  audio: { title: 'Sable — Salt & Ash · 01:07', groups: [
+    ['Identity', [['Title','Sable'],['Artist','Harbour Lights'],['Album','Salt & Ash'],
+                  ['Year','2019'],['Genre','Ambient'],['Track','3 of 9']]],
+    ['Sound',    [['Codec','flac'],['Channels','2.0'],['Sample rate','44.1 kHz'],
+                  ['Bitrate','1 411 kbps']]],
+    ['Clock & file', [['Duration','04:12'],['Position','01:07'],['Remaining','03:05'],
+                  ['File size','42.6 MB'],['Container','FLAC']]],
+    ['SALU',     [['Queue','3 of 9'],['EQ','Ambient']]]
+  ]},
+  live: { title: 'ATN Bangla — live', groups: [
+    ['Identity', [['Title','ATN Bangla']]],
+    ['Picture',  [['Resolution','1280 × 720'],['Frame rate','25 fps'],['Codec','h264 (Main)'],
+                  ['Decoder','d3d11va'],['Bitrate','2.1 Mbps']]],
+    ['Sound',    [['Codec','aac (LC)'],['Channels','2.0'],['Sample rate','48 kHz']]],
+    ['Stream',   [['Provider','atn.example'],['Group','News'],
+                  ['Language','Bangla · from the tvg-id'],
+                  ['Country','Bangladesh · from the tvg-id'],
+                  ['Bitrate','2.1 Mbps'],['Buffered','2.4 s']]],
+    ['SALU',     [['Queue','17 of 48']]]
+  ]}
+};
+
+function infoRow(label, value){
+  return `<div class="irow"><span class="il">${label}</span><span class="iv">${value}</span></div>`;
+}
+function renderInfo(){
+  const set = INFO_SETS[state.media];
+  $('infoBody').innerHTML = set.groups.map(([name, rows]) =>
+    `<div class="igrp"><div class="iname">${name}</div>`
+    + rows.map(([l, v]) => infoRow(l, v)).join('') + '</div>').join('');
+  $('stripTitle').textContent = set.title;
+}
+function openInfo(){
+  renderInfo();
+  $('infoPanel').classList.add('open');
+  state.infoOpen = true;
+  doorTag.textContent = 'info.md §0 — left edge, below the control bar · 322 wide '
+    + '(this mock anchors at its 40 px strip; the real chrome block is 148 px)';
+  doorTag.classList.add('show');
+  const r = $('infoPanel').getBoundingClientRect(), st = stage.getBoundingClientRect();
+  doorTag.style.left = (st.width - 660) + 'px';
+  doorTag.style.top = '52px';
+}
+function closeInfo(msg){
+  $('infoPanel').classList.remove('open');
+  state.infoOpen = false;
+  doorTag.classList.remove('show');
+  if (msg) say(msg);
+}
+
 const DOORS = {
-  info: {
-    tag: 'mock — the Info surface is a separate decision (info.md holds the field inventory)',
-    w: 380, h: 190,
-    html: `<div class="dt">The Quiet Harbour</div>
-      <div class="dr"><b>Picture</b><span>1920 × 1080 · 23.976 fps · h264 (d3d11va)</span></div>
-      <div class="dr"><b>Sound</b><span>aac · 2 ch · 48 kHz · volume 100 %</span></div>
-      <div class="dr"><b>Clock</b><span>01:42:37 · left 00:37:12</span></div>
-      <div class="dr"><b>File</b><span>MKV · 4.2 GB · 2019</span></div>
-      <div class="dr"><b>SALU</b><span>engine mpv 0.3x · build 2026.09</span></div>`
-  },
   remote: {
     tag: 'mock — Remote has no payload until the Phase 8 server exists',
     w: 214, h: 208,
@@ -778,6 +877,20 @@ function qrPlaceholder(){
   return `<svg class="qr" viewBox="-0.5 -0.5 ${N+1} ${N+1}" fill="currentColor">${eyes}${mods}</svg>`;
 }
 
+/* The panel's header: the mark that opened it, and the close mark. */
+(function buildInfoHeader(){
+  const mark = document.createElement('div');
+  mark.innerHTML = infoMark(previewMarks.info);
+  $('infoHeadMark').replaceWith(mark.firstElementChild);
+  const close = document.createElement('div');
+  close.innerHTML = svg('<path d="M5.6 5.6 L14.4 14.4 M14.4 5.6 L5.6 14.4"/>');
+  $('infoClose').appendChild(close.firstElementChild);
+  $('infoClose').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeInfo('The header\'s close mark closed the Info panel.');
+  });
+})();
+
 /* A mark was clicked */
 function hit(kind){
   if (kind === 'shuffle'){
@@ -791,6 +904,11 @@ function hit(kind){
     renderMenu();
     say('Repeat <b>' + state.repeat + '</b> — the strip stays open.'
       + (state.repeat === 'one' ? ' The bead appears at the arc\'s centre.' : ''));
+  } else if (kind === 'info'){
+    closeMenu();
+    openInfo();
+    say('Info opens as a <b>left panel</b> (info.md §0) — a live read, so it is a panel and never a modal. '
+      + 'It re-reads on a media change and <b>stays open</b>.');
   } else {
     closeMenu();
     setTimeout(() => openDoor(kind), 60);
@@ -832,6 +950,7 @@ function onRightClick(ev){
     say('<b>Web mode:</b> nothing happens — by construction. The player tree is not built while the browser owns the window, so this gesture cannot exist there.');
     return;
   }
+  if (state.infoOpen){ closeInfo('Right-click <b>closed the Info panel</b> first — the menu opens on a clean screen.'); return; }
   if (state.door){ closeDoor('Right-click <b>closed the door</b> first — the menu opens on a clean screen.'); return; }
   if (state.panel){ togglePanel(false); say('Right-click <b>closed the Playlist panel</b> first — its dismiss barrier owns the gesture. Second right-click opens the menu.'); return; }
   if (state.open){ closeMenu('Right-click closed the menu — the gesture is its own toggle.'); return; }
@@ -841,6 +960,7 @@ function onRightClick(ev){
 
 function onLeftClick(ev){
   if (state.mode === 'web') return;
+  if (state.infoOpen){ closeInfo('Click outside closed the Info panel.'); return; }
   if (state.door){ closeDoor('Click outside closed the door.'); return; }
   if (state.open){ closeMenu('Click outside closed the menu.'); return; }
   if (state.panel){ togglePanel(false); return; }
@@ -866,6 +986,7 @@ function togglePanel(force){
 
 document.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Escape') return;
+  if (state.infoOpen) { closeInfo('Esc closed the Info panel.'); return; }
   if (state.door) { closeDoor('Esc closed the door.'); return; }
   if (state.open) { closeMenu('Esc closed the menu.'); return; }
   if (state.panel){ togglePanel(false); return; }
@@ -875,8 +996,13 @@ document.addEventListener('keydown', (ev) => {
 stage.addEventListener('contextmenu', onRightClick);
 stage.addEventListener('click', onLeftClick);
 document.addEventListener('click', (ev) => {
-  // clicks outside the stage close anything the stage left open
-  if (!stage.contains(ev.target)){ if (state.door) closeDoor(); if (state.open) closeMenu(); hideChip(); }
+  // clicks outside the stage close anything the stage left open — but the
+  // toolbar's own controls (the concept and media switches) are preview
+  // instruments, not the window: they never count as "click outside".
+  const fromToolbar = ev.target.closest && ev.target.closest('.bar');
+  if (!stage.contains(ev.target) && !fromToolbar){
+    if (state.door) closeDoor(); if (state.infoOpen) closeInfo(); if (state.open) closeMenu(); hideChip();
+  }
 });
 
 /* concept switch */
@@ -890,6 +1016,20 @@ $('conceptSeg').addEventListener('click', (ev) => {
     ? 'Concept A — the second row: one frosted strip at the click point, pitch-only grouping.'
     : 'Concept B — the ring: marks bloom around the cursor, staggered, hairline glass, no rectangle.');
 });
+$('mediaSeg').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  state.media = b.dataset.m;
+  Array.from($('mediaSeg').children).forEach(x => x.classList.toggle('on', x === b));
+  if (state.infoOpen) renderInfo();          // re-reads, stays open (info.md §0.8)
+  const what = { video: 'a local video file', audio: 'a local audio file',
+                 live: 'a live channel' }[state.media];
+  say('Playing ' + what + ' — ' + (state.media === 'live'
+      ? 'the <b>Clock &amp; file</b> group has no truth (no duration, no file), so it drops and the <b>Stream</b> group takes its place.'
+      : state.media === 'audio'
+        ? 'there is no picture, so the whole <b>Picture</b> group drops — groups are not drawn empty.'
+        : 'both a picture and a file exist, so <b>Picture</b> and <b>Clock &amp; file</b> are both drawn.'));
+});
+
 $('panelTgl').addEventListener('click', () => togglePanel());
 
 /* mode switch — the real Player · Web switch lives in the title strip */
@@ -900,7 +1040,7 @@ $('modeSwitch').addEventListener('click', () => {
   $('mwPlayer').classList.toggle('lit', !web);
   $('mwWeb').classList.toggle('lit', web);
   $('stripTitle').textContent = web ? 'SALU — built-in browser' : 'The Quiet Harbour — 2019 · 01:42:37';
-  if (web){ closeMenu(); closeDoor(); togglePanel(false); state.panel = false; }
+  if (web){ closeMenu(); closeDoor(); closeInfo(); togglePanel(false); state.panel = false; }
   say(web
     ? 'Web mode: the player tree is unmounted. Right-click the page — nothing happens, and nothing needs to be remembered.'
     : 'Player mode: the picture and the gesture are back.');
@@ -908,8 +1048,9 @@ $('modeSwitch').addEventListener('click', () => {
 
 /* reset */
 $('resetTgl').addEventListener('click', () => {
-  state.shuffle = false; state.repeat = 'off';
-  closeMenu(); closeDoor(); togglePanel(false);
+  state.shuffle = false; state.repeat = 'off'; state.media = 'video';
+  Array.from($('mediaSeg').children).forEach((x,i) => x.classList.toggle('on', i === 0));
+  closeMenu(); closeDoor(); closeInfo(); togglePanel(false);
   if (state.open) menu.classList.remove('show');
   state.open = false;
   say('States reset — shuffle off, repeat off, everything closed.');

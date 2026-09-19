@@ -51,7 +51,11 @@ alternative — not rejected, not built.
 | Web mode = nothing | by construction: the player tree is not built while the browser owns the window |
 | Mini mode = nothing | the 32 px bar builds no popups, and this is not the exception |
 | Channel (IPTV) lists | repeat + shuffle dropped, as the channel header already drops them |
-| Esc tiers | door → menu → panel |
+| Esc tiers | door → info panel → menu → playlist panel |
+| **Info opens as a LEFT panel** | `info.md` §0 — left edge, top at the chrome block's bottom, 322 wide (the Playlist panel's width, mirrored) |
+| Info re-reads on a media change, stays open | unlike the Track panel, which closes — it describes what is playing |
+| The media switch in the toolbar | proves the presence rules: **video** = Picture + Clock & file · **audio** = no Picture group · **live** = no Clock & file, Stream instead |
+| A group with nothing to say is not drawn | and a row with no truth is not drawn — never `—`, never `N/A` |
 | 5 marks is the ceiling | a sixth means a different design |
 
 ## Keys in the preview (reviewer conveniences, not the shipping design)
@@ -63,8 +67,9 @@ alternative — not rejected, not built.
 | `I` | swaps the Info mark between proposal **A** (circle-i) and **B** (sheet) |
 | `R` | swaps the Remote mark between proposal **A** (scan frame) and **B** (phone + arcs) |
 
-The **Playlist panel** button in the toolbar exists only to prove the
-close-first contract; the **Reset states** button clears the toggles.
+The **Playlist panel** button exists only to prove the close-first contract,
+the **media switch** (video · audio · live channel) exists only to prove the
+presence rules of `info.md` §0.5, and **Reset states** clears the toggles.
 
 ## Marks
 

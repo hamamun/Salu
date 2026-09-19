@@ -23,7 +23,8 @@ Preview: `design/right-menu-preview/index.html` (+ its `README.md`).
 | 2026-09-19 | The layer is a **right-button menu in Player mode only** — never over the web surface, never in mini | ✅ LOCKED (owner's brief) |
 | 2026-09-19 | The five marks, in this order: **shuffle · repeat · info · remote · settings** | ✅ LOCKED (owner's brief) |
 | 2026-09-19 | **Concept A · the second row** — one slim frosted strip at the click point. *Concept B (the ring) is parked, not rejected* | ✅ LOCKED (owner, from `design/right-menu-preview/`) |
-| — | Everything else — the two new marks, the Info surface, Remote's payload, frozen vs live | ⏳ open (§12) |
+| 2026-09-19 | **Info is defined** — the panel lives in `info.md` §0: left edge, below the control bar, 322 wide, six groups (Identity · Picture · Sound · Clock & file · SALU · Stream) | ✅ LOCKED (`info.md`) |
+| — | Still open — the two new marks, Remote's payload, the marker `Ctrl+I` question | ⏳ open (§12) |
 
 ---
 
@@ -238,27 +239,28 @@ hand like every other one.
 
 ---
 
-## 8. Info — the one genuinely new surface (DECIDE BEFORE BUILDING)
+## 8. Info — now DEFINED (2026-09-19)
 
-`info.md` is a **parked inventory**, and its own header says no field in it is
-decided and nothing is implemented. What the Info door shows is a *design
-decision*, not a build step:
+The Info surface is no longer an open question: the owner defined it and it
+lives in **`info.md` §0** (rows, placement, presence rules, live-vs-frozen,
+refusals, behaviour). What this file needs to say about it is only the seams:
 
-1. **Merge Info and About.** Phase 9's About (app identity, mpv version,
-   build, credits) and Info (what is playing) are one door with two faces —
-   what is playing while something plays, Salu itself when nothing is.
-2. **Info is a panel, not a modal** — the threshold in rule 8 is *used while
-   watching*: reading the codec of the film in front of you is that.
-3. **The field list comes from `info.md`, and only from it.** It marks its own
-   uncertain items ⚠ — those get verified against the engine Salu ships
-   (§7 of `info.md`, the harvest recipe) or dropped, never guessed.
-4. **Audio/video/channel each get their own short list.** Four or five rows,
-   read by type size alone, no labels — the `AlbumArtView` discipline.
-5. **Live or frozen?** Live (bitrate, cache, fps) costs a read loop; frozen at
-   open costs one. **Recommend frozen at open**, refreshed on reopen — live
-   numbers turn a quiet surface into a dashboard.
-
----
+1. **The door is the menu's Info mark** — nothing else. No control-row mark, no
+   title-bar button. The mark reads **lit** while the panel is open and
+   **dimmed/inert** when nothing is loaded.
+2. **It is a panel** (`follow.md` rule 8 — a live read), so it joins the
+   one-popup world: opening it closes the Playlist · Track · Tune panels **and
+   the Open pill**; opening any of them closes Info.
+3. **Finding — the Open pill collides with it.** Both own the left region below
+   the chrome, and `open_media_control.dart` today makes **no** `PanelService`
+   call, so the pill would open *under* a glass panel that paints above the
+   chrome. Building Info means wiring `PanelService.infoOpen` into the pill's
+   open path. (This is the one code change Info forces outside its own file.)
+4. **`InfoMark`** is shared with §4 below — one mark, two places (menu + panel
+   header).
+5. **About is not merged.** The owner's Info is strictly *what is playing*; the
+   SALU group carries the only Salu-state rows it needs, and Phase 9's About
+   stays its own question (`info.md` §9.4).
 
 ## 9. Remote — blocked, and the block is real (DECIDE)
 
@@ -316,9 +318,13 @@ decision comes first.
 1. ~~**Concept A or B?**~~ — **ANSWERED 2026-09-19: A · the second row** (§3).
 2. **Info mark:** circle-i (recommended) or sheet? **Remote mark:** scan frame
    (recommended) or phone + arcs (fails at true size — see §4)?
-3. **Info or About first?** Merge them (§8.1) or ship About as it stands and
-   make Info a later phase?
-4. **Frozen at open** (recommended) or live numbers? (§8.5)
+3. ~~**Info or About first?**~~ — **ANSWERED 2026-09-19: neither is merged.**
+   Info is defined on its own in `info.md` §0 (media facts only); About stays a
+   separate Phase 9 question.
+4. ~~**Frozen at open or live?**~~ — **ANSWERED 2026-09-19 in `info.md` §0.6:**
+   the three clock rows (duration · position · remaining) tick off the existing
+   notifiers; every other row is read once at open and re-read on media/track
+   changes. This supersedes the earlier "freeze everything" advice.
 5. **Remote:** park until Phase 8 (recommended) or define the payload now
    (§9)?
 6. **Suspended shuffle ink:** keep 55 % (consistency with the header) or give
