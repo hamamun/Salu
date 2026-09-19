@@ -561,17 +561,20 @@ class _SaluCheckbox extends StatelessWidget {
       width: 19,
       height: 19,
       decoration: BoxDecoration(
-        color: checked ? AppColors.accent : Colors.transparent,
+        // SALU style (follow.md · rules 4 + 6): the state is carried by
+        // the mark — a white tick lights inside a quiet outline. No
+        // accent fill, never a coloured block behind a mark.
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(5),
         border: Border.all(
-          color: checked ? AppColors.accent : const Color(0xFF5A5A5E),
+          color: checked ? AppColors.iconIdle : AppColors.statusUnknown,
           width: 1.6,
         ),
       ),
       alignment: Alignment.center,
       child: checked
           ? const IconTheme(
-              data: IconThemeData(color: Colors.white),
+              data: IconThemeData(color: AppColors.textPrimary),
               child: TickMark(size: 12),
             )
           : null,
