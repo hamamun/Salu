@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU · right-click layer — design preview</title>
+<style>
+  /* ── SALU palette (lib/theme/app_theme.dart · AppColors) ───────────── */
+  :root{
+    --bg:#1E1E1E; --video:#121212; --surface:#252526; --surface-hi:#2D2D30;
+    --text:#EDEDED; --idle:#A6A6A6; --sec:#9A9A9A; --divider:#3A3A3C;
+    --outline:#333336; --accent:#4C9EEB; --alive:#57C777; --dead:#E05B5B;
+    --glass:rgba(30,30,30,.80); --chip:#F02C2C31;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#101013;color:var(--text);
+    font:13px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    padding:34px 26px 90px;display:flex;flex-direction:column;align-items:center;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{width:1020px;max-width:100%;margin-bottom:8px}
+  header .k{font-size:10px;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;color:#7c7c80;margin-bottom:6px}
+  header h1{font-size:21px;font-weight:600;letter-spacing:.01em}
+  header p{color:var(--sec);font-size:12.5px;margin-top:6px;max-width:800px}
+  header p b{color:var(--text);font-weight:600}
+
+  section{width:1020px;max-width:100%;margin-top:34px}
+  section>h2{font-size:12px;font-weight:600;letter-spacing:.09em;
+    text-transform:uppercase;color:#8f8f94;margin-bottom:4px}
+  section>.sub{color:var(--sec);font-size:12px;margin-bottom:14px;max-width:830px}
+  section>.sub b{color:var(--text);font-weight:600}
+
+  /* ── verdict card (the check-first answer) ──────────────────────────── */
+  .verdict{border:1px solid #2b2f36;background:#161b21;border-radius:12px;padding:16px 18px}
+  .verdict .vt{font-size:15px;font-weight:600;margin-bottom:4px}
+  .verdict .vs{color:var(--sec);font-size:12.5px;margin-bottom:12px}
+  .verdict ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+  .verdict li{display:flex;gap:9px;font-size:12.5px;color:#c6c6ca;line-height:1.5}
+  .verdict li i{flex:none;width:14px;height:14px;margin-top:3px;border-radius:50%;
+    border:1.4px solid var(--idle);position:relative;opacity:.85}
+  .verdict li i::after{content:'';position:absolute;left:3.4px;top:5.2px;width:5px;height:1.6px;
+    background:var(--idle);transform:rotate(-45deg);transform-origin:left center}
+  .verdict li i::before{content:'';position:absolute;left:2.4px;top:6.4px;width:2.4px;height:1.6px;
+    background:var(--idle);transform:rotate(45deg);transform-origin:left center}
+  .verdict li b{color:var(--text);font-weight:600}
+  .verdict code{font:11.5px/1.4 "Cascadia Mono",Consolas,monospace;color:#9fc4e8}
+
+  /* ── mark cards ─────────────────────────────────────────────────────── */
+  .grid{display:flex;flex-wrap:wrap;gap:10px}
+  .card{width:132px;background:#191b1f;border:1px solid #26282d;border-radius:10px;
+    padding:14px 8px 11px;display:flex;flex-direction:column;align-items:center;gap:9px}
+  .card svg{width:26px;height:26px;stroke:var(--idle);fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+    transition:stroke .12s ease,transform .12s ease}
+  .card:hover svg{stroke:var(--text);transform:scale(1.06)}
+  .card:active svg{transform:scale(.9)}
+  .card .n{font-size:10.5px;font-weight:600;color:var(--text);text-align:center}
+  .card .t{font-size:9.5px;color:#77777c;text-align:center;line-height:1.35;min-height:28px}
+  .card .tag{font-size:8.5px;font-weight:700;letter-spacing:.08em;border-radius:99px;
+    padding:1px 7px;text-transform:uppercase}
+  .card .tag.new{color:var(--accent);border:1px solid rgba(76,158,235,.4)}
+  .card .tag.reuse{color:#8f8f94;border:1px solid #33363c}
+  .card svg .solid{fill:currentColor;stroke:none}
+
+  /* ── the live stage ─────────────────────────────────────────────────── */
+  .bar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .seg{display:flex;border:1px solid var(--outline);border-radius:9px;overflow:hidden}
+  .seg button{background:transparent;border:0;color:var(--sec);font:600 11.5px/1 inherit;
+    padding:8px 13px;cursor:pointer;transition:color .12s,background .12s}
+  .seg button.on{background:var(--surface-hi);color:var(--text)}
+  .bar .hint{color:#7c7c80;font-size:11.5px}
+  .bar .hint b{color:var(--text);font-weight:600}
+  .tgl{background:transparent;border:1px solid var(--outline);color:var(--sec);border-radius:9px;
+    font:600 11.5px/1 inherit;padding:9px 13px;cursor:pointer;transition:color .12s,border-color .12s}
+  .tgl:hover{color:var(--text);border-color:#4a4a50}
+  .tgl.on{color:var(--text);border-color:#5a5a62}
+
+  .stage{position:relative;width:1020px;max-width:100%;height:520px;border-radius:12px;
+    overflow:hidden;background:var(--video);border:1px solid #232327;user-select:none}
+  .stage canvas{display:none}
+  .picture{position:absolute;inset:0;background:url("assets/still.jpg") center/cover no-repeat;
+    filter:saturate(.85) brightness(.72)}
+  .picture::after{content:'';position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(18,18,18,.72),rgba(18,18,18,.06) 30%,rgba(18,18,18,.35))}
+
+  /* fake title strip — the real one is the fused chrome block */
+  .strip{position:absolute;left:0;right:0;top:0;height:40px;display:flex;align-items:center;
+    gap:12px;padding:0 12px;z-index:6;color:var(--text)}
+  .strip .logo{width:17px;height:17px;border:1.6px solid var(--idle);border-radius:5px;flex:none;
+    display:grid;place-items:center}
+  .strip .logo span{width:5px;height:5px;background:var(--idle);transform:rotate(45deg);border-radius:1px}
+  .strip .title{font-size:12px;color:#c9c9cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .strip .spacer{flex:1}
+  .modeswitch{display:flex;align-items:center;gap:5px;border:1px solid var(--outline);
+    background:var(--glass);border-radius:8px;padding:3px 9px;cursor:pointer}
+  .modeswitch span{font-size:10.5px;color:var(--sec)}
+  .modeswitch span.lit{color:var(--text)}
+  .caps{display:flex;gap:16px;color:var(--idle);font-size:11px}
+  .caps i{display:block;width:9px;height:9px;border:1.4px solid currentColor}
+  .caps .mn i{height:1.4px;width:11px;border:0;background:currentColor;margin-top:5px}
+  .caps .mx i{border-radius:1px}
+  .caps .cl{position:relative}
+
+  /* the fake playlist panel — only here to prove "right-click closes first" */
+  .panel{position:absolute;top:40px;right:0;bottom:0;width:280px;z-index:5;
+    background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border-left:1px solid var(--outline);padding:10px 12px;transform:translateX(102%);
+    transition:transform .2s cubic-bezier(.2,.7,.3,1)}
+  .panel.open{transform:none}
+  .panel .ph{display:flex;align-items:center;gap:9px;color:var(--idle);padding-bottom:8px;
+    border-bottom:1px solid var(--divider);margin-bottom:8px}
+  .panel .ph svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7}
+  .panel .row{display:flex;align-items:center;gap:9px;height:38px;color:var(--sec);font-size:11.5px}
+  .panel .row .dot{width:5px;height:5px;border-radius:50%;background:#3a3a3c}
+  .panel .row.now{color:var(--text)}
+  .panel .row.now .dot{background:var(--text)}
+
+  /* ── the menu itself — two concepts, one box ─────────────────────────── */
+  .menu{position:absolute;left:0;top:0;z-index:9;opacity:0;pointer-events:none;
+    transition:opacity .14s ease,transform .16s cubic-bezier(.2,.8,.3,1)}
+  .menu.show{opacity:1;pointer-events:auto}
+  .menu.row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:12px;
+    background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--outline);box-shadow:0 10px 26px rgba(0,0,0,.42)}
+  .menu.row .gap{width:14px;flex:none}
+  .menu.ring{width:1px;height:1px}
+  .mbtn{position:relative;width:30px;height:30px;border:0;background:transparent;color:var(--idle);
+    display:grid;place-items:center;cursor:pointer;
+    transition:color .12s ease,transform .12s ease,filter .2s ease}
+  .mbtn svg{width:18px;height:18px;stroke:currentColor;fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+  .mbtn svg .solid{fill:currentColor;stroke:none}
+  .mbtn:hover{color:var(--text);transform:scale(1.06)}
+  .mbtn:active{transform:scale(.9)}
+  .mbtn.quiet{opacity:.55}
+  .mbtn.lit{color:var(--text);filter:drop-shadow(0 0 6px rgba(237,237,237,.30))}
+  .menu.ring .mbtn{position:absolute;left:-15px;top:-15px;opacity:0;transform:scale(.6);
+    transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.3,1),color .12s ease}
+  .menu.ring.show .mbtn{opacity:1;transform:scale(1)}
+  .menu.ring.show .mbtn:hover{color:var(--text);transform:scale(1.06)}
+  .menu.ring.show .mbtn:active{transform:scale(.9)}
+
+  /* hover chip — the timeline's chip (HoverChip), reused as the menu's namer */
+  .chip{position:absolute;z-index:10;height:20px;padding:0 9px;border-radius:5px;
+    background:var(--chip);color:var(--text);font-size:11.5px;font-weight:500;letter-spacing:.3px;
+    display:flex;align-items:center;white-space:nowrap;opacity:0;transition:opacity .1s;pointer-events:none}
+  .chip.show{opacity:1}
+
+  /* anchor tick — shows exactly where the right-click landed */
+  .anchor{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
+    border:1px solid rgba(237,237,237,.45);z-index:8;opacity:0;transition:opacity .35s;pointer-events:none}
+  .anchor.show{opacity:1}
+
+  /* doors — dashed = "not built yet", the preview's own language */
+  .door{position:absolute;z-index:9;border:1px dashed #4a4d55;border-radius:12px;
+    background:rgba(22,22,24,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    padding:14px 16px;opacity:0;transform:scale(.96);pointer-events:none;
+    transition:opacity .18s ease,transform .18s cubic-bezier(.2,.8,.3,1)}
+  .door.show{opacity:1;transform:none;pointer-events:auto}
+  .door .dt{font-size:12.5px;font-weight:600;margin-bottom:9px}
+  .door .dr{display:flex;justify-content:space-between;gap:20px;font-size:11.5px;
+    color:#b9b9be;padding:3px 0}
+  .door .dr b{color:#77777c;font-weight:500}
+  .door .dm{font:11px/1.5 "Cascadia Mono",Consolas,monospace;color:#8f8f94;margin-top:8px}
+  .door .qr{width:152px;height:152px;color:var(--text)}
+  .door .qr rect{shape-rendering:crispEdges}
+  .door .six{display:grid;place-items:center;height:96px;color:var(--idle)}
+  .door .six svg{width:38px;height:38px;stroke:currentColor;fill:none;stroke-width:1.7}
+  .door .six svg .solid{fill:currentColor;stroke:none}
+
+  .previewTag{position:absolute;z-index:11;font-size:9.5px;font-weight:700;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--accent);border:1px solid rgba(76,158,235,.45);
+    border-radius:99px;padding:2px 8px;background:rgba(16,16,19,.75);white-space:nowrap;
+    opacity:0;transition:opacity .18s ease;pointer-events:none}
+  .previewTag.show{opacity:1}
+
+  /* the live note + flash */
+  .note{margin-top:10px;font-size:11.5px;color:#8f8f94;min-height:18px}
+  .note b{color:var(--text);font-weight:600}
+  .flash{position:absolute;left:50%;top:50%;width:74px;height:74px;margin:-37px 0 0 -37px;z-index:7;
+    border-radius:50%;background:rgba(0,0,0,.42);display:grid;place-items:center;color:#fff;
+    opacity:0;transition:opacity .25s;pointer-events:none}
+  .flash.show{opacity:1}
+  .flash svg{width:30px;height:30px;stroke:currentColor;fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  .flash svg .solid{fill:currentColor;stroke:none}
+
+  /* fake web page (mode demo) */
+  .web{position:absolute;inset:0;z-index:4;display:none;background:#f6f7f9}
+  .web.on{display:block}
+  .web .bar2{height:38px;background:#fff;border-bottom:1px solid #e3e5e8;display:flex;
+    align-items:center;gap:8px;padding:0 12px}
+  .web .bar2 span{width:8px;height:8px;border-radius:50%;background:#d8dade}
+  .web .bar2 .url{flex:1;height:22px;border-radius:11px;background:#eef0f3;margin:0 8px}
+  .web .page{padding:26px 34px;color:#5a6068;font-size:12px}
+  .web .h{height:16px;width:280px;border-radius:4px;background:#dfe3e8;margin-bottom:12px}
+  .web .p{height:9px;border-radius:4px;background:#e8ebef;margin-bottom:8px}
+  .web .imgs{display:flex;gap:10px;margin-top:16px}
+  .web .imgs div{width:112px;height:74px;border-radius:6px;background:#e4e8ed}
+
+  /* ── state demo / comparison ────────────────────────────────────────── */
+  .states{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start}
+  .stgroup{display:flex;flex-direction:column;gap:6px}
+  .stgroup .st{color:#8f8f94;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+  .strow{display:flex;gap:18px;background:#191b1f;border:1px solid #26282d;border-radius:10px;
+    padding:10px 14px}
+  .stcell{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--idle);width:62px}
+  .stcell svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+  .stcell svg .solid{fill:currentColor;stroke:none}
+  .stcell em{font-size:9.5px;font-style:normal;color:#77777c;text-align:center;line-height:1.3}
+  .stcell.lit{color:var(--text)}
+  .stcell.lit svg{filter:drop-shadow(0 0 6px rgba(237,237,237,.30))}
+  .stcell.q svg{opacity:.55}
+
+  .cmp{display:flex;gap:18px;flex-wrap:wrap}
+  .cmp figure{flex:1;min-width:420px;background:#141418;border:1px solid #232327;border-radius:12px;
+    padding:12px 14px 14px}
+  .cmp figcaption{font-size:11px;color:#8f8f94;margin-bottom:10px}
+  .cmp figcaption b{color:var(--text)}
+  .mini{position:relative;height:210px;border-radius:9px;overflow:hidden;
+    background:url("assets/still.jpg") center/cover no-repeat;filter:saturate(.8) brightness(.6)}
+  .mini .m{position:absolute;display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:12px;
+    background:var(--glass);backdrop-filter:blur(18px);border:1px solid var(--outline);color:var(--idle)}
+  .mini .m .b{width:28px;height:28px;display:grid;place-items:center}
+  .mini .m .g{width:14px;flex:none}
+  .mini svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  .mini svg .solid{fill:currentColor;stroke:none}
+  .mini .r{position:absolute;width:28px;height:28px;display:grid;place-items:center;color:var(--idle)}
+
+  .rules{margin-top:14px;border:1px solid #26282d;background:#17181c;border-radius:10px;padding:14px 18px}
+  .rules ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:6px 26px}
+  .rules li{font-size:12px;color:#b8b8bd;display:flex;gap:9px;line-height:1.5}
+  .rules li::before{content:'·';color:var(--idle)}
+  .rules li b{color:var(--text);font-weight:600}
+
+  footer{width:1020px;max-width:100%;margin-top:34px;color:#6f6f74;font-size:11.5px;
+    border-top:1px solid #232327;padding-top:14px}
+  kbd{font:11px/1 "Cascadia Mono",Consolas,monospace;border:1px solid #33363c;border-radius:5px;
+    padding:2px 6px;color:#c6c6ca;background:#191b1f}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="k">SALU · design preview · review artifact only — nothing here is wired into <code>lib/</code></div>
+  <h1>The right-click layer — Player mode only</h1>
+  <p>Five marks on the picture, opened by the <b>right mouse button</b>: shuffle · repeat · info ·
+  remote · settings. Two concepts are built and live below — <b>the second row</b> (recommended) and
+  <b>the ring</b> (the bolder one). Right-click the picture to try it. Esc closes, clicking outside
+  closes, and a right-click always <b>closes what is open first</b>.</p>
+</header>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <h2>0 · The check first — may anything sit over the picture?</h2>
+  <div class="sub">Asked before a line was designed. Answer, from Salu's own code:</div>
+  <div class="verdict">
+    <div class="vt">Yes — over the video <i>and</i> over the album-art canvas. Both, today.</div>
+    <div class="vs">mpv is not a native child window here: media_kit paints each frame into a
+      <b>Flutter texture</b>, so ordinary Flutter widgets draw on top of it. Salu already does exactly this.</div>
+    <ul>
+      <li><i></i><span><b>The mpv canvas is a Flutter texture.</b> <code>video_screen.dart</code> mounts
+        media_kit's <code>Video</code> widget (texture renderer) and stacks Flutter children over it
+        — <code>LyricsOverlay</code>, <code>AlbumArtView</code> — in one <code>Stack</code>.</span></li>
+      <li><i></i><span><b>Blurred glass over moving video already ships.</b> The playlist, tracks and
+        tune panels are <code>BackdropFilter</code> surfaces floating over the picture
+        (panel width 322 px, <code>top: kChromeBlockHeight</code>). A frosted strip is the same material.</span></li>
+      <li><i></i><span><b>Audio is easier, not harder.</b> The album-art canvas and the lyrics view are
+        plain Flutter widgets — there is no engine surface in the way at all.</span></li>
+      <li><i></i><span><b>No engine caveats found.</b> <code>cc.md</code> §5 / D20: media_kit
+        re-registers its texture on every <i>window resize</i> only; overlays are untouched by that.
+        Subtitles are drawn by mpv <i>into</i> the texture, so they stay under the menu, correctly.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <h2>1 · Marks — two new, three already in the family</h2>
+  <div class="sub">The family is closed: thin monochrome strokes, round caps, ~8.5 % of size,
+    drawn by hand (<code>follow.md</code> rule 6). Shuffle, repeat and settings already exist —
+    only Info and Remote need new geometry.</div>
+  <div class="grid" id="markGrid"></div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <h2>2 · Live — right-click the picture</h2>
+  <div class="sub">The stage is a fake player: a still as the video, the fused top chrome, and a
+    Playlist panel you can slide in to prove the <b>close-first</b> contract. Marks behave exactly as
+    the written spec: toggles stay open, doors leave.</div>
+
+  <div class="bar">
+    <div class="seg" id="conceptSeg">
+      <button data-c="row" class="on">A · the second row</button>
+      <button data-c="ring">B · the ring</button>
+    </div>
+    <button class="tgl" id="panelTgl">Playlist panel</button>
+    <button class="tgl" id="resetTgl">Reset states</button>
+    <div class="hint">Stage: <b>right-click</b> · close: <b>Esc</b> or left-click the picture</div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="picture"></div>
+    <div class="web" id="webPage">
+      <div class="bar2"><span></span><span></span><span></span><div class="url"></div><span></span></div>
+      <div class="page">
+        <div class="h"></div><div class="p"></div><div class="p" style="width:78%"></div>
+        <div class="p" style="width:64%"></div>
+        <div class="imgs"><div></div><div></div><div></div><div></div></div>
+      </div>
+    </div>
+
+    <div class="strip">
+      <div class="logo"><span></span></div>
+      <div class="title" id="stripTitle">The Quiet Harbour — 2019 · 01:42:37</div>
+      <div class="spacer"></div>
+      <div class="modeswitch" id="modeSwitch">
+        <span id="mwPlayer" class="lit">Player</span><span>·</span><span id="mwWeb">Web</span>
+      </div>
+      <div class="caps">
+        <div class="mn"><i></i></div><div class="mx"><i></i></div><div class="cl"><i style="border:0;background:currentColor;height:11px;width:1.4px;transform:rotate(45deg)"></i></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel">
+      <div class="ph">
+        <svg viewBox="0 0 20 20"><path d="M4 3 V17 M8 3 V17 M12 3 V17 M16 3 V17"/></svg>
+        <span style="font-size:11.5px;color:#9a9a9a">12 items</span>
+      </div>
+      <div class="row now"><span class="dot"></span>The Quiet Harbour</div>
+      <div class="row"><span class="dot"></span>Harbour Lights</div>
+      <div class="row"><span class="dot"></span>Salt &amp; Ash</div>
+      <div class="row"><span class="dot"></span>Northbound</div>
+      <div class="row"><span class="dot"></span>Slow Tide</div>
+      <div class="row"><span class="dot"></span>Winter Ferry</div>
+    </div>
+
+    <div class="anchor" id="anchor"></div>
+    <div class="chip" id="chip">Shuffle</div>
+    <div class="flash" id="flash"></div>
+    <div class="menu row" id="menu"></div>
+
+    <div class="door" id="door"></div>
+    <div class="previewTag" id="doorTag"></div>
+  </div>
+
+  <div class="note" id="note">Right-click anywhere on the picture — the menu lands at the cursor.</div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <h2>3 · The marks carry the state — nothing else does</h2>
+  <div class="sub">No labels, no text rows, no check marks, no shortcut letters (<code>follow.md</code>
+    rules 1, 2, 6). The mark alone says what is on: full white + a very faint static glow for a live
+    toggle, 55 % ink for off, and the bead for repeat-one.</div>
+  <div class="states">
+    <div class="stgroup">
+      <div class="st">Shuffle</div>
+      <div class="strow">
+        <div class="stcell q" data-mark="shuffle"></div>
+        <div class="stcell lit" data-mark="shuffle"></div>
+      </div>
+    </div>
+    <div class="stgroup">
+      <div class="st">Repeat</div>
+      <div class="strow">
+        <div class="stcell q" data-mark="repeat-off"></div>
+        <div class="stcell lit" data-mark="repeat-all"></div>
+        <div class="stcell lit" data-mark="repeat-one"></div>
+      </div>
+    </div>
+    <div class="stgroup">
+      <div class="st">Settings · Info · Remote</div>
+      <div class="strow">
+        <div class="stcell" data-mark="settings"></div>
+        <div class="stcell" data-mark="info-a"></div>
+        <div class="stcell" data-mark="remote-a"></div>
+      </div>
+    </div>
+  </div>
+  <div class="rules">
+    <ul>
+      <li><b>Suspended:</b> shuffle keeps its state but drops to 55 % while repeat-one is active — exactly as the Playlist header already does.</li>
+      <li><b>Pitch, not boxes:</b> 6 px inside a group, 14 px between the toggle pair and the door trio. Nothing is drawn around a group.</li>
+      <li><b>Hover:</b> ink glides gray → white in ~120 ms, mark scales 1.06, chip names it after 600 ms. Press sinks to 0.90.</li>
+      <li><b>Never a sixth mark.</b> If it needs nine items, it needs a different design.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <h2>4 · Both concepts, side by side</h2>
+  <div class="sub">Same five marks, same order, same behaviour — only the way they arrive differs.
+    <b>A</b> reads immediately and extends cleanly; <b>B</b> is more Salu and has no rectangle in it.</div>
+  <div class="cmp">
+    <figure>
+      <figcaption><b>A · the second row</b> — a slim frosted strip at the click point, edge-nudged
+        inward so it is never half off-screen.</figcaption>
+      <div class="mini" id="miniA"></div>
+    </figure>
+    <figure>
+      <figcaption><b>B · the ring</b> — the marks bloom around the cursor in a 58 px arc, staggered
+        20 ms apart; hairline glass, no box at all.</figcaption>
+      <div class="mini" id="miniB"></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <h2>5 · What the layer is not</h2>
+  <div class="rules">
+    <ul>
+      <li><b>Never in Web mode.</b> By construction, not by a rule: the player tree is not built while the browser owns the window, so the gesture cannot exist there.</li>
+      <li><b>Never in mini mode.</b> The 32 px bar owes the viewer no popups — the mini shell builds none, and this is not the exception.</li>
+      <li><b>Never the only door.</b> Shuffle and repeat keep their home in the Playlist header, Settings keeps the title-bar mark, Info gets a second visible door. Nobody is told the shortcut exists — and nobody depends on it.</li>
+      <li><b>Never in channel mode for the toggles.</b> Live lists drop repeat and shuffle (the channel header already has no pair), so the menu drops them too rather than offering two dead switches.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  Static preview — no build step, no Flutter. Serve the folder
+  (<kbd>python3 -m http.server</kbd>) or open the file directly. Playback is fake; marks are drawn to
+  the exact geometry in <kbd>lib/ui/widgets/salu_marks.dart</kbd> and
+  <kbd>lib/ui/widgets/dot_grid_icon.dart</kbd>. Spec for the implementation session:
+  <kbd>right_item.md</kbd>.
+</footer>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   Marks — drawn from the real painters, not from a stock set.
+   markStrokeFor(20) = clamp(20 * .085, 1.4, 2.2) = 1.7
+   quiet = ink.withAlpha(140) ≈ 55 % (opacity, so the mark can light on hover)
+   ══════════════════════════════════════════════════════════════════════ */
+const STROKE = 1.7;
+
+function svg(inner, cls){
+  return `<svg class="${cls||''}" viewBox="0 0 20 20" stroke-width="${STROKE}"
+    stroke-linecap="round" stroke-linejoin="round" fill="none">${inner}</svg>`;
+}
+const n = (v) => Math.round(v*100)/100;
+
+/* Repeat — ¾ arc (Restart geometry) from 135°, sweeping 270° clockwise, an
+   arrowhead riding the end, plus the fill bead for repeat-one. */
+function repeatMark(state){                 // 'off' | 'all' | 'one'
+  const s = 20, c = 10, r = s*0.32;
+  const start = 3*Math.PI/4, end = start + 3*Math.PI/2;
+  const p0 = [c + r*Math.cos(start), c + r*Math.sin(start)];
+  const p1 = [c + r*Math.cos(end),   c + r*Math.sin(end)];
+  const arc = `M ${n(p0[0])} ${n(p0[1])} A ${r} ${r} 0 1 1 ${n(p1[0])} ${n(p1[1])}`;
+  const tan = [-Math.sin(end), Math.cos(end)];
+  const nrm = [tan[1]*s*0.11, -tan[0]*s*0.11];
+  const back = [p1[0] - tan[0]*s*0.16, p1[1] - tan[1]*s*0.16];
+  const head = `M ${n(back[0]+nrm[0])} ${n(back[1]+nrm[1])} L ${n(p1[0])} ${n(p1[1])} `
+             + `L ${n(back[0]-nrm[0])} ${n(back[1]-nrm[1])}`;
+  const bead = state === 'one'
+    ? `<circle cx="10" cy="10" r="${n(s*0.09)}" class="solid"/>` : '';
+  return svg(`<path d="${arc}"/><path d="${head}"/>${bead}`);
+}
+
+/* Shuffle — two rules crossing near the middle, a chevron-V head at each
+   right end. Must cross and carry heads so it never reads as the transport */
+function shuffleMark(){
+  const s = 20;
+  const tS = [s*.16, s*.30], tE = [s*.62, s*.58];
+  const bS = [s*.16, s*.70], bE = [s*.62, s*.42];
+  const head = (tip, from) => {
+    const dx = tip[0]-from[0], dy = tip[1]-from[1], L = Math.hypot(dx,dy);
+    const u = [dx/L, dy/L];
+    const b = [tip[0]-u[0]*s*.18, tip[1]-u[1]*s*.18];
+    const nn = [u[1]*s*.075, -u[0]*s*.075];
+    return `M ${n(tip[0])} ${n(tip[1])} L ${n(b[0]+nn[0])} ${n(b[1]+nn[1])} `
+         + `M ${n(tip[0])} ${n(tip[1])} L ${n(b[0]-nn[0])} ${n(b[1]-nn[1])}`;
+  };
+  return svg(
+      `<path d="M ${tS[0]} ${tS[1]} L ${tE[0]} ${tE[1]}"/>`
+    + `<path d="M ${bS[0]} ${bS[1]} L ${bE[0]} ${bE[1]}"/>`
+    + `<path d="${head(tE, tS)}"/>` + `<path d="${head(bE, bS)}"/>`);
+}
+
+/* Settings — the dot grid: six dots, two lines of three (DotGridIcon).
+   dot = clamp(size * .17, 1.6, 4) = 3.4 at an 18–20 px mark. */
+function settingsMark(){
+  const s = 20, d = Math.min(Math.max(s*0.17, 1.6), 4.0), r = d/2;
+  const ys = [r, s*0.7 - r], xs = [r, s/2, s - r];
+  let out = '';
+  ys.forEach(y => xs.forEach(x => {
+    out += `<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" class="solid"/>`;
+  }));
+  return svg(out);
+}
+
+/* Info — proposal A: the plain circle-i. B: a sheet with a folded corner and
+   two content rules (the "what is this file" reading, about + tags merged). */
+function infoMark(variant){
+  if (variant === 'i'){
+    return svg('<circle cx="10" cy="10" r="6.6"/>'
+      + '<circle cx="10" cy="6.8" r="0.95" class="solid"/>'
+      + '<path d="M10 9.6 V13.7"/>');
+  }
+  return svg('<path d="M4.6 3.4 H11.4 L15.4 7.4 V16.6 H4.6 Z"/>'
+    + '<path d="M11.4 3.4 V7.4 H15.4"/>'
+    + '<path d="M7.2 10.8 H12.8 M7.2 13.6 H10.6"/>');
+}
+
+/* Remote — proposal A: a scan frame (four corner brackets + a centre dot).
+   B: a phone with two arcs, echoing the sound mark's arc language. */
+function remoteMark(variant){
+  if (variant === 'frame'){
+    return svg('<path d="M3.2 6.6 V3.2 H6.6 M13.4 3.2 H16.8 V6.6 '
+      + 'M16.8 13.4 V16.8 H13.4 M6.6 16.8 H3.2 V13.4"/>'
+      + '<circle cx="10" cy="10" r="1.15" class="solid"/>');
+  }
+  const arc = (r) => {
+    const a0 = -52*Math.PI/180, a1 = 52*Math.PI/180, cx = 12.1, cy = 10;
+    return `M ${n(cx + r*Math.cos(a0))} ${n(cy + r*Math.sin(a0))} `
+         + `A ${r} ${r} 0 0 1 ${n(cx + r*Math.cos(a1))} ${n(cy + r*Math.sin(a1))}`;
+  };
+  return svg('<rect x="4.4" y="2.6" width="7.6" height="14.8" rx="2.2"/>'
+    + `<path d="${arc(2.2)}"/><path d="${arc(4.0)}"/>`);
+}
+
+const MARKS = {
+  'shuffle':      { html: shuffleMark(),                  quiet: () => state.shuffle === false },
+  'repeat-off':   { html: repeatMark('off'),              quiet: () => state.repeat === 'off' },
+  'repeat-all':   { html: repeatMark('all') },
+  'repeat-one':   { html: repeatMark('one') },
+  'settings':     { html: settingsMark() },
+  'info-a':       { html: infoMark('i') },
+  'info-b':       { html: infoMark('sheet') },
+  'remote-a':     { html: remoteMark('frame') },
+  'remote-b':     { html: remoteMark('phone') }
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   State — one holder for the preview, mirroring the spec's service recipe
+   ══════════════════════════════════════════════════════════════════════ */
+const state = {
+  mode: 'player',      // player | web
+  concept: 'row',      // row | ring
+  open: false,
+  anchor: { x: 0, y: 0 },
+  shuffle: false,
+  repeat: 'off',       // off | all | one
+  door: null,          // info | remote | settings
+  panel: false,
+  busy: false          // true while the fake web page owns the window
+};
+
+const $ = (id) => document.getElementById(id);
+const stage = $('stage'), menu = $('menu'), chip = $('chip'), anchorEl = $('anchor');
+const door = $('door'), doorTag = $('doorTag'), note = $('note'), flash = $('flash');
+
+function say(html){ note.innerHTML = html; }
+
+/* ── mark cards (section 1) ───────────────────────────────────────────── */
+(function buildCards(){
+  const cards = [
+    ['shuffle',  'Shuffle',  'already in the family — the Playlist header\'s slot-2 mark', 'reuse'],
+    ['repeat-all','Repeat',  'already in the family — off → all → one, bead for one',     'reuse'],
+    ['settings', 'Settings', 'the six-dot grid — the title bar\'s own mark',               'reuse'],
+    ['info-a',   'Info · A', 'circle + i — the plain international reading',               'new'],
+    ['info-b',   'Info · B', 'a sheet with a folded corner — reads as "this file"',        'new'],
+    ['remote-a', 'Remote · A','a scan frame — four brackets and a centre dot',             'new'],
+    ['remote-b', 'Remote · B','a phone with two arcs — the sound mark\'s arc language',    'new']
+  ];
+  $('markGrid').innerHTML = cards.map(([id, name, about, tag]) => `
+    <div class="card">
+      ${MARKS[id].html}
+      <div class="n">${name}</div>
+      <div class="t">${about}</div>
+      <div class="tag ${tag}">${tag === 'new' ? 'new mark' : 'reuse'}</div>
+    </div>`).join('');
+})();
+
+/* ── state demo rows (section 3) ──────────────────────────────────────── */
+(function buildStates(){
+  const labels = {'shuffle':'off · 55%|on · white + glow',
+                  'repeat-off':'off','repeat-all':'all','repeat-one':'one · bead',
+                  'settings':'','info-a':'','remote-a':''};
+  document.querySelectorAll('.stcell').forEach(cell => {
+    const id = cell.dataset.mark;
+    cell.insertAdjacentHTML('afterbegin', MARKS[id].html);
+    const parts = (labels[id] || '').split('|');
+    const i = Array.from(cell.parentNode.children).indexOf(cell);
+    if (parts[i] !== undefined && parts[i] !== '') {
+      cell.insertAdjacentHTML('beforeend', `<em>${parts[i]}</em>`);
+    }
+  });
+})();
+
+/* ── the static comparison strip (section 4) ──────────────────────────── */
+(function buildMini(){
+  const row = `<div class="m" style="left:64px;top:96px">
+      <div class="b">${MARKS['shuffle'].html}</div><div class="b">${MARKS['repeat-all'].html}</div>
+      <div class="g"></div>
+      <div class="b">${MARKS['info-a'].html}</div><div class="b">${MARKS['remote-a'].html}</div>
+      <div class="b">${MARKS['settings'].html}</div>
+    </div>`;
+  $('miniA').innerHTML = row;
+
+  const ring = [[-90,'info-a'],[-18,'remote-a'],[54,'settings'],[126,'shuffle'],[198,'repeat-all']]
+    .map(([deg,id]) => {
+      const a = deg*Math.PI/180, cx = 230, cy = 105, r = 58;
+      const x = cx + r*Math.cos(a) - 14, y = cy + r*Math.sin(a) - 14;
+      return `<div class="r" style="left:${n(x)}px;top:${n(y)}px">${MARKS[id].html}</div>`;
+    }).join('');
+  $('miniB').innerHTML = `<div class="r" style="left:216px;top:91px;border:1px solid rgba(237,237,237,.35);border-radius:50%"></div>` + ring;
+})();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   The menu — build, place, behave
+   ══════════════════════════════════════════════════════════════════════ */
+function shuffleQuiet(){ return !state.shuffle; }              // off = 55 % ink
+function repeatQuiet(){ return state.repeat === 'off' && !state.shuffle; }
+
+function menuButton(kind){
+  // kind: 'shuffle' | 'repeat' | 'info' | 'remote' | 'settings'
+  const lit = (kind === 'shuffle' && state.shuffle)
+           || (kind === 'repeat' && state.repeat !== 'off');
+  let mark, name;
+  if (kind === 'shuffle')      { mark = shuffleMark(); name = 'Shuffle'; }
+  else if (kind === 'repeat')  { mark = repeatMark(state.repeat); name = 'Repeat'; }
+  else if (kind === 'info')    { mark = infoMark(previewMarks.info); name = 'Info'; }
+  else if (kind === 'remote')  { mark = remoteMark(previewMarks.remote); name = 'Remote'; }
+  else                         { mark = settingsMark(); name = 'Settings'; }
+
+  // Shuffle drops to 55 % while repeat-one suspends it (the header's rule).
+  const suspended = (kind === 'shuffle' && state.repeat === 'one');
+  const off = (kind === 'shuffle' && !state.shuffle)
+           || (kind === 'repeat'  && state.repeat === 'off');
+  const cls = `mbtn${(off || suspended) ? ' quiet' : ''}${lit && !suspended ? ' lit' : ''}`;
+  return `<button class="${cls}" data-k="${kind}" data-name="${name}">${mark}</button>`;
+}
+
+/* Which proposal the owner is looking at — switchable in the preview */
+const previewMarks = { info: 'i', remote: 'frame' };
+
+function menuHTML(){
+  return menuButton('shuffle') + menuButton('repeat')
+       + '<div class="gap"></div>'
+       + menuButton('info') + menuButton('remote') + menuButton('settings');
+}
+
+function renderMenu(){
+  menu.innerHTML = menuHTML();
+  menu.querySelectorAll('.mbtn').forEach(btn => {
+    btn.addEventListener('mouseenter', () => showChip(btn));
+    btn.addEventListener('mouseleave', hideChip);
+    btn.addEventListener('click', (e) => { e.stopPropagation(); hit(btn.dataset.k); });
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
+  if (state.concept === 'ring') placeRing(); else placeRow();
+}
+
+/* Placement A — the strip: centred on the cursor, dropped 10 px below it,
+   nudged inward so it never opens half off-screen (the cursor is not moved). */
+function placeRow(){
+  const w = menu.offsetWidth, h = menu.offsetHeight, box = stage.getBoundingClientRect();
+  const m = 12;
+  let x = state.anchor.x - w/2;
+  let y = state.anchor.y + 10;
+  if (y + h + m > box.height) y = state.anchor.y - h - 10;   // flip above near the bottom
+  x = Math.max(m, Math.min(x, box.width - w - m));
+  y = Math.max(m, Math.min(y, box.height - h - m));
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+}
+
+/* Placement B — the ring: five marks bloom on a 58 px circle around the
+   cursor, staggered 20 ms apart; the whole bloom slides inward at the edges. */
+function placeRing(){
+  const R = 58, box = stage.getBoundingClientRect();
+  let cx = Math.max(R + 22, Math.min(state.anchor.x, box.width  - R - 22));
+  let cy = Math.max(R + 22, Math.min(state.anchor.y, box.height - R - 22));
+  menu.style.left = cx + 'px';
+  menu.style.top  = cy + 'px';
+  const btns = menu.querySelectorAll('.mbtn');
+  btns.forEach((btn, i) => {
+    const a = (-90 + i * 72) * Math.PI/180;
+    const x = R * Math.cos(a), y = R * Math.sin(a);
+    btn.style.left = (x - 15) + 'px';
+    btn.style.top  = (y - 15) + 'px';
+    btn.style.transitionDelay = (i * 20) + 'ms';   // stagger, 20 ms apart
+  });
+}
+
+function openMenu(x, y){
+  state.open = true;
+  state.anchor = { x, y };
+  anchorEl.style.left = x + 'px';
+  anchorEl.style.top  = y + 'px';
+  anchorEl.classList.add('show');
+  clearTimeout(anchorEl._t);
+  anchorEl._t = setTimeout(() => anchorEl.classList.remove('show'), 900);
+  renderMenu();
+  menu.classList.add('show');
+  say('Menu open at the cursor. <b>Toggles stay</b> (shuffle · repeat) — <b>doors leave</b> (info · remote · settings).');
+}
+
+function closeMenu(msg){
+  state.open = false;
+  hideChip();
+  menu.classList.remove('show');
+  if (msg) say(msg);
+}
+
+/* Doors — dashed placeholders. Info and Remote are unbuilt on purpose:
+   Info is parked in info.md, Remote waits on the Phase 8 server. */
+const DOORS = {
+  info: {
+    tag: 'mock — the Info surface is a separate decision (info.md holds the field inventory)',
+    w: 380, h: 190,
+    html: `<div class="dt">The Quiet Harbour</div>
+      <div class="dr"><b>Picture</b><span>1920 × 1080 · 23.976 fps · h264 (d3d11va)</span></div>
+      <div class="dr"><b>Sound</b><span>aac · 2 ch · 48 kHz · volume 100 %</span></div>
+      <div class="dr"><b>Clock</b><span>01:42:37 · left 00:37:12</span></div>
+      <div class="dr"><b>File</b><span>MKV · 4.2 GB · 2019</span></div>
+      <div class="dr"><b>SALU</b><span>engine mpv 0.3x · build 2026.09</span></div>`
+  },
+  remote: {
+    tag: 'mock — Remote has no payload until the Phase 8 server exists',
+    w: 214, h: 208,
+    html: `<div class="dt">Pair</div><div id="qrBox"></div>`
+  },
+  settings: {
+    tag: 'opens the existing Settings window (General) — nothing new to draw',
+    w: 214, h: 176,
+    html: `<div class="six">${settingsMark()}</div>`
+  }
+};
+
+function openDoor(kind){
+  const d = DOORS[kind];
+  door.innerHTML = d.html;
+  door.style.width = d.w + 'px';
+  door.classList.add('show');
+  const box = stage.getBoundingClientRect();
+  door.style.left = Math.round((box.width - d.w) / 2) + 'px';
+  door.style.top  = Math.round((box.height - d.h) / 2) + 'px';
+  doorTag.textContent = d.tag;
+  doorTag.style.left = door.style.left;
+  doorTag.style.top  = (parseInt(door.style.top, 10) - 24) + 'px';
+  doorTag.classList.add('show');
+  if (kind === 'remote') $('qrBox').innerHTML = qrPlaceholder();
+  state.door = kind;
+}
+
+function closeDoor(msg){
+  state.door = null;
+  door.classList.remove('show');
+  doorTag.classList.remove('show');
+  if (msg) say(msg);
+}
+
+/* A deterministic QR placeholder — it must not pretend to be scannable. */
+function qrPlaceholder(){
+  const N = 21, finders = [[0,0],[N-7,0],[0,N-7]];
+  const inFinder = (x,y) => finders.some(([fx,fy]) => x>=fx && x<fx+7 && y>=fy && y<fy+7);
+  let mods = '';
+  for (let y=0; y<N; y++) for (let x=0; x<N; x++){
+    if (inFinder(x,y)) continue;
+    if (((x*7 + y*13 + (x*y)%5) % 3) === 0)
+      mods += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+  }
+  const eyes = finders.map(([fx,fy]) =>
+    `<rect x="${fx+.5}" y="${fy+.5}" width="6" height="6" fill="none" stroke="currentColor"/>`
+  + `<rect x="${fx+2}" y="${fy+2}" width="3" height="3"/>`).join('');
+  return `<svg class="qr" viewBox="-0.5 -0.5 ${N+1} ${N+1}" fill="currentColor">${eyes}${mods}</svg>`;
+}
+
+/* A mark was clicked */
+function hit(kind){
+  if (kind === 'shuffle'){
+    state.shuffle = !state.shuffle;
+    renderMenu();
+    say('Shuffle <b>' + (state.shuffle ? 'on' : 'off') + '</b> — the strip stays open. '
+      + (state.repeat === 'one' && state.shuffle
+          ? 'Repeat-one is active, so shuffle is <b>suspended</b>: state kept, ink dropped to 55 %.' : ''));
+  } else if (kind === 'repeat'){
+    state.repeat = state.repeat === 'off' ? 'all' : state.repeat === 'all' ? 'one' : 'off';
+    renderMenu();
+    say('Repeat <b>' + state.repeat + '</b> — the strip stays open.'
+      + (state.repeat === 'one' ? ' The bead appears at the arc\'s centre.' : ''));
+  } else {
+    closeMenu();
+    setTimeout(() => openDoor(kind), 60);
+    say('A door: the menu leaves and its surface arrives — '
+      + (kind === 'settings' ? 'the existing Settings window.'
+        : kind === 'info' ? 'Info is unbuilt; info.md has the field inventory.'
+        : 'Remote waits on the Phase 8 server; the QR has nothing to point at yet.'));
+  }
+}
+
+function showChip(btn){
+  const r = btn.getBoundingClientRect(), s = stage.getBoundingClientRect();
+  clearTimeout(chip._t);
+  chip._t = setTimeout(() => {
+    chip.textContent = btn.dataset.name;      // name only — never a hint, never a shortcut
+    chip.classList.add('show');
+    const w = chip.offsetWidth;
+    chip.style.left = Math.max(8, Math.min(r.left - s.left + r.width/2 - w/2, s.width - w - 8)) + 'px';
+    chip.style.top  = (r.bottom - s.top + 6) + 'px';
+  }, 600);                                     // SaluIconButton's hover-delay tooltip
+}
+function hideChip(){ clearTimeout(chip._t); chip.classList.remove('show'); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Gestures — the contract
+   · right-click: closes first (panel → door → menu), opens only on a clean
+     screen; in Web mode it does nothing at all.
+   · left-click on the picture: closes; otherwise it is play/pause.
+   · Esc: door → menu → panel.
+   ══════════════════════════════════════════════════════════════════════ */
+function pointIn(ev){
+  const s = stage.getBoundingClientRect();
+  return { x: ev.clientX - s.left, y: ev.clientY - s.top };
+}
+
+function onRightClick(ev){
+  ev.preventDefault();
+  if (state.mode === 'web'){
+    say('<b>Web mode:</b> nothing happens — by construction. The player tree is not built while the browser owns the window, so this gesture cannot exist there.');
+    return;
+  }
+  if (state.door){ closeDoor('Right-click <b>closed the door</b> first — the menu opens on a clean screen.'); return; }
+  if (state.panel){ togglePanel(false); say('Right-click <b>closed the Playlist panel</b> first — its dismiss barrier owns the gesture. Second right-click opens the menu.'); return; }
+  if (state.open){ closeMenu('Right-click closed the menu — the gesture is its own toggle.'); return; }
+  const p = pointIn(ev);
+  openMenu(p.x, p.y);
+}
+
+function onLeftClick(ev){
+  if (state.mode === 'web') return;
+  if (state.door){ closeDoor('Click outside closed the door.'); return; }
+  if (state.open){ closeMenu('Click outside closed the menu.'); return; }
+  if (state.panel){ togglePanel(false); return; }
+  flashPlayPause();
+}
+
+function flashPlayPause(){
+  flash.innerHTML = svg('<path d="M7.2 4.8 V15.2 M12.8 4.8 V15.2"/>');
+  flash.classList.add('show');
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => flash.classList.remove('show'), 420);
+  say('Nothing was open, so the click fell through to the picture: play/pause. '
+    + 'The menu never eats a left-click it does not need.');
+}
+
+function togglePanel(force){
+  state.panel = (force === undefined) ? !state.panel : force;
+  $('panel').classList.toggle('open', state.panel);
+  $('panelTgl').classList.toggle('on', state.panel);
+  if (state.panel) say('Playlist panel open — now right-click the picture and watch: the panel closes first.');
+  else say('Panel closed.');
+}
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  if (state.door) { closeDoor('Esc closed the door.'); return; }
+  if (state.open) { closeMenu('Esc closed the menu.'); return; }
+  if (state.panel){ togglePanel(false); return; }
+  closeMenu();
+});
+
+stage.addEventListener('contextmenu', onRightClick);
+stage.addEventListener('click', onLeftClick);
+document.addEventListener('click', (ev) => {
+  // clicks outside the stage close anything the stage left open
+  if (!stage.contains(ev.target)){ if (state.door) closeDoor(); if (state.open) closeMenu(); hideChip(); }
+});
+
+/* concept switch */
+$('conceptSeg').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  state.concept = b.dataset.c;
+  Array.from($('conceptSeg').children).forEach(x => x.classList.toggle('on', x === b));
+  menu.className = 'menu ' + state.concept;
+  if (state.open){ closeMenu(); }
+  say(state.concept === 'row'
+    ? 'Concept A — the second row: one frosted strip at the click point, pitch-only grouping.'
+    : 'Concept B — the ring: marks bloom around the cursor, staggered, hairline glass, no rectangle.');
+});
+$('panelTgl').addEventListener('click', () => togglePanel());
+
+/* mode switch — the real Player · Web switch lives in the title strip */
+$('modeSwitch').addEventListener('click', () => {
+  state.mode = state.mode === 'player' ? 'web' : 'player';
+  const web = state.mode === 'web';
+  $('webPage').classList.toggle('on', web);
+  $('mwPlayer').classList.toggle('lit', !web);
+  $('mwWeb').classList.toggle('lit', web);
+  $('stripTitle').textContent = web ? 'SALU — built-in browser' : 'The Quiet Harbour — 2019 · 01:42:37';
+  if (web){ closeMenu(); closeDoor(); togglePanel(false); state.panel = false; }
+  say(web
+    ? 'Web mode: the player tree is unmounted. Right-click the page — nothing happens, and nothing needs to be remembered.'
+    : 'Player mode: the picture and the gesture are back.');
+});
+
+/* reset */
+$('resetTgl').addEventListener('click', () => {
+  state.shuffle = false; state.repeat = 'off';
+  closeMenu(); closeDoor(); togglePanel(false);
+  if (state.open) menu.classList.remove('show');
+  state.open = false;
+  say('States reset — shuffle off, repeat off, everything closed.');
+});
+
+/* preview-only: let the reviewer flip the two new marks between A and B */
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'i' || ev.key === 'I'){ previewMarks.info   = previewMarks.info   === 'i'     ? 'sheet' : 'i';     refreshMarks(); }
+  if (ev.key === 'r' || ev.key === 'R'){ previewMarks.remote = previewMarks.remote === 'frame' ? 'phone' : 'frame'; refreshMarks(); }
+});
+function refreshMarks(){
+  document.querySelectorAll('.stcell').forEach(cell => {
+    const id = cell.dataset.mark;
+    const mapped = id === 'info-a' ? 'info' + (previewMarks.info === 'i' ? '-a' : '-b')
+                 : id === 'remote-a' ? 'remote' + (previewMarks.remote === 'frame' ? '-a' : '-b')
+                 : null;
+    if (!mapped) return;
+    const first = cell.querySelector('svg');
+    const tmp = document.createElement('div');
+    tmp.innerHTML = MARKS[mapped].html;
+    first.replaceWith(tmp.firstElementChild);
+  });
+  document.querySelectorAll('.card').forEach(card => {
+    const svgEl = card.querySelector('svg'); const nameEl = card.querySelector('.n');
+    if (!svgEl || !nameEl) return;
+    if (nameEl.textContent.startsWith('Info')){
+      const tmp = document.createElement('div');
+      tmp.innerHTML = MARKS['info-' + (previewMarks.info === 'i' ? 'a' : 'b')].html;
+      svgEl.replaceWith(tmp.firstElementChild);
+    }
+    if (nameEl.textContent.startsWith('Remote')){
+      const tmp = document.createElement('div');
+      tmp.innerHTML = MARKS['remote-' + (previewMarks.remote === 'frame' ? 'a' : 'b')].html;
+      svgEl.replaceWith(tmp.firstElementChild);
+    }
+  });
+  if (state.open) renderMenu();
+  say('Swapped proposal: Info <b>' + (previewMarks.info === 'i' ? 'A · circle-i' : 'B · sheet')
+    + '</b>, Remote <b>' + (previewMarks.remote === 'frame' ? 'A · scan frame' : 'B · phone + arcs') + '</b>.');
+}
+
+menu.className = 'menu ' + state.concept;
+window.addEventListener('resize', () => { if (state.open) renderMenu(); });
+</script>
+</body>
+</html>
