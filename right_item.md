@@ -2,12 +2,18 @@
 
 > **Purpose:** the working spec for SALU's right-mouse-button layer in **Player
 > mode only** — five marks on the picture: shuffle · repeat · info · remote ·
-> settings. Written as the handoff for the session that builds it.
+> settings. **Four ship first** (Remote waits on Phase 8, §9). Written as the handoff for the session that builds it.
 >
-> **Status:** CONCEPT LOCKED (2026-09-19). The owner reviewed the preview and
-> picked **concept A · the second row** — now the design of record (§3).
-> Everything else here is still open: the remaining §12 questions are answered
-> before code starts, and no `lib/` file moves until they are.
+> **Status: FULLY LOCKED (2026-09-19). No question is open in this file or in
+> `info.md`. Build may start.**
+>
+> Locked by the owner: the layer (Player mode only; five marks, four shipping first), **concept A ·
+> the second row**, the Info panel (`info.md` §0), both new marks, Remote
+> parked with Phase 8, and the suspended-shuffle ink. The §0 log carries each
+> one with its date; §12 carries the answers with their reasons.
+>
+> The only work left in this file is the **build checklist** (§14) and the
+> **probe list** in `info.md` §7 — tasks, not questions.
 >
 > **Read first:** `follow.md` (the binding design contract), then `info.md`
 > (the field inventory Info will show) and `salu_context.md` (phases).
@@ -21,10 +27,14 @@ Preview: `design/right-menu-preview/index.html` (+ its `README.md`).
 | Date | Decision | State |
 |---|---|---|
 | 2026-09-19 | The layer is a **right-button menu in Player mode only** — never over the web surface, never in mini | ✅ LOCKED (owner's brief) |
-| 2026-09-19 | The five marks, in this order: **shuffle · repeat · info · remote · settings** | ✅ LOCKED (owner's brief) |
+| 2026-09-19 | The five marks, in this order: **shuffle · repeat · info · remote · settings** (remote's slot arrives with Phase 8 — four ship first) | ✅ LOCKED (owner's brief) |
 | 2026-09-19 | **Concept A · the second row** — one slim frosted strip at the click point. *Concept B (the ring) is parked, not rejected* | ✅ LOCKED (owner, from `design/right-menu-preview/`) |
 | 2026-09-19 | **Info is defined** — the panel lives in `info.md` §0: left edge, below the control bar, 322 wide, six groups (Identity · Picture · Sound · Clock & file · SALU · Stream) | ✅ LOCKED (`info.md`) |
-| — | Still open — the two new marks, Remote's payload, the marker `Ctrl+I` question | ⏳ open (§12) |
+| 2026-09-19 | **Info marks locked**: `InfoMark` = circle + i (proposal A). **`RemoteMark` = the scan frame (proposal A)** — proposal B (phone + arcs) is refused on evidence: it merges into a blob at true size | ✅ LOCKED |
+| 2026-09-19 | **Remote is parked** until Phase 8 (the server) exists — the strip ships with **four** marks; the fifth slot returns with the server | ✅ LOCKED |
+| 2026-09-19 | **Suspended shuffle keeps the 55 % ink** — identical to the Playlist header, no second reading | ✅ LOCKED |
+| 2026-09-19 | Info panel: **no cover thumbnail**; **About stays separate** (Phase 9, entered from Settings) | ✅ LOCKED (`info.md` §0.7, §9) |
+| — | **No question is open in this file or in `info.md`.** Build may start | ✅ |
 
 ---
 
@@ -110,8 +120,8 @@ ambient `IconTheme`):
 | Shuffle | `ShuffleMark` | exists — reuse as-is |
 | Repeat | `RepeatMark` (quiet / bead) | exists — reuse as-is |
 | Settings | `DotGridIcon` (six dots) | exists — reuse as-is |
-| Info | **`InfoMark`** | **new** — recommended proposal A: circle + i |
-| Remote | **`RemoteMark`** | **new** — recommended proposal A: scan frame (four brackets + centre dot) |
+| Info | **`InfoMark`** | **new** — **LOCKED: proposal A · circle + i** (a conventional shape drawn in Salu's hand, the way the chevron and the × already are) |
+| Remote | **`RemoteMark`** | **new** — **LOCKED: proposal A · scan frame** (four brackets + centre dot). **Parked with Phase 8** — the mark is drawn when its server can answer, not before |
 
 **Legibility finding (from the preview's own true-size render, `design/right-menu-preview/marks-true-size.png`):** at the real 18–20 px
 the circle-i, the scan frame, the six dots, the arc and the shuffle marks all
@@ -129,6 +139,7 @@ too subtle in the real app — park until seen on a real build.
 
 | Property | Value | Why |
 |---|---|---|
+| Marks shipped | **four** — shuffle · repeat ‖ info · settings. Remote's slot is drawn when Phase 8 lands (§9) | the strip's geometry is unchanged; one fewer mark is a shorter strip, not a different one |
 | Hit box per mark | **30 × 30** | the Playlist header's `_headerButton` size (`SaluIconButton(size: 30)`) — not a new number |
 | Glyph size | **18 px** | the header's own mark size (`RepeatMark(size: 18)`) — stroke `markStrokeFor(18) ≈ 1.5` |
 | Strip padding | **6 px vertical, 8 px horizontal** | reads as a capsule, not a toolbar |
@@ -229,7 +240,7 @@ No labels, no check marks, no text rows, no shortcut letters (rules 1, 2, 6).
 | Right-button detection | `lib/ui/screens/home_screen.dart` | a `Listener(onPointerDown:)` on the video layer reading `event.buttons == kSecondaryButton` — **not** `showMenu`, which is Material's own popup with ripples, boxes and Material text |
 | `InfoMark`, `RemoteMark` | `lib/ui/widgets/salu_marks.dart` | two new painters in the family |
 | Settings door | existing `SettingsDialog(initialTab: SettingsTab.general)` via `HomeScreen._openSettings` | no new window |
-| Info surface | *decide first* — see §8 | new |
+| Info surface | **defined** — `info.md` §0 (left panel); see §8 for the seams | new |
 | QR / pairing payload | *blocked* — see §9 | |
 
 **Why not Material's `showMenu`/`PopupMenuButton`:** they bring a rectangle, a
@@ -262,26 +273,25 @@ refusals, behaviour). What this file needs to say about it is only the seams:
    SALU group carries the only Salu-state rows it needs, and Phase 9's About
    stays its own question (`info.md` §9.4).
 
-## 9. Remote — blocked, and the block is real (DECIDE)
+## 9. Remote — **DECIDED: parked** (2026-09-19)
 
 The QR itself is trivial. What it *points at* is not: Phase 8's server does not
 exist and the Android app does not exist, so today a scan leads nowhere — and
 rule 1 forbids explaining that with text.
 
-Two honest routes, owner's call:
+**Decided 2026-09-19: park it.**
 
-- **(a) Park it.** Ship the other four; Remote arrives with Phase 8 and the
-  menu has four marks until then. *Recommended — nothing untrue is shown.*
-- **(b) Design the payload once, use it twice.** The QR encodes address + port
-  + token; the future app reads it as a pairing code, and until then the
-  server (once built) answers the same scan with a compact dark page in the
-  phone's browser. Note this brushes against `salu_context.md`'s "No PWA or
-  WebView" line for the companion app — the page would be the *browser's*, not
-  the app's, but the owner must agree.
-
-Either way: **the QR is generated inside Salu**, and no QR dependency is added
-until the payload is defined — a `qrcode` package is fine, but the payload
-decision comes first.
+- The strip ships with **four** marks — shuffle · repeat ‖ info · settings —
+  and Remote's fifth slot arrives with Phase 8. Nothing untrue is on screen,
+  and no control ever leads nowhere.
+- **The payload is still the first thing Phase 8 settles**, before any QR
+  dependency is added: the QR is generated inside Salu, and a `qrcode` package
+  is fine once the payload (address + port + token) is defined.
+- If the payload lands early, route (b) survives as a note: the same scan can
+  open a compact dark page in the phone's browser while the app is being
+  built. It brushes against `salu_context.md`'s "No PWA or WebView" line for
+  the companion app — the page would be the *browser's*, not the app's — so it
+  needs the owner's word before it is used.
 
 ---
 
@@ -295,7 +305,7 @@ decision comes first.
 | **Web mode** | **never** — the player tree is not built |
 | **Mini mode** | **never** — the 32 px bar builds no popups |
 | Channel (IPTV) list playing | opens with **four** marks (no shuffle/repeat) |
-| Nothing loaded / STOPPED | opens; toggles idle-quiet, Info shows the app's own face |
+| Nothing loaded / STOPPED | opens; toggles idle-quiet, Info's mark is dimmed and inert |
 | Clean screen, left-click | play/pause — unchanged, the menu never eats it |
 
 ---
@@ -313,22 +323,23 @@ decision comes first.
 
 ---
 
-## 12. Open questions — the owner answers these before code starts
+## 12. Questions — **none open** (all closed 2026-09-19)
 
-1. ~~**Concept A or B?**~~ — **ANSWERED 2026-09-19: A · the second row** (§3).
-2. **Info mark:** circle-i (recommended) or sheet? **Remote mark:** scan frame
-   (recommended) or phone + arcs (fails at true size — see §4)?
-3. ~~**Info or About first?**~~ — **ANSWERED 2026-09-19: neither is merged.**
-   Info is defined on its own in `info.md` §0 (media facts only); About stays a
-   separate Phase 9 question.
-4. ~~**Frozen at open or live?**~~ — **ANSWERED 2026-09-19 in `info.md` §0.6:**
-   the three clock rows (duration · position · remaining) tick off the existing
-   notifiers; every other row is read once at open and re-read on media/track
-   changes. This supersedes the earlier "freeze everything" advice.
-5. **Remote:** park until Phase 8 (recommended) or define the payload now
-   (§9)?
-6. **Suspended shuffle ink:** keep 55 % (consistency with the header) or give
-   the suspended state its own quieter-but-lit reading?
+Every question this file raised has an answer. Recorded here with its reason,
+so a later session sees why and not only what.
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Concept A or B? | **A · the second row** (owner, from the preview). B stays parked |
+| 2 | Which Info mark? | **circle + i** — a conventional shape in Salu's own stroke, like the chevron and the × |
+| 3 | Which Remote mark? | **the scan frame.** The phone-with-arcs proposal is *refused on evidence*: at true size its arcs merge into the body (`design/right-menu-preview/marks-true-size.png`) |
+| 4 | Info or About — merge? | **No.** Info = what is playing (`info.md` §0). About = Salu itself, Phase 9, entered from Settings. Nothing shared |
+| 5 | Frozen or live Info rows? | **The three clock rows tick** (existing notifiers, no new timer); every other row is read once at open and re-read on media / track changes (`info.md` §0.6) |
+| 6 | Remote — park or payload now? | **Park.** Four marks ship; the fifth arrives with Phase 8, and the payload is settled before any QR dependency is added |
+| 7 | Suspended shuffle ink? | **55 %** — identical to the Playlist header; one meaning, one reading |
+
+**A later session that wants to change one of these is making a new decision,
+not reopening this one.** Nothing here is a blocker: build may start.
 
 ---
 
@@ -357,12 +368,16 @@ Widget tests, in the style of `test/mini_bar_test.dart`:
 ## 14. Definition of done
 
 - [x] **Concept locked in this file** — §3 and the §0 log carry A · the second row (2026-09-19).
-- [ ] §12 answered and written into this file.
-- [ ] `InfoMark` + `RemoteMark` added to the family, listed in the family's own
-      header comment in `salu_marks.dart`.
-- [ ] Strip ships with the §5 numbers — pitch and glass identical to the
-      existing recipe, nothing invented.
+- [x] **§12 answered and written into this file** — nothing is pending (2026-09-19).
+- [ ] `InfoMark` added to the family and listed in the family's own header
+      comment in `salu_marks.dart`. (`RemoteMark` is drawn when Phase 8 lands —
+      §9 — so it is *not* part of this build.)
+- [ ] Strip ships **four marks** (shuffle · repeat ‖ info · settings) with the
+      §5 numbers — pitch and glass identical to the existing recipe, nothing invented.
 - [ ] §10 gating table holds as tests.
+- [ ] The Info panel per `info.md` §0 and its own checklist §8 — including the
+      Open pill's `PanelService.infoOpen` wiring (the one change outside the
+      panel's own file).
 - [ ] `flutter analyze` clean; `test/right_menu_test.dart` green.
 - [ ] README's "What works right now" gains one line; `salu_context.md` Phase 4
       notes the layer under Slide-Out Panels & Menus.

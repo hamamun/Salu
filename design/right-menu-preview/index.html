@@ -613,10 +613,10 @@ function say(html){ note.innerHTML = html; }
     ['shuffle',  'Shuffle',  'already in the family — the Playlist header\'s slot-2 mark', 'reuse'],
     ['repeat-all','Repeat',  'already in the family — off → all → one, bead for one',     'reuse'],
     ['settings', 'Settings', 'the six-dot grid — the title bar\'s own mark',               'reuse'],
-    ['info-a',   'Info · A', 'circle + i — the plain international reading',               'new'],
-    ['info-b',   'Info · B', 'a sheet with a folded corner — reads as "this file"',        'new'],
-    ['remote-a', 'Remote · A','a scan frame — four brackets and a centre dot',             'new'],
-    ['remote-b', 'Remote · B','a phone with two arcs — the sound mark\'s arc language',    'new']
+    ['info-a',   'Info · A', 'circle + i — LOCKED: the plain international reading',        'new'],
+    ['info-b',   'Info · B', 'a sheet with a folded corner — not chosen',                    'new'],
+    ['remote-a', 'Remote · A','a scan frame — four brackets and a centre dot · LOCKED, ships with Phase 8', 'new'],
+    ['remote-b', 'Remote · B','a phone with two arcs — REFUSED: at true size the arcs merge into the body', 'new']
   ];
   $('markGrid').innerHTML = cards.map(([id, name, about, tag]) => `
     <div class="card">

@@ -23,6 +23,12 @@ only.
 
 ## Status: concept LOCKED (2026-09-19)
 
+> **Note on Remote:** this mock draws all five marks to show the *target*
+> state. The first build ships **four** — shuffle · repeat ‖ info · settings —
+> because the Remote server (Phase 8) does not exist yet and a control must
+> never lead nowhere. The QR in this page is a placeholder, not a scannable
+> code.
+
 The owner picked **A · the second row** from this page; it is now the design of
 record in `right_item.md` §3. **B · the ring** stays switchable here as a parked
 alternative — not rejected, not built.
@@ -30,6 +36,7 @@ alternative — not rejected, not built.
 | Concept | State |
 |---|---|
 | **A · the second row** | ✅ LOCKED 2026-09-19 — the default view of this page |
+| Info mark · Remote mark | ✅ LOCKED to proposal A in both cases (press `I` / `R` to compare) |
 | B · the ring | ⏸ parked (the staggered arrival is the one piece worth borrowing later) |
 
 ## What it demonstrates

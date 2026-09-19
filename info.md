@@ -8,10 +8,16 @@
 >   field Salu *can* have, now marked **shown / parked / refused** against §0.
 > * **§7 · THE HARVEST** — how a candidate name becomes a shipping row.
 >
-> **Status:** §0 is **DECIDED** (the surface, its placement and its rows). The
-> inventory is still candidates, not contracts: ⚠ marks a name that must be
-> verified against the engine Salu actually ships **before** it appears in a §0
-> row. A name that does not answer is dropped, never guessed at.
+> **Status: FULLY DECIDED (2026-09-19). No question is open in this file.**
+> §0 is the locked surface — its placement, its rows, its presence rules and
+> its live-clock rule. Every §9 question was answered by the owner on
+> 2026-09-19 and is recorded there as a decision.
+>
+> The **inventory** (§1–§6) is still candidates, not contracts: ⚠ marks a name
+> that must be verified against the engine Salu actually ships **before** it
+> appears in a §0 row. A name that does not answer is dropped, never guessed
+> at — that is the only work left in this file, and it is a task (§7), not a
+> question.
 >
 > **The door:** the Info panel is opened **only** from the right-button menu in
 > Player mode — `right_item.md` §3, concept A · the second row. There is no
@@ -123,7 +129,8 @@ or an IPTV channel, and the Stream group takes its place.
 | Played from | `resumed 12:34` | **in hand** (`ResumeService`) | the file was resumed |
 | EQ | preset name, else `Custom` | **in hand** (`TuneService`) | the curve is not flat |
 | Subtitles | `+0.4 s` | **in hand** (`PlayerService.subDelay`) | a subtitle track is selected |
-| Engine | `mpv 0.3x` ⚠ | new read | after §7 verifies the name |
+
+*(No engine/version row: that is About's, and only About's — §0.7.)*
 
 ### 6 · Stream — only for a URL / IPTV channel
 
@@ -179,7 +186,9 @@ that is stale.
 | MusicBrainz / AcoustID ids · play counts and ratings · mood / BPM / key · chapters · podcast fields | true, interesting, and noise in a panel about *this* playback |
 | ReplayGain | a **tune-layer input** (L35), not a display row |
 | Embedded lyrics | mode B's subject, never this panel (L34) |
-| Copy-a-value · reveal-in-Explorer · a cover thumbnail · the folder path | parked affordances — none of them earn a first build, and the path is already on screen in the window title |
+| **A cover thumbnail** | **REFUSED by owner decision, 2026-09-19** — the panel is facts, not art (the art already has its own canvas in audio mode) |
+| App identity — app version, app credits, the mpv/ffmpeg build numbers | **not this panel** — **About owns it** (Phase 9: `lib/ui/modals/about_modal.dart`, entered from Settings). Info describes *what is playing*, About describes *Salu*. The two never merge (owner, 2026-09-19) |
+| Copy-a-value · reveal-in-Explorer · the folder path | parked affordances — none of them earn a first build, and the path is already on screen in the window title |
 
 ## 0.8 Behaviour
 
@@ -267,7 +276,7 @@ Language/script.
 | Chapters / table of contents | parked (the timeline is their future home) |
 | Podcast / show / episode (`TGID`/`TSSY`? · `PODCAST`/`SHOW`/`EPISODEID`/`SEASONNUMBER` · `tvsh`/`tven`/`tvsn`) | parked |
 | Lyrics, unsynced / synced (`USLT`/`SYLT` · `LYRICS` · `©lyr` · `Lyrics`) | **refused here** — mode B's subject (L34) |
-| Cover / extra art (`APIC` · `METADATA_BLOCK_PICTURE` · `covr` · `WM/Picture`) | the art slot + **canvas**; a panel thumbnail is parked |
+| Cover / extra art (`APIC` · `METADATA_BLOCK_PICTURE` · `covr` · `WM/Picture`) | the art slot + **canvas**; a panel thumbnail is **refused** (owner, 2026-09-19) |
 | Comment / description / synopsis | **refused** (free text, §5) |
 | Encoding provenance (`TENC`/`TSSE` · `ENCODED_BY`/`ENCODER`/`ISFT`) | parked |
 | Tool / watermark / scratch (`MP3GAIN`, `Id3v2 PRIV:*`, `TXXX:*`, `----:com.apple.iTunes:*`) | **refused** (§5) |
@@ -320,7 +329,7 @@ All four junk candidates stay `refused` (§5).
 | HLS / adaptive | `track-list/N/hls-bitrate`, `/program-id` | **Stream · Bitrate** |
 | DVB / IPTV stream metadata | service and provider names, `dvbin`-channel params ⚠ | **Stream · Provider** |
 | Window / display | `display-names`, `current-monitor`, `window-id`, `window-scale`, … | parked |
-| Engine identity | `mpv-version`, `ffmpeg-version`⚠, `build-date`⚠, `options/*` | **SALU · Engine** (mpv only, after §7) — also About's material |
+| Engine identity | `mpv-version`, `ffmpeg-version`⚠, `build-date`⚠, `options/*` | **refused here** — About owns app + engine identity (Phase 9, §0.7) |
 
 ## 5. Junk classes — refused, and why
 
@@ -397,22 +406,20 @@ The recipe, unchanged from the original doc:
 - [ ] Seen on a real Windows build with hardware decoding on, over a live 4K
       picture — the blur cost is the one thing a test cannot prove.
 
-## 9. Open questions
+## 9. Decisions — every question closed (2026-09-19)
 
-1. **The clock** — confirm §0.6: the three clock rows tick, everything else is
-   read once. (Supersedes the earlier "freeze everything" advice.)
-2. **Credits (§2.2)** — a second wave for the panel, or never? Every row there
-   is parked, not refused.
-3. **A cover thumbnail** at the top of the panel — parked; say the word and it
-   moves into the first build (`AudioDisplayService.coverBytes` is already in
-   hand).
-4. **About** — Salu's own identity (version, credits, engine) is still
-   unbuilt (Phase 9). SALU · Engine is the one row that touches it; does About
-   become its own door later, or grow out of this group?
-5. **A silent keyboard shortcut** — the owner locked the menu as the only
-   door. `Ctrl+I` would cost nothing and is never printed (rule 2). Noted,
-   not applied.
-6. **Per-file or per-playback truth** — codec/size facts as the *container*
-   declares them, or as the *output graph* ends up after hardware decoding and
-   filters? They disagree in interesting ways; §0 currently takes the engine's
-   live answer.
+**Nothing in this file is waiting on the owner.** Recorded here so a later
+reader sees the reasoning, not just the verdict.
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| 1 | Do the clock rows tick? | **Yes** — duration, position and remaining tick off the existing `position` / `duration` notifiers. Everything else is read once at open and re-read on media / track / resolution / subtitle changes (§0.6) | frozen, they look broken within a second; ticking costs no timer |
+| 2 | A credits block (composer, label, ISRC, copyright …)? | **Not in the first build** — every §2.2 row stays *parked*, none refused. It is one more group whenever the owner wants it | the panel is already six groups on a 322 px surface |
+| 3 | A cover thumbnail at the top? | **NO** (owner) | the panel is facts, not art — the art already owns the audio canvas |
+| 4 | Merge About into Info? | **NO** (owner) — **About stays its own Phase 9 window**, entered from Settings, and **nothing in this file touches it**. Info = what is playing; About = Salu itself | two different subjects; they never share a door |
+| 5 | A silent `Ctrl+I` shortcut? | **Not applied** — the right-click menu is the only door (owner). Noted, never added | the owner locked one door on purpose |
+| 6 | Per-file truth (container) or per-playback truth (output graph)? | **The engine's live answer** — what mpv reports right now, after hardware decoding and filters | it is the truth about what is actually playing, which is the panel's whole subject |
+
+Anything a later session wants to revisit is a **new question**, not a re-open
+of these — the file is closed at this revision.
+
