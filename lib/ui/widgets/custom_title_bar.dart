@@ -193,7 +193,7 @@ class CustomTitleBar extends StatelessWidget {
                 SaluIconButton(
                   tooltip: 'Settings',
                   enabled: onSettings != null,
-                  onTap: onSettings,
+                  onTap: onSettings ?? () {},
                   hitSize: const Size(46, CustomTitleBar.height),
                   child: const DotGridIcon(size: 18),
                 ),
