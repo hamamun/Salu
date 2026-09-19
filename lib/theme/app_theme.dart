@@ -52,10 +52,9 @@ class AppColors {
   /// Status dot — never tried / unknown.
   static const Color statusUnknown = Color(0xFF5A5A5E);
 
-  /// Windows-native red used when hovering the Close window button.
-  static const Color closeButtonHover = Color(0xFFE81123);
-
-  /// Subtle hover wash for the Minimize / Maximize window buttons.
+  /// Subtle hover wash for Material interactive surfaces (menus, rows).
+  /// The window caption buttons deliberately take NO background shape —
+  /// the mark itself lights up (follow.md rule 4).
   static const Color captionButtonHover = Color(0x1AFFFFFF);
 
   // ── Timeline & volume bars (monochrome — same for video and audio) ────

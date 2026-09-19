@@ -5,6 +5,8 @@ import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
 import '../mini/mini_marks.dart';
 import 'dot_grid_icon.dart';
+import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 
 /// SALU's invisible-until-activity title bar.
 ///
@@ -14,10 +16,14 @@ import 'dot_grid_icon.dart';
 /// key is pressed, then auto-hides 3 seconds after the last activity
 /// (visibility is driven by the parent via [visible]).
 ///
-/// Contains: a [DragToMoveArea] spanning the full width, the current media
+/// Contains: a [DragToMoveArea] spanning the full width, the SALU mark in
+/// the left corner (with the mode switch beside it), the current media
 /// title in the center, and the caption row on the right — the 6-dot
-/// settings button followed by Windows caption buttons (Minimize /
-/// Maximize / Close) rendered with native Segoe Fluent glyphs.
+/// settings button followed by the Windows caption buttons (Minimize /
+/// Maximize / Close) drawn as SALU marks in the family's own thin stroke
+/// (follow.md rule 6) — never stock glyphs. Every control in the row
+/// rides the shared icon recipe: light + scale on hover, sink on press,
+/// and nothing is ever drawn behind it (follow.md rules 2 & 4).
 ///
 /// When [immersive] is true the bar paints no gradient and performs no
 /// visibility animation of its own — the parent block (HomeScreen's fused
@@ -53,10 +59,10 @@ class CustomTitleBar extends StatelessWidget {
   /// and no slide/fade wrapper (the fused parent block drives both).
   final bool immersive;
 
-  /// A widget pinned to the bar's top-left — web mode's Player · Web
-  /// switch lives in this slot, beside where the SALU mark sits in
-  /// Player mode (web.md · the toggle lock). The centered title is
-  /// untouched by it.
+  /// A widget pinned just RIGHT of the SALU mark at the bar's left corner
+  /// — web mode's Player · Web switch lives in this slot (web.md · the
+  /// toggle lock: the switch always stands next to the SALU logo, in the
+  /// same place in both modes). The centered title is untouched by it.
   final Widget? leading;
 
   /// A live status mark standing at the caption row's left end, before
@@ -64,8 +70,8 @@ class CustomTitleBar extends StatelessWidget {
   /// only signal that can follow a download into Player mode: the
   /// browser stays alive behind the mode switch, so a file keeps landing
   /// while you watch, and this corner is where the news can wait.
-  /// It is a SALU control, not a caption button, so it keeps the icon
-  /// recipe (no hover box) rather than the caption family's.
+  /// Like the caption marks themselves it rides the shared icon recipe
+  /// (no hover box — follow.md rule 4).
   final Widget? badge;
 
   /// false hides the Mini-bar glyph: there is no room for a browser
@@ -129,22 +135,38 @@ class CustomTitleBar extends StatelessWidget {
               ),
             ),
           ),
-          // The left slot — drawn above the drag area so its controls
-          // answer clicks while the rest of the bar still drags.
-          if (leading != null)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: leading!,
+          // The left corner — the SALU mark ALWAYS stands at the very
+          // left (web.md · toggle lock: the mode switch sits NEXT to the
+          // SALU logo, same place in both modes), then the mode slot.
+          // Drawn above the drag area: the mark never answers the pointer
+          // (the drag area behind it moves the window); the controls
+          // beside it do.
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const _SaluMarkTile(),
+                    if (leading != null) ...<Widget>[
+                      const SizedBox(width: 10),
+                      leading!,
+                    ],
+                  ],
                 ),
               ),
             ),
-          // Caption buttons — right aligned.
+          ),
+          // Caption buttons — right aligned. Every control in the row is
+          // a [SaluIconButton]: the mark lights gray → white and scales
+          // 1.06 on hover, sinks 0.90 on press, and NOTHING is drawn
+          // behind it (follow.md rules 2 & 4). The marks themselves are
+          // drawn in the family's own thin stroke (rule 6).
           Align(
             alignment: Alignment.centerRight,
             child: Row(
@@ -154,51 +176,57 @@ class CustomTitleBar extends StatelessWidget {
                 // so the caption buttons themselves never shift.
                 if (badge != null) badge!,
                 // Mini bar mode — one glyph IMMEDIATELY left of Settings
-                // (mini.md §4). A wide, thin rounded strip: the bar itself,
-                // drawn in the caption family's ink and stroke, naming the
-                // action by shape — never by text (tooltips name controls,
-                // they never teach shortcuts; follow.md rule 2).
+                // (mini.md §4). A wide, thin rounded strip: the bar
+                // itself, naming the action by shape — never by text
+                // (tooltips name controls, they never teach shortcuts;
+                // follow.md rule 2).
                 // Web mode hides it (mini.md §8 — the browser does not fit
                 // a 32-px strip), so it never appears to lie.
                 if (showMini)
-                  _CaptionButton(
+                  SaluIconButton(
                     tooltip: 'Mini bar mode',
-                    onPressed: windows.toggleMini,
-                    child: const MiniBarMark(
-                      size: 18,
-                      color: AppColors.textPrimary,
-                    ),
+                    onTap: windows.toggleMini,
+                    hitSize: const Size(46, CustomTitleBar.height),
+                    child: const MiniBarMark(size: 18),
                   ),
                 // SALU settings — six dots in two lines (left of Minimize).
-                _CaptionButton(
+                SaluIconButton(
                   tooltip: 'Settings',
-                  onPressed: () => onSettings?.call(),
-                  child: const DotGridIcon(
-                    size: 18,
-                    color: AppColors.textPrimary,
-                  ),
+                  enabled: onSettings != null,
+                  onTap: onSettings ?? () {},
+                  hitSize: const Size(46, CustomTitleBar.height),
+                  child: const DotGridIcon(size: 18),
                 ),
-                _CaptionButton(
-                  glyph: '\uE921', // Minimize
+                // Minimize — one thin rule.
+                SaluIconButton(
                   tooltip: 'Minimize',
-                  onPressed: () => windowManager.minimize(),
+                  onTap: () => windowManager.minimize(),
+                  hitSize: const Size(46, CustomTitleBar.height),
+                  child: const MinimizeMark(size: 18),
                 ),
+                // Maximize — one thin hollow square; while maximized it
+                // reads as the same mark, modified: two squares.
                 ValueListenableBuilder<bool>(
                   valueListenable: windows.isMaximized,
                   builder:
                       (BuildContext context, bool maximized, Widget? _) {
-                    return _CaptionButton(
-                      glyph: maximized ? '\uE923' : '\uE922',
+                    return SaluIconButton(
                       tooltip: maximized ? 'Restore' : 'Maximize',
-                      onPressed: windows.toggleMaximize,
+                      onTap: windows.toggleMaximize,
+                      hitSize: const Size(46, CustomTitleBar.height),
+                      child: maximized
+                          ? const RestoreMark(size: 18)
+                          : const MaximizeMark(size: 18),
                     );
                   },
                 ),
-                _CaptionButton(
-                  glyph: '\uE8BB', // Close
+                // Close — the family's ×. It lights to full white on
+                // hover like every other mark; the red close box is gone.
+                SaluIconButton(
                   tooltip: 'Close',
-                  isClose: true,
-                  onPressed: () => windowManager.close(),
+                  onTap: () => windowManager.close(),
+                  hitSize: const Size(46, CustomTitleBar.height),
+                  child: const CloseMark(size: 18),
                 ),
               ],
             ),
@@ -229,69 +257,42 @@ class CustomTitleBar extends StatelessWidget {
   }
 }
 
-/// A single caption button (settings mark or Min / Max / Close glyph) drawn
-/// with the native Segoe Fluent Icons glyph set for a perfectly
-/// Windows-native feel.
-class _CaptionButton extends StatefulWidget {
-  const _CaptionButton({
-    required this.tooltip,
-    required this.onPressed,
-    this.glyph,
-    this.child,
-    this.isClose = false,
-  }) : assert(glyph != null || child != null);
-
-  /// Segoe Fluent glyph to render (or pass [child] for a custom mark).
-  final String? glyph;
-
-  /// Custom content — e.g. the 6-dot settings mark — rendered instead of
-  /// [glyph] when provided.
-  final Widget? child;
-
-  final String tooltip;
-  final VoidCallback onPressed;
-  final bool isClose;
-
-  @override
-  State<_CaptionButton> createState() => _CaptionButtonState();
-}
-
-class _CaptionButtonState extends State<_CaptionButton> {
-  bool _hovered = false;
+/// The SALU mark in the bar's left corner (web.md · toggle lock — the
+/// Player · Web switch stands next to it in both modes). The app's own
+/// tile at 22 px, softly rounded — the mini bar's 19 px tile
+/// (mini.md §3) is its cousin in the 32 px strip.
+///
+/// It is a brand mark, not a control: it never answers the pointer
+/// (the drag area behind it still moves the window) and never takes a
+/// hover shape.
+class _SaluMarkTile extends StatelessWidget {
+  const _SaluMarkTile();
 
   @override
   Widget build(BuildContext context) {
-    final Color background = _hovered
-        ? (widget.isClose
-            ? AppColors.closeButtonHover
-            : AppColors.captionButtonHover)
-        : Colors.transparent;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          width: 46,
-          height: CustomTitleBar.height,
-          color: background,
-          alignment: Alignment.center,
-          child: widget.child ??
-              Text(
-                widget.glyph!,
-                style: TextStyle(
-                  // Native Windows caption glyphs (Win11), MDL2 on Win10.
-                  fontFamily: 'Segoe Fluent Icons',
-                  fontFamilyFallback: const <String>['Segoe MDL2 Assets'],
-                  fontSize: 10,
-                  color: _hovered && widget.isClose
-                      ? Colors.white
-                      : AppColors.textPrimary,
-                ),
+    return IgnorePointer(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: Image.asset(
+          'assets/images/salu_logo.png',
+          width: 22,
+          height: 22,
+          filterQuality: FilterQuality.medium,
+          // A caption-size decode of the app icon: sharp at any DPI, and
+          // nowhere near the cost of the full-size PNG.
+          cacheWidth: 64,
+          errorBuilder: (BuildContext context, Object error,
+              StackTrace stack) {
+            // Never a broken-image glyph — a thin frame in the family's
+            // ink.
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: AppColors.surfaceOutline),
               ),
+              child: const SizedBox(width: 22, height: 22),
+            );
+          },
         ),
       ),
     );

@@ -208,7 +208,7 @@ Hard bans — if it's on this list it does not exist in mini mode:
 - New code only: the shell, `MiniProgressStrip` painter (top edge) + hit
   zone, the title-swap controller.
 - The full-mode toggle lives in `custom_title_bar.dart`, one glyph left
-  of Settings — thin Segoe-style mark, same family as caption buttons.
+  of Settings — a thin SALU mark, same family as the caption marks.
 - Persist **both** geometries independently (full rect + mini point),
   logical-pixel aware.
 

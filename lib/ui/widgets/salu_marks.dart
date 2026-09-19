@@ -32,6 +32,10 @@ import 'package:flutter/material.dart';
 ///   · globe          — Country grouping    [CountryMark]
 ///   · bookmark       — Favourite           [BookmarkMark] (outline / [filled])
 ///   · chevron        — Reveal / twist      [RevealChevronMark] · [GroupTwistMark]
+///   · one rule       — Minimize            [MinimizeMark] (window caption)
+///   · hollow square  — Maximize            [MaximizeMark] (window caption)
+///   · two squares    — Restore             [RestoreMark] (window caption)
+///   · crossing rules — Close               [CloseMark] (window caption)
 
 /// Shared stroke weight so the whole family reads as one hand (public so
 /// the transport marks share it — see transport_marks.dart).
@@ -1313,6 +1317,192 @@ class _GroupTwistPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GroupTwistPainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+// ── Window caption family (follow.md · hard rules 4 & 6) ────────────────
+//
+// The title bar's own marks — Minimize / Maximize / Restore / Close —
+// drawn by hand in the family's stroke instead of the stock Segoe Fluent
+// glyphs. They ride [SaluIconButton]'s recipe: the mark lights from
+// iconIdle to white and scales 1.06 on hover, sinks 0.90 on press, and
+// nothing is ever drawn behind it. No red close box, no white wash.
+
+/// Minimize — a single thin rule, the caption row's quietest mark.
+/// Sits just below the geometric centre, the way a dash optically
+/// centres (one rule only — three would read as the ≡ drag handle).
+class MinimizeMark extends StatelessWidget {
+  const MinimizeMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _MinimizePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _MinimizePainter extends CustomPainter {
+  const _MinimizePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawLine(
+      Offset(size.width * 0.26, size.height * 0.56),
+      Offset(size.width * 0.74, size.height * 0.56),
+      Paint()
+        ..color = ink
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MinimizePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Maximize — one thin hollow square with the family's soft corners.
+class MaximizeMark extends StatelessWidget {
+  const MaximizeMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _MaximizePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _MaximizePainter extends CustomPainter {
+  const _MaximizePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Rect frame = Rect.fromCenter(
+      center: size.center(Offset.zero),
+      width: s * 0.56,
+      height: s * 0.56,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(frame, Radius.circular(s * 0.12)),
+      Paint()
+        ..color = ink
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MaximizePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Restore — two thin squares, the back one up-right and quieter: the
+/// [StackedFramesMark]'s own "two frames, the back sits quieter"
+/// language, so the maximized state reads as one mark, modified —
+/// never a second glyph.
+class RestoreMark extends StatelessWidget {
+  const RestoreMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _RestorePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _RestorePainter extends CustomPainter {
+  const _RestorePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    Offset p(double x, double y) => Offset(s * x / 24, s * y / 24);
+    final Radius r = Radius.circular(s * 2 / 24);
+    final Paint paint = Paint()
+      ..strokeWidth = stroke
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    // Back square — up-right, quieter (the ~55 % back-ink rule).
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromPoints(p(10, 4), p(20, 14)), r),
+      Paint()
+        ..color = ink.withAlpha(140)
+        ..strokeWidth = stroke
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+    // Front square — down-left, full ink.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromPoints(p(4, 10), p(14, 20)), r),
+      paint..color = ink,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RestorePainter old) =>
+      old.ink != ink || old.stroke != stroke;
+}
+
+/// Close — two crossing rules, the family's ×. It lights to full white
+/// on hover like every other mark — the red close-hover box is gone
+/// (follow.md rule 4: nothing is drawn behind an icon, ever).
+class CloseMark extends StatelessWidget {
+  const CloseMark({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _ClosePainter(markInk(context), markStrokeFor(size)),
+    );
+  }
+}
+
+class _ClosePainter extends CustomPainter {
+  const _ClosePainter(this.ink, this.stroke);
+
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint paint = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(s * 0.27, s * 0.27), Offset(s * 0.73, s * 0.73), paint);
+    canvas.drawLine(Offset(s * 0.73, s * 0.27), Offset(s * 0.27, s * 0.73), paint);
+  }
+
+  @override
+  bool shouldRepaint(_ClosePainter old) =>
       old.ink != ink || old.stroke != stroke;
 }
 

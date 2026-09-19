@@ -44,6 +44,11 @@
      = Country · bookmark = Favourite (solid + always visible = saved,
      outline on hover = unsaved — never a star) · chevron = reveal (list
      edges) / group twist (heads, rotating 90° open)
+   - **window caption line** (title bar): one rule = Minimize · hollow
+     square = Maximize · two squares (back sits quieter) = Restore ·
+     thin × = Close — the same marks ride the §2 recipe as every other
+     control: light + scale on hover, nothing drawn behind (the old red
+     close box and the white caption wash are gone, rule 4)
    **No text buttons for actions.** An action is a mark plus a hover-delay
    tooltip; emphasis is carried by the mark itself (solid = primary,
    hollow = secondary), never by a filled button behind it. **One
