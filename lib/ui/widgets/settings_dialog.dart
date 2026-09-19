@@ -7,6 +7,7 @@ import '../../core/language_names.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
 import '../../core/tune_service.dart';
+import '../../core/web/web_download_service.dart';
 import '../../core/web/web_popup_service.dart';
 import '../../theme/app_theme.dart';
 import '../osd/osd_controller.dart';
@@ -14,21 +15,34 @@ import 'dot_grid_icon.dart';
 import 'salu_marks.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
-/// backdrop, opened by the 6-dot button in the title bar.
+/// backdrop, opened by the 6-dot button in the title bar and by the
+/// browser's own ⋮ menu.
 ///
-/// Current tabs: General. The tab strip is structured so later phases'
-/// Video / Audio / Subtitles tabs can slot right in.
+/// Current tabs: General · Subtitles · Web. The tab strip is structured
+/// so later phases' Video / Audio tabs can slot right in.
 class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key});
+  const SettingsDialog({super.key, this.initialTab = SettingsTab.general});
+
+  /// The tab the window opens on. General is the default at every door;
+  /// the browser's own doors ask for Web — a viewer who came from the web
+  /// section is after the web settings and should not have to hunt for
+  /// them through General first.
+  final SettingsTab initialTab;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
 }
 
-enum _SettingsTab { general, subtitles, web }
+/// The window's three tabs. Public because a caller picks the one to open
+/// on ([SettingsDialog.initialTab]).
+enum SettingsTab { general, subtitles, web }
 
 class _SettingsDialogState extends State<SettingsDialog> {
-  _SettingsTab _tab = _SettingsTab.general;
+  /// Opens on the door the viewer came through, then moves only by their
+  /// own taps. `late` because a field initializer cannot reach `widget`
+  /// any other way — and it is read once, at the first build, so a later
+  /// rebuild never throws the viewer back to the tab they arrived on.
+  late SettingsTab _tab = widget.initialTab;
 
   @override
   Widget build(BuildContext context) {
@@ -104,21 +118,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
         children: <Widget>[
           _TabButton(
             label: 'General',
-            selected: _tab == _SettingsTab.general,
-            onTap: () => setState(() => _tab = _SettingsTab.general),
+            selected: _tab == SettingsTab.general,
+            onTap: () => setState(() => _tab = SettingsTab.general),
           ),
           // cc.md §2 — the Subtitles tab (D1…D5, D13).
           _TabButton(
             label: 'Subtitles',
-            selected: _tab == _SettingsTab.subtitles,
-            onTap: () => setState(() => _tab = _SettingsTab.subtitles),
+            selected: _tab == SettingsTab.subtitles,
+            onTap: () => setState(() => _tab = SettingsTab.subtitles),
           ),
           // web.md — the Web tab: the browser's settings (Search
           // suggestions + pop-ups + the auto-clear schedule).
           _TabButton(
             label: 'Web',
-            selected: _tab == _SettingsTab.web,
-            onTap: () => setState(() => _tab = _SettingsTab.web),
+            selected: _tab == SettingsTab.web,
+            onTap: () => setState(() => _tab = SettingsTab.web),
           ),
         ],
       ),
@@ -127,9 +141,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Widget _buildBody() {
     return switch (_tab) {
-      _SettingsTab.general => const _GeneralTab(),
-      _SettingsTab.subtitles => const _SubtitlesTab(),
-      _SettingsTab.web => const _WebTab(),
+      SettingsTab.general => const _GeneralTab(),
+      SettingsTab.subtitles => const _SubtitlesTab(),
+      SettingsTab.web => const _WebTab(),
     };
   }
 }
@@ -185,6 +199,25 @@ class _WebTab extends StatelessWidget {
           ),
           SizedBox(height: 16),
           _WebPageSchemePicker(),
+          SizedBox(height: 28),
+          Text(
+            'Downloads',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Where the files you download land. Asking opens the Windows '
+            'Save As, one download at a time.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _WebAskDownloadSwitch(),
+          SizedBox(height: 8),
+          _WebDownloadFolderRow(),
           SizedBox(height: 28),
           Text(
             'Pop-ups',
@@ -441,6 +474,177 @@ class _WebPageSchemePicker extends StatelessWidget {
                 ),
               ),
           ],
+        );
+      },
+    );
+  }
+}
+
+/// Settings → Web → Downloads: Chrome/Edge's own "Ask where to save each
+/// file before downloading". **On by default** — every download opens the
+/// native Windows Save As and not one byte is written until a place is
+/// chosen; walking away from that dialog cancels the download outright,
+/// and a cancelled download never reaches the shelf (it is not a failed
+/// one, it is a refused one). Off, files go straight to the folder below
+/// with no question at all. Either way the change reaches every live tab
+/// at once (`WebDataControlService.applyDownloadPreferences`) — no
+/// restart, and a download already travelling keeps the path it was given.
+class _WebAskDownloadSwitch extends StatelessWidget {
+  const _WebAskDownloadSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: SettingsService.instance.webAskDownloadLocation,
+      builder: (BuildContext context, bool on, Widget? _) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => unawaited(
+              SettingsService.instance.setWebAskDownloadLocation(!on)),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: on ? const Color(0x144C9EEB) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: on ? const Color(0x404C9EEB) : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color:
+                        on ? const Color(0x264C9EEB) : AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: IconTheme.merge(
+                    data: IconThemeData(
+                      color:
+                          on ? AppColors.accent : AppColors.textSecondary,
+                    ),
+                    child: const Icon(Icons.save_alt,
+                        size: 20, color: AppColors.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Ask where to save each file',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'Off, downloads go straight to the folder below.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _SaluSwitch(on: on),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Settings → Web → Downloads: the folder downloads belong to — and, with
+/// asking on, the folder the Save As question starts in. Empty is the
+/// honest default ("the Windows Downloads folder", a relocated one
+/// included), so the row says that in words rather than showing a path
+/// SALU guessed, and it offers the reset only once a folder of the
+/// viewer's own is in force.
+class _WebDownloadFolderRow extends StatelessWidget {
+  const _WebDownloadFolderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: SettingsService.instance.webDownloadFolder,
+      builder: (BuildContext context, String folder, Widget? _) {
+        final String trimmed = folder.trim();
+        final bool custom = trimmed.isNotEmpty;
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () =>
+                unawaited(WebDownloadService.pickDownloadFolder()),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Text(
+                          'Download location',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Tooltip(
+                          message: custom
+                              ? trimmed
+                              : 'The Windows Downloads folder',
+                          waitDuration: const Duration(milliseconds: 400),
+                          child: Text(
+                            custom ? trimmed : 'Windows Downloads folder',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  if (custom)
+                    _HoverIconButton(
+                      icon: Icons.restart_alt,
+                      tooltip: 'Use the Windows folder',
+                      onPressed: () => unawaited(
+                          SettingsService.instance.setWebDownloadFolder('')),
+                    ),
+                  _HoverIconButton(
+                    icon: Icons.folder_open,
+                    tooltip: 'Change…',
+                    onPressed: () =>
+                        unawaited(WebDownloadService.pickDownloadFolder()),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );

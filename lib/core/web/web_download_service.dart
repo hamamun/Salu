@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart' as fs;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../settings_service.dart';
 
 /// Where one download stands.
 ///
@@ -17,6 +20,61 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// dead download from holding the badge hostage — and it self-corrects,
 /// because the next real progress report puts the row back to `running`.
 enum WebDownloadState { running, completed, failed }
+
+/// The shape of a Save As answer: the chosen path, or `null` for the
+/// dialog's Cancel. One seam type so a test can stand in for the shell.
+typedef WebSavePicker = Future<String?> Function({
+  required String suggestedName,
+  String? initialDirectory,
+});
+
+/// The shape of a folder-picker answer: the chosen folder, or `null`.
+typedef WebFolderPicker = Future<String?> Function();
+
+/// What one Save As question came back with (Settings → Web → Downloads).
+enum WebSaveKind {
+  /// The viewer chose a place — [WebSaveAnswer.path] is it.
+  save,
+
+  /// The viewer walked away from the dialog: the download never happens.
+  cancel,
+
+  /// SALU could not ask (asking is off, the picker refused, anything
+  /// unexpected) — the engine's own path stands and the file still lands.
+  engineDefault,
+}
+
+/// SALU's answer about where one download should land.
+///
+/// Deliberately free of the plugin's own types: this service still knows
+/// nothing about the engine, and [WebTab] is the translator in this
+/// direction exactly as it is for the reports coming the other way.
+@immutable
+class WebSaveAnswer {
+  /// Save the file to [path] — an absolute path, file name included. The
+  /// parameter is non-nullable on purpose: a "save" with no place to save
+  /// to is not a save, and the other two answers say what they mean.
+  const WebSaveAnswer.toPath(String savePath)
+      : path = savePath,
+        kind = WebSaveKind.save;
+
+  /// Drop the download: nothing is written and nothing is reported.
+  const WebSaveAnswer.cancelled()
+      : path = null,
+        kind = WebSaveKind.cancel;
+
+  /// Let the engine use the path it had already worked out.
+  const WebSaveAnswer.engineDefault()
+      : path = null,
+        kind = WebSaveKind.engineDefault;
+
+  final WebSaveKind kind;
+  final String? path;
+
+  bool get isSave => kind == WebSaveKind.save;
+  bool get isCancel => kind == WebSaveKind.cancel;
+  bool get isEngineDefault => kind == WebSaveKind.engineDefault;
+}
 
 /// One download row: what the engine said, in SALU's own words.
 ///
@@ -147,7 +205,8 @@ class WebDownloadItem {
   }
 }
 
-/// SALU's download log and the badge's only source of truth.
+/// SALU's download log, the badge's only source of truth — and the answer
+/// to where a download lands.
 ///
 /// The engine reports every download itself — `add_DownloadStarting`,
 /// `add_BytesReceivedChanged` and `add_StateChanged` in the vendored
@@ -155,6 +214,15 @@ class WebDownloadItem {
 /// as `WebviewController.onDownloadEvent`. `WebTab._wire` listens and
 /// hands the plain values here through [report], so this service knows
 /// nothing about the plugin and stays unit-testable.
+///
+/// Since the Downloads lock of 2026-09-19 (web.md), the traffic runs the
+/// other way as well: with Settings → Web → Downloads asking, the engine
+/// holds a download on its own deferral and SALU — through
+/// [askWhereToSave] — opens the native Windows Save As for it, one dialog
+/// at a time. A place chosen becomes the file's path, a Cancel drops the
+/// download before a byte is written (so it never reaches the log at all),
+/// and any way the question can fail answers "your own default is fine"
+/// rather than losing the file.
 ///
 /// What it keeps:
 ///   · [items]     — the log, newest first (running rows included)
@@ -256,7 +324,9 @@ class WebDownloadService {
   }
 
   /// Test-only: drops the one-shot load guard and every row, so a test
-  /// can exercise [load] from a genuinely cold start.
+  /// can exercise [load] from a genuinely cold start. The prompt queue is
+  /// emptied with them — a test must never inherit another's waiting Save
+  /// As — and the two shell-dialog seams go back to the real dialogs.
   @visibleForTesting
   void debugResetForTest() {
     _writeTimer?.cancel();
@@ -264,6 +334,10 @@ class WebDownloadService {
     _sweepTimer?.cancel();
     _sweepTimer = null;
     _lastProgressMs.clear();
+    _promptTail = Future<WebSaveAnswer>.value(
+        const WebSaveAnswer.engineDefault());
+    debugSaveLocationPicker = null;
+    debugFolderPicker = null;
     _loaded = false;
     _shelfOpen = false;
     items.value = const <WebDownloadItem>[];
@@ -425,9 +499,165 @@ class WebDownloadService {
     _syncCounts();
   }
 
+  // ── Where a download lands (Settings → Web → Downloads) ──────────────
+
+  /// The Save As seam — `null` in the app, where the native Windows dialog
+  /// answers; a test replaces it to answer without a window (and
+  /// [debugResetForTest] puts it back). Returns the chosen path, or `null`
+  /// when the viewer walked away from the dialog.
+  @visibleForTesting
+  static WebSavePicker? debugSaveLocationPicker;
+
+  /// The folder-picker seam, beside [debugSaveLocationPicker] for the same
+  /// reason (see [pickDownloadFolder]).
+  @visibleForTesting
+  static WebFolderPicker? debugFolderPicker;
+
+  /// Asks the seam if there is one, the shell if there is not.
+  static Future<String?> _pick({
+    required String suggestedName,
+    String? initialDirectory,
+  }) {
+    final WebSavePicker? seam = debugSaveLocationPicker;
+    if (seam != null) {
+      return seam(
+        suggestedName: suggestedName,
+        initialDirectory: initialDirectory,
+      );
+    }
+    return _nativeSaveLocation(
+      suggestedName: suggestedName,
+      initialDirectory: initialDirectory,
+    );
+  }
+
+  /// The native Windows Save As — the same shell dialog Edge and Chrome
+  /// open, reached through `file_selector` (already a SALU dependency for
+  /// Open File… / Open Folder…), which is why it brings its own overwrite
+  /// warning and its own "file (1).mp4" naming for free.
+  static Future<String?> _nativeSaveLocation({
+    required String suggestedName,
+    String? initialDirectory,
+  }) async {
+    final fs.FileSaveLocation? picked = await fs.getSaveLocation(
+      acceptedTypeGroups: _saveTypeGroups(suggestedName),
+      initialDirectory: initialDirectory == null || initialDirectory.isEmpty
+          ? null
+          : initialDirectory,
+      suggestedName: suggestedName.isEmpty ? null : suggestedName,
+      confirmButtonText: 'Save',
+    );
+    return picked?.path;
+  }
+
+  /// The dialog's filter list: the file's own extension first — the shell
+  /// then completes a name typed without one, the way Chrome's Save As
+  /// does — and "All files" behind it, so nothing is ever un-saveable.
+  static List<fs.XTypeGroup> _saveTypeGroups(String fileName) {
+    final String ext = p.extension(fileName);
+    final String bare = ext.startsWith('.') ? ext.substring(1) : ext;
+    return <fs.XTypeGroup>[
+      if (bare.isNotEmpty)
+        fs.XTypeGroup(label: bare.toUpperCase(), extensions: <String>[bare]),
+      const fs.XTypeGroup(label: 'All files'),
+    ];
+  }
+
+  /// The folder picker behind Settings → Web → Downloads → Change… — the
+  /// native Windows dialog SALU's Open Folder… already uses, and the
+  /// setting that follows it. A Cancel changes nothing. Answers whether
+  /// the folder actually moved, so the row can stay quiet about a picker
+  /// the viewer walked away from.
+  ///
+  /// The seam lives beside [debugSaveLocationPicker] for the same reason:
+  /// every shell dialog SALU opens is in this one service, and a test can
+  /// answer both without a window.
+  static Future<bool> pickDownloadFolder() async {
+    try {
+      final WebFolderPicker? seam = debugFolderPicker;
+      final String? dir = await (seam == null ? _nativeFolderPick() : seam());
+      if (dir == null || dir.trim().isEmpty) return false;
+      await SettingsService.instance.setWebDownloadFolder(dir.trim());
+      return true;
+    } catch (_) {
+      // No picker here, or a path the shell would not give back — the
+      // folder in force stays in force.
+      return false;
+    }
+  }
+
+  static Future<String?> _nativeFolderPick() => fs.getDirectoryPath();
+
+  /// The prompt queue's tail ([askWhereToSave] owns it). One Save As at a
+  /// time: a page that fires three downloads at once must not stack three
+  /// dialogs, so each waits for the one before it — and each download
+  /// simply sits on its own engine deferral until its turn comes, which is
+  /// exactly what the deferral is for.
+  Future<WebSaveAnswer> _promptTail =
+      Future<WebSaveAnswer>.value(const WebSaveAnswer.engineDefault());
+
+  /// Asks where one download should land, and answers with what the
+  /// viewer decided ([WebSaveAnswer]).
+  ///
+  /// [suggestedPath] is the engine's own full target path — its folder is
+  /// the dialog's starting point when the viewer has chosen none, and its
+  /// file name is what the dialog pre-fills.
+  ///
+  /// Never throws and never hangs on a failure: every way this can go
+  /// wrong answers [WebSaveAnswer.engineDefault], because a question SALU
+  /// could not ask must never cost the viewer their file.
+  Future<WebSaveAnswer> askWhereToSave(String suggestedPath) {
+    final Future<WebSaveAnswer> mine =
+        _promptTail.then((WebSaveAnswer _) => _askOnce(suggestedPath));
+    // The tail never carries an error of its own, so a queue can neither
+    // stall nor leave an unhandled exception behind it.
+    _promptTail =
+        mine.catchError((Object _) => const WebSaveAnswer.engineDefault());
+    return mine;
+  }
+
+  Future<WebSaveAnswer> _askOnce(String suggestedPath) async {
+    try {
+      // The switch may have been flipped while this prompt waited in the
+      // queue — the latest word wins, and "off" means stop asking.
+      if (!SettingsService.instance.webAskDownloadLocation.value) {
+        return const WebSaveAnswer.engineDefault();
+      }
+      final String name = p.basename(suggestedPath);
+      final String start = _startFolderFor(suggestedPath);
+      final String? picked = await _pick(
+        suggestedName: name.isEmpty ? 'download' : name,
+        initialDirectory: start.isEmpty ? null : start,
+      );
+      if (picked == null || picked.trim().isEmpty) {
+        // The dialog's Cancel: no file, and nothing for the shelf — a
+        // download the viewer refused is not a failed download.
+        return const WebSaveAnswer.cancelled();
+      }
+      return WebSaveAnswer.toPath(picked.trim());
+    } catch (_) {
+      // No picker here, a window that will not open, a path the shell
+      // refused — the engine's own folder takes the file instead.
+      return const WebSaveAnswer.engineDefault();
+    }
+  }
+
+  /// Where the Save As starts: the viewer's chosen folder when there is
+  /// one (that is the whole point of the setting), else the folder the
+  /// engine suggested — which is Windows' own Downloads, relocated one
+  /// included, and so a better guess than any SALU could compute.
+  static String _startFolderFor(String suggestedPath) {
+    final String custom =
+        SettingsService.instance.webDownloadFolder.value.trim();
+    if (custom.isNotEmpty) return custom;
+    final String dir = p.dirname(suggestedPath);
+    if (dir.isNotEmpty && dir != '.' && dir != '/' && dir != '\\') return dir;
+    return downloadsFolder();
+  }
+
   // ── Explorer's two answers ───────────────────────────────────────────
 
-  /// Opens the Downloads folder with [path] selected — the honest
+  /// Opens [path]'s own folder with the file selected — the honest
   /// "Show in folder": Explorer lands ON the file, not merely near it.
   /// Falls back to the folder itself when the select form is refused.
   Future<void> reveal(String path) async {
@@ -439,14 +669,13 @@ class WebDownloadService {
     }
   }
 
-  /// Opens the folder holding [path] — or the Downloads folder when
-  /// [path] is null (the shelf's footer, which must work with an empty
-  /// log). Never throws: a folder that will not open is not an error the
-  /// browser can do anything about.
+  /// Opens the folder holding [path] — or the download folder when [path]
+  /// is null (the shelf's footer, which must work with an empty log).
+  /// Never throws: a folder that will not open is not an error the browser
+  /// can do anything about.
   Future<void> openFolder(String? path) async {
-    final String target = path != null && path.isNotEmpty
-        ? p.dirname(path)
-        : _downloadsFolder();
+    final String target =
+        path != null && path.isNotEmpty ? p.dirname(path) : downloadsFolder();
     if (target.isEmpty) return;
     try {
       await Process.start('explorer', <String>[target]);
@@ -463,7 +692,14 @@ class WebDownloadService {
     return now.millisecondsSinceEpoch - last > staleAfter.inMilliseconds;
   }
 
-  static String _downloadsFolder() {
+  /// The folder downloads belong to — the viewer's own choice when there
+  /// is one (Settings → Web → Downloads), else Windows' own Downloads.
+  /// The shelf's footer opens this; the Save As falls back to it only when
+  /// the engine suggested no folder of its own.
+  static String downloadsFolder() {
+    final String custom =
+        SettingsService.instance.webDownloadFolder.value.trim();
+    if (custom.isNotEmpty) return custom;
     final String home = Platform.environment['USERPROFILE'] ?? '';
     return home.isEmpty ? '' : p.join(home, 'Downloads');
   }

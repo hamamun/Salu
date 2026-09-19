@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salu/core/settings_service.dart';
 import 'package:salu/core/web/web_download_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -304,6 +305,187 @@ void main() {
         isNull,
       );
       expect(WebDownloadItem.fromJson('nope'), isNull);
+    });
+  });
+
+  group('where a download lands (the Save As prompt)', () {
+    // Forward-slash paths on purpose: `package:path` answers the same for
+    // these on Windows and everywhere else, so these tests are not a
+    // platform of their own the way the row-model ones above are.
+    const String suggested = '/downloads/film.mp4';
+    const String chosen = '/elsewhere/film.mp4';
+
+    final List<String> names = <String>[];
+    final List<String?> dirs = <String?>[];
+    int opened = 0;
+
+    setUp(() async {
+      names.clear();
+      dirs.clear();
+      opened = 0;
+      await SettingsService.instance.setWebAskDownloadLocation(true);
+      await SettingsService.instance.setWebDownloadFolder('');
+    });
+
+    tearDown(() async {
+      WebDownloadService.debugSaveLocationPicker = null;
+      WebDownloadService.debugFolderPicker = null;
+      await SettingsService.instance.setWebAskDownloadLocation(true);
+      await SettingsService.instance.setWebDownloadFolder('');
+    });
+
+    /// A seam that records the question and answers [answer].
+    void answerWith(String? answer) {
+      WebDownloadService.debugSaveLocationPicker =
+          ({required String suggestedName, String? initialDirectory}) async {
+        opened++;
+        names.add(suggestedName);
+        dirs.add(initialDirectory);
+        return answer;
+      };
+    }
+
+    test('the place chosen becomes the answer, name and folder pre-filled',
+        () async {
+      answerWith(chosen);
+
+      final WebSaveAnswer answer = await svc.askWhereToSave(suggested);
+
+      expect(answer.kind, WebSaveKind.save);
+      expect(answer.path, chosen);
+      expect(names, <String>['film.mp4']);
+      // No folder of the viewer's own, so the dialog starts where the
+      // engine suggested — Windows' own Downloads, relocated one included,
+      // which is a better guess than any SALU could compute.
+      expect(dirs, <String?>['/downloads']);
+    });
+
+    test('walking away from the dialog cancels, and nothing is logged',
+        () async {
+      answerWith(null);
+
+      final WebSaveAnswer answer = await svc.askWhereToSave(suggested);
+
+      expect(answer.isCancel, isTrue);
+      expect(answer.path, isNull);
+      expect(svc.items.value, isEmpty,
+          reason: 'a refused download is not a failed one');
+      expect(svc.hasBadge, isFalse);
+    });
+
+    test('asking off opens no dialog at all — the engine path stands',
+        () async {
+      await SettingsService.instance.setWebAskDownloadLocation(false);
+      answerWith(chosen);
+
+      final WebSaveAnswer answer = await svc.askWhereToSave(suggested);
+
+      expect(answer.kind, WebSaveKind.engineDefault);
+      expect(opened, 0);
+    });
+
+    test("the viewer's own folder is where the question starts", () async {
+      await SettingsService.instance.setWebDownloadFolder('/mine/downloads');
+      answerWith(chosen);
+
+      await svc.askWhereToSave(suggested);
+
+      expect(dirs, <String?>['/mine/downloads']);
+      // The shelf's footer follows the same setting.
+      expect(WebDownloadService.downloadsFolder(), '/mine/downloads');
+    });
+
+    test('a picker that throws never costs the viewer their file', () async {
+      WebDownloadService.debugSaveLocationPicker =
+          ({required String suggestedName, String? initialDirectory}) async {
+        opened++;
+        throw StateError('no window here');
+      };
+
+      final WebSaveAnswer answer = await svc.askWhereToSave(suggested);
+
+      expect(answer.kind, WebSaveKind.engineDefault);
+      expect(opened, 1);
+    });
+
+    test('three downloads at once ask one at a time', () async {
+      final List<Completer<String?>> gates = <Completer<String?>>[
+        Completer<String?>(),
+        Completer<String?>(),
+        Completer<String?>(),
+      ];
+      WebDownloadService.debugSaveLocationPicker =
+          ({required String suggestedName, String? initialDirectory}) {
+        names.add(suggestedName);
+        return gates[opened++].future;
+      };
+
+      final Future<WebSaveAnswer> a = svc.askWhereToSave('/downloads/a.mp4');
+      final Future<WebSaveAnswer> b = svc.askWhereToSave('/downloads/b.mp4');
+      final Future<WebSaveAnswer> c = svc.askWhereToSave('/downloads/c.mp4');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(opened, 1, reason: 'one dialog at a time, never three stacked');
+
+      gates[0].complete('/mine/a.mp4');
+      await a;
+      await Future<void>.delayed(Duration.zero);
+      expect(opened, 2);
+
+      gates[1].complete(null);
+      await b;
+      await Future<void>.delayed(Duration.zero);
+      expect(opened, 3);
+
+      gates[2].complete('/mine/c.mp4');
+
+      expect((await a).path, '/mine/a.mp4');
+      expect((await b).isCancel, isTrue);
+      expect((await c).path, '/mine/c.mp4');
+      expect(names, <String>['a.mp4', 'b.mp4', 'c.mp4']);
+    });
+
+    test('the switch flipped while a prompt waits in the queue wins',
+        () async {
+      final Completer<String?> gate = Completer<String?>();
+      WebDownloadService.debugSaveLocationPicker =
+          ({required String suggestedName, String? initialDirectory}) {
+        opened++;
+        return gate.future;
+      };
+
+      final Future<WebSaveAnswer> first =
+          svc.askWhereToSave('/downloads/a.mp4');
+      final Future<WebSaveAnswer> second =
+          svc.askWhereToSave('/downloads/b.mp4');
+      await Future<void>.delayed(Duration.zero);
+      expect(opened, 1);
+
+      await SettingsService.instance.setWebAskDownloadLocation(false);
+      gate.complete('/mine/a.mp4');
+
+      expect((await first).path, '/mine/a.mp4');
+      // The queued one reads the switch when its turn comes, not when it
+      // was asked — so it never opens a dialog.
+      expect((await second).kind, WebSaveKind.engineDefault);
+      expect(opened, 1);
+    });
+
+    test('the folder picker moves the setting — a Cancel does not', () async {
+      WebDownloadService.debugFolderPicker = () async => '/mine/downloads';
+      expect(await WebDownloadService.pickDownloadFolder(), isTrue);
+      expect(SettingsService.instance.webDownloadFolder.value,
+          '/mine/downloads');
+
+      WebDownloadService.debugFolderPicker = () async => null;
+      expect(await WebDownloadService.pickDownloadFolder(), isFalse);
+      expect(SettingsService.instance.webDownloadFolder.value,
+          '/mine/downloads',
+          reason: 'walking away leaves the folder in force');
+
+      // Back to Windows' own — an empty setting, never a guessed path.
+      await SettingsService.instance.setWebDownloadFolder('');
+      expect(SettingsService.instance.webDownloadFolder.value, '');
     });
   });
 }

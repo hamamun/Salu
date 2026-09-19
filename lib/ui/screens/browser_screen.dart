@@ -64,7 +64,8 @@ class BrowserScreen extends StatefulWidget {
   final bool chromeVisible;
 
   /// Opens SALU's Settings window (the ⋮ menu's "Settings" row) — owned
-  /// by the home screen, which is where the window lives.
+  /// by the home screen, which is where the window lives and which tab a
+  /// door opens on: this one is the browser's, so it lands on Web.
   final VoidCallback? onOpenSettings;
 
   @override
@@ -799,16 +800,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
-  /// "Show in folder" — Explorer opens the Downloads folder with this
-  /// very file selected, not merely somewhere near it.
+  /// "Show in folder" — Explorer opens the file's own folder with this
+  /// very file selected, not merely somewhere near it (with asking on, a
+  /// download's folder is wherever the viewer put it).
   Future<void> _revealDownload(WebDownloadItem item) async {
     setState(() => _downloadsOpen = false);
     WebDownloadService.instance.setShelfOpen(false);
     await WebDownloadService.instance.reveal(item.path);
   }
 
-  /// The shelf's footer: the Downloads folder itself — the one answer
-  /// that still works with an empty log.
+  /// The shelf's footer: the download folder itself (Settings → Web →
+  /// Downloads) — the one answer that still works with an empty log.
   Future<void> _openDownloadsFolder() async {
     setState(() => _downloadsOpen = false);
     WebDownloadService.instance.setShelfOpen(false);

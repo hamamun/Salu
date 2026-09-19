@@ -90,6 +90,9 @@ Webview::Webview(
 }
 
 Webview::~Webview() {
+  // SALU addition: tell any download prompt still waiting for its viewer
+  // that there is nothing left to hand the answer to (see `alive_flag_`).
+  *alive_flag_ = false;
   if (owns_window_) {
     DestroyWindow(hwnd_);
   }
@@ -378,9 +381,16 @@ void Webview::RegisterEventHandlers() {
         Callback<ICoreWebView2DownloadStartingEventHandler>(
             [this](ICoreWebView2* sender,
                    ICoreWebView2DownloadStartingEventArgs* args) -> HRESULT {
-              wil::com_ptr<ICoreWebView2Deferral> deferral;
-              args->GetDeferral(&deferral);
-
+              // SALU delta (VENDOR_NOTES.md): upstream hid the engine's own
+              // download UI and then wrote the engine's default path
+              // straight back, which is why every file landed in Windows
+              // Downloads without a word. With SALU's "Ask where to save
+              // each file" setting on, the host is asked first: the
+              // deferral is held until it answers with a path or a cancel
+              // — the flow Microsoft's own DownloadStarting sample
+              // documents. Handled stays TRUE either way, because SALU
+              // draws its own download shelf and never the engine's
+              // flyout.
               args->put_Handled(TRUE);
 
               wil::com_ptr<ICoreWebView2DownloadOperation> download;
@@ -401,17 +411,116 @@ void Webview::RegisterEventHandlers() {
               wil::unique_cotaskmem_string resultFilePath;
               args->get_ResultFilePath(&resultFilePath);
 
+              const std::string url =
+                  util::Utf8FromUtf16(uri.get() ? uri.get() : L"");
+              const std::string suggestedPath = util::Utf8FromUtf16(
+                  resultFilePath.get() ? resultFilePath.get() : L"");
+
+              // -- Asking: the host says where this file lands --
+              if (ask_where_to_save_ && download_starting_callback_) {
+                wil::com_ptr<ICoreWebView2Deferral> deferral;
+                if (SUCCEEDED(args->GetDeferral(&deferral)) && deferral) {
+                  // The event args are only borrowed by this handler, but
+                  // the answer arrives later — so hold one reference of
+                  // SALU's own, and the view's life flag with it, and the
+                  // completer never talks to something already gone.
+                  args->AddRef();
+                  std::shared_ptr<ICoreWebView2DownloadStartingEventArgs> held(
+                      args, [](ICoreWebView2DownloadStartingEventArgs* p) {
+                        p->Release();
+                      });
+                  const std::string mime = util::Utf8FromUtf16(
+                      mimeType.get() ? mimeType.get() : L"");
+                  std::shared_ptr<bool> alive = alive_flag_;
+                  download_starting_callback_(
+                      url, suggestedPath, mime, totalBytesToReceive,
+                      [this, alive, held, deferral, download, url,
+                       suggestedPath,
+                       totalBytesToReceive](bool cancelled,
+                                            const std::string& path) {
+                        // The view died while the viewer was choosing —
+                        // there is nothing left to save into, and nothing
+                        // left to report to.
+                        if (!*alive) {
+                          return;
+                        }
+                        if (cancelled) {
+                          // Walking away from the Save As cancels the
+                          // download outright: no file is written and
+                          // nothing reaches the host's log, because a
+                          // download the viewer refused is not a failed
+                          // download.
+                          held->put_Cancel(TRUE);
+                          deferral->Complete();
+                          return;
+                        }
+                        // An empty answer means "your own default is
+                        // fine" — the engine's path stands.
+                        std::string finalPath = suggestedPath;
+                        if (!path.empty()) {
+                          const std::wstring wide = util::Utf16FromUtf8(path);
+                          if (SUCCEEDED(held->put_ResultFilePath(
+                                  wide.c_str()))) {
+                            finalPath = path;
+                          }
+                        }
+                        // Progress handlers go on first, then the state is
+                        // read: a small file can finish while the viewer is
+                        // still choosing, and a handler registered after the
+                        // fact is never told about the past. Both statements
+                        // run on the UI thread, where the engine's own
+                        // callbacks queue rather than interleave, so nothing
+                        // can land between them and be reported twice.
+                        UpdateDownloadProgress(download.get());
+                        if (download_event_callback_) {
+                          COREWEBVIEW2_DOWNLOAD_STATE state =
+                              COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS;
+                          download->get_State(&state);
+                          if (state ==
+                              COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED) {
+                            INT64 recvd = 0;
+                            download->get_BytesReceived(&recvd);
+                            wil::unique_cotaskmem_string landed;
+                            download->get_ResultFilePath(&landed);
+                            download_event_callback_(
+                                {WebviewDownloadEventKind::DownloadCompleted,
+                                 url,
+                                 util::Utf8FromUtf16(
+                                     landed.get() ? landed.get()
+                                                  : finalPath.c_str()),
+                                 recvd, totalBytesToReceive});
+                          } else {
+                            download_event_callback_(
+                                {WebviewDownloadEventKind::DownloadStarted,
+                                 url, finalPath, 0, totalBytesToReceive});
+                          }
+                        }
+                        deferral->Complete();
+                      });
+                  return S_OK;
+                }
+                // No deferral to hold — fall through and let the engine's
+                // own path stand rather than lose the file.
+              }
+
+              // -- Quiet: upstream's own behaviour, deferral completed --
+              wil::com_ptr<ICoreWebView2Deferral> quietDeferral;
+              args->GetDeferral(&quietDeferral);
+
               args->put_ResultFilePath(resultFilePath.get());
               UpdateDownloadProgress(download.get());
 
               if (download_event_callback_) {
                 download_event_callback_(
-                    {WebviewDownloadEventKind::DownloadStarted,
-                     util::Utf8FromUtf16(uri.get()),
-                     util::Utf8FromUtf16(resultFilePath.get()), 0,
-                     totalBytesToReceive});
+                    {WebviewDownloadEventKind::DownloadStarted, url,
+                     suggestedPath, 0, totalBytesToReceive});
               }
 
+              // Upstream took this deferral and never completed it. The
+              // contract says complete it, so it is completed.
+              if (quietDeferral) {
+                quietDeferral->Complete();
+              }
               return S_OK;
             })
             .Get(),
@@ -514,6 +623,45 @@ bool Webview::SetPreferredColorScheme(int scheme) {
   }
   return SUCCEEDED(profile->put_PreferredColorScheme(
       static_cast<COREWEBVIEW2_PREFERRED_COLOR_SCHEME>(scheme)));
+}
+
+bool Webview::SetDownloadPreferences(
+    bool ask_where_to_save, const std::string& default_download_folder) {
+  // SALU addition (VENDOR_NOTES.md): Settings -> Web -> Downloads, the two
+  // halves of "where do files land".
+  //
+  // The ASKING half is SALU's own flag, read by the `DownloadStarting`
+  // handler: on, every download is offered to the host (a Save As of the
+  // viewer's own choosing) before a single byte is written; off, the
+  // engine's own path stands and no round trip happens at all. It always
+  // applies — it needs no engine API.
+  ask_where_to_save_ = ask_where_to_save;
+
+  // The FOLDER half rides on the profile's own DefaultDownloadFolderPath
+  // (the same profile the colour scheme uses, reached the same way, and
+  // present in the SDK pinned above). The engine persists it in the user
+  // data folder, creates the folder at the next download if it is
+  // missing, and answers E_INVALIDARG for a path it cannot use — leaving
+  // the previous folder in force. An empty string means "leave it alone".
+  if (default_download_folder.empty()) {
+    return true;
+  }
+  if (!webview_) {
+    return false;
+  }
+  auto webview13 = webview_.try_query<ICoreWebView2_13>();
+  if (!webview13) {
+    return false;
+  }
+  wil::com_ptr<ICoreWebView2Profile> profile;
+  if (FAILED(webview13->get_Profile(&profile)) || !profile) {
+    return false;
+  }
+  const std::wstring folder = util::Utf16FromUtf8(default_download_folder);
+  if (folder.empty()) {
+    return false;
+  }
+  return SUCCEEDED(profile->put_DefaultDownloadFolderPath(folder.c_str()));
 }
 
 bool Webview::SetBackgroundColor(int32_t color) {

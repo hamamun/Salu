@@ -144,6 +144,45 @@ class WebDataControlService {
     unawaited(applyPageScheme(SettingsService.instance.webPageScheme.value));
   }
 
+  /// Settings → Web → Downloads, the asking half: whether every download
+  /// is offered a Save As before a byte of it is written.
+  static bool get askWhereToSave =>
+      SettingsService.instance.webAskDownloadLocation.value;
+
+  /// Settings → Web → Downloads, the folder half, exactly as the engine
+  /// wants it: an absolute path, or '' for "leave the engine's own alone"
+  /// — which is Windows' Downloads folder, a relocated one included. SALU
+  /// never guesses a path into the profile.
+  static String get configuredDownloadFolder =>
+      SettingsService.instance.webDownloadFolder.value.trim();
+
+  /// Pushes both halves of Downloads into every live engine view right
+  /// now: the asking half applies from the next download, the folder half
+  /// to the profile every tab shares (which the engine itself persists in
+  /// its user data folder). Views started later read the settings at birth
+  /// ([WebTab._start]), so one call covers the whole browser.
+  Future<void> applyDownloadPreferences() async {
+    final bool ask = askWhereToSave;
+    final String folder = configuredDownloadFolder;
+    for (final WebviewController controller in List.of(_live)) {
+      try {
+        await controller.setDownloadPreferences(
+          askWhereToSave: ask,
+          defaultDownloadFolder: folder,
+        );
+      } catch (_) {
+        // A controller that died between the snapshot and the call, or a
+        // runtime too old for the profile API. The asking half lives in
+        // the plugin and applies either way; the folder half simply stays
+        // at Windows' own Downloads.
+      }
+    }
+  }
+
+  void _onDownloadPreferenceChanged() {
+    unawaited(applyDownloadPreferences());
+  }
+
   bool _purgePending = false;
   bool _prepared = false;
   Future<void>? _prepare;
@@ -168,6 +207,7 @@ class WebDataControlService {
         await _purgePendingProfile();
         await runAutoClearOnOpen();
         _registerPageSchemeListener();
+        _registerDownloadPreferenceListeners();
         await _ensureEnvironment();
       } catch (_) {
         // A failing warm-up must not strand the browser in `await` forever;
@@ -201,6 +241,17 @@ class WebDataControlService {
   /// Web → Page colours). Idempotent — `prepare` runs once per process.
   void _registerPageSchemeListener() {
     SettingsService.instance.webPageScheme.addListener(_onPageSchemeChanged);
+  }
+
+  /// The two live listeners that carry a Downloads change (Settings → Web
+  /// → Downloads) into every running engine view the moment it is made —
+  /// the same contract Page colours has. Idempotent, because `prepare`
+  /// runs once per process.
+  void _registerDownloadPreferenceListeners() {
+    SettingsService.instance.webAskDownloadLocation
+        .addListener(_onDownloadPreferenceChanged);
+    SettingsService.instance.webDownloadFolder
+        .addListener(_onDownloadPreferenceChanged);
   }
 
   /// Creates the shared environment — the per-process home of the one
