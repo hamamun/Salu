@@ -7,6 +7,7 @@ import '../../core/language_names.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
 import '../../core/tune_service.dart';
+import '../../core/web/web_data_control.dart';
 import '../../core/web/web_download_service.dart';
 import '../../core/web/web_popup_service.dart';
 import '../../theme/app_theme.dart';
@@ -285,6 +286,8 @@ class _WebTab extends StatelessWidget {
           ),
           SizedBox(height: 16),
           _WebAutoClearTimingPicker(),
+          SizedBox(height: 28),
+          _WebEngineFooter(),
         ],
       ),
     );
@@ -473,7 +476,82 @@ class _WebPageSchemePicker extends StatelessWidget {
                       .setWebPageScheme(option.scheme),
                 ),
               ),
+            const _PageSchemeEngineNote(),
           ],
+        );
+      },
+    );
+  }
+}
+
+/// The honesty line under Page colours: while a colour push stands refused
+/// by the engine (`WebDataControlService.pageSchemeFailed`), the picker
+/// says so instead of pretending — with the two things that fix it.
+/// Silent the rest of the time.
+class _PageSchemeEngineNote extends StatelessWidget {
+  const _PageSchemeEngineNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: WebDataControlService.instance.pageSchemeFailed,
+      builder: (BuildContext context, bool failed, Widget? _) {
+        if (!failed) return const SizedBox.shrink();
+        return const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(Icons.warning_amber_outlined,
+                    size: 15, color: AppColors.statusDead),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Page colours couldn’t reach the web engine — pages follow '
+                  'Windows instead. Update the WebView2 Runtime (Windows '
+                  'Update) and make sure SALU itself is up to date.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The engine line at the foot of Settings → Web: which WebView2 Runtime
+/// SALU's pages render with. The query already lives in the plugin
+/// (`getWebViewVersion`, upstream) — SALU only surfaces it, so a refused
+/// Page colours push points at something concrete.
+class _WebEngineFooter extends StatelessWidget {
+  const _WebEngineFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: WebDataControlService.instance.runtimeVersion(),
+      builder: (BuildContext context, AsyncSnapshot<String?> snap) {
+        final String? v = snap.data;
+        final String label;
+        if (snap.connectionState == ConnectionState.waiting) {
+          label = 'Engine · WebView2 …';
+        } else if (v == null || v.isEmpty) {
+          label = 'Engine · WebView2 (not detected)';
+        } else {
+          label = 'Engine · WebView2 $v';
+        }
+        return Text(
+          label,
+          style: const TextStyle(
+              fontSize: 12, color: AppColors.textSecondary),
         );
       },
     );

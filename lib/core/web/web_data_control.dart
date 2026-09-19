@@ -129,15 +129,19 @@ class WebDataControlService {
   /// the whole browser.
   Future<void> applyPageScheme(WebPageScheme scheme) async {
     final int value = pageSchemeValue(scheme);
+    bool ok = true;
     for (final WebviewController controller in List.of(_live)) {
       try {
         await controller.setPreferredColorScheme(value);
       } catch (_) {
         // A controller that died between the snapshot and the call, or a
         // runtime too old for the profile API — it simply keeps following
-        // the OS. Nothing to clean up.
+        // the OS. Nothing to clean up, but the outcome is reported so
+        // Settings → Web can say why (see [pageSchemeFailed]).
+        ok = false;
       }
     }
+    reportPageSchemeApplied(ok);
   }
 
   void _onPageSchemeChanged() {
@@ -195,19 +199,62 @@ class WebDataControlService {
 
   void detach(WebviewController controller) => _live.remove(controller);
 
+  /// True while a Page colours push stands refused by the engine — a
+  /// runtime too old for the profile control, or a SALU build whose native
+  /// half predates it. Settings → Web → Page colours carries a warning
+  /// while this holds; any successful push clears it again.
+  final ValueNotifier<bool> pageSchemeFailed = ValueNotifier<bool>(false);
+
+  /// Records one Page colours outcome, from [applyPageScheme] or a tab's
+  /// birth-apply ([WebTab]). Last write wins: a single success clears an
+  /// earlier failure, a single failure raises the flag.
+  void reportPageSchemeApplied(bool ok) {
+    if (pageSchemeFailed.value == !ok) return;
+    pageSchemeFailed.value = !ok;
+  }
+
+  Future<String?>? _runtimeVersion;
+
+  /// The WebView2 Runtime's own version string (the plugin's upstream
+  /// `getWebViewVersion` — no new native code), or `null` when the runtime
+  /// is missing or the query fails. One-shot per process; Settings → Web
+  /// shows it as the engine line, so a refused Page colours push points at
+  /// something concrete.
+  Future<String?> runtimeVersion() {
+    return _runtimeVersion ??= () async {
+      if (!Platform.isWindows) return null;
+      try {
+        return await WebviewController.getWebViewVersion()
+            .timeout(const Duration(seconds: 3));
+      } catch (_) {
+        return null;
+      }
+    }();
+  }
+
   /// The shared environment is per-process and can only be created once —
   /// the first Webview pays for it (see [WebTab] start-up ordering).
   ///
-  /// Awaits: any scheduled purge, then the open-timed auto-clear, THEN the
-  /// environment — in that order the folder delete can never fight a live
-  /// runtime.
+  /// The listeners register FIRST: a Settings change must reach the engine
+  /// even when a warm-up leg below misbehaves. Each leg after that is
+  /// guarded on its own — one failure can never cancel the rest — but the
+  /// ORDER stays: purge + auto-clear run before the environment exists,
+  /// the only moment a folder delete is guaranteed.
   Future<void> prepare() {
     return _prepare ??= () async {
+      _registerPageSchemeListener();
+      _registerDownloadPreferenceListeners();
       try {
         await _purgePendingProfile();
+      } catch (_) {
+        // A stale purge marker simply waits for the next launch.
+      }
+      try {
         await runAutoClearOnOpen();
-        _registerPageSchemeListener();
-        _registerDownloadPreferenceListeners();
+      } catch (_) {
+        // The open-timed sweep is best-effort; the close guard still runs.
+      }
+      try {
         await _ensureEnvironment();
       } catch (_) {
         // A failing warm-up must not strand the browser in `await` forever;

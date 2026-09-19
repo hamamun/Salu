@@ -63,10 +63,11 @@ dependencies:
   # start page (never crashes the player).
   #
   # VENDORED (third_party/webview_windows, see its VENDOR_NOTES.md): the
-  # upstream 0.4.0 plugin plus exactly one addition — the engine's own
-  # profile PreferredColorScheme control, which Settings → Web → Page
-  # colours drives (what `prefers-color-scheme` answers; the same control
-  # Edge's Appearance setting uses). Upstream has no such API, and
+  # upstream 0.4.0 plugin plus two additions — the engine's own profile
+  # PreferredColorScheme control, which Settings → Web → Page colours
+  # drives (what `prefers-color-scheme` answers; the same control Edge's
+  # Appearance setting uses), and the DownloadStarting deferral
+  # round-trip behind "Ask where to save". Upstream has neither API, and
   # command-line flags are not a supported WebView2 configuration path.
   webview_windows:
     path: third_party/webview_windows

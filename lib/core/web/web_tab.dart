@@ -454,7 +454,13 @@ if (!window.__saluEsc) {
             .setPreferredColorScheme(WebDataControlService.pageSchemeValue(
                 WebDataControlService.currentPageScheme))
             .timeout(const Duration(seconds: 2));
-      } catch (_) {}
+        WebDataControlService.instance.reportPageSchemeApplied(true);
+      } catch (_) {
+        // The engine refused or never heard (a runtime too old for the
+        // profile control, a build whose native half predates it) — the
+        // view keeps following the OS, and Settings → Web says why.
+        WebDataControlService.instance.reportPageSchemeApplied(false);
+      }
       // Downloads (web.md · Downloads lock), the settings halves: whether
       // each download asks, and the folder the question starts in (the
       // profile's own default download folder). Set before the first load
