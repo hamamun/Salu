@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU · App-icon concepts II — minimal directions</title>
+<style>
+  :root{--text:#EDEDED;--sec:#9A9A9A;--outline:#333336;--accent:#4C9EEB}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#101013;color:var(--text);
+    font:13px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    padding:34px 26px 90px;display:flex;flex-direction:column;align-items:center;
+    -webkit-font-smoothing:antialiased}
+  header{width:1060px;max-width:100%;margin-bottom:24px}
+  header .k{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+    color:#7c7c80;margin-bottom:6px}
+  header h1{font-size:21px;font-weight:600}
+  header p{color:var(--sec);font-size:12.5px;margin-top:6px;max-width:800px}
+  header a{color:var(--accent);text-decoration:none}
+  .grid{display:flex;flex-wrap:wrap;gap:16px;width:1060px;max-width:100%}
+  .concept{background:#191b1f;border:1px solid #26282d;border-radius:14px;
+    padding:18px;width:330px;display:flex;flex-direction:column;gap:11px}
+  .tile{background:#14161a;border:1px solid #24262b;border-radius:22%;
+    display:grid;place-items:center;padding:30px}
+  .tile svg{width:150px;height:150px;display:block}
+  .n{font-size:13px;font-weight:600}
+  .n span{color:#6d6d72;font-weight:500;font-size:11px;margin-left:8px;
+    letter-spacing:.06em;text-transform:uppercase}
+  .d{font-size:11px;color:#84848a;line-height:1.5}
+  .sizes{display:flex;align-items:flex-end;gap:12px}
+  .sizes .s{background:#14161a;border:1px solid #24262b;border-radius:22%;
+    display:grid;place-items:center}
+  .sizes .lbl{font-size:9.5px;color:#6d6d72}
+  section{width:1060px;max-width:100%;margin-top:34px}
+  section h2{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+    color:#8f8f94;margin-bottom:14px}
+  .rowline{display:flex;align-items:center;gap:16px;background:#141519;
+    border:1px solid #232529;border-radius:12px;padding:14px 18px;flex-wrap:wrap}
+  .rowline .grp{display:flex;align-items:center;gap:10px}
+  .rowline .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6d6d72}
+  footer{margin-top:44px;color:#5d5d62;font-size:11px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="k">SALU · design preview II — no implementation</div>
+  <h1>App-icon concepts · minimal directions</h1>
+  <p>Six genuinely different geometries this time — each reduces the mark to
+     fewer, quieter elements instead of recolouring the same loops.
+     Sheet I (family marks + colourways) is at <a href="index.html">index.html</a>.</p>
+</header>
+
+<div class="grid">
+
+  <!-- 1 · ORBIT ─ one ring, one triangle, one dot -->
+  <div class="concept">
+    <div class="tile"><svg viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="29" fill="none" stroke="#EDEDED" stroke-width="6"
+        stroke-linecap="round" pathLength="360" stroke-dasharray="302 58" stroke-dashoffset="-140"/>
+      <circle cx="55" cy="78.6" r="5" fill="#4C9EEB"/>
+      <path d="M42 36.5 67 50 42 63.5Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="5" stroke-linejoin="round"/>
+    </svg></div>
+    <div class="n">Orbit <span>3 elements</span></div>
+    <div class="d">One open ring, one soft triangle, one accent satellite where the
+    ring breaks. The dot carries all the colour — everything else stays ink.
+    Reads as "play in motion".</div>
+    <div class="sizes">
+      <div class="s" style="padding:8px"><svg width="48" height="48" viewBox="0 0 100 100"><circle cx="50" cy="50" r="29" fill="none" stroke="#EDEDED" stroke-width="8" stroke-linecap="round" pathLength="360" stroke-dasharray="302 58" stroke-dashoffset="-140"/><circle cx="55" cy="78.6" r="6" fill="#4C9EEB"/><path d="M42 36.5 67 50 42 63.5Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="6" stroke-linejoin="round"/></svg></div>
+      <div class="s" style="padding:6px"><svg width="32" height="32" viewBox="0 0 100 100"><circle cx="50" cy="50" r="29" fill="none" stroke="#EDEDED" stroke-width="11" stroke-linecap="round" pathLength="360" stroke-dasharray="302 58" stroke-dashoffset="-140"/><circle cx="55" cy="78.6" r="8" fill="#4C9EEB"/><path d="M42 36.5 67 50 42 63.5Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="8" stroke-linejoin="round"/></svg></div>
+      <div class="s" style="padding:5px"><svg width="24" height="24" viewBox="0 0 100 100"><circle cx="50" cy="50" r="29" fill="none" stroke="#EDEDED" stroke-width="14" stroke-linecap="round" pathLength="360" stroke-dasharray="302 58" stroke-dashoffset="-140"/><path d="M41 36 68 50 41 64Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="10" stroke-linejoin="round"/></svg></div>
+      <div class="s" style="padding:4px"><svg width="16" height="16" viewBox="0 0 100 100"><circle cx="50" cy="50" r="29" fill="none" stroke="#EDEDED" stroke-width="18" stroke-linecap="round" pathLength="360" stroke-dasharray="302 58" stroke-dashoffset="-140"/><path d="M40 35 70 50 40 65Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="12" stroke-linejoin="round"/></svg></div>
+      <div class="lbl">48 · 32 · 24 · 16 — dot drops at 24, ring+play survive</div>
+    </div>
+  </div>
+
+  <!-- 2 · LENS ─ two thin rings, gradient vesica -->
+  <div class="concept">
+    <div class="tile"><svg viewBox="0 0 100 100">
+      <defs><linearGradient id="lens" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#4C9EEB"/><stop offset="1" stop-color="#39C2C7"/>
+      </linearGradient></defs>
+      <circle cx="50" cy="38" r="24" fill="none" stroke="rgba(237,237,237,.75)" stroke-width="4.5"/>
+      <circle cx="50" cy="62" r="24" fill="none" stroke="rgba(237,237,237,.75)" stroke-width="4.5"/>
+      <path d="M29.2 50A24 24 0 0 1 70.8 50A24 24 0 0 1 29.2 50Z" fill="url(#lens)"/>
+    </svg></div>
+    <div class="n">Lens <span>vesica</span></div>
+    <div class="d">The two loops simplified to plain thin rings; their overlap — the
+    place both circles agree — becomes a horizontal lens that points right,
+    like a play. The only colour is where the two meet.</div>
+    <div class="sizes">
+      <div class="s" style="padding:8px"><svg width="48" height="48" viewBox="0 0 100 100"><circle cx="50" cy="38" r="24" fill="none" stroke="rgba(237,237,237,.8)" stroke-width="6"/><circle cx="50" cy="62" r="24" fill="none" stroke="rgba(237,237,237,.8)" stroke-width="6"/><path d="M29.2 50A24 24 0 0 1 70.8 50A24 24 0 0 1 29.2 50Z" fill="url(#lens)"/></svg></div>
+      <div class="s" style="padding:6px"><svg width="32" height="32" viewBox="0 0 100 100"><circle cx="50" cy="38" r="24" fill="none" stroke="rgba(237,237,237,.85)" stroke-width="8"/><circle cx="50" cy="62" r="24" fill="none" stroke="rgba(237,237,237,.85)" stroke-width="8"/><path d="M29.2 50A24 24 0 0 1 70.8 50A24 24 0 0 1 29.2 50Z" fill="url(#lens)"/></svg></div>
+      <div class="s" style="padding:5px"><svg width="24" height="24" viewBox="0 0 100 100"><circle cx="50" cy="38" r="24" fill="none" stroke="rgba(237,237,237,.9)" stroke-width="11"/><circle cx="50" cy="62" r="24" fill="none" stroke="rgba(237,237,237,.9)" stroke-width="11"/><path d="M29.2 50A24 24 0 0 1 70.8 50A24 24 0 0 1 29.2 50Z" fill="url(#lens)"/></svg></div>
+      <div class="lbl">48 · 32 · 24 — rings thicken as they shrink</div>
+    </div>
+  </div>
+
+  <!-- 3 · PUNCH ─ negative-space play -->
+  <div class="concept">
+    <div class="tile"><svg viewBox="0 0 100 100">
+      <defs>
+        <radialGradient id="disc" cx=".38" cy=".32" r=".9">
+          <stop offset="0" stop-color="#33465E"/><stop offset="1" stop-color="#1A1F26"/>
+        </radialGradient>
+        <mask id="punch"><circle cx="50" cy="50" r="33" fill="#fff"/>
+          <path d="M42 36 68 50 42 64Z" fill="#000" stroke="#000" stroke-width="6" stroke-linejoin="round"/>
+        </mask>
+      </defs>
+      <circle cx="50" cy="50" r="33" fill="url(#disc)" mask="url(#punch)"/>
+      <circle cx="50" cy="50" r="39.5" fill="none" stroke="rgba(237,237,237,.16)" stroke-width="2"/>
+      <circle cx="50" cy="50" r="39.5" fill="none" stroke="url(#lens)" stroke-width="2.5"
+        stroke-linecap="round" pathLength="360" stroke-dasharray="70 290" stroke-dashoffset="-115"/>
+    </svg></div>
+    <div class="n">Punch <span>negative space</span></div>
+    <div class="d">No drawn triangle at all — the play is a hole in a softly lit disc,
+    so the wallpaper behind the icon would show through it in spirit. A faint
+    accent arc at seven o'clock keeps the loop memory.</div>
+  </div>
+
+  <!-- 4 · SCRIPT ─ one continuous S line -->
+  <div class="concept">
+    <div class="tile"><svg viewBox="0 0 100 100">
+      <path d="M66 33.5A16.5 16.5 0 1 0 50 50A16.5 16.5 0 1 1 33.5 66.5"
+        fill="none" stroke="#EDEDED" stroke-width="6.5" stroke-linecap="round"/>
+      <circle cx="66" cy="33.5" r="5" fill="#4C9EEB"/>
+      <path d="M45.5 60.5 57.5 66.5 45.5 72.5Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="4" stroke-linejoin="round"/>
+    </svg></div>
+    <div class="n">Script <span>monoline S</span></div>
+    <div class="d">The double loop unwound into one continuous S — SALU's initial —
+    drawn as a single stroke with an accent terminal. The play nests quietly in
+    the lower bowl. Calligraphic, signature-like, very quiet.</div>
+  </div>
+
+  <!-- 5 · FROST ─ Win11 fluent glass -->
+  <div class="concept">
+    <div class="tile"><svg viewBox="0 0 100 100">
+      <defs>
+        <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="rgba(76,158,235,.30)"/>
+          <stop offset="1" stop-color="rgba(76,158,235,0)"/>
+        </radialGradient>
+        <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="1.6" stdDeviation="2.4" flood-color="#000" flood-opacity=".55"/>
+        </filter>
+      </defs>
+      <circle cx="50" cy="50" r="34" fill="url(#glow)"/>
+      <circle cx="44" cy="40" r="24" fill="none" stroke="rgba(237,237,237,.30)" stroke-width="7"
+        stroke-linecap="round" pathLength="360" stroke-dasharray="300 60" stroke-dashoffset="-80"/>
+      <circle cx="56" cy="60" r="24" fill="none" stroke="rgba(237,237,237,.45)" stroke-width="7"
+        stroke-linecap="round" pathLength="360" stroke-dasharray="300 60" stroke-dashoffset="-260"/>
+      <path d="M41 38 69 52.5 41 67Z" fill="#F4F6F8" stroke="#F4F6F8" stroke-width="5.5"
+        stroke-linejoin="round" filter="url(#soft)"/>
+    </svg></div>
+    <div class="n">Frost <span>fluent glass</span></div>
+    <div class="d">The current mark, but treated like Windows 11 mica: loops as
+    frosted glass at 30–45% ink, triangle crisp with a soft shadow, one accent
+    glow behind. Familiar geometry, modern material.</div>
+  </div>
+
+  <!-- 6 · SPECTRUM ─ gradient line art -->
+  <div class="concept">
+    <div class="tile"><svg viewBox="0 0 100 100">
+      <defs><linearGradient id="spec" x1="0" y1="1" x2="1" y2="0">
+        <stop offset="0" stop-color="#4C9EEB"/><stop offset=".55" stop-color="#39C2C7"/>
+        <stop offset="1" stop-color="#57C777"/>
+      </linearGradient></defs>
+      <circle cx="50" cy="50" r="30" fill="none" stroke="url(#spec)" stroke-width="6"
+        stroke-linecap="round" pathLength="360" stroke-dasharray="312 48" stroke-dashoffset="-150"/>
+      <path d="M42.5 37 66.5 50 42.5 63Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="5" stroke-linejoin="round"/>
+    </svg></div>
+    <div class="n">Spectrum <span>gradient line</span></div>
+    <div class="d">A single open ring carrying the whole brand gradient — blue,
+    teal, alive-green — around a plain white play. Colour as the line itself,
+    not as a fill; the gap sits at the triangle's exit, like a signal path.</div>
+  </div>
+</div>
+
+<!-- ── side-by-side on a fake taskbar ─────────────────────────────────── -->
+<section>
+  <h2>On a taskbar, next to today's icon</h2>
+  <div class="rowline">
+    <div class="grp"><div class="lbl">today</div>
+      <div class="s" style="background:#17191d;border:1px solid #24262b;border-radius:22%;padding:7px;display:grid;place-items:center">
+        <svg width="34" height="34" viewBox="0 0 100 100"><circle cx="44" cy="40" r="26" fill="none" stroke="#8A8F98" stroke-width="9" stroke-linecap="round" pathLength="360" stroke-dasharray="300 60" stroke-dashoffset="-80"/><circle cx="56" cy="60" r="26" fill="none" stroke="#EDEDED" stroke-width="9" stroke-linecap="round" pathLength="360" stroke-dasharray="300 60" stroke-dashoffset="-260"/><path d="M40 37 71 53.5 40 70Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="7" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="grp"><div class="lbl">orbit</div>
+      <div class="s" style="background:#17191d;border:1px solid #24262b;border-radius:22%;padding:7px;display:grid;place-items:center">
+        <svg width="34" height="34" viewBox="0 0 100 100"><circle cx="50" cy="50" r="29" fill="none" stroke="#EDEDED" stroke-width="10" stroke-linecap="round" pathLength="360" stroke-dasharray="302 58" stroke-dashoffset="-140"/><circle cx="55" cy="78.6" r="7" fill="#4C9EEB"/><path d="M42 36.5 67 50 42 63.5Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="7" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="grp"><div class="lbl">lens</div>
+      <div class="s" style="background:#17191d;border:1px solid #24262b;border-radius:22%;padding:7px;display:grid;place-items:center">
+        <svg width="34" height="34" viewBox="0 0 100 100"><circle cx="50" cy="38" r="24" fill="none" stroke="rgba(237,237,237,.85)" stroke-width="8"/><circle cx="50" cy="62" r="24" fill="none" stroke="rgba(237,237,237,.85)" stroke-width="8"/><path d="M29.2 50A24 24 0 0 1 70.8 50A24 24 0 0 1 29.2 50Z" fill="url(#lens)"/></svg>
+      </div>
+    </div>
+    <div class="grp"><div class="lbl">punch</div>
+      <div class="s" style="background:#17191d;border:1px solid #24262b;border-radius:22%;padding:7px;display:grid;place-items:center">
+        <svg width="34" height="34" viewBox="0 0 100 100"><defs><radialGradient id="d2" cx=".38" cy=".32" r=".9"><stop offset="0" stop-color="#33465E"/><stop offset="1" stop-color="#1A1F26"/></radialGradient><mask id="p2"><circle cx="50" cy="50" r="33" fill="#fff"/><path d="M42 36 68 50 42 64Z" fill="#000" stroke="#000" stroke-width="7" stroke-linejoin="round"/></mask></defs><circle cx="50" cy="50" r="33" fill="url(#d2)" mask="url(#p2)"/></svg>
+      </div>
+    </div>
+    <div class="grp"><div class="lbl">script</div>
+      <div class="s" style="background:#17191d;border:1px solid #24262b;border-radius:22%;padding:7px;display:grid;place-items:center">
+        <svg width="34" height="34" viewBox="0 0 100 100"><path d="M66 33.5A16.5 16.5 0 1 0 50 50A16.5 16.5 0 1 1 33.5 66.5" fill="none" stroke="#EDEDED" stroke-width="9" stroke-linecap="round"/><circle cx="66" cy="33.5" r="7" fill="#4C9EEB"/><path d="M45 60 58 66.5 45 73Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="5" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="grp"><div class="lbl">frost</div>
+      <div class="s" style="background:#17191d;border:1px solid #24262b;border-radius:22%;padding:7px;display:grid;place-items:center">
+        <svg width="34" height="34" viewBox="0 0 100 100"><circle cx="44" cy="40" r="24" fill="none" stroke="rgba(237,237,237,.32)" stroke-width="9" stroke-linecap="round" pathLength="360" stroke-dasharray="300 60" stroke-dashoffset="-80"/><circle cx="56" cy="60" r="24" fill="none" stroke="rgba(237,237,237,.5)" stroke-width="9" stroke-linecap="round" pathLength="360" stroke-dasharray="300 60" stroke-dashoffset="-260"/><path d="M41 38 69 52.5 41 67Z" fill="#F4F6F8" stroke="#F4F6F8" stroke-width="6" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="grp"><div class="lbl">spectrum</div>
+      <div class="s" style="background:#17191d;border:1px solid #24262b;border-radius:22%;padding:7px;display:grid;place-items:center">
+        <svg width="34" height="34" viewBox="0 0 100 100"><circle cx="50" cy="50" r="30" fill="none" stroke="url(#spec)" stroke-width="9" stroke-linecap="round" pathLength="360" stroke-dasharray="312 48" stroke-dashoffset="-150"/><path d="M42.5 37 66.5 50 42.5 63Z" fill="#EDEDED" stroke="#EDEDED" stroke-width="6" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>design/icons-preview/concepts2.html · preview only — nothing wired into the app</footer>
+</body>
+</html>
