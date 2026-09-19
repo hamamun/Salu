@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import '../../theme/app_theme.dart';
 import 'salu_icon_button.dart';
 import 'salu_marks.dart';
-import 'web_marks.dart';
 
 /// Find-in-page — the ⋮ menu's "Find in page…" (Chrome's `Ctrl+F` bar):
 /// type, and every match lights up; Enter walks forward, Shift+Enter

@@ -282,7 +282,7 @@ class _SaluMarkTile extends StatelessWidget {
           // nowhere near the cost of the full-size PNG.
           cacheWidth: 64,
           errorBuilder: (BuildContext context, Object error,
-              StackTrace stack) {
+              StackTrace? stack) {
             // Never a broken-image glyph — a thin frame in the family's
             // ink.
             return DecoratedBox(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/web/web_favourites_service.dart';
 import '../../theme/app_theme.dart';
 import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 import 'web_marks.dart';
 
 /// The slide-out favourite panel (web.md · favourite star lock): tapping

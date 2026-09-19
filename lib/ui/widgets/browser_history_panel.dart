@@ -5,6 +5,7 @@ import '../../core/web/web_address.dart';
 import '../../core/web/web_history_service.dart';
 import '../../theme/app_theme.dart';
 import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 import 'web_marks.dart';
 
 /// The history panel — the ⋮ menu's "History": every visited page, newest

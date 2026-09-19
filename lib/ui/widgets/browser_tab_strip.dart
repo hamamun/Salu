@@ -7,7 +7,6 @@ import '../../theme/app_theme.dart';
 import '../screens/browser_screen.dart' show kWebStripHeight;
 import 'salu_icon_button.dart';
 import 'salu_marks.dart';
-import 'web_marks.dart';
 
 /// The tab strip — directly below the title bar (web.md), chromeless like
 /// everything in SALU. The active tab lights its own floor; the rest stay

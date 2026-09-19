@@ -35,7 +35,8 @@ import 'package:flutter/material.dart';
 ///   · one rule       — Minimize            [MinimizeMark] (window caption)
 ///   · hollow square  — Maximize            [MaximizeMark] (window caption)
 ///   · two squares    — Restore             [RestoreMark] (window caption)
-///   · crossing rules — Close               [CloseMark] (window caption)
+///   · crossing rules — Close               [CloseMark] (one × for every
+///                                            close: caption · tab · panel)
 
 /// Shared stroke weight so the whole family reads as one hand (public so
 /// the transport marks share it — see transport_marks.dart).
@@ -1467,9 +1468,14 @@ class _RestorePainter extends CustomPainter {
       old.ink != ink || old.stroke != stroke;
 }
 
-/// Close — two crossing rules, the family's ×. It lights to full white
-/// on hover like every other mark — the red close-hover box is gone
-/// (follow.md rule 4: nothing is drawn behind an icon, ever).
+/// Close — two crossing rules, the family's one ×.
+///
+/// The window caption's close, the tab strip's tab ×, the panel / sheet
+/// dismiss marks and the Clear dialog's cancel are all this class: one
+/// silhouette, drawn once (follow.md rule 6 — the browser's `web_marks.dart`
+/// deliberately has no × of its own). It lights to full white on hover like
+/// every other mark — the red close-hover box is gone (follow.md rule 4:
+/// nothing is drawn behind an icon, ever).
 class CloseMark extends StatelessWidget {
   const CloseMark({super.key, this.size = 18});
 

@@ -5,6 +5,7 @@ import '../../core/web/web_address.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
 import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 import 'web_marks.dart';
 
 /// The site panel — the padlock's answer (Chrome's "View site
