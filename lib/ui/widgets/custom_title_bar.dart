@@ -16,7 +16,8 @@ import 'salu_marks.dart';
 /// key is pressed, then auto-hides 3 seconds after the last activity
 /// (visibility is driven by the parent via [visible]).
 ///
-/// Contains: a [DragToMoveArea] spanning the full width, the current media
+/// Contains: a [DragToMoveArea] spanning the full width, the SALU mark in
+/// the left corner (with the mode switch beside it), the current media
 /// title in the center, and the caption row on the right — the 6-dot
 /// settings button followed by the Windows caption buttons (Minimize /
 /// Maximize / Close) drawn as SALU marks in the family's own thin stroke
@@ -58,10 +59,10 @@ class CustomTitleBar extends StatelessWidget {
   /// and no slide/fade wrapper (the fused parent block drives both).
   final bool immersive;
 
-  /// A widget pinned to the bar's top-left — web mode's Player · Web
-  /// switch lives in this slot, beside where the SALU mark sits in
-  /// Player mode (web.md · the toggle lock). The centered title is
-  /// untouched by it.
+  /// A widget pinned just RIGHT of the SALU mark at the bar's left corner
+  /// — web mode's Player · Web switch lives in this slot (web.md · the
+  /// toggle lock: the switch always stands next to the SALU logo, in the
+  /// same place in both modes). The centered title is untouched by it.
   final Widget? leading;
 
   /// A live status mark standing at the caption row's left end, before
@@ -134,21 +135,33 @@ class CustomTitleBar extends StatelessWidget {
               ),
             ),
           ),
-          // The left slot — drawn above the drag area so its controls
-          // answer clicks while the rest of the bar still drags.
-          if (leading != null)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: leading!,
+          // The left corner — the SALU mark ALWAYS stands at the very
+          // left (web.md · toggle lock: the mode switch sits NEXT to the
+          // SALU logo, same place in both modes), then the mode slot.
+          // Drawn above the drag area: the mark never answers the pointer
+          // (the drag area behind it moves the window); the controls
+          // beside it do.
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const _SaluMarkTile(),
+                    if (leading != null) ...<Widget>[
+                      const SizedBox(width: 10),
+                      leading!,
+                    ],
+                  ],
                 ),
               ),
             ),
+          ),
           // Caption buttons — right aligned. Every control in the row is
           // a [SaluIconButton]: the mark lights gray → white and scales
           // 1.06 on hover, sinks 0.90 on press, and NOTHING is drawn
@@ -238,6 +251,48 @@ class CustomTitleBar extends StatelessWidget {
         child: IgnorePointer(
           ignoring: !visible,
           child: content,
+        ),
+      ),
+    );
+  }
+}
+
+/// The SALU mark in the bar's left corner (web.md · toggle lock — the
+/// Player · Web switch stands next to it in both modes). The app's own
+/// tile at 22 px, softly rounded — the mini bar's 19 px tile
+/// (mini.md §3) is its cousin in the 32 px strip.
+///
+/// It is a brand mark, not a control: it never answers the pointer
+/// (the drag area behind it still moves the window) and never takes a
+/// hover shape.
+class _SaluMarkTile extends StatelessWidget {
+  const _SaluMarkTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: Image.asset(
+          'assets/images/salu_logo.png',
+          width: 22,
+          height: 22,
+          filterQuality: FilterQuality.medium,
+          // A caption-size decode of the app icon: sharp at any DPI, and
+          // nowhere near the cost of the full-size PNG.
+          cacheWidth: 64,
+          errorBuilder: (BuildContext context, Object error,
+              StackTrace stack) {
+            // Never a broken-image glyph — a thin frame in the family's
+            // ink.
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: AppColors.surfaceOutline),
+              ),
+              child: const SizedBox(width: 22, height: 22),
+            );
+          },
         ),
       ),
     );
