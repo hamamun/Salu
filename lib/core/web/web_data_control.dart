@@ -8,6 +8,7 @@ import 'package:webview_windows/webview_windows.dart';
 
 import '../settings_service.dart';
 import 'web_autoclear_policy.dart';
+import 'web_download_service.dart';
 import 'web_history_service.dart';
 
 /// The four checkboxes of the Clear dialog (web.md · Clear data — LOCKED):
@@ -282,8 +283,14 @@ class WebDataControlService {
   /// goes now when the engine is not up yet, otherwise at the next
   /// startup — the folder purge is the only complete answer and a live
   /// engine locks it.
+  ///
+  /// "Downloads history" is SALU's own log as well now that the engine's
+  /// reports are kept: the rows go, and the FILES stay exactly where
+  /// they landed — which is what the dialog's own line always promised.
   Future<void> clear(WebDataClearFlags flags) async {
     if (flags.history) WebHistoryService.instance.clear();
+
+    if (flags.downloads) WebDownloadService.instance.clear();
 
     if (flags.cookies || flags.downloads) {
       if (!_prepared) {

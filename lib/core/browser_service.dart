@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'player_service.dart';
 import 'web/web_data_control.dart';
+import 'web/web_download_service.dart';
 import 'web/web_favourites_service.dart';
 import 'web/web_history_service.dart';
 import 'web/web_popup_service.dart';
@@ -58,6 +59,13 @@ class BrowserService {
   /// Player mode ignores it (the strip shows the media title).
   final ValueNotifier<String?> stripTitle = ValueNotifier<String?>(null);
 
+  /// The download shelf's doorbell. The title bar's badge stands outside
+  /// the browser's own tree — it has to, a download started here keeps
+  /// running after the mode flips back — so the badge rings this and the
+  /// mounted screen opens its shelf. Bumped, never reset: every ring is
+  /// a new request, even two in a row.
+  final ValueNotifier<int> downloadsRequest = ValueNotifier<int>(0);
+
   bool get isWeb => mode.value == SaluMode.web;
 
   /// Whether `BrowserScreen` is mounted and listening. The screen flips
@@ -96,6 +104,7 @@ class BrowserService {
     await WebFavouritesService.instance.load();
     await WebHistoryService.instance.load();
     await WebPopupService.instance.load();
+    await WebDownloadService.instance.load();
   }
 
   /// Applies [next] mode. Entering Web pauses the player — in this mode
@@ -134,6 +143,14 @@ class BrowserService {
 
   Future<void> toggleMode() =>
       setMode(isWeb ? SaluMode.player : SaluMode.web);
+
+  /// Opens the download shelf. Web mode comes first — the shelf hangs
+  /// off the browser's own chrome, so in Player mode the tap buys the
+  /// mode switch (and the pause that contract carries) as well.
+  Future<void> openDownloads() async {
+    await setMode(SaluMode.web);
+    downloadsRequest.value = downloadsRequest.value + 1;
+  }
 
   /// Opens [url] in the browser: flips to Web mode and either delivers the
   /// request to the mounted screen (new tab per key function 6) or leaves
@@ -204,6 +221,9 @@ class BrowserService {
     } catch (_) {}
     try {
       await WebPopupService.instance.flush();
+    } catch (_) {}
+    try {
+      await WebDownloadService.instance.flush();
     } catch (_) {}
   }
 

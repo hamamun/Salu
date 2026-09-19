@@ -83,6 +83,23 @@ class OsdAutoloadCard extends OsdCard {
   final String folder;
 }
 
+/// The download landing card (web.md · Downloads): the browser's news
+/// while Player mode owns the window — the file just fetched, named. The
+/// badge in the caption row is the interactive half (it opens the shelf),
+/// so this one is transient and pointer-transparent like every other
+/// one-shot card: it says the download landed, and gets out of the way.
+class OsdDownloadCard extends OsdCard {
+  const OsdDownloadCard({required this.name, this.failed = false})
+      : super(ttl: const Duration(milliseconds: 2200));
+
+  /// The file's own name — never the URL, which can carry a query string
+  /// full of tokens (the channel-failure rule, §10.10e).
+  final String name;
+
+  /// The engine interrupted it: the row stays in the shelf, marked.
+  final bool failed;
+}
+
 /// The "Failed to load" card (playlist_imp.md §10.8 · §10.10b): the
 /// wording is fixed and the [name] is the **channel's** display label or
 /// the **playlist's** name — never a URL, which would carry credentials

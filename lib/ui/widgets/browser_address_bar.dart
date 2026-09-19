@@ -5,6 +5,7 @@ import '../../core/web/web_suggestions.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
 import '../screens/browser_screen.dart' show kWebRowHeight;
+import 'download_badge.dart';
 import 'salu_icon_button.dart';
 import 'web_marks.dart';
 
@@ -12,7 +13,8 @@ import 'web_marks.dart';
 /// navigation to its LEFT (Home · Back · Forward · Reload), the site
 /// padlock + the favourite STAR inside its LEFT corner (the padlock names
 /// the site, the star saves it), the held-back pop-up badge in its RIGHT
-/// corner while a page has any, and the ⋮ menu beside it.
+/// corner while a page has any, the download badge between the field and
+/// the ⋮ while a download has anything to say, and the ⋮ menu beside it.
 ///
 /// Typing NEVER loads a page (the lock): keystrokes debounce into the
 /// suggestion dropdown — Google while-they-type merged with SALU's own
@@ -35,6 +37,8 @@ class BrowserAddressBar extends StatefulWidget {
     required this.onSiteInfo,
     required this.onBlockedTap,
     required this.onMenu,
+    this.downloadsOpen = false,
+    required this.onDownloadsTap,
     this.onClearData,
     required this.onBack,
     required this.onForward,
@@ -76,6 +80,12 @@ class BrowserAddressBar extends StatefulWidget {
 
   /// ⋮ tap: the browser menu (zoom, find, history, …).
   final VoidCallback onMenu;
+
+  /// Whether the download shelf is up — the badge lights like the ♥.
+  final bool downloadsOpen;
+
+  /// Download badge tap: the download shelf.
+  final VoidCallback onDownloadsTap;
   final VoidCallback? onClearData;
   final VoidCallback onBack;
   final VoidCallback onForward;
@@ -157,6 +167,13 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           const SizedBox(width: 7),
           Expanded(child: _buildField()),
           const SizedBox(width: 7),
+          // The download badge — Chrome's own slot, immediately left of
+          // the ⋮. It stands only while it has something to say, and the
+          // omnibox absorbs the width, so the ⋮ never moves.
+          DownloadBadge(
+            onTap: widget.onDownloadsTap,
+            active: widget.downloadsOpen,
+          ),
           // ⋮ menu beside the omnibox (zoom, find, history, clear, settings).
           SaluIconButton(
             size: 27,

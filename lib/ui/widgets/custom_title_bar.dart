@@ -36,6 +36,7 @@ class CustomTitleBar extends StatelessWidget {
     this.onSettings,
     this.immersive = false,
     this.leading,
+    this.badge,
     this.showMini = true,
   });
 
@@ -57,6 +58,15 @@ class CustomTitleBar extends StatelessWidget {
   /// Player mode (web.md · the toggle lock). The centered title is
   /// untouched by it.
   final Widget? leading;
+
+  /// A live status mark standing at the caption row's left end, before
+  /// the Mini-bar glyph — the download badge's second home. It is the
+  /// only signal that can follow a download into Player mode: the
+  /// browser stays alive behind the mode switch, so a file keeps landing
+  /// while you watch, and this corner is where the news can wait.
+  /// It is a SALU control, not a caption button, so it keeps the icon
+  /// recipe (no hover box) rather than the caption family's.
+  final Widget? badge;
 
   /// false hides the Mini-bar glyph: there is no room for a browser
   /// inside a 32-px strip (mini.md §8), so in web mode that button
@@ -140,6 +150,9 @@ class CustomTitleBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
+                // The live badge slot (downloads) — leftmost of the row,
+                // so the caption buttons themselves never shift.
+                if (badge != null) badge!,
                 // Mini bar mode — one glyph IMMEDIATELY left of Settings
                 // (mini.md §4). A wide, thin rounded strip: the bar itself,
                 // drawn in the caption family's ink and stroke, naming the

@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:webview_windows/webview_windows.dart';
 
 import '../../core/browser_service.dart';
+import '../../core/player_service.dart';
+import '../../core/queue_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/web/web_address.dart';
+import '../../core/web/web_download_service.dart';
 import '../../core/web/web_favourites_service.dart';
 import '../../core/web/web_find.dart';
 import '../../core/web/web_history_service.dart';
@@ -18,6 +21,7 @@ import '../../theme/app_theme.dart';
 import '../../ui/osd/osd_controller.dart';
 import '../widgets/browser_address_bar.dart';
 import '../widgets/browser_clear_dialog.dart';
+import '../widgets/browser_downloads_panel.dart';
 import '../widgets/browser_favourite_sheet.dart';
 import '../widgets/browser_favourites_hub.dart';
 import '../widgets/browser_find_bar.dart';
@@ -93,6 +97,13 @@ class _BrowserScreenState extends State<BrowserScreen> {
   bool _menuOpen = false;
   bool _historyOpen = false;
 
+  /// The download shelf (the badge's answer). [_playInFlight] is the
+  /// race guard on its Play mark: the mode switch and the engine load
+  /// both await, and a second tap in that gap must never land the same
+  /// file twice.
+  bool _downloadsOpen = false;
+  bool _playInFlight = false;
+
   /// Find-in-page (the ⋮ menu's "Find in page…"): the bar, the query, and
   /// the {total, index} count the script answers with. [_findSeq] drops
   /// late answers when keystrokes outrun the engine.
@@ -124,6 +135,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _favourites.favourites.addListener(_updateStar);
     _openSub = _service.openRequests.listen(_onOpenRequest);
     _service.mode.addListener(_onModeChanged);
+    // The title bar's badge stands outside this tree — it has to, a
+    // download outlives Web mode — so it rings the service's doorbell.
+    _service.downloadsRequest.addListener(_onDownloadsRequest);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _tabs.isNotEmpty) return;
       final WebOpenRequest? pending = _service.takePendingRequest();
@@ -143,6 +157,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _favourites.favourites.removeListener(_updateStar);
     unawaited(_openSub.cancel());
     _service.mode.removeListener(_onModeChanged);
+    _service.downloadsRequest.removeListener(_onDownloadsRequest);
     _suggestTimer?.cancel();
     _addressFocus.removeListener(_onAddressFocusChanged);
     _unbindActive();
@@ -713,16 +728,91 @@ class _BrowserScreenState extends State<BrowserScreen> {
     } catch (_) {}
   }
 
-  /// The menu's "Show in folder" — downloads land silently in the
-  /// Downloads folder (no progress events reach this plugin), so the
-  /// honest answer is the folder itself, opened in Explorer.
-  Future<void> _showDownloadsFolder() async {
-    setState(() => _menuOpen = false);
-    final String home = Platform.environment['USERPROFILE'] ?? '';
-    if (home.isEmpty) return;
+  // ── Downloads (the badge's answer) ─────────────────────────────────────
+
+  /// The badge's tap, from either of its two homes: the shelf opens in
+  /// place of whatever else was up (one popup at a time, follow.md §3),
+  /// and tells the service it is being watched — finishes from here on
+  /// are seen as they land, so the badge needs no reason to linger.
+  void _toggleDownloads() {
+    setState(() {
+      _hubOpen = false;
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _siteOpen = false;
+      _blockedOpen = false;
+      _menuOpen = false;
+      _historyOpen = false;
+      _dropFind();
+      _downloadsOpen = !_downloadsOpen;
+    });
+    WebDownloadService.instance.setShelfOpen(_downloadsOpen);
+  }
+
+  /// The title bar's badge rang the doorbell ([BrowserService
+  /// .openDownloads], from Player mode): a ring is a request, not a
+  /// flip, so an already-open shelf stays open.
+  void _onDownloadsRequest() {
+    if (!mounted || _downloadsOpen) return;
+    _toggleDownloads();
+  }
+
+  /// The shelf's Play — the one thing a browser that is not also a
+  /// player cannot offer: the file just downloaded IS media, and SALU
+  /// plays it.
+  ///
+  /// The queue decides the shape (owner, 2026-09-19):
+  ///   · a queue is already there → the file joins its end and Web mode
+  ///     keeps the screen — you stay where you were;
+  ///   · nothing queued and nothing playing → the file becomes the
+  ///     queue, Player mode takes the window and playback starts.
+  ///
+  /// A channel list is the one populated queue a local file never joins
+  /// (`PlayerService.appendToQueue` refuses it by design), so it takes
+  /// the fresh-load branch — exactly what dropping the same file on the
+  /// window has always done.
+  Future<void> _playDownload(WebDownloadItem item) async {
+    if (_playInFlight) return;
+    final String path = item.path;
+    if (path.isEmpty) return;
+    _playInFlight = true;
     try {
-      await Process.start('explorer', <String>['$home\\Downloads']);
-    } catch (_) {}
+      final QueueService queue = QueueService.instance;
+      if (queue.hasQueue && !queue.isChannelList) {
+        setState(() => _downloadsOpen = false);
+        WebDownloadService.instance.setShelfOpen(false);
+        await PlayerService.instance.appendToQueue(<String>[path]);
+        return;
+      }
+      // Nothing to join: the file becomes the queue, and the window
+      // follows it. The mode flip first — it parks the pages, and the
+      // engine load must not race a browser still holding the screen.
+      setState(() => _downloadsOpen = false);
+      WebDownloadService.instance.setShelfOpen(false);
+      await _service.setMode(SaluMode.player);
+      await PlayerService.instance.openPaths(<String>[path]);
+    } catch (_) {
+      // A file that will not open leaves the row where it is.
+    } finally {
+      _playInFlight = false;
+    }
+  }
+
+  /// "Show in folder" — Explorer opens the Downloads folder with this
+  /// very file selected, not merely somewhere near it.
+  Future<void> _revealDownload(WebDownloadItem item) async {
+    setState(() => _downloadsOpen = false);
+    WebDownloadService.instance.setShelfOpen(false);
+    await WebDownloadService.instance.reveal(item.path);
+  }
+
+  /// The shelf's footer: the Downloads folder itself — the one answer
+  /// that still works with an empty log.
+  Future<void> _openDownloadsFolder() async {
+    setState(() => _downloadsOpen = false);
+    WebDownloadService.instance.setShelfOpen(false);
+    await WebDownloadService.instance.openFolder(null);
   }
 
   void _openFind() {
@@ -933,6 +1023,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         _blockedOpen ||
         _menuOpen ||
         _historyOpen ||
+        _downloadsOpen ||
         _findOpen) {
       setState(() {
         _hubOpen = false;
@@ -942,9 +1033,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
         _blockedOpen = false;
         _menuOpen = false;
         _historyOpen = false;
+        _downloadsOpen = false;
         _dropFind();
         _hideSuggestions();
       });
+      WebDownloadService.instance.setShelfOpen(false);
     }
   }
 
@@ -1053,6 +1146,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       onSiteInfo: _toggleSitePanel,
                       onBlockedTap: _toggleBlockedList,
                       onMenu: _toggleMenu,
+                      downloadsOpen: _downloadsOpen,
+                      onDownloadsTap: _toggleDownloads,
                       onBack: () => tab?.goBack(),
                       onForward: () => tab?.goForward(),
                       onReload: () => tab?.reload(),
@@ -1075,7 +1170,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       _siteOpen ||
                       _blockedOpen ||
                       _menuOpen ||
-                      _historyOpen))
+                      _historyOpen ||
+                      _downloadsOpen))
                 Positioned.fill(
                   child: Listener(
                     behavior: HitTestBehavior.translucent,
@@ -1185,6 +1281,28 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     ),
                   ),
                 ),
+              if (_chrome && _downloadsOpen)
+                Positioned(
+                  right: 48,
+                  top: kWebStripHeight + kWebRowHeight - 4,
+                  child: _PopGrow(
+                    child: BrowserDownloadsPanel(
+                      onPlay: (WebDownloadItem i) =>
+                          unawaited(_playDownload(i)),
+                      onReveal: (WebDownloadItem i) =>
+                          unawaited(_revealDownload(i)),
+                      onRemove: WebDownloadService.instance.remove,
+                      onOpenFolder: () =>
+                          unawaited(_openDownloadsFolder()),
+                      onClearFinished:
+                          WebDownloadService.instance.clearFinished,
+                      onClose: () {
+                        setState(() => _downloadsOpen = false);
+                        WebDownloadService.instance.setShelfOpen(false);
+                      },
+                    ),
+                  ),
+                ),
               if (_chrome && _menuOpen)
                 Positioned(
                   right: 8,
@@ -1209,8 +1327,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                         setState(() => _menuOpen = false);
                         widget.onOpenSettings?.call();
                       },
-                      onDownloadsFolder: () =>
-                          unawaited(_showDownloadsFolder()),
+                      onDownloads: _toggleDownloads,
                       onClose: () =>
                           setState(() => _menuOpen = false),
                     ),

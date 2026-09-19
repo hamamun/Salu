@@ -7,6 +7,7 @@ import 'package:webview_windows/webview_windows.dart';
 
 import 'web_address.dart';
 import 'web_data_control.dart';
+import 'web_download_service.dart';
 import 'web_history_service.dart';
 import 'web_popup_service.dart';
 
@@ -533,7 +534,33 @@ if (!window.__saluEsc) {
       // The plugin json-decodes every `webMessageReceived` itself and
       // answers `addError` for anything that is not JSON — the error leg
       // must be held, or a chatty page faults the zone.
-      ..add(c.webMessage.listen(_onWebMessage, onError: (_) {}));
+      ..add(c.webMessage.listen(_onWebMessage, onError: (_) {}))
+      // The engine reports its own downloads (`DownloadStarting` →
+      // `BytesReceivedChanged` → `StateChanged` in the vendored plugin's
+      // webview.cc) as this one stream. SALU used to ignore it, which is
+      // why a download landed with no trace; every tab now feeds the one
+      // shared log the badge and the shelf read.
+      ..add(c.onDownloadEvent.listen(_onDownloadEvent, onError: (_) {}));
+  }
+
+  /// Maps one engine download event onto SALU's own log. The plugin's
+  /// event carries no download id, so the row is keyed on the engine's
+  /// result path — decided at `DownloadStarting`, stable for the rest of
+  /// the download (see [WebDownloadItem]).
+  void _onDownloadEvent(WebviewDownloadEvent e) {
+    final WebDownloadState state = switch (e.kind) {
+      WebviewDownloadEventKind.downloadCompleted =>
+        WebDownloadState.completed,
+      WebviewDownloadEventKind.downloadStarted => WebDownloadState.running,
+      WebviewDownloadEventKind.downloadProgress => WebDownloadState.running,
+    };
+    WebDownloadService.instance.report(
+      state,
+      url: e.url,
+      path: e.resultFilePath,
+      received: e.bytesReceived,
+      total: e.totalBytesToReceive,
+    );
   }
 
   /// The shim's reports arrive here (`chrome.webview.postMessage` → the

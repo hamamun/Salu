@@ -19,6 +19,7 @@ import '../../core/transport_actions.dart';
 import '../../core/tune/tune_model.dart';
 import '../../core/tune_service.dart';
 import '../../core/ui_lock.dart';
+import '../../core/web/web_download_service.dart';
 import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
 import '../mini/mini_shell.dart';
@@ -30,6 +31,7 @@ import '../panels/playlist_panel.dart';
 import '../panels/track_panel.dart';
 import '../panels/tune_panel.dart';
 import '../widgets/custom_title_bar.dart';
+import '../widgets/download_badge.dart';
 import '../widgets/eq_curve_overlay.dart';
 import '../widgets/live_light.dart';
 import '../widgets/settings_dialog.dart';
@@ -143,6 +145,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // — once born — stays in the tree, just hidden (web.md · mode
     // keep-alive + "No SALU media controls in Web mode").
     _browser.mode.addListener(_onSaluModeChanged);
+    // A download landing while Player mode owns the window is worth one
+    // line on the deck — the browser stays alive behind the mode switch,
+    // so files keep arriving while you watch (web.md · Downloads).
+    _downloadSub =
+        WebDownloadService.instance.finished.listen(_onDownloadFinished);
     // While transient UI (open pill, URL modal) is up, the chrome must
     // not auto-hide beneath it; when the last lock releases, restart the
     // countdown fresh.
@@ -183,6 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
     _windows.mode.removeListener(_onWindowModeChanged);
     _browser.mode.removeListener(_onSaluModeChanged);
+    unawaited(_downloadSub?.cancel());
     ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
     _player.transportState.removeListener(_onTransportStateChanged);
     _playerFocus.dispose();
@@ -271,6 +279,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  StreamSubscription<WebDownloadItem>? _downloadSub;
+
+  /// The deck's download line. Web mode keeps quiet here — its own badge
+  /// and shelf are already on screen, and the same news twice is noise.
+  void _onDownloadFinished(WebDownloadItem item) {
+    if (!mounted || _browser.isWeb) return;
+    OsdController.instance.show(
+      OsdDownloadCard(name: item.fileName, failed: item.isFailed),
+    );
+  }
+
+  /// The download badge's title-bar home — one widget, both modes. It
+  /// stands down by itself when there is nothing to report; the tap
+  /// opens the shelf, buying the mode switch on the way when Player mode
+  /// owns the window. Only where a browser exists at all.
+  Widget? get _downloadBadge => BrowserService.browserSupported
+      ? DownloadBadge(
+          size: 30,
+          markSize: 15,
+          onTap: () => unawaited(BrowserService.instance.openDownloads()),
+        )
+      : null;
+
   /// The full window in Web mode: the title strip — Player · Web switch at
   /// its LEFT end, the active tab's title centered, settings and the window
   /// buttons unchanged — and below it the browser, all the way to the
@@ -304,6 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           title: title,
                           onSettings: _openSettings,
                           leading: const WebModeToggle(),
+                          badge: _downloadBadge,
                           showMini: false,
                         );
                       },
@@ -982,6 +1014,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             leading: BrowserService.browserSupported
                                 ? const WebModeToggle()
                                 : null,
+                            badge: _downloadBadge,
                           );
                         },
                       ),

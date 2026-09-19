@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
 import 'salu_icon_button.dart';
-import 'salu_marks.dart';
 
 /// The browser menu — the ⋮ at the row's right edge (Chrome's ⋮ slot):
 /// the standard shelf every browser carries: new tab, zoom, desktop
@@ -12,10 +11,10 @@ import 'salu_marks.dart';
 ///
 /// Page-bound rows (find, open-in-Edge) dim while no page is showing;
 /// zoom and desktop mode stay live — a virgin tab remembers them for
-/// boot. Downloads unfolds inline: files save silently to the Downloads
-/// folder (no progress events reach this plugin), so the section names
-/// the folder and opens it.
-class BrowserMenu extends StatefulWidget {
+/// boot. Downloads is a door, not a section: it opens the download
+/// shelf, where the engine's own reports are already waiting — what is
+/// travelling, what landed, and the file each one became.
+class BrowserMenu extends StatelessWidget {
   const BrowserMenu({
     super.key,
     required this.tab,
@@ -25,7 +24,7 @@ class BrowserMenu extends StatefulWidget {
     required this.onClearData,
     required this.onOpenInEdge,
     required this.onSettings,
-    required this.onDownloadsFolder,
+    required this.onDownloads,
     required this.onClose,
   });
 
@@ -36,26 +35,21 @@ class BrowserMenu extends StatefulWidget {
   final VoidCallback onClearData;
   final VoidCallback onOpenInEdge;
   final VoidCallback onSettings;
-  final VoidCallback onDownloadsFolder;
+
+  /// Opens the download shelf (the badge's own panel).
+  final VoidCallback onDownloads;
   final VoidCallback onClose;
 
   @override
-  State<BrowserMenu> createState() => _BrowserMenuState();
-}
-
-class _BrowserMenuState extends State<BrowserMenu> {
-  bool _downloadsOpen = false;
-
-  @override
   Widget build(BuildContext context) {
-    final WebTab? tab = widget.tab;
+    final WebTab? tab = this.tab;
     final bool page = tab?.hasPage == true;
     return Focus(
       autofocus: true,
       onKeyEvent: (FocusNode n, KeyEvent e) {
         if (e is KeyDownEvent &&
             e.logicalKey == LogicalKeyboardKey.escape) {
-          widget.onClose();
+          onClose();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -76,7 +70,7 @@ class _BrowserMenuState extends State<BrowserMenu> {
             children: <Widget>[
               _MenuRow(
                 label: 'New tab',
-                onTap: widget.onNewTab,
+                onTap: onNewTab,
               ),
               const _MenuDivider(),
               if (tab != null) ...<Widget>[
@@ -87,88 +81,29 @@ class _BrowserMenuState extends State<BrowserMenu> {
               _MenuRow(
                 label: 'Find in page…',
                 enabled: page,
-                onTap: widget.onFind,
+                onTap: onFind,
               ),
               _MenuRow(
                 label: 'History',
-                onTap: widget.onHistory,
+                onTap: onHistory,
               ),
               _MenuRow(
                 label: 'Downloads',
-                trailing: IconTheme(
-                  data: const IconThemeData(color: AppColors.textSecondary),
-                  child: AnimatedRotation(
-                    turns: _downloadsOpen ? 0.5 : 0.0,
-                    duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOut,
-                    child: const RevealChevronMark(up: false, size: 13),
-                  ),
-                ),
-                onTap: () =>
-                    setState(() => _downloadsOpen = !_downloadsOpen),
+                onTap: onDownloads,
               ),
-              if (_downloadsOpen)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(9),
-                      border:
-                          Border.all(color: AppColors.surfaceOutline),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        const Text(
-                          'Files save to the Downloads folder.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: widget.onDownloadsFolder,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 7),
-                            decoration: BoxDecoration(
-                              color: const Color(0x144C9EEB),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: const Color(0x404C9EEB)),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              'Show in folder',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.accent,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               _MenuRow(
                 label: 'Clear browsing data…',
-                onTap: widget.onClearData,
+                onTap: onClearData,
               ),
               _MenuRow(
                 label: 'Open in Edge',
                 enabled: page,
-                onTap: widget.onOpenInEdge,
+                onTap: onOpenInEdge,
               ),
               const _MenuDivider(),
               _MenuRow(
                 label: 'Settings',
-                onTap: widget.onSettings,
+                onTap: onSettings,
               ),
             ],
           ),
