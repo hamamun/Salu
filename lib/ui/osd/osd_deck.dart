@@ -10,6 +10,7 @@ import '../osc/volume_bar.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/salu_marks.dart';
 import '../widgets/transport_marks.dart';
+import '../widgets/web_marks.dart' show DownloadMark;
 import 'osd_controller.dart';
 
 /// The OSD deck — ONE slot, two "feels" (outline · §4).
@@ -134,6 +135,7 @@ class _OsdDeckState extends State<OsdDeck>
       OsdVolumeCard c => _TransientCard(child: _volumeBody(c)),
       OsdResumeCard c => _ResumeToast(card: c),
       OsdUndoCard c => _UndoToast(card: c),
+      OsdDownloadCard c => _TransientCard(child: _downloadBody(c)),
       OsdAutoloadCard c => _TransientCard(child: _autoloadBody(c)),
       OsdFailedCard c => _TransientCard(child: _failedBody(c)),
       OsdSubtitleCard c => _TransientCard(child: _subtitleBody(c)),
@@ -255,6 +257,39 @@ class _OsdDeckState extends State<OsdDeck>
           constraints: const BoxConstraints(maxWidth: 280),
           child: Text(
             'Failed to load — ${card.name}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The browser's download news (web.md · Downloads) — the download
+  /// mark carrying the file's name, in the failed card's own shape. A
+  /// download that finished while you watch is worth one line and no
+  /// more: the badge up in the caption row opens the shelf.
+  Widget _downloadBody(OsdDownloadCard card) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconTheme.merge(
+          data: const IconThemeData(color: AppColors.textPrimary),
+          child: const DownloadMark(size: 16),
+        ),
+        const SizedBox(width: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: Text(
+            card.failed
+                ? 'Download interrupted — ${card.name}'
+                : 'Downloaded — ${card.name}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(

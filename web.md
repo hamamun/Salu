@@ -57,7 +57,10 @@ Implementation notes, lock by lock:
   pop-ups captured by the document-start shim into the badge + per-site
   rules (2026-09-17 cut — the lock below), permission prompts are one
   tidy card (camera/mic/location/notifications/clipboard/sensors),
-  downloads go to the WebView2 default (Windows Downloads).
+  downloads go to the WebView2 default (Windows Downloads) and are
+  tracked: engine reports → one shared log → the address bar's + the
+  title bar's badge → the download shelf, where a landed media file
+  plays inside SALU (2026-09-19 lock below).
 - **Memory** — a mode switch keeps the browser alive (2026-09-17, Mode
   keep-alive lock below): leaving for Player mode Offstages the surface
   and parks every running page (media paused first, then the engine's
@@ -83,7 +86,7 @@ purge · auto-clear all three timings · fullscreen hand-off + Esc ·
 pop-up capture (stub defeats gates · badge + held-back list · per-site
 Allow/Block/visit · Settings default + exceptions) · ⋮ menu (zoom ladder
 · desktop UA + restore · find incl. Esc/Enter/arrows · history groups +
-delete + clear-all · downloads folder · clear dialog · Edge door ·
+delete + clear-all · downloads badge + shelf (start → ring → land → Play / Show in folder / Open folder · ⋮ door · title-bar badge in BOTH modes) · clear dialog · Edge door ·
 Settings) · Ctrl+T/W/R/L/F + zoom keys · permission cards · resume memory
 untouched by any of it.
 
@@ -132,9 +135,10 @@ ship its own browser engine — it *wraps* the one Windows already has.
 | 2026-09-16 | **Downloads — LOCKED** | Standard browser behaviour: send the file to **Windows File Explorer** (user's Downloads folder) — like Edge/Chrome. |
 | 2026-09-16 | **Popups & permissions — LOCKED** | Edge/Chrome-style: block popups by default + tidy prompts for site permissions (location, camera, notifications…). |
 | 2026-09-17 | **Pop-up system: capture + badge + per-site — LOCKED** | Engine policy stays `deny` (nothing ever escapes to an OS window); a document-start shim reports every `window.open` / `target=_blank` to Dart over `webMessage` and returns a stub handle, so ad-gates pass with nothing rendered. Held-back pop-ups count into an address-bar badge (⧉) with per-URL Open; allowed sites open in a new foreground SALU tab (at the tab cap they park in the list instead — never a hijack). Per-site Allow/Block lives in the padlock panel (+ "just for this visit", session-only); the global default + exceptions list live in Settings → Web. |
-| 2026-09-17 | **Standard browser menu (⋮) — LOCKED** | One ⋮ at the row's right edge (beside 🧹, which stays): New tab · Zoom −/%/+ (Chrome's ladder, per tab, % resets) · Desktop mode switch (per tab, Edge-on-Windows UA + reload) · Find in page… (own highlighter — the plugin exposes no Find API) · History (Today/Yesterday/Earlier, search, per-row ×, clear-all) · Downloads (names the folder + Show in folder — no progress events reach this plugin) · Clear browsing data… (the same dialog as 🧹) · Open in Edge (the `microsoft-edge:` escape door) · Settings. Keyboard: Ctrl+T/W/R/L/F and Ctrl +/−/0 while Flutter holds focus (a native-focused page eats keys first — no accelerator hook exists). |
+| 2026-09-17 | **Standard browser menu (⋮) — LOCKED** | One ⋮ at the row's right edge (beside 🧹, which stays): New tab · Zoom −/%/+ (Chrome's ladder, per tab, % resets) · Desktop mode switch (per tab, Edge-on-Windows UA + reload) · Find in page… (own highlighter — the plugin exposes no Find API) · History (Today/Yesterday/Earlier, search, per-row ×, clear-all) · Downloads (a door to the download shelf — see the 2026-09-19 Downloads lock; the earlier note here that "no progress events reach this plugin" was WRONG, the engine reports every download and SALU now listens) · Clear browsing data… (the same dialog as 🧹) · Open in Edge (the `microsoft-edge:` escape door) · Settings. Keyboard: Ctrl+T/W/R/L/F and Ctrl +/−/0 while Flutter holds focus (a native-focused page eats keys first — no accelerator hook exists). |
 | 2026-09-17 | **Page colours — LOCKED** | Pages render **light by default**, the way Edge shows them. Cause of the old mismatch: WebView2 answers `prefers-color-scheme` from the **Windows app mode** (its `PreferredColorScheme` profile control defaults to Auto = follow the OS; Edge answers from its own Appearance setting), so on a dark-mode PC a site with a dark theme (pixabay.com) went dark inside SALU while staying white in Edge. Fix: the engine's own supported control — `ICoreWebView2Profile::put_PreferredColorScheme` — reached through the vendored plugin's one addition (`third_party/webview_windows`, VENDOR_NOTES.md); the earlier `--blink-settings` command-line switch was undocumented, silently lost to the host's preference sync, and restart-bound — removed. Settings → Web → **Page colours**: Light (default) · Dark · Follow Windows; applies **immediately** — every live page re-themes in place (`WebDataControlService.applyPageScheme`), new tabs inherit at birth. SALU's own chrome stays dark regardless. |
 | 2026-09-17 | **Mode keep-alive — LOCKED** | The Player/Web switch **hides the browser, it does not close it**. The web surface is born on the first Web entry and stays in the tree for the life of the process (the home screen Offstages it instead of unmounting it), so Web → Player → Web lands on the **exact same pages** — same tabs, URLs, scroll and state, nothing reloaded. Leaving Web, every running page's **own media pauses first** (no site may play unattended behind the player — the same courtesy SALU's player gets when Web opens), then its renderer **suspends** (the engine's Suspend/Resume — the same contract the off-stage tabs already use), and a page that owns the screen releases the fullscreen hand-off on the way out. Returning to Web, the active tab resumes and every page sits **paused**, like the player; resume is manual, on the site's own controls. RAM stays honest the whole time: hidden renderers are suspended, not idle-playing. Mini-bar swaps still tear the tree (mini.md §8 — a 32-px bar hosts no browser), and the app's **close** still runs key function 8 exactly as written. |
+| 2026-09-19 | **Downloads: badge + shelf + Play — LOCKED** | The engine was always reporting its downloads (`add_DownloadStarting` → `add_BytesReceivedChanged` → `add_StateChanged` in the vendored plugin's `webview.cc`, reaching Dart as `WebviewController.onDownloadEvent` with url, **result path**, bytes and total); SALU simply never subscribed, which is why a download landed with no trace. Now: `WebTab._wire` listens and feeds **one shared log** (`lib/core/web/web_download_service.dart`, keyed on the engine's result path — the event carries no download id). A **badge** stands in **two** places — the address bar's right corner (Chrome's own slot, left of the ⋮) *and* the title bar's caption row, because the browser stays alive behind the mode switch, so a file can land while Player mode owns the window. It shows only while it has news: a hairline ring for what is travelling (determinate when the server gave a size, the tab strip's spinner when it did not), a count above one, and it **stays after the last byte** until the shelf is opened. Its tap opens the **download shelf** — a slide-down panel in the same family as the site panel and the held-back list, NOT a tab (Chrome and Edge open a flyout here too; the ⋮ menu's "Downloads" is a second door to it). Rows: file name · what has landed of what, from which host · the progress hairline; landed rows carry ▶ **Play** (media only), **Show in folder** (`explorer /select,` — Explorer lands ON the file) and ×; the footer is **Open Downloads folder**. **Play's rule (owner):** a queue already there → the file joins its end and Web mode keeps the screen; nothing queued → the file becomes the queue, Player mode takes the window and playback starts (a channel list is the one populated queue a local file never joins, so it takes the fresh-load branch). A one-flight guard makes a double tap land the file once. Landed rows persist (`web_downloads`, 200 cap, newest first); a traveller never does — the engine cannot resume it. "Downloads history" in the Clear dialog now empties this log **and** the files stay on the PC, which is what its own line always said. **Known gaps:** the plugin exposes no cancel/pause and drops `DOWNLOAD_STATE_INTERRUPTED` silently (`webview.cc`), so a traveller carries no × and a failed download can only be dismissed by hand — both need a vendor delta, parked. |
 
 ---
 
@@ -146,7 +150,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 ├──────────────────────────────────────────────────────────┤
 │  ♥Fav  ▢ Tab  ▢ Tab  ▢ Tab  [ + ]                       │
 ├──────────────────────────────────────────────────────────┤
-│  ⌂ ⇦ ⇨ ⟳   [ 🔒 ☆ URL + suggestions………… ⧉ ]         ⋮  │
+│  ⌂ ⇦ ⇨ ⟳   [ 🔒 ☆ URL + suggestions………… ⧉ ]      ↓ ⋮  │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
 │                    WebView (the page)                    │
@@ -189,10 +193,14 @@ ship its own browser engine — it *wraps* the one Windows already has.
   `browser_site_panel.dart` (padlock panel + held-back list),
   `browser_menu.dart` (the ⋮ shelf), `browser_history_panel.dart`,
   `browser_find_bar.dart`, `browser_clear_dialog.dart`,
-  `browser_views.dart`, `web_marks.dart`, `web_mode_toggle.dart`;
+  `browser_views.dart`, `web_marks.dart`, `web_mode_toggle.dart`,
+  `download_badge.dart` (the badge, one widget for both of its homes) and
+  `browser_downloads_panel.dart` (the shelf);
   `lib/core/web/` holds `web_popup_service.dart` (per-site rules + visit
-  memories; the global default is `SettingsService.webPopupDefault`)
-  and `web_find.dart` (the highlighter script + answer parsing).
+  memories; the global default is `SettingsService.webPopupDefault`),
+  `web_download_service.dart` (the download log + badge counts +
+  Explorer's two answers) and `web_find.dart` (the highlighter script +
+  answer parsing).
 - `follow.md` records that the web browser, bookmarks, and Stream Library
   panel were **postponed** to be designed separately (they are not mpv work).
   Browser part is done; Stream Library / M3U sidebar remains Phase 6 pending.
