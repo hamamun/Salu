@@ -9,6 +9,10 @@ import 'salu_marks.dart';
 /// ambient [IconTheme] so [SaluIconButton]'s hover recipe lights them up
 /// like every other control in SALU.
 ///
+/// Only the browser's genuinely own shapes live here: the × every close in
+/// SALU wears (caption, tab, panel, dialog) is the family's single
+/// [CloseMark] in `salu_marks.dart` — one silhouette, never redrawn.
+///
 /// Family:
 ///   · house           — Home               [HomeMark]
 ///   · stem + head     — Back / Forward     [ArrowMark] (mirrored)
@@ -16,7 +20,6 @@ import 'salu_marks.dart';
 ///   · five points     — Favourite star     [StarMark] (outline / filled —
 ///                       the two-state URL-bar mark web.md locks)
 ///   · heart           — Favourites hub     [HeartMark] (web.md's ♥ slot)
-///   · crossed rules   — Close (tab ×)      [CloseMark]
 ///   · tabbed rect     — Folder             [FolderMark]
 ///   · circle + hands  — History row        [ClockMark]
 ///   · handle+bristles — Clear browsing data [BroomMark]
@@ -330,45 +333,6 @@ class _HeartPainter extends CustomPainter {
   @override
   bool shouldRepaint(_HeartPainter old) =>
       old.ink != ink || old.stroke != stroke || old.filled != filled;
-}
-
-/// Close — two crossed rules: the tab × and the cancel mark, the same
-/// silhouette the Open plus becomes at 45°, so "close" is one family away.
-class CloseMark extends StatelessWidget {
-  const CloseMark({super.key, this.size = 12});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _ClosePainter(markInk(context), markStrokeFor(size)),
-    );
-  }
-}
-
-class _ClosePainter extends CustomPainter {
-  const _ClosePainter(this.ink, this.stroke);
-
-  final Color ink;
-  final double stroke;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..color = ink
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round;
-    final double a = size.width * 0.26;
-    final double b = size.width * 0.74;
-    canvas.drawLine(Offset(a, a), Offset(b, b), paint);
-    canvas.drawLine(Offset(b, a), Offset(a, b), paint);
-  }
-
-  @override
-  bool shouldRepaint(_ClosePainter old) =>
-      old.ink != ink || old.stroke != stroke;
 }
 
 /// Folder — a tabbed rectangle: the favourite panel's "Change folder"
