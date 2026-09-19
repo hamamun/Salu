@@ -44,10 +44,12 @@ const int kWebMaxTabs = 10;
 /// [chromeVisible] false is the page-fullscreen hand-off: the web view
 /// keeps the entire window and every SALU row hides with it.
 ///
-/// Tabs live and die inside this widget (service comment): leaving for
-/// Player mode tears the whole thing down — controllers disposed, session
-/// caches cleared — so "coming back is a clean start" holds without a
-/// single bookkeeping thread (web.md · key function 8).
+/// Tabs live and die inside this widget — but the widget itself now
+/// outlives the mode switch (web.md · mode keep-alive): leaving for
+/// Player mode HIDES the surface (the home screen Offstages it), parking
+/// every running page, and coming back finds every tab exactly where it
+/// was, media paused like the player's. Only an app close tears it down:
+/// controllers disposed, session caches cleared (web.md · key function 8).
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({
     super.key,
@@ -121,6 +123,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _addressFocus.addListener(_onAddressFocusChanged);
     _favourites.favourites.addListener(_updateStar);
     _openSub = _service.openRequests.listen(_onOpenRequest);
+    _service.mode.addListener(_onModeChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _tabs.isNotEmpty) return;
       final WebOpenRequest? pending = _service.takePendingRequest();
@@ -139,6 +142,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _service.browserMounted = false;
     _favourites.favourites.removeListener(_updateStar);
     unawaited(_openSub.cancel());
+    _service.mode.removeListener(_onModeChanged);
     _suggestTimer?.cancel();
     _addressFocus.removeListener(_onAddressFocusChanged);
     _unbindActive();
@@ -165,6 +169,39 @@ class _BrowserScreenState extends State<BrowserScreen> {
   void _onAddressFocusChanged() {
     if (!_addressFocus.hasFocus && _suggestionsShown) {
       setState(_hideSuggestions);
+    }
+  }
+
+  // ── Player · Web (the mode swap, web.md · mode keep-alive) ────────────
+
+  /// The mode flip no longer tears this surface down — the home screen
+  /// keeps it mounted and just Offstages it. So the swap is a matter of
+  /// PARKING, not closing: leaving, every running page pauses its own
+  /// media and suspends its renderer; returning, the active tab takes the
+  /// stage back and every page is intact, and paused — like the player.
+  void _onModeChanged() {
+    if (_service.isWeb) {
+      _tab?.activate();
+      return;
+    }
+    unawaited(_parkSurface());
+  }
+
+  /// The leaving leg, in the order the pages need it: the active tab's
+  /// page may still own the screen (the fullscreen hand-off releases
+  /// first — the mode swap itself already took the window back), then
+  /// every running tab parks in turn. A tab that already gave up its
+  /// renderer (an off-stage one) stays exactly as it is.
+  Future<void> _parkSurface() async {
+    final WebTab? tab = _tab;
+    if (tab != null && tab.wantsFullscreen.value) {
+      _releasePageFullscreen();
+    }
+    // The parks await between tabs — a teardown in that gap must not
+    // clear the list out from under the iteration.
+    for (final WebTab t in <WebTab>[..._tabs]) {
+      if (!t.started) continue;
+      await t.park();
     }
   }
 

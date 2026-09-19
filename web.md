@@ -49,14 +49,22 @@ Implementation notes, lock by lock:
   next open).
 - **Mode + window** — Player · Web switch top-left of the strip in both
   modes; Web draws no SALU media controls and pauses playback on entry;
+  a mode switch never tears the browser down (2026-09-17, Mode keep-alive
+  lock below — the page comes back exactly where it was, media paused);
   page fullscreen hides SALU's whole chrome for the web view and Esc
-  (page-side listener + Flutter fallback) releases it; pop-ups captured
-  by the document-start shim into the badge + per-site rules (2026-09-17
-  cut — the lock below), permission prompts are one tidy card
-  (camera/mic/location/notifications/clipboard/sensors), downloads go to
-  the WebView2 default (Windows Downloads).
-- **Memory** — leaving for Player mode tears every `WebviewController`
-  down (session cache cleared before dispose); coming back starts clean.
+  (page-side listener + Flutter fallback) releases it, and a page still
+  holding the screen releases the hand-off on the way to Player mode;
+  pop-ups captured by the document-start shim into the badge + per-site
+  rules (2026-09-17 cut — the lock below), permission prompts are one
+  tidy card (camera/mic/location/notifications/clipboard/sensors),
+  downloads go to the WebView2 default (Windows Downloads).
+- **Memory** — a mode switch keeps the browser alive (2026-09-17, Mode
+  keep-alive lock below): leaving for Player mode Offstages the surface
+  and parks every running page (media paused first, then the engine's
+  Suspend — the same contract the off-stage tabs already use); coming
+  back finds every tab on its exact page, media paused like the player.
+  The `WebviewController` teardown (session cache cleared before dispose)
+  runs only when the app CLOSES (key function 8, the close guard).
 - `BrowserService.openInBrowser()` is the ready door for the Phase 6
   Library panel (key function 3/6) when that lands.
 - Settings → Updates WebView2/yt-dlp detection stays Phase 4/5 scope —
@@ -65,6 +73,10 @@ Implementation notes, lock by lock:
   player and browser.
 
 **On-device checklist** (needs a Windows run): toggle in both modes ·
+**mode keep-alive round trip** (Web → Player → Web: every page exactly
+where it was, none reloaded · page media comes back PAUSED, not
+auto-playing · a fullscreen page releases the hand-off · the player's
+own pause state is untouched the whole way) ·
 tab cap + laziness · suggestion merge (and the Settings toggle) ·
 star ↔ sheet ↔ hub round-trip incl. Undo · clear dialog incl. next-startup
 purge · auto-clear all three timings · fullscreen hand-off + Esc ·
@@ -97,7 +109,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 
 | Idea | Verdict | Why (plain) |
 |------|---------|-------------|
-| **Floating mini-player** (browse while a video plays in an always-on-top corner window) | **PARKED 2026-09-16** | Not feasible now: a WebView2 page is a native surface Flutter can't reliably draw above, and a separate always-on-top window needs a second window + shared mpv player. Flutter desktop has no stable multi-window support; the usual workaround (`desktop_multi_window`) is a separate engine with known media_kit blank-video issues. Revisit later. |
+| **Floating mini-player** (browse while a video plays in an always-on-top corner window) | **PARKED 2026-09-16** | Not feasible now: it needs a separate always-on-top window + shared mpv player (the pages themselves are texture-composited, so drawing over them is fine — it is the second window that is the problem). Flutter desktop has no stable multi-window support; the usual workaround (`desktop_multi_window`) is a separate engine with known media_kit blank-video issues. Revisit later. |
 | Drag & drop between player and browser | **OUT** | Web mode is a WebView (embedded), not mpv — no local drag & drop. |
 
 ---
@@ -122,6 +134,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 | 2026-09-17 | **Pop-up system: capture + badge + per-site — LOCKED** | Engine policy stays `deny` (nothing ever escapes to an OS window); a document-start shim reports every `window.open` / `target=_blank` to Dart over `webMessage` and returns a stub handle, so ad-gates pass with nothing rendered. Held-back pop-ups count into an address-bar badge (⧉) with per-URL Open; allowed sites open in a new foreground SALU tab (at the tab cap they park in the list instead — never a hijack). Per-site Allow/Block lives in the padlock panel (+ "just for this visit", session-only); the global default + exceptions list live in Settings → Web. |
 | 2026-09-17 | **Standard browser menu (⋮) — LOCKED** | One ⋮ at the row's right edge (beside 🧹, which stays): New tab · Zoom −/%/+ (Chrome's ladder, per tab, % resets) · Desktop mode switch (per tab, Edge-on-Windows UA + reload) · Find in page… (own highlighter — the plugin exposes no Find API) · History (Today/Yesterday/Earlier, search, per-row ×, clear-all) · Downloads (names the folder + Show in folder — no progress events reach this plugin) · Clear browsing data… (the same dialog as 🧹) · Open in Edge (the `microsoft-edge:` escape door) · Settings. Keyboard: Ctrl+T/W/R/L/F and Ctrl +/−/0 while Flutter holds focus (a native-focused page eats keys first — no accelerator hook exists). |
 | 2026-09-17 | **Page colours — LOCKED** | Pages render **light by default**, the way Edge shows them. Cause of the old mismatch: WebView2 answers `prefers-color-scheme` from the **Windows app mode** (its `PreferredColorScheme` profile control defaults to Auto = follow the OS; Edge answers from its own Appearance setting), so on a dark-mode PC a site with a dark theme (pixabay.com) went dark inside SALU while staying white in Edge. Fix: the engine's own supported control — `ICoreWebView2Profile::put_PreferredColorScheme` — reached through the vendored plugin's one addition (`third_party/webview_windows`, VENDOR_NOTES.md); the earlier `--blink-settings` command-line switch was undocumented, silently lost to the host's preference sync, and restart-bound — removed. Settings → Web → **Page colours**: Light (default) · Dark · Follow Windows; applies **immediately** — every live page re-themes in place (`WebDataControlService.applyPageScheme`), new tabs inherit at birth. SALU's own chrome stays dark regardless. |
+| 2026-09-17 | **Mode keep-alive — LOCKED** | The Player/Web switch **hides the browser, it does not close it**. The web surface is born on the first Web entry and stays in the tree for the life of the process (the home screen Offstages it instead of unmounting it), so Web → Player → Web lands on the **exact same pages** — same tabs, URLs, scroll and state, nothing reloaded. Leaving Web, every running page's **own media pauses first** (no site may play unattended behind the player — the same courtesy SALU's player gets when Web opens), then its renderer **suspends** (the engine's Suspend/Resume — the same contract the off-stage tabs already use), and a page that owns the screen releases the fullscreen hand-off on the way out. Returning to Web, the active tab resumes and every page sits **paused**, like the player; resume is manual, on the site's own controls. RAM stays honest the whole time: hidden renderers are suspended, not idle-playing. Mini-bar swaps still tear the tree (mini.md §8 — a 32-px bar hosts no browser), and the app's **close** still runs key function 8 exactly as written. |
 
 ---
 
@@ -153,7 +166,7 @@ ship its own browser engine — it *wraps* the one Windows already has.
 | 5 | **Navigation buttons** | **Home · Back · Forward · Reload** (icons, left of the URL bar). "Close Browser" is replaced by the Player toggle in the title strip. See layout below. |
 | 6 | **New tab on new bookmark** | Clicking a different bookmark while the browser is open spawns a **new tab** instead of overwriting the current page. |
 | 7 | **No SALU media controls** | The SALU OSC (Play/Pause, Volume) is hidden in browser mode — streaming sites use their own player controls. |
-| 8 | **Memory cleanup** | On "Close Browser", destroy the WebView controllers, clear the session cache, and flush RAM so SALU stays lightweight. |
+| 8 | **Memory cleanup** | When the app **closes** (the close guard), destroy the WebView controllers, clear the session cache, and flush RAM so SALU stays lightweight. A Player/Web mode switch does NOT destroy anything (see **Mode keep-alive — LOCKED** in the locked decisions) — it parks the running pages instead, and the surface only dies with the app. |
 | 9 | **Saved bookmarks** | Up to **15 Web Bookmarks** (plus 10 M3U streams) stored instantly with `shared_preferences`. |
 | 10 | **WebView2 updates** | Settings → Updates can check for and update the WebView2 linker (`WebView2Loader.dll`) and `yt-dlp`. |
 

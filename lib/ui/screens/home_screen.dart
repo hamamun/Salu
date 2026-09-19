@@ -67,9 +67,24 @@ class _HomeScreenState extends State<HomeScreen> {
   final WindowStateService _windows = WindowStateService.instance;
 
   /// Player · Web — which surface owns the window (web.md). In Web mode
-  /// the video tree is not built at all, exactly like mini's rule: the
-  /// browser fills the stage, the OSC and panels are out of work.
+  /// the browser fills the stage; the player tree steps out as before
+  /// (its engine lives in [PlayerService], so the paused state survives)
+  /// while the browser itself now stays in the tree (web.md · mode
+  /// keep-alive) — a switch back is instant and nothing is lost.
   final BrowserService _browser = BrowserService.instance;
+
+  /// Whether the web surface has ever been born. The first time Web mode
+  /// is entered the browser is mounted and, from then on, it STAYS in the
+  /// tree for the life of the app — a mode switch only Offstages it, it
+  /// never unmounts it (web.md · mode keep-alive). It is disposed only
+  /// when the whole screen dies.
+  bool _webBorn = false;
+
+  /// Named focus nodes so the keyboard follows whichever surface owns the
+  /// window. Offstage keeps a widget in the tree, so `autofocus` does not
+  /// re-fire on re-show — the mode handler moves focus explicitly.
+  final FocusNode _playerFocus = FocusNode();
+  final FocusNode _webFocus = FocusNode();
 
   /// Unified global activity state: moving the mouse anywhere over the
   /// window — or pressing a non-transport key — reveals the chrome;
@@ -123,9 +138,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // The full window and the mini bar are two different trees — swapping
     // between them tears one down and builds the other (mini.md §8 · §9).
     _windows.mode.addListener(_onWindowModeChanged);
-    // Player · Web swaps the full tree's CONTENT the same way: the video
-    // canvas, the OSC and the panels step out while the browser is on
-    // stage (web.md — "No SALU media controls in Web mode").
+    // Player · Web decides which SURFACE owns the window: the player tree
+    // steps out as before (its engine is service-side), while the browser
+    // — once born — stays in the tree, just hidden (web.md · mode
+    // keep-alive + "No SALU media controls in Web mode").
     _browser.mode.addListener(_onSaluModeChanged);
     // While transient UI (open pill, URL modal) is up, the chrome must
     // not auto-hide beneath it; when the last lock releases, restart the
@@ -169,6 +185,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _browser.mode.removeListener(_onSaluModeChanged);
     ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
     _player.transportState.removeListener(_onTransportStateChanged);
+    _playerFocus.dispose();
+    _webFocus.dispose();
     super.dispose();
   }
 
@@ -217,8 +235,23 @@ class _HomeScreenState extends State<HomeScreen> {
   /// way mini does (web.md: "No SALU media controls in the browser"; the
   /// panels would be waiting behind a page otherwise) and empties the
   /// deck, so no whisper flashes over the first navigation.
+  ///
+  /// The swap also BIRTHS the web surface the first time it is needed:
+  /// from then on it lives in the full tree and the Offstage flag alone
+  /// hides it (web.md · mode keep-alive) — the player tree, whose engine
+  /// is in [PlayerService], comes and goes as before. The pages
+  /// themselves do not park or unpark — [BrowserScreen] watches the same
+  /// mode and handles its tabs.
   void _onSaluModeChanged() {
-    if (_browser.isWeb) {
+    final bool toWeb = _browser.isWeb;
+    final FocusNode target = toWeb ? _webFocus : _playerFocus;
+    // The FIRST web entry is the browser's own focus story — a fresh tab
+    // lands with the caret in the omnibox (focusAddress: true) and the
+    // hand-off below must not steal it. Every other switch is an
+    // explicit move of the keyboard to the surface that just won.
+    final bool webJustBorn = toWeb && !_webBorn;
+    if (toWeb) {
+      _webBorn = true;
       PanelService.instance.closePlaylist();
       PanelService.instance.closeTrackPanel();
       PanelService.instance.closeTunePanel();
@@ -228,6 +261,14 @@ class _HomeScreenState extends State<HomeScreen> {
     // Coming back to Player mode re-arms the chrome countdown the web
     // branch paused; entering Web the call is simply ignored.
     _restartHideTimer();
+    // The web surface outlives the swap, so its focus never re-asks
+    // itself — move the keyboard by hand, after the frame that just
+    // re-attached (or newly attached) the surface. For the player it is
+    // the guarantee behind the remounted tree's autofocus.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || webJustBorn) return;
+      target.requestFocus();
+    });
   }
 
   /// The full window in Web mode: the title strip — Player · Web switch at
@@ -239,7 +280,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.videoBackdrop,
       body: Focus(
-        autofocus: true,
+        // No autofocus: the surface now lives in the tree across the
+        // whole app, and the mode handler moves the keyboard to it
+        // explicitly (see [_onSaluModeChanged]).
+        focusNode: _webFocus,
         onKeyEvent: _onKeyEvent,
         child: ListenableBuilder(
           listenable: _browser.pageFullscreen,
@@ -742,18 +786,51 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// The full window: video canvas, fused top chrome, panels, deck — the
-  /// tree that has always been there. In Web mode the browser paints this
-  /// window instead (web.md) — a tree swap, mini's rule reused.
+  /// The full window (web.md · mode keep-alive). The player surface
+  /// comes and goes exactly as before — its engine lives in
+  /// [PlayerService], so unmounting it while the browser is on stage
+  /// changes nothing about the paused state. The WEB surface, however,
+  /// is born on the first Web entry and then lives in the tree for the
+  /// life of the process: a mode switch only Offstages it (its texture
+  /// is simply not painted), and only an app close tears it down
+  /// (key function 8).
   Widget _buildFull() {
-    if (_browser.isWeb) return _buildWeb();
+    final bool web = _browser.isWeb;
 
+    return Scaffold(
+      backgroundColor: web ? AppColors.videoBackdrop : AppColors.background,
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          // Player mode owns the player surface — not built at all while
+          // Web mode owns the window, the way it never was before the
+          // keep-alive.
+          if (!web) _buildPlayer(),
+          // The web surface — hidden (Offstage) while the player owns the
+          // window, kept alive so a switch back lands on the exact pages
+          // (web.md · mode keep-alive).
+          if (_webBorn)
+            Offstage(
+              offstage: !web,
+              child: _buildWeb(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// The player's whole surface: drop + hover + every layer, the tree
+  /// the full window has always had. Built only while Player mode owns
+  /// the window — the engine is in [PlayerService], so the swap back and
+  /// forth costs the tree, not the state.
+  Widget _buildPlayer() {
     final bool chromeVisible = _chromeVisible || _dropHovering;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Focus(
         autofocus: true,
+        focusNode: _playerFocus,
         onKeyEvent: _onKeyEvent,
         child: DropTarget(
           onDragEntered: (_) => setState(() => _dropHovering = true),
