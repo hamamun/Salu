@@ -4,14 +4,26 @@
 > mode only** — five marks on the picture: shuffle · repeat · info · remote ·
 > settings. Written as the handoff for the session that builds it.
 >
-> **Status:** DESIGN REVIEW — nothing here is locked and nothing is
-> implemented. The owner reviews the preview first, answers §12, then the
-> decisions land here as LOCKED and only then does code move.
+> **Status:** CONCEPT LOCKED (2026-09-19). The owner reviewed the preview and
+> picked **concept A · the second row** — now the design of record (§3).
+> Everything else here is still open: the remaining §12 questions are answered
+> before code starts, and no `lib/` file moves until they are.
 >
 > **Read first:** `follow.md` (the binding design contract), then `info.md`
 > (the field inventory Info will show) and `salu_context.md` (phases).
 
 Preview: `design/right-menu-preview/index.html` (+ its `README.md`).
+
+---
+
+## 0 · Decision log
+
+| Date | Decision | State |
+|---|---|---|
+| 2026-09-19 | The layer is a **right-button menu in Player mode only** — never over the web surface, never in mini | ✅ LOCKED (owner's brief) |
+| 2026-09-19 | The five marks, in this order: **shuffle · repeat · info · remote · settings** | ✅ LOCKED (owner's brief) |
+| 2026-09-19 | **Concept A · the second row** — one slim frosted strip at the click point. *Concept B (the ring) is parked, not rejected* | ✅ LOCKED (owner, from `design/right-menu-preview/`) |
+| — | Everything else — the two new marks, the Info surface, Remote's payload, frozen vs live | ⏳ open (§12) |
 
 ---
 
@@ -59,23 +71,29 @@ nothing today and nothing needs changing.
 
 ---
 
-## 3. Two concepts — the owner picks one (PROPOSED, not locked)
+## 3. The concept — **A · the second row** (LOCKED 2026-09-19)
 
-Both are built and live in the preview. Same five marks, same order, same
-behaviour; only the arrival differs.
+### 3.1 A · the second row — the design of record
 
-**A · the second row — RECOMMENDED.** One slim frosted strip, centred on the
-cursor and dropped 10 px below it. Reads instantly, extends cleanly, and its
-geometry is the panels' geometry (glass + hairline outline + radius).
+One slim frosted strip, centred on the cursor and dropped 10 px below it, the
+five marks in order with pitch-only grouping. Reads instantly, extends
+cleanly, and its geometry is the panels' geometry (glass + hairline outline +
+radius) — the numbers are in §5.
 
-**B · the ring.** The five marks bloom on a 58 px circle around the cursor,
-staggered 20 ms apart — hairline glass, no rectangle anywhere, and its shapes
-echo Salu's own circular grammar (the volume wheel, the Restart arc, the still
-light). More Salu, harder to aim, harder to extend past five items.
+Locked by the owner after the preview (`design/right-menu-preview/`), where A
+is the default view.
 
-**Decide:** A or B. (If A and B are still close after the preview, ship A and
-keep B's arc in the notes — an arrival animation is a later, cheaper change
-than a placement change.)
+### 3.2 B · the ring — parked, not rejected
+
+The five marks bloom on a 58 px circle around the cursor, staggered 20 ms
+apart — hairline glass, no rectangle anywhere, and its shapes echo Salu's own
+circular grammar (the volume wheel, the Restart arc, the still light).
+
+**Parked, not deleted.** The live switch stays in the preview page so the idea
+is never lost, and the one piece of it worth borrowing later is the *arrival*
+— a staggered bloom is a cheaper change to A's own placement than a new
+placement would be. Do not build it now; revisit only if A ever feels plain
+on a real build.
 
 ---
 
@@ -106,7 +124,7 @@ too subtle in the real app — park until seen on a real build.
 
 ---
 
-## 5. The strip (concept A) — geometry, matching the existing pitch language
+## 5. The strip — geometry (concept A, LOCKED), matching the existing pitch language
 
 | Property | Value | Why |
 |---|---|---|
@@ -295,7 +313,7 @@ decision comes first.
 
 ## 12. Open questions — the owner answers these before code starts
 
-1. **Concept A or B?** (§3)
+1. ~~**Concept A or B?**~~ — **ANSWERED 2026-09-19: A · the second row** (§3).
 2. **Info mark:** circle-i (recommended) or sheet? **Remote mark:** scan frame
    (recommended) or phone + arcs (fails at true size — see §4)?
 3. **Info or About first?** Merge them (§8.1) or ship About as it stands and
@@ -332,7 +350,7 @@ Widget tests, in the style of `test/mini_bar_test.dart`:
 
 ## 14. Definition of done
 
-- [ ] Concept locked in this file, §3 updated from PROPOSED to LOCKED.
+- [x] **Concept locked in this file** — §3 and the §0 log carry A · the second row (2026-09-19).
 - [ ] §12 answered and written into this file.
 - [ ] `InfoMark` + `RemoteMark` added to the family, listed in the family's own
       header comment in `salu_marks.dart`.

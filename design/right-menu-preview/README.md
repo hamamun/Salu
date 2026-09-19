@@ -18,15 +18,26 @@ python3 -m http.server 8533 --bind 0.0.0.0
 
 Right-click the picture and five marks arrive at the cursor —
 **shuffle · repeat · info · remote · settings** — in a slim frosted strip
-(concept **A**) or blooming around the pointer (concept **B**). Toggles stay
-open; doors leave. Player mode only.
+(**concept A · the second row**). Toggles stay open; doors leave. Player mode
+only.
+
+## Status: concept LOCKED (2026-09-19)
+
+The owner picked **A · the second row** from this page; it is now the design of
+record in `right_item.md` §3. **B · the ring** stays switchable here as a parked
+alternative — not rejected, not built.
+
+| Concept | State |
+|---|---|
+| **A · the second row** | ✅ LOCKED 2026-09-19 — the default view of this page |
+| B · the ring | ⏸ parked (the staggered arrival is the one piece worth borrowing later) |
 
 ## What it demonstrates
 
 | Behavior | Decision |
 |---|---|
 | Overlay over mpv video **and** album art | Allowed — both are Flutter textures/widgets; Salu already stacks glass panels there (§0 of the page) |
-| Two concepts, switchable live | A · **the second row** (recommended) · B · **the ring** |
+| Two concepts, switchable live | A · **the second row** (**LOCKED**) · B · **the ring** (parked) |
 | Right-click closes first (panel → door → menu) | follow.md rule 3's one-popup world; the panels' own dismiss barriers already own the gesture |
 | Opens only on a clean screen | else the menu would fight the panel it just closed |
 | Shuffle / repeat = **toggles that stay** | one visit flips both; the Playlist header keeps the same two controls |
