@@ -128,10 +128,9 @@ class _MenuDivider extends StatelessWidget {
 class _MenuRow extends StatefulWidget {
   const _MenuRow({
     required this.label,
-    this.trailing,
     this.enabled = true,
     this.onTap,
-  });
+  }) : trailing = null;
 
   final String label;
   final Widget? trailing;
