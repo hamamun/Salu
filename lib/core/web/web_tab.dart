@@ -423,6 +423,12 @@ if (!window.__saluEsc) {
       _controller = c;
       WebDataControlService.instance.attach(c);
       _wire(c);
+      // Downloads (web.md · Downloads lock): SALU answers the engine's
+      // "where should this file land?" — asked at `DownloadStarting`, with
+      // the download itself held on the engine's own deferral until the
+      // answer arrives. In place BEFORE the first loadUrl, so a page that
+      // starts a download on arrival cannot beat it.
+      c.downloadStartingDelegate = _onDownloadStarting;
       // Popups blocked by default (web.md · popups lock) — awaited, and
       // the capture shim with it, because both must be in force BEFORE
       // the first loadUrl lands: `addScriptToExecuteOnDocumentCreated`
@@ -447,6 +453,20 @@ if (!window.__saluEsc) {
         await c
             .setPreferredColorScheme(WebDataControlService.pageSchemeValue(
                 WebDataControlService.currentPageScheme))
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {}
+      // Downloads (web.md · Downloads lock), the settings halves: whether
+      // each download asks, and the folder the question starts in (the
+      // profile's own default download folder). Set before the first load
+      // so the very first download of a session already obeys; later
+      // changes reach this view live via WebDataControlService.
+      try {
+        await c
+            .setDownloadPreferences(
+              askWhereToSave: WebDataControlService.askWhereToSave,
+              defaultDownloadFolder:
+                  WebDataControlService.configuredDownloadFolder,
+            )
             .timeout(const Duration(seconds: 2));
       } catch (_) {}
       // A lazy tab may have chosen its zoom / dress before the engine
@@ -563,6 +583,31 @@ if (!window.__saluEsc) {
     );
   }
 
+  /// The other direction: the engine's QUESTION about one download, asked
+  /// at `DownloadStarting` and held on the engine's own deferral until
+  /// SALU answers (web.md · Downloads lock). Every decision about where a
+  /// file belongs lives in [WebDownloadService] — the one-dialog-at-a-time
+  /// queue, the asking switch, the folder, the native Save As and its
+  /// failure modes; this is only the translation between the plugin's
+  /// words and SALU's.
+  ///
+  /// `null` means "your own path stands" — which is also the answer a tab
+  /// being torn down gives, because a question nobody is left to answer
+  /// must never cost the viewer their file.
+  Future<WebviewDownloadDecision?> _onDownloadStarting(
+    WebviewDownloadRequest request,
+  ) async {
+    if (_disposed) return null;
+    final WebSaveAnswer answer = await WebDownloadService.instance
+        .askWhereToSave(request.suggestedPath);
+    if (_disposed) return null;
+    return switch (answer.kind) {
+      WebSaveKind.cancel => const WebviewDownloadDecision.cancel(),
+      WebSaveKind.save => WebviewDownloadDecision.saveTo(answer.path ?? ''),
+      WebSaveKind.engineDefault => null,
+    };
+  }
+
   /// The shim's reports arrive here (`chrome.webview.postMessage` → the
   /// plugin's `webMessage` stream, which arrives already json-decoded —
   /// our reports land as a Map). Anything that is not one of ours —
@@ -644,6 +689,11 @@ if (!window.__saluEsc) {
     _controller = null;
     if (c != null) {
       WebDataControlService.instance.detach(c);
+      // A tab on its way out answers no more download questions — the
+      // engine's own path stands for anything still in flight (and the
+      // plugin's life flag covers the case where the view is already
+      // gone by the time an answer arrives).
+      c.downloadStartingDelegate = null;
       try {
         await c.clearCache().timeout(const Duration(milliseconds: 800));
       } catch (_) {}

@@ -41,6 +41,7 @@ constexpr auto kMethodClearCache = "clearCache";
 constexpr auto kMethodSetCacheDisabled = "setCacheDisabled";
 constexpr auto kMethodSetPopupWindowPolicy = "setPopupWindowPolicy";
 constexpr auto kMethodSetPreferredColorScheme = "setPreferredColorScheme";
+constexpr auto kMethodSetDownloadPreferences = "setDownloadPreferences";
 constexpr auto kMethodSetFpsLimit = "setFpsLimit";
 
 constexpr auto kEventType = "type";
@@ -251,6 +252,18 @@ void WebviewBridge::RegisterEventHandlers() {
     EmitEvent(event);
   });
 
+  // SALU addition (VENDOR_NOTES.md): the asking half of Settings -> Web ->
+  // Downloads. Unlike the event above, which only reports what already
+  // happened, this one is a QUESTION — the engine is holding the
+  // download's deferral until Dart answers with a path or a cancel.
+  webview_->OnDownloadStarting(
+      [this](const std::string& url, const std::string& suggestedPath,
+             const std::string& mimeType, INT64 totalBytesToReceive,
+             Webview::WebviewDownloadStartingCompleter completer) {
+        OnDownloadStarting(url, suggestedPath, mimeType, totalBytesToReceive,
+                           completer);
+      });
+
   webview_->OnHistoryChanged([this](WebviewHistoryChanged historyChanged) {
     const auto event = flutter::EncodableValue(flutter::EncodableMap{
         {flutter::EncodableValue(kEventType),
@@ -351,6 +364,55 @@ void WebviewBridge::OnPermissionRequested(
             completer(WebviewPermissionState::Default);
           },
           [completer]() { completer(WebviewPermissionState::Default); }));
+}
+
+void WebviewBridge::OnDownloadStarting(
+    const std::string& url, const std::string& suggestedPath,
+    const std::string& mimeType, INT64 totalBytesToReceive,
+    Webview::WebviewDownloadStartingCompleter completer) {
+  auto args = std::make_unique<flutter::EncodableValue>(flutter::EncodableMap{
+      {"url", url},
+      {"suggestedPath", suggestedPath},
+      {"mimeType", mimeType},
+      {"totalBytesToReceive", totalBytesToReceive}});
+
+  // Every leg that cannot produce an answer — Dart threw, the handler is
+  // not set, the reply has the wrong shape — answers "keep the engine's
+  // own path" (`false, ""`) and never "cancel": a prompt SALU could not
+  // show must not cost the viewer their file.
+  method_channel_->InvokeMethod(
+      "downloadStarting", std::move(args),
+      std::make_unique<
+          flutter::MethodResultFunctions<flutter::EncodableValue>>(
+          [completer](const flutter::EncodableValue* result) {
+            if (const auto* map = std::get_if<flutter::EncodableMap>(result)) {
+              const auto cancel =
+                  map->find(flutter::EncodableValue("cancel"));
+              if (cancel != map->end()) {
+                if (const auto* flag = std::get_if<bool>(&cancel->second)) {
+                  if (*flag) {
+                    return completer(true, std::string());
+                  }
+                }
+              }
+              const auto path = map->find(flutter::EncodableValue("path"));
+              if (path != map->end()) {
+                if (const auto* value =
+                        std::get_if<std::string>(&path->second)) {
+                  if (!value->empty()) {
+                    return completer(false, *value);
+                  }
+                }
+              }
+            }
+            completer(false, std::string());
+          },
+          [completer](const std::string& error_code,
+                      const std::string& error_message,
+                      const flutter::EncodableValue* error_details) {
+            completer(false, std::string());
+          },
+          [completer]() { completer(false, std::string()); }));
 }
 
 void WebviewBridge::HandleMethodCall(
@@ -703,6 +765,37 @@ void WebviewBridge::HandleMethodCall(
                            "Setting the preferred color scheme failed.");
     }
     return result->Error(kErrorInvalidArgs);
+  }
+
+  // setDownloadPreferences: {"askWhereToSave": bool,
+  // "defaultDownloadFolder": string} (SALU addition, VENDOR_NOTES.md).
+  // The asking half always applies — it is SALU's own flag. The folder
+  // half can fail on its own (a runtime too old for the profile API, a
+  // path the engine refuses), and the bool answer says whether it did.
+  if (method_name.compare(kMethodSetDownloadPreferences) == 0) {
+    const auto* map =
+        std::get_if<flutter::EncodableMap>(method_call.arguments());
+    if (!map) {
+      return result->Error(kErrorInvalidArgs);
+    }
+    bool askWhereToSave = false;
+    std::string defaultDownloadFolder;
+    const auto ask = map->find(flutter::EncodableValue("askWhereToSave"));
+    if (ask != map->end()) {
+      if (const auto* value = std::get_if<bool>(&ask->second)) {
+        askWhereToSave = *value;
+      }
+    }
+    const auto folder =
+        map->find(flutter::EncodableValue("defaultDownloadFolder"));
+    if (folder != map->end()) {
+      if (const auto* value = std::get_if<std::string>(&folder->second)) {
+        defaultDownloadFolder = *value;
+      }
+    }
+    const bool applied = webview_->SetDownloadPreferences(
+        askWhereToSave, defaultDownloadFolder);
+    return result->Success(flutter::EncodableValue(applied));
   }
 
   if (method_name.compare(kMethodSetFpsLimit) == 0) {

@@ -35,6 +35,66 @@ typedef PermissionRequestedDelegate
     = FutureOr<WebviewPermissionDecision> Function(
         String url, WebviewPermissionKind permissionKind, bool isUserInitiated);
 
+/// One download the engine has just started, offered to the host BEFORE a
+/// byte of it is written (SALU addition, VENDOR_NOTES.md).
+class WebviewDownloadRequest {
+  const WebviewDownloadRequest({
+    required this.url,
+    required this.suggestedPath,
+    required this.mimeType,
+    required this.totalBytesToReceive,
+  });
+
+  /// The URL being downloaded.
+  final String url;
+
+  /// The full path the engine would have used on its own — its folder plus
+  /// the file name it derived from the response.
+  final String suggestedPath;
+
+  /// The response's MIME type; empty when the server gave none.
+  final String mimeType;
+
+  /// Total size in bytes; `0` when the server never said.
+  final int totalBytesToReceive;
+
+  /// The file name half of [suggestedPath] — what a Save As pre-fills.
+  /// Split by hand rather than by `package:path`: the engine only ever
+  /// suggests Windows paths, and this library must not grow a dependency.
+  String get suggestedFileName {
+    final cut = suggestedPath.lastIndexOf(RegExp(r'[\\/]'));
+    return cut >= 0 ? suggestedPath.substring(cut + 1) : suggestedPath;
+  }
+
+  /// The folder half of [suggestedPath] — a Save As starting point for a
+  /// host with no folder of its own to offer. Empty when there is none.
+  String get suggestedDirectory {
+    final cut = suggestedPath.lastIndexOf(RegExp(r'[\\/]'));
+    return cut > 0 ? suggestedPath.substring(0, cut) : '';
+  }
+}
+
+/// The host's answer to a [WebviewDownloadRequest] (SALU addition).
+class WebviewDownloadDecision {
+  /// Save the download to [path] — an absolute path, file name included.
+  const WebviewDownloadDecision.saveTo(this.path) : cancel = false;
+
+  /// Drop the download: nothing is written and nothing is reported.
+  const WebviewDownloadDecision.cancel()
+      : path = null,
+        cancel = true;
+
+  final String? path;
+  final bool cancel;
+}
+
+/// Asked where one download should land. Answering `null` leaves the
+/// engine's own [WebviewDownloadRequest.suggestedPath] in force — the
+/// file still downloads, just where the engine said.
+typedef DownloadStartingDelegate
+    = FutureOr<WebviewDownloadDecision?> Function(
+        WebviewDownloadRequest request);
+
 typedef ScriptID = String;
 
 /// Attempts to translate a button constant such as [kPrimaryMouseButton]
@@ -113,6 +173,13 @@ class WebviewController extends ValueNotifier<WebviewValue> {
   Future<void> get ready => _creatingCompleter.future;
 
   PermissionRequestedDelegate? _permissionRequested;
+
+  /// Where each download should land, asked BEFORE the engine writes a
+  /// byte of it (SALU addition, VENDOR_NOTES.md). Left null — upstream's
+  /// behaviour — the engine's own suggested path is used and Dart is never
+  /// asked. Only consulted while this view has "ask where to save" turned
+  /// on ([setDownloadPreferences]).
+  DownloadStartingDelegate? downloadStartingDelegate;
 
   late MethodChannel _methodChannel;
   late EventChannel _eventChannel;
@@ -255,6 +322,13 @@ class WebviewController extends ValueNotifier<WebviewValue> {
               call.arguments as Map<dynamic, dynamic>);
         }
 
+        // SALU addition (VENDOR_NOTES.md): the engine is holding this
+        // download's deferral until the answer comes back, so this leg is
+        // the one that decides where a file lands — or whether it lands.
+        if (call.method == 'downloadStarting') {
+          return _onDownloadStarting(call.arguments as Map<dynamic, dynamic>);
+        }
+
         throw MissingPluginException('Unknown method ${call.method}');
       });
 
@@ -292,6 +366,40 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     }
 
     return null;
+  }
+
+  /// SALU addition (VENDOR_NOTES.md): turns one `downloadStarting` call
+  /// into the engine's two possible answers — `{'path': …}` to redirect
+  /// the download, `{'cancel': true}` to drop it. Anything else (no
+  /// delegate, no decision, an empty path) answers `null`, which the
+  /// engine reads as "your own suggested path is fine": a question SALU
+  /// could not ask must never cost the viewer their file.
+  Future<Map<String, dynamic>?> _onDownloadStarting(
+      Map<dynamic, dynamic> args) async {
+    final delegate = downloadStartingDelegate;
+    if (delegate == null) {
+      return null;
+    }
+
+    final request = WebviewDownloadRequest(
+      url: args['url'] as String? ?? '',
+      suggestedPath: args['suggestedPath'] as String? ?? '',
+      mimeType: args['mimeType'] as String? ?? '',
+      totalBytesToReceive: args['totalBytesToReceive'] as int? ?? 0,
+    );
+
+    final decision = await delegate(request);
+    if (decision == null) {
+      return null;
+    }
+    if (decision.cancel) {
+      return <String, dynamic>{'cancel': true};
+    }
+    final path = decision.path;
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    return <String, dynamic>{'path': path};
   }
 
   @override
@@ -504,6 +612,36 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     }
     assert(value.isInitialized);
     return _methodChannel.invokeMethod('setPreferredColorScheme', scheme);
+  }
+
+  /// Tells the engine where downloads go (SALU addition, VENDOR_NOTES.md).
+  ///
+  /// [askWhereToSave] decides whether the host is asked about each
+  /// download — through [downloadStartingDelegate], with the engine
+  /// waiting on its own deferral for the answer. Off, every file goes
+  /// straight to the folder with no round trip at all.
+  ///
+  /// [defaultDownloadFolder] sets the profile's own default download
+  /// folder (the engine persists it in the user data folder and creates
+  /// it at the next download if it is missing). Null or empty leaves the
+  /// current one alone — which, untouched, is the system Downloads
+  /// folder.
+  ///
+  /// Returns false when the folder half could not be applied (a runtime
+  /// too old for the profile API, or a path the engine refuses); the
+  /// asking half applies either way.
+  Future<bool> setDownloadPreferences(
+      {required bool askWhereToSave, String? defaultDownloadFolder}) async {
+    if (_isDisposed) {
+      return false;
+    }
+    assert(value.isInitialized);
+    final result = await _methodChannel.invokeMethod<bool>(
+        'setDownloadPreferences', <String, dynamic>{
+      'askWhereToSave': askWhereToSave,
+      'defaultDownloadFolder': defaultDownloadFolder ?? '',
+    });
+    return result ?? false;
   }
 
   /// Suspends the web view.

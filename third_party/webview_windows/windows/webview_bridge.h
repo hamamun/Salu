@@ -52,4 +52,12 @@ class WebviewBridge {
       const std::string& url, WebviewPermissionKind permissionKind,
       bool is_user_initiated,
       Webview::WebviewPermissionRequestedCompleter completer);
+
+  // SALU addition (VENDOR_NOTES.md): asks Dart where one download should
+  // land and hands the answer back to the engine, which is waiting on its
+  // `DownloadStarting` deferral the whole time.
+  void OnDownloadStarting(
+      const std::string& url, const std::string& suggestedPath,
+      const std::string& mimeType, INT64 totalBytesToReceive,
+      Webview::WebviewDownloadStartingCompleter completer);
 };

@@ -35,13 +35,14 @@ class BrowserDownloadsPanel extends StatelessWidget {
   /// that is not also a player cannot offer.
   final ValueChanged<WebDownloadItem> onPlay;
 
-  /// Opens the Downloads folder with this very file selected.
+  /// Opens the file's own folder with this very file selected.
   final ValueChanged<WebDownloadItem> onReveal;
 
   /// Drops one row (the file stays on the PC).
   final ValueChanged<String> onRemove;
 
-  /// The footer: the Downloads folder itself, log empty or not.
+  /// The footer: the download folder itself (Settings → Web →
+  /// Downloads), log empty or not.
   final VoidCallback onOpenFolder;
   final VoidCallback onClearFinished;
   final VoidCallback onClose;
@@ -162,7 +163,7 @@ class BrowserDownloadsPanel extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             const Text(
-                              'Open Downloads folder',
+                              'Open download folder',
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,

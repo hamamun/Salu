@@ -7,6 +7,7 @@ import '../../core/language_names.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
 import '../../core/tune_service.dart';
+import '../../core/web/web_download_service.dart';
 import '../../core/web/web_popup_service.dart';
 import '../../theme/app_theme.dart';
 import '../osd/osd_controller.dart';
@@ -185,6 +186,25 @@ class _WebTab extends StatelessWidget {
           ),
           SizedBox(height: 16),
           _WebPageSchemePicker(),
+          SizedBox(height: 28),
+          Text(
+            'Downloads',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Where the files you download land. Asking opens the Windows '
+            'Save As, one download at a time.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _WebAskDownloadSwitch(),
+          SizedBox(height: 8),
+          _WebDownloadFolderRow(),
           SizedBox(height: 28),
           Text(
             'Pop-ups',
@@ -441,6 +461,177 @@ class _WebPageSchemePicker extends StatelessWidget {
                 ),
               ),
           ],
+        );
+      },
+    );
+  }
+}
+
+/// Settings → Web → Downloads: Chrome/Edge's own "Ask where to save each
+/// file before downloading". **On by default** — every download opens the
+/// native Windows Save As and not one byte is written until a place is
+/// chosen; walking away from that dialog cancels the download outright,
+/// and a cancelled download never reaches the shelf (it is not a failed
+/// one, it is a refused one). Off, files go straight to the folder below
+/// with no question at all. Either way the change reaches every live tab
+/// at once (`WebDataControlService.applyDownloadPreferences`) — no
+/// restart, and a download already travelling keeps the path it was given.
+class _WebAskDownloadSwitch extends StatelessWidget {
+  const _WebAskDownloadSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: SettingsService.instance.webAskDownloadLocation,
+      builder: (BuildContext context, bool on, Widget? _) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () =>
+              unawaited(SettingsService.instance.setWebAskDownloadLocation(!on)),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: on ? const Color(0x144C9EEB) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: on ? const Color(0x404C9EEB) : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color:
+                        on ? const Color(0x264C9EEB) : AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: IconTheme.merge(
+                    data: IconThemeData(
+                      color:
+                          on ? AppColors.accent : AppColors.textSecondary,
+                    ),
+                    child: const Icon(Icons.save_alt,
+                        size: 20, color: AppColors.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Ask where to save each file',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'Off, downloads go straight to the folder below.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _SaluSwitch(on: on),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Settings → Web → Downloads: the folder downloads belong to — and, with
+/// asking on, the folder the Save As question starts in. Empty is the
+/// honest default ("the Windows Downloads folder", a relocated one
+/// included), so the row says that in words rather than showing a path
+/// SALU guessed, and it offers the reset only once a folder of the
+/// viewer's own is in force.
+class _WebDownloadFolderRow extends StatelessWidget {
+  const _WebDownloadFolderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: SettingsService.instance.webDownloadFolder,
+      builder: (BuildContext context, String folder, Widget? _) {
+        final String trimmed = folder.trim();
+        final bool custom = trimmed.isNotEmpty;
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () =>
+                unawaited(WebDownloadService.pickDownloadFolder()),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Text(
+                          'Download location',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Tooltip(
+                          message: custom
+                              ? trimmed
+                              : 'The Windows Downloads folder',
+                          waitDuration: const Duration(milliseconds: 400),
+                          child: Text(
+                            custom ? trimmed : 'Windows Downloads folder',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  if (custom)
+                    _HoverIconButton(
+                      icon: Icons.restart_alt,
+                      tooltip: 'Use the Windows folder',
+                      onPressed: () => unawaited(
+                          SettingsService.instance.setWebDownloadFolder('')),
+                    ),
+                  _HoverIconButton(
+                    icon: Icons.folder_open,
+                    tooltip: 'Change…',
+                    onPressed: () =>
+                        unawaited(WebDownloadService.pickDownloadFolder()),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );

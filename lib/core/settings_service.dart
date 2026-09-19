@@ -133,6 +133,8 @@ class SettingsService {
   static const String _keyWebAutoClearTiming = 'web_auto_clear_timing';
   static const String _keyWebPopupDefault = 'web_popup_default';
   static const String _keyWebPageScheme = 'web_page_scheme';
+  static const String _keyWebAskDownloadLocation = 'web_ask_download_location';
+  static const String _keyWebDownloadFolder = 'web_download_folder';
 
   // ── Auto EQ (eq_imp.md §5) ─────────────────────────────────────────────
   static const String _keyAutoEq = 'auto_eq';
@@ -194,6 +196,24 @@ class SettingsService {
   /// shows them, whatever Windows app mode says.
   final ValueNotifier<WebPageScheme> webPageScheme =
       ValueNotifier<WebPageScheme>(WebPageScheme.light);
+
+  /// Whether every download asks where to land first (Settings → Web →
+  /// Downloads) — Chrome/Edge's own "Ask where to save each file before
+  /// downloading". **On by default**: a file that arrives unannounced in a
+  /// folder nobody chose is exactly what the viewer asked SALU to stop
+  /// doing. Off, downloads go straight to [webDownloadFolder] with no
+  /// question at all. Applies to the next download, never to one already
+  /// travelling.
+  final ValueNotifier<bool> webAskDownloadLocation =
+      ValueNotifier<bool>(true);
+
+  /// Where browser downloads land, and where the Save As question starts
+  /// (Settings → Web → Downloads). **Empty by default**, which means "the
+  /// Windows Downloads folder" — the honest default, and the one that
+  /// follows a Downloads folder the viewer has already relocated
+  /// themselves. Never stored as a guess: a path only lands here from the
+  /// folder picker.
+  final ValueNotifier<String> webDownloadFolder = ValueNotifier<String>('');
 
   /// Auto EQ (eq_imp.md §5) — SALU picks a preset the moment a file loads
   /// and learns from the viewer's corrections. Default **Off**, and turning
@@ -301,6 +321,9 @@ class SettingsService {
             WebPageScheme.values.asNameMap()[rawPageScheme] ??
                 WebPageScheme.light;
       }
+      webAskDownloadLocation.value =
+          prefs.getBool(_keyWebAskDownloadLocation) ?? true;
+      webDownloadFolder.value = prefs.getString(_keyWebDownloadFolder) ?? '';
       autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
       mouseOverPreview.value = prefs.getBool(_keyMouseOverPreview) ?? false;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
@@ -332,6 +355,8 @@ class SettingsService {
       webAutoClearTiming.value = WebAutoClearTiming.onOpen;
       webPopupDefault.value = WebPopupDefault.block;
       webPageScheme.value = WebPageScheme.light;
+      webAskDownloadLocation.value = true;
+      webDownloadFolder.value = '';
       autoEq.value = false;
       mouseOverPreview.value = false;
       subtitleApiKey.value = '';
@@ -440,6 +465,44 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyWebPageScheme, scheme.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Web browser — whether each download asks where to land first
+  /// (Settings → Web → Downloads; Chrome/Edge's "Ask where to save each
+  /// file before downloading"). Persists at once and reaches every live
+  /// engine view at once: the value change is what
+  /// `WebDataControlService` listens on, and views started later read the
+  /// setting at birth (`WebTab._start`). A download already travelling is
+  /// never re-routed — its path was settled when it started.
+  Future<void> setWebAskDownloadLocation(bool on) async {
+    webAskDownloadLocation.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyWebAskDownloadLocation, on);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Web browser — where downloads land, and where the Save As question
+  /// starts (Settings → Web → Downloads). [folder] is an absolute path
+  /// from the folder picker, or '' to hand the choice back to Windows
+  /// (its own Downloads folder, relocated one included). Applies to every
+  /// live view at once, the same way the asking switch does.
+  Future<void> setWebDownloadFolder(String folder) async {
+    final String trimmed = folder.trim();
+    if (webDownloadFolder.value == trimmed) return;
+    webDownloadFolder.value = trimmed;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      if (trimmed.isEmpty) {
+        await prefs.remove(_keyWebDownloadFolder);
+      } else {
+        await prefs.setString(_keyWebDownloadFolder, trimmed);
+      }
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }

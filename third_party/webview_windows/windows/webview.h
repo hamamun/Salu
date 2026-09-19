@@ -7,6 +7,7 @@
 #include <winrt/base.h>
 
 #include <functional>
+#include <memory>
 
 class WebviewHost;
 
@@ -134,6 +135,20 @@ class Webview {
   typedef std::function<void(bool contains_fullscreen_element)>
       ContainsFullScreenElementChangedCallback;
   typedef std::function<void(WebviewDownloadEvent)> DownloadEventCallback;
+  // SALU addition (VENDOR_NOTES.md): the host's answer to "where should
+  // this download land?" — `cancelled` drops the download entirely (the
+  // viewer walked away from its own Save As), `path` is the absolute file
+  // path to save to, and an empty `path` with `cancelled` false means
+  // "keep the engine's own default". The completer is what releases the
+  // `DownloadStarting` deferral the engine is holding.
+  typedef std::function<void(bool cancelled, const std::string& path)>
+      WebviewDownloadStartingCompleter;
+  typedef std::function<void(const std::string& url,
+                             const std::string& suggested_path,
+                             const std::string& mime_type,
+                             INT64 total_bytes_to_receive,
+                             WebviewDownloadStartingCompleter completer)>
+      DownloadStartingCallback;
 
   ~Webview();
 
@@ -168,6 +183,13 @@ class Webview {
   void SetPopupWindowPolicy(WebviewPopupWindowPolicy policy);
   bool SetUserAgent(const std::string& user_agent);
   bool SetPreferredColorScheme(int scheme);
+  // SALU addition (VENDOR_NOTES.md): Settings -> Web -> Downloads. `ask`
+  // decides whether each download is offered to the host first (a Save As
+  // of the viewer's own choosing); `default_download_folder` is the
+  // profile's own DefaultDownloadFolderPath — empty leaves the engine's
+  // current folder alone.
+  bool SetDownloadPreferences(bool ask_where_to_save,
+                              const std::string& default_download_folder);
   bool OpenDevTools();
   bool SetBackgroundColor(int32_t color);
   bool SetZoomFactor(double factor);
@@ -195,6 +217,12 @@ class Webview {
 
   void OnDownloadEvent(DownloadEventCallback callback) {
     download_event_callback_ = std::move(callback);
+  }
+
+  // SALU addition (VENDOR_NOTES.md): asked BEFORE a download's path is
+  // settled, unlike OnDownloadEvent which only reports what happened.
+  void OnDownloadStarting(DownloadStartingCallback callback) {
+    download_starting_callback_ = std::move(callback);
   }
 
   void OnHistoryChanged(HistoryChangedCallback callback) {
@@ -260,6 +288,10 @@ class Webview {
   UrlChangedCallback url_changed_callback_;
   LoadingStateChangedCallback loading_state_changed_callback_;
   DownloadEventCallback download_event_callback_;
+  // SALU addition (VENDOR_NOTES.md).
+  DownloadStartingCallback download_starting_callback_;
+  bool ask_where_to_save_ = false;
+
   OnLoadErrorCallback on_load_error_callback_;
   HistoryChangedCallback history_changed_callback_;
   DocumentTitleChangedCallback document_title_changed_callback_;
@@ -271,6 +303,13 @@ class Webview {
   DevtoolsProtocolEventCallback devtools_protocol_event_callback_;
   ContainsFullScreenElementChangedCallback
       contains_fullscreen_element_changed_callback_;
+
+  // SALU addition: a download prompt OUTLIVES its `DownloadStarting`
+  // handler — the engine holds the deferral while the viewer answers —
+  // so the completer checks this flag before touching anything of `this`.
+  // The destructor flips it; the flag itself is shared, so it stays
+  // readable for as long as a completer still holds a copy.
+  std::shared_ptr<bool> alive_flag_ = std::make_shared<bool>(true);
 
   Webview(
       wil::com_ptr<ICoreWebView2CompositionController> composition_controller,
