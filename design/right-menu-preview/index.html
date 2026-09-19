@@ -85,6 +85,42 @@
   .picture::after{content:'';position:absolute;inset:0;
     background:linear-gradient(180deg,rgba(18,18,18,.72),rgba(18,18,18,.06) 30%,rgba(18,18,18,.35))}
 
+  /* the fake chrome block — the real one is 40 px title + 108 px controller.
+     The pill's drop is measured against it, so the mock keeps both halves. */
+  .ctl{position:absolute;left:0;right:0;top:40px;height:108px;z-index:6;
+    display:flex;flex-direction:column;justify-content:flex-end;padding:0 18px 12px;
+    background:linear-gradient(180deg,rgba(18,18,18,.62),rgba(18,18,18,0) 92%)}
+  .ctl .tl{height:4px;border-radius:2px;background:rgba(237,237,237,.22);margin-bottom:10px}
+  .ctl .tl i{display:block;height:4px;width:38%;border-radius:2px;background:rgba(237,237,237,.5)}
+  .ctl .row{height:36px;display:flex;align-items:center;gap:6px;color:var(--idle)}
+  .ctl .row .mk{width:36px;height:36px;display:grid;place-items:center;
+    transition:color .12s ease,transform .12s ease}
+  .ctl .row .mk svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round}
+  .ctl .row .mk svg .solid{fill:currentColor;stroke:none}
+  .ctl .row .mk:hover{color:var(--text);transform:scale(1.06)}
+  .ctl .row .plus{cursor:pointer}
+  .ctl .row .plus.on{color:var(--text)}
+  .ctl .row .plus.on svg{transform:rotate(45deg)}
+  .ctl .row .plus svg{transition:transform .13s cubic-bezier(.2,.8,.3,1)}
+  .ctl .row .ctr{flex:1;display:flex;justify-content:center;gap:22px}
+  .ctl .row .end{display:flex;gap:6px}
+
+  /* the Open pill — its top is the control row's bottom + 6, exactly as the
+     real one lands: 36 px of it hangs below the chrome block's 148 px edge */
+  .pill{position:absolute;left:18px;top:142px;z-index:7;height:42px;padding:0 8px;
+    display:flex;align-items:center;gap:2px;border-radius:21px;
+    background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--outline);box-shadow:0 8px 22px rgba(0,0,0,.4);
+    opacity:0;transform:scale(.96);transform-origin:top left;pointer-events:none;
+    transition:opacity .14s ease,transform .15s cubic-bezier(.2,.8,.3,1)}
+  .pill.show{opacity:1;transform:none;pointer-events:auto}
+  .pill .pm{width:36px;height:36px;display:grid;place-items:center;color:var(--idle);cursor:pointer;
+    transition:color .12s ease,transform .12s ease}
+  .pill .pm svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  .pill .pm:hover{color:var(--text);transform:scale(1.06)}
+
   /* fake title strip — the real one is the fused chrome block */
   .strip{position:absolute;left:0;right:0;top:0;height:40px;display:flex;align-items:center;
     gap:12px;padding:0 12px;z-index:6;color:var(--text)}
@@ -104,7 +140,7 @@
   .caps .cl{position:relative}
 
   /* the fake playlist panel — only here to prove "right-click closes first" */
-  .panel{position:absolute;top:40px;right:0;bottom:0;width:280px;z-index:5;
+  .panel{position:absolute;top:148px;right:0;bottom:0;width:280px;z-index:5;
     background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     border-left:1px solid var(--outline);padding:10px 12px;transform:translateX(102%);
     transition:transform .2s cubic-bezier(.2,.7,.3,1)}
@@ -118,7 +154,7 @@
   .panel .row.now .dot{background:var(--text)}
 
   /* ── the Info panel — left edge, below the control bar (info.md §0.2) ── */
-  .infopanel{position:absolute;left:0;top:40px;bottom:0;width:322px;z-index:8;
+  .infopanel{position:absolute;left:0;top:148px;bottom:0;width:322px;z-index:8;
     background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     border-right:1px solid var(--outline);border-top-right-radius:14px;
     display:flex;flex-direction:column;opacity:0;transform:translateX(-102%);
@@ -193,8 +229,6 @@
     color:#b9b9be;padding:3px 0}
   .door .dr b{color:#77777c;font-weight:500}
   .door .dm{font:11px/1.5 "Cascadia Mono",Consolas,monospace;color:#8f8f94;margin-top:8px}
-  .door .qr{width:152px;height:152px;color:var(--text)}
-  .door .qr rect{shape-rendering:crispEdges}
   .door .six{display:grid;place-items:center;height:96px;color:var(--idle)}
   .door .six svg{width:38px;height:38px;stroke:currentColor;fill:none;stroke-width:1.7}
   .door .six svg .solid{fill:currentColor;stroke:none}
@@ -278,7 +312,7 @@
   <div class="k">SALU · design preview · review artifact only — nothing here is wired into <code>lib/</code></div>
   <h1>The right-click layer — Player mode only</h1>
   <p>Five marks on the picture, opened by the <b>right mouse button</b>: shuffle · repeat · info ·
-  remote · settings. Two concepts are built and live below — <b>A · the second row</b>
+  info · settings. Two concepts are built and live below — <b>A · the second row</b>
   (<b>LOCKED 2026-09-19</b>) and <b>B · the ring</b> (parked, kept here so the idea
   survives). Right-click the picture to try it. Esc closes, clicking outside
   closes, and a right-click always <b>closes what is open first</b>.</p>
@@ -313,7 +347,8 @@
   <h2>1 · Marks — two new, three already in the family</h2>
   <div class="sub">The family is closed: thin monochrome strokes, round caps, ~8.5 % of size,
     drawn by hand (<code>follow.md</code> rule 6). Shuffle, repeat and settings already exist —
-    only Info and Remote need new geometry.</div>
+    <b>only Info is new</b>, and it is locked to the sheet. Remote has no mark: its seat
+    stays empty until its own workstream designs it.</div>
   <div class="grid" id="markGrid"></div>
 </section>
 
@@ -336,7 +371,7 @@
     </div>
     <button class="tgl" id="panelTgl">Playlist panel</button>
     <button class="tgl" id="resetTgl">Reset states</button>
-    <div class="hint">Stage: <b>right-click</b> · close: <b>Esc</b> or left-click the picture</div>
+    <div class="hint">Stage: <b>right-click</b> · pill: click <b>+</b> · close: <b>Esc</b> or left-click the picture</div>
   </div>
 
   <div class="stage" id="stage">
@@ -360,6 +395,22 @@
       <div class="caps">
         <div class="mn"><i></i></div><div class="mx"><i></i></div><div class="cl"><i style="border:0;background:currentColor;height:11px;width:1.4px;transform:rotate(45deg)"></i></div>
       </div>
+    </div>
+
+    <div class="ctl">
+      <div class="tl"><i></i></div>
+      <div class="row">
+        <div class="mk plus" id="plusBtn"></div>
+        <div class="mk" id="plMark"></div>
+        <div class="ctr">
+          <div class="mk" id="c1"></div><div class="mk" id="c2"></div><div class="mk" id="c3"></div>
+        </div>
+        <div class="end"><div class="mk" id="e1"></div><div class="mk" id="e2"></div></div>
+      </div>
+    </div>
+
+    <div class="pill" id="pill">
+      <div class="pm" id="p1"></div><div class="pm" id="p2"></div><div class="pm" id="p3"></div>
     </div>
 
     <div class="panel" id="panel">
@@ -419,11 +470,10 @@
       </div>
     </div>
     <div class="stgroup">
-      <div class="st">Settings · Info · Remote</div>
+      <div class="st">Info · Settings</div>
       <div class="strow">
         <div class="stcell" data-mark="settings"></div>
-        <div class="stcell" data-mark="info-a"></div>
-        <div class="stcell" data-mark="remote-a"></div>
+        <div class="stcell" data-mark="info"></div>
       </div>
     </div>
   </div>
@@ -440,7 +490,7 @@
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <section>
   <h2>4 · Both concepts, side by side — the owner picked A</h2>
-  <div class="sub">Same five marks, same order, same behaviour — only the way they arrive differs.
+  <div class="sub">Same marks, same order, same behaviour — only the way they arrive differs.
     <b>A</b> reads immediately and extends cleanly; <b>B</b> is more Salu and has no rectangle in it.</div>
   <div class="cmp">
     <figure>
@@ -464,6 +514,7 @@
     <ul>
       <li><b>Never in Web mode.</b> By construction, not by a rule: the player tree is not built while the browser owns the window, so the gesture cannot exist there.</li>
       <li><b>Never in mini mode.</b> The 32 px bar owes the viewer no popups — the mini shell builds none, and this is not the exception.</li>
+      <li><b>Remote's seat is empty.</b> The strip's order keeps room for it between repeat and info, and draws nothing there — a control that leads nowhere does not exist.</li>
       <li><b>Never the only door.</b> Shuffle and repeat keep their home in the Playlist header, Settings keeps the title-bar mark, Info gets a second visible door. Nobody is told the shortcut exists — and nobody depends on it.</li>
       <li><b>Never in channel mode for the toggles.</b> Live lists drop repeat and shuffle (the channel header already has no pair), so the menu drops them too rather than offering two dead switches.</li>
     </ul>
@@ -542,46 +593,28 @@ function settingsMark(){
   return svg(out);
 }
 
-/* Info — proposal A: the plain circle-i. B: a sheet with a folded corner and
-   two content rules (the "what is this file" reading, about + tags merged). */
-function infoMark(variant){
-  if (variant === 'i'){
-    return svg('<circle cx="10" cy="10" r="6.6"/>'
-      + '<circle cx="10" cy="6.8" r="0.95" class="solid"/>'
-      + '<path d="M10 9.6 V13.7"/>');
-  }
+/* Info — LOCKED 2026-09-19: the sheet, a page with a folded corner and two
+   content rules. (The circle-i was dropped: a letter in a circle is the one
+   shape this family would have borrowed rather than drawn.) */
+function infoMark(){
   return svg('<path d="M4.6 3.4 H11.4 L15.4 7.4 V16.6 H4.6 Z"/>'
     + '<path d="M11.4 3.4 V7.4 H15.4"/>'
     + '<path d="M7.2 10.8 H12.8 M7.2 13.6 H10.6"/>');
 }
 
-/* Remote — proposal A: a scan frame (four corner brackets + a centre dot).
-   B: a phone with two arcs, echoing the sound mark's arc language. */
-function remoteMark(variant){
-  if (variant === 'frame'){
-    return svg('<path d="M3.2 6.6 V3.2 H6.6 M13.4 3.2 H16.8 V6.6 '
-      + 'M16.8 13.4 V16.8 H13.4 M6.6 16.8 H3.2 V13.4"/>'
-      + '<circle cx="10" cy="10" r="1.15" class="solid"/>');
-  }
-  const arc = (r) => {
-    const a0 = -52*Math.PI/180, a1 = 52*Math.PI/180, cx = 12.1, cy = 10;
-    return `M ${n(cx + r*Math.cos(a0))} ${n(cy + r*Math.sin(a0))} `
-         + `A ${r} ${r} 0 0 1 ${n(cx + r*Math.cos(a1))} ${n(cy + r*Math.sin(a1))}`;
-  };
-  return svg('<rect x="4.4" y="2.6" width="7.6" height="14.8" rx="2.2"/>'
-    + `<path d="${arc(2.2)}"/><path d="${arc(4.0)}"/>`);
+function equalizerMark(){
+  return svg('<path d="M5.4 3.4 V16.6 M10 3.4 V16.6 M14.6 3.4 V16.6"/>'
+    + '<circle cx="5.4" cy="7.4" r="1.5" class="solid"/>'
+    + '<circle cx="10" cy="12.4" r="1.5" class="solid"/>'
+    + '<circle cx="14.6" cy="9.4" r="1.5" class="solid"/>');
 }
-
 const MARKS = {
   'shuffle':      { html: shuffleMark(),                  quiet: () => state.shuffle === false },
   'repeat-off':   { html: repeatMark('off'),              quiet: () => state.repeat === 'off' },
   'repeat-all':   { html: repeatMark('all') },
   'repeat-one':   { html: repeatMark('one') },
   'settings':     { html: settingsMark() },
-  'info-a':       { html: infoMark('i') },
-  'info-b':       { html: infoMark('sheet') },
-  'remote-a':     { html: remoteMark('frame') },
-  'remote-b':     { html: remoteMark('phone') }
+  'info':         { html: infoMark() }
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -594,8 +627,9 @@ const state = {
   anchor: { x: 0, y: 0 },
   shuffle: false,
   repeat: 'off',       // off | all | one
-  door: null,          // remote | settings (centred cards)
+  door: null,          // settings (a centred card)
   infoOpen: false,     // the left panel (info.md §0)
+  pill: false,         // the Open pill in the control row
   media: 'video',      // video | audio | live — drives the Info rows
   panel: false,
   busy: false          // true while the fake web page owns the window
@@ -612,11 +646,8 @@ function say(html){ note.innerHTML = html; }
   const cards = [
     ['shuffle',  'Shuffle',  'already in the family — the Playlist header\'s slot-2 mark', 'reuse'],
     ['repeat-all','Repeat',  'already in the family — off → all → one, bead for one',     'reuse'],
-    ['settings', 'Settings', 'the six-dot grid — the title bar\'s own mark',               'reuse'],
-    ['info-a',   'Info · A', 'circle + i — LOCKED: the plain international reading',        'new'],
-    ['info-b',   'Info · B', 'a sheet with a folded corner — not chosen',                    'new'],
-    ['remote-a', 'Remote · A','a scan frame — four brackets and a centre dot · LOCKED, ships with Phase 8', 'new'],
-    ['remote-b', 'Remote · B','a phone with two arcs — REFUSED: at true size the arcs merge into the body', 'new']
+    ['info',     'Info',     'the sheet, a folded corner and two content rules — LOCKED',   'new'],
+    ['settings', 'Settings', 'the six-dot grid — the title bar\'s own mark',               'reuse']
   ];
   $('markGrid').innerHTML = cards.map(([id, name, about, tag]) => `
     <div class="card">
@@ -631,7 +662,7 @@ function say(html){ note.innerHTML = html; }
 (function buildStates(){
   const labels = {'shuffle':'off · 55%|on · white + glow',
                   'repeat-off':'off','repeat-all':'all','repeat-one':'one · bead',
-                  'settings':'','info-a':'','remote-a':''};
+                  'settings':'','info':''};
   document.querySelectorAll('.stcell').forEach(cell => {
     const id = cell.dataset.mark;
     cell.insertAdjacentHTML('afterbegin', MARKS[id].html);
@@ -648,12 +679,12 @@ function say(html){ note.innerHTML = html; }
   const row = `<div class="m" style="left:64px;top:96px">
       <div class="b">${MARKS['shuffle'].html}</div><div class="b">${MARKS['repeat-all'].html}</div>
       <div class="g"></div>
-      <div class="b">${MARKS['info-a'].html}</div><div class="b">${MARKS['remote-a'].html}</div>
+      <div class="b">${MARKS['info'].html}</div>
       <div class="b">${MARKS['settings'].html}</div>
     </div>`;
   $('miniA').innerHTML = row;
 
-  const ring = [[-90,'info-a'],[-18,'remote-a'],[54,'settings'],[126,'shuffle'],[198,'repeat-all']]
+  const ring = [[-90,'info'],[54,'settings'],[126,'shuffle'],[198,'repeat-all']]
     .map(([deg,id]) => {
       const a = deg*Math.PI/180, cx = 230, cy = 105, r = 58;
       const x = cx + r*Math.cos(a) - 14, y = cy + r*Math.sin(a) - 14;
@@ -669,14 +700,13 @@ function shuffleQuiet(){ return !state.shuffle; }              // off = 55 % ink
 function repeatQuiet(){ return state.repeat === 'off' && !state.shuffle; }
 
 function menuButton(kind){
-  // kind: 'shuffle' | 'repeat' | 'info' | 'remote' | 'settings'
+  // kind: 'shuffle' | 'repeat' | 'info' | 'settings'  (remote's seat is empty)
   const lit = (kind === 'shuffle' && state.shuffle)
            || (kind === 'repeat' && state.repeat !== 'off');
   let mark, name;
   if (kind === 'shuffle')      { mark = shuffleMark(); name = 'Shuffle'; }
   else if (kind === 'repeat')  { mark = repeatMark(state.repeat); name = 'Repeat'; }
-  else if (kind === 'info')    { mark = infoMark(previewMarks.info); name = 'Info'; }
-  else if (kind === 'remote')  { mark = remoteMark(previewMarks.remote); name = 'Remote'; }
+  else if (kind === 'info')    { mark = infoMark(); name = 'Info'; }
   else                         { mark = settingsMark(); name = 'Settings'; }
 
   // Shuffle drops to 55 % while repeat-one suspends it (the header's rule).
@@ -688,12 +718,16 @@ function menuButton(kind){
 }
 
 /* Which proposal the owner is looking at — switchable in the preview */
-const previewMarks = { info: 'i', remote: 'frame' };
+/* Locked 2026-09-19: Info = the sheet. Remote has no mark — its seat is
+   reserved and empty (right_item.md §9). */
+const previewMarks = { info: 'sheet' };
 
+/* Four marks ship. Remote's seat (between repeat and info) is reserved and
+   stays EMPTY — no stand-in control (right_item.md §9). */
 function menuHTML(){
   return menuButton('shuffle') + menuButton('repeat')
        + '<div class="gap"></div>'
-       + menuButton('info') + menuButton('remote') + menuButton('settings');
+       + menuButton('info') + menuButton('settings');
 }
 
 function renderMenu(){
@@ -721,7 +755,7 @@ function placeRow(){
   menu.style.top  = y + 'px';
 }
 
-/* Placement B — the ring: five marks bloom on a 58 px circle around the
+/* Placement B — the ring: the marks bloom on a 58 px circle around the
    cursor, staggered 20 ms apart; the whole bloom slides inward at the edges. */
 function placeRing(){
   const R = 58, box = stage.getBoundingClientRect();
@@ -749,7 +783,7 @@ function openMenu(x, y){
   anchorEl._t = setTimeout(() => anchorEl.classList.remove('show'), 900);
   renderMenu();
   menu.classList.add('show');
-  say('Menu open at the cursor. <b>Toggles stay</b> (shuffle · repeat) — <b>doors leave</b> (info · remote · settings).');
+  say('Menu open at the cursor. <b>Toggles stay</b> (shuffle · repeat) — <b>doors leave</b> (info · settings). Remote\'s seat stays empty.');
 }
 
 function closeMenu(msg){
@@ -826,11 +860,6 @@ function closeInfo(msg){
 }
 
 const DOORS = {
-  remote: {
-    tag: 'mock — Remote has no payload until the Phase 8 server exists',
-    w: 214, h: 208,
-    html: `<div class="dt">Pair</div><div id="qrBox"></div>`
-  },
   settings: {
     tag: 'opens the existing Settings window (General) — nothing new to draw',
     w: 214, h: 176,
@@ -850,7 +879,6 @@ function openDoor(kind){
   doorTag.style.left = door.style.left;
   doorTag.style.top  = (parseInt(door.style.top, 10) - 24) + 'px';
   doorTag.classList.add('show');
-  if (kind === 'remote') $('qrBox').innerHTML = qrPlaceholder();
   state.door = kind;
 }
 
@@ -861,26 +889,52 @@ function closeDoor(msg){
   if (msg) say(msg);
 }
 
-/* A deterministic QR placeholder — it must not pretend to be scannable. */
-function qrPlaceholder(){
-  const N = 21, finders = [[0,0],[N-7,0],[0,N-7]];
-  const inFinder = (x,y) => finders.some(([fx,fy]) => x>=fx && x<fx+7 && y>=fy && y<fy+7);
-  let mods = '';
-  for (let y=0; y<N; y++) for (let x=0; x<N; x++){
-    if (inFinder(x,y)) continue;
-    if (((x*7 + y*13 + (x*y)%5) % 3) === 0)
-      mods += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+/* ── the fake chrome's marks + the Open pill ──────────────────────────────
+   Here because the pill's drop is exactly what the Info panel collides with:
+   the + button ends at y 136, the capsule drops 6 px and is 42 tall, so it
+   spans y 142-184 while the chrome block ends at 148 (info.md §0.2 · §0.8). */
+(function buildChrome(){
+  const put = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  put('plusBtn', svg('<path d="M10 3.6 V16.4 M3.6 10 H16.4"/>'));
+  put('plMark',  svg('<path d="M4 3 V17 M8 3 V17 M12 3 V17 M16 3 V17"/>'));
+  put('c1', svg('<path d="M6.8 4.4 L13.2 10 L6.8 15.6"/>'));
+  put('c2', svg('<rect x="4.8" y="4.8" width="10.4" height="10.4" rx="2.4"/>'));
+  put('c3', svg('<path d="M3.6 10 L8.4 5.2 M3.6 10 L8.4 14.8"/>'
+    + '<path d="M10 5.2 L14.8 10 L10 14.8"/>'));
+  put('e1', equalizerMark());
+  put('e2', svg('<path d="M3.6 3.6 H8 M12 3.6 H16.4 M3.6 16.4 H8 M12 16.4 H16.4"/>'
+    + '<path d="M10 1.6 V18.4"/>'));
+  put('p1', svg('<path d="M3.4 3.4 H12.6 V16.6 H3.4 Z"/><path d="M5.8 6.6 H10.2 M5.8 9.6 H10.2"/>'));
+  put('p2', svg('<path d="M3.4 3.4 H8.6 V8.6 H3.4 Z M11.4 3.4 H16.6 V8.6 H11.4 Z '
+    + 'M3.4 11.4 H8.6 V16.6 H3.4 Z M11.4 11.4 H16.6 V16.6 H11.4 Z"/>'));
+  put('p3', svg('<circle cx="6.8" cy="13.2" r="2.6"/>'
+    + '<path d="M8.6 8.8 L13.6 13.8 M13.6 2.2 L17.8 6.4 M11.4 6.4 H17.8 V12.8"/>'));
+  $('plusBtn').addEventListener('click', (ev) => { ev.stopPropagation(); togglePill(); });
+})();
+
+/* One popup at a time, both directions (info.md §0.8). */
+function togglePill(force){
+  const next = force === undefined ? !state.pill : force;
+  state.pill = next;
+  $('pill').classList.toggle('show', next);
+  $('plusBtn').classList.toggle('on', next);
+  if (next && state.infoOpen){
+    closeInfo();
+    say('<b>The pill opened, so Info closed</b> — one popup at a time. The overlap it dodges: '
+      + 'the pill runs y 142\u2013184 and the chrome block ends at 148, so 36 px of it would '
+      + 'sit under the panel\'s top strip.');
+  } else if (next) {
+    say('The Open pill spans y 142\u2013184; the chrome block ends at <b>y 148</b>. That 36 px is '
+      + 'exactly what the Info panel would cover \u2014 open <b>Info</b> now and the pill closes itself.');
+  } else {
+    say('Pill closed.');
   }
-  const eyes = finders.map(([fx,fy]) =>
-    `<rect x="${fx+.5}" y="${fy+.5}" width="6" height="6" fill="none" stroke="currentColor"/>`
-  + `<rect x="${fx+2}" y="${fy+2}" width="3" height="3"/>`).join('');
-  return `<svg class="qr" viewBox="-0.5 -0.5 ${N+1} ${N+1}" fill="currentColor">${eyes}${mods}</svg>`;
 }
 
 /* The panel's header: the mark that opened it, and the close mark. */
 (function buildInfoHeader(){
   const mark = document.createElement('div');
-  mark.innerHTML = infoMark(previewMarks.info);
+  mark.innerHTML = infoMark();
   $('infoHeadMark').replaceWith(mark.firstElementChild);
   const close = document.createElement('div');
   close.innerHTML = svg('<path d="M5.6 5.6 L14.4 14.4 M14.4 5.6 L5.6 14.4"/>');
@@ -906,16 +960,14 @@ function hit(kind){
       + (state.repeat === 'one' ? ' The bead appears at the arc\'s centre.' : ''));
   } else if (kind === 'info'){
     closeMenu();
+    if (state.pill) togglePill(false);        // one popup: the pill steps aside
     openInfo();
     say('Info opens as a <b>left panel</b> (info.md §0) — a live read, so it is a panel and never a modal. '
       + 'It re-reads on a media change and <b>stays open</b>.');
   } else {
     closeMenu();
     setTimeout(() => openDoor(kind), 60);
-    say('A door: the menu leaves and its surface arrives — '
-      + (kind === 'settings' ? 'the existing Settings window.'
-        : kind === 'info' ? 'Info is unbuilt; info.md has the field inventory.'
-        : 'Remote waits on the Phase 8 server; the QR has nothing to point at yet.'));
+    say('A door: the menu leaves and its surface arrives — the existing Settings window.');
   }
 }
 
@@ -1005,28 +1057,33 @@ document.addEventListener('click', (ev) => {
   }
 });
 
-/* concept switch */
+/* ── preview instruments ──────────────────────────────────────────────── */
+
+/* concept switch — A is the locked design; B stays reachable so the parked
+   idea survives (right_item.md §3). */
 $('conceptSeg').addEventListener('click', (ev) => {
   const b = ev.target.closest('button'); if (!b) return;
   state.concept = b.dataset.c;
   Array.from($('conceptSeg').children).forEach(x => x.classList.toggle('on', x === b));
   menu.className = 'menu ' + state.concept;
-  if (state.open){ closeMenu(); }
+  if (state.open) closeMenu();
   say(state.concept === 'row'
-    ? 'Concept A — the second row: one frosted strip at the click point, pitch-only grouping.'
-    : 'Concept B — the ring: marks bloom around the cursor, staggered, hairline glass, no rectangle.');
+    ? 'Concept A — the second row: <b>the locked design</b>. One frosted strip at the click point, pitch-only grouping.'
+    : 'Concept B — the ring: parked, not rejected. The staggered arrival is the one piece worth borrowing later.');
 });
+
+/* the media switch — proves the presence rules of info.md §0.5 */
 $('mediaSeg').addEventListener('click', (ev) => {
   const b = ev.target.closest('button'); if (!b) return;
   state.media = b.dataset.m;
   Array.from($('mediaSeg').children).forEach(x => x.classList.toggle('on', x === b));
-  if (state.infoOpen) renderInfo();          // re-reads, stays open (info.md §0.8)
+  if (state.infoOpen) renderInfo();          // re-reads, stays open (§0.8)
   const what = { video: 'a local video file', audio: 'a local audio file',
                  live: 'a live channel' }[state.media];
   say('Playing ' + what + ' — ' + (state.media === 'live'
       ? 'the <b>Clock &amp; file</b> group has no truth (no duration, no file), so it drops and the <b>Stream</b> group takes its place.'
       : state.media === 'audio'
-        ? 'there is no picture, so the whole <b>Picture</b> group drops — groups are not drawn empty.'
+        ? 'there is no picture, so the whole <b>Picture</b> group drops — groups are never drawn empty.'
         : 'both a picture and a file exist, so <b>Picture</b> and <b>Clock &amp; file</b> are both drawn.'));
 });
 
@@ -1039,8 +1096,8 @@ $('modeSwitch').addEventListener('click', () => {
   $('webPage').classList.toggle('on', web);
   $('mwPlayer').classList.toggle('lit', !web);
   $('mwWeb').classList.toggle('lit', web);
-  $('stripTitle').textContent = web ? 'SALU — built-in browser' : 'The Quiet Harbour — 2019 · 01:42:37';
-  if (web){ closeMenu(); closeDoor(); closeInfo(); togglePanel(false); state.panel = false; }
+  $('stripTitle').textContent = web ? 'SALU — built-in browser' : INFO_SETS[state.media].title;
+  if (web){ closeMenu(); closeDoor(); closeInfo(); togglePill(false); togglePanel(false); state.panel = false; }
   say(web
     ? 'Web mode: the player tree is unmounted. Right-click the page — nothing happens, and nothing needs to be remembered.'
     : 'Player mode: the picture and the gesture are back.');
@@ -1049,48 +1106,10 @@ $('modeSwitch').addEventListener('click', () => {
 /* reset */
 $('resetTgl').addEventListener('click', () => {
   state.shuffle = false; state.repeat = 'off'; state.media = 'video';
-  Array.from($('mediaSeg').children).forEach((x,i) => x.classList.toggle('on', i === 0));
-  closeMenu(); closeDoor(); closeInfo(); togglePanel(false);
-  if (state.open) menu.classList.remove('show');
-  state.open = false;
+  Array.from($('mediaSeg').children).forEach((x, i) => x.classList.toggle('on', i === 0));
+  closeMenu(); closeDoor(); closeInfo(); togglePill(false); togglePanel(false); state.panel = false;
   say('States reset — shuffle off, repeat off, everything closed.');
 });
-
-/* preview-only: let the reviewer flip the two new marks between A and B */
-document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'i' || ev.key === 'I'){ previewMarks.info   = previewMarks.info   === 'i'     ? 'sheet' : 'i';     refreshMarks(); }
-  if (ev.key === 'r' || ev.key === 'R'){ previewMarks.remote = previewMarks.remote === 'frame' ? 'phone' : 'frame'; refreshMarks(); }
-});
-function refreshMarks(){
-  document.querySelectorAll('.stcell').forEach(cell => {
-    const id = cell.dataset.mark;
-    const mapped = id === 'info-a' ? 'info' + (previewMarks.info === 'i' ? '-a' : '-b')
-                 : id === 'remote-a' ? 'remote' + (previewMarks.remote === 'frame' ? '-a' : '-b')
-                 : null;
-    if (!mapped) return;
-    const first = cell.querySelector('svg');
-    const tmp = document.createElement('div');
-    tmp.innerHTML = MARKS[mapped].html;
-    first.replaceWith(tmp.firstElementChild);
-  });
-  document.querySelectorAll('.card').forEach(card => {
-    const svgEl = card.querySelector('svg'); const nameEl = card.querySelector('.n');
-    if (!svgEl || !nameEl) return;
-    if (nameEl.textContent.startsWith('Info')){
-      const tmp = document.createElement('div');
-      tmp.innerHTML = MARKS['info-' + (previewMarks.info === 'i' ? 'a' : 'b')].html;
-      svgEl.replaceWith(tmp.firstElementChild);
-    }
-    if (nameEl.textContent.startsWith('Remote')){
-      const tmp = document.createElement('div');
-      tmp.innerHTML = MARKS['remote-' + (previewMarks.remote === 'frame' ? 'a' : 'b')].html;
-      svgEl.replaceWith(tmp.firstElementChild);
-    }
-  });
-  if (state.open) renderMenu();
-  say('Swapped proposal: Info <b>' + (previewMarks.info === 'i' ? 'A · circle-i' : 'B · sheet')
-    + '</b>, Remote <b>' + (previewMarks.remote === 'frame' ? 'A · scan frame' : 'B · phone + arcs') + '</b>.');
-}
 
 menu.className = 'menu ' + state.concept;
 window.addEventListener('resize', () => { if (state.open) renderMenu(); });

@@ -16,18 +16,21 @@ python3 -m http.server 8533 --bind 0.0.0.0
 
 ## The idea in one line
 
-Right-click the picture and five marks arrive at the cursor —
-**shuffle · repeat · info · remote · settings** — in a slim frosted strip
-(**concept A · the second row**). Toggles stay open; doors leave. Player mode
-only.
+Right-click the picture and four marks arrive at the cursor —
+**shuffle · repeat ‖ info · settings** — in a slim frosted strip (**concept A ·
+the second row**). Toggles stay open; doors leave. Player mode only. **Remote's
+seat between repeat and info is reserved and stays empty** — it is a separate
+workstream with its own design (`right_item.md` §9).
 
-## Status: concept LOCKED (2026-09-19)
+## Status: locked (2026-09-19)
 
-> **Note on Remote:** this mock draws all five marks to show the *target*
-> state. The first build ships **four** — shuffle · repeat ‖ info · settings —
-> because the Remote server (Phase 8) does not exist yet and a control must
-> never lead nowhere. The QR in this page is a placeholder, not a scannable
-> code.
+| Thing | State |
+|---|---|
+| Concept **A · the second row** | ✅ LOCKED — the default view of this page |
+| **Info mark = the sheet** | ✅ LOCKED (the circle-i proposal was dropped by the owner) |
+| **Remote** | ⏸ a reserved, **empty seat** — no mark, no QR, no payload here |
+| **Suspended shuffle** | ✅ 55 % ink + the chip reading `Shuffle · suspended` |
+| Concept B · the ring | ⏸ parked, not rejected — still switchable in the toolbar |
 
 The owner picked **A · the second row** from this page; it is now the design of
 record in `right_item.md` §3. **B · the ring** stays switchable here as a parked
@@ -59,20 +62,21 @@ alternative — not rejected, not built.
 | Mini mode = nothing | the 32 px bar builds no popups, and this is not the exception |
 | Channel (IPTV) lists | repeat + shuffle dropped, as the channel header already drops them |
 | Esc tiers | door → info panel → menu → playlist panel |
-| **Info opens as a LEFT panel** | `info.md` §0 — left edge, top at the chrome block's bottom, 322 wide (the Playlist panel's width, mirrored) |
+| **Info opens as a LEFT panel** | `info.md` §0 — left edge, top at the chrome block's bottom (148 px), 322 wide (the Playlist panel's width, mirrored) |
+| **The Open pill ↔ Info, both directions** | the measured collision: the pill spans y 142–184 while the chrome ends at 148, so 36 px of it lands in the panel's strip. Opening either closes the other — one popup at a time |
+| The mock's chrome is the real one | 40 px title strip + 108 px control row = 148, with the `+` and its pill drawn at their true offsets |
 | Info re-reads on a media change, stays open | unlike the Track panel, which closes — it describes what is playing |
 | The media switch in the toolbar | proves the presence rules: **video** = Picture + Clock & file · **audio** = no Picture group · **live** = no Clock & file, Stream instead |
 | A group with nothing to say is not drawn | and a row with no truth is not drawn — never `—`, never `N/A` |
-| 5 marks is the ceiling | a sixth means a different design |
+| Four marks ship — and four is the working ceiling | Remote's reserved seat is the fifth; a sixth means a different design |
 
 ## Keys in the preview (reviewer conveniences, not the shipping design)
 
-| Key | Does |
+| Key / gesture | Does |
 |---|---|
 | Right-click on the picture | opens the menu at the cursor |
-| `Esc` / left-click the picture | closes, in the order door → menu → panel |
-| `I` | swaps the Info mark between proposal **A** (circle-i) and **B** (sheet) |
-| `R` | swaps the Remote mark between proposal **A** (scan frame) and **B** (phone + arcs) |
+| `+` in the control row | opens the real Open pill (and closes Info, if it is up) |
+| `Esc` / left-click the picture | closes, in the order door → info panel → menu → pill → playlist panel |
 
 The **Playlist panel** button exists only to prove the close-first contract,
 the **media switch** (video · audio · live channel) exists only to prove the
@@ -95,10 +99,10 @@ review):
 | `marks-row.png` | the eight states enlarged — repeat off · repeat one · shuffle · settings · info A · info B · remote A · remote B |
 | `marks-true-size.png` | the same row at **true UI size (20 px)**, then magnified with nearest-neighbour so the blur is honest |
 
-**The finding:** at true size the circle-i, the scan frame, the six dots, the
-arc and the shuffle marks all hold. **Remote proposal B (phone + arcs) does
-not** — the two arcs merge into the body and read as a blob. Recommend
-**Info A** and **Remote A**.
+**The finding:** at true size the **sheet**, the six dots, the ¾ arc and the
+shuffle marks all hold. A phone-with-arcs proposal did **not** — its two arcs
+merged into the body and read as a blob, which is the bar every new mark is
+judged against. The Info mark is now locked to the sheet.
 
 ## Handoff
 

@@ -42,12 +42,13 @@ by the mark that opened it (`DotGridIcon`'s existing rule, applied once more).
 | Property | Value | Why |
 |---|---|---|
 | Anchor | `Positioned(top: kChromeBlockHeight, left: 0, bottom: 0)` | starts exactly where the chrome block ends — panel and chrome read as one window |
-| Width | **322** | the Playlist panel's width, reused: **one panel width, two sides** |
+| Width | **`min(322, windowWidth − 24)`** — 322 at every real size (the window floor is 800), clamping only as a guard if that floor ever drops | the Playlist panel's width, reused: **one panel width, two sides** |
+| Height | `windowHeight − kChromeBlockHeight` — at the 800 × 600 floor that is **452 px**, so every group fits without scrolling; the scroll view is the safety net, not the plan | the chrome block is 40 + 108 = 148 |
 | Glass | `ClipPath(_TopRightRadius(14))` + `BackdropFilter(blur 18)` + `AppColors.glass` + a **right-edge** hairline (`surfaceOutline`) | the playlist panel's recipe, mirrored |
 | Arrival | slide in from the left, one 220 ms forward/reverse controller, opacity tied to the same curve | the playlist panel's motion, verbatim |
 | Hit-testing | stops the instant it starts closing | a closing panel must never eat a click |
 | Overflow | one scroll view when the rows exceed the height; no scrollbar, fixed row heights | a long list stays a scroll offset |
-| Collision | it owns the same screen region as the Open pill → **one-popup world** (§0.8) | two glass surfaces in one corner would stack |
+| Collision | the Open pill reaches **36 px below** the chrome block (its own geometry: `+` button ends at y 136, pill drops 6 px, capsule is 42 tall → y 142–184, against a chrome bottom of 148). So it lands in this panel's top strip → **one-popup world, wired both ways** (§0.8) | measured, not guessed — the two would stack in the left column |
 
 Nothing else lives on that side of the window: the Playlist panel is right, the
 Track panel is right (`top: kChromeBlockHeight + 6, right: 16`), the Tune panel
@@ -197,7 +198,7 @@ that is stale.
 | Door | right-click menu → the Info mark, Player mode only. The mark reads **lit** while the panel is open |
 | Nothing loaded, or STOPPED | the mark is **dimmed and inert** (the transport's own dim-don't-hide rule) — there is no playback to describe |
 | One popup world | opening Info closes the Playlist · Track · Tune panels **and the Open pill**; opening any of them closes Info |
-| ⚠ The Open pill | **finding:** the pill drops into the same left region and today does **not** close panels — `open_media_control.dart` makes no `PanelService` call — while the panel layer paints *above* the chrome, so the two would overlap with the panel covering the pill. Wiring `PanelService.infoOpen` into the pill's open path is part of building this panel |
+| The Open pill | **decided — the pill joins the one-popup world, both directions.** Measured collision: the pill spans y 142–184, the chrome block ends at 148, so **36 px of the pill sits in this panel's top strip**, and the panel paints above the chrome — the panel would cover the pill. The fix is the app's own rule (rule 3), not a new layout: opening the pill sets `PanelService.infoOpen = false`, and `OpenMediaControl` listens so that opening **Info** closes a pill that is up. The alternative — starting the panel 42 px lower to dodge the pill — is **rejected**: it would break the panel's flush alignment with the chrome's bottom edge, and the Playlist panel beside it, for a popup that is up a fraction of the time |
 | Esc | closes the panel first (the panel tier), then the menu, then whatever else is open |
 | Click-outside | closes — the playlist panel's opaque barrier recipe, so the closing click never falls through to the picture |
 | Chrome | `ChromeLock` is held while open, so the chrome never auto-hides beneath it |
@@ -360,33 +361,35 @@ All four junk candidates stay `refused` (§5).
 
 ---
 
-## 7. Harvesting the truth — do this before the ⚠ rows ship
+## 7. How the ⚠ names get settled — **decided: no separate probe pass**
 
-Names in this file are candidates. The rows that need verification **before
-they can appear in §0** are exactly these:
+*Owner delegated this decision, 2026-09-19.* Nothing is probed by hand and no
+harness is built. The names settle themselves, in this order:
+
+1. **Every new read is defensive.** Try the primary name; if it does not
+   answer, try the alternate (`audio-bitrate` → `demux-bitrate`); if neither
+   answers, the row is simply **not drawn** — the §0.3 rule that already
+   governs the whole panel. Nothing is guessed, nothing prints `N/A`.
+2. **The recipe already exists in the codebase** —
+   `audio_display_service.dart`'s `_probeKeys` plus its by-key / uppercase
+   fallback chain is exactly this pattern. §0's reads follow it; a second
+   convention is never invented.
+3. **One debug-build log line per Info open** names what answered and what did
+   not — so a single run on a real Windows build settles the whole list at
+   once, with no separate task and no extra tooling.
+4. **After that first build, any row that never answered is deleted from §0.**
+   A row that cannot ship leaves no trace in the spec.
+
+The names below are kept only as the checklist that log line is read against —
+not as a to-do:
 
 `container-fps` · `video-codec` · `video-bitrate` · `demux-bitrate` ·
 `audio-params/samplerate` · `audio-bitrate` · `file-format` · `file-size` ·
-`demux-channels` · `target-prim` / `target-trc` · `mpv-version` ·
+`demux-channels` · `target-prim` / `target-trc` ·
 `demuxer-cache-duration` · `hls-bitrate`
 
-The recipe, unchanged from the original doc:
-
-1. **Log the engine identity** — `mpv-version` at startup in a debug build, so
-   a claim can be tied to a version.
-2. **Enumerate properties** — `get_property` on `property-list`⚠, or
-   `mpv --list-options` / `--show-profile=all`⚠ on the same libmpv build.
-   Anything the probe answers is real; anything it does not, delete here.
-3. **Dump the tag map for a corpus** — a dozen representative files (MP3 with
-   PRIV frames, FLAC with cuesheet + lyrics, M4A with `----` atoms, WAV with
-   RIFF INFO, OGG/Opus, an MKV with chapters, a TS/IPTV stream). That is the
-   real junk list, and it settles §5.
-4. **Per-track metadata** — read `track-list/N/metadata` for a multi-audio or
-   multi-sub file; today Salu never asks.
-5. A name that fails the probe is **deleted from §0's row list** — the row
-   simply never ships. It is never replaced by a guess.
-
----
+*(No `mpv-version` probe is needed: engine identity belongs to About, not to
+this panel — §0.7.)*
 
 ## 8. Build checklist for the Info panel
 
@@ -419,6 +422,9 @@ reader sees the reasoning, not just the verdict.
 | 4 | Merge About into Info? | **NO** (owner) — **About stays its own Phase 9 window**, entered from Settings, and **nothing in this file touches it**. Info = what is playing; About = Salu itself | two different subjects; they never share a door |
 | 5 | A silent `Ctrl+I` shortcut? | **Not applied** — the right-click menu is the only door (owner). Noted, never added | the owner locked one door on purpose |
 | 6 | Per-file truth (container) or per-playback truth (output graph)? | **The engine's live answer** — what mpv reports right now, after hardware decoding and filters | it is the truth about what is actually playing, which is the panel's whole subject |
+| 7 | How are the ⚠ property names verified? | **No separate probe pass** — defensive reads with alternates, a row that does not answer is not drawn, one debug log line per open names what answered, and rows that never answer are deleted after the first real build (§7) | it turns the first Windows run into the probe instead of inventing a task |
+| 8 | The Open pill in the same corner? | **The pill joins the one-popup world, both directions** (§0.8). The panel keeps its flush alignment with the chrome — no reserved gap | measured: 36 px of overlap; the app's rule 3 already answers it |
+| 9 | Panel sizing when the window changes? | **`min(322, windowWidth − 24)` wide, `windowHeight − 148` tall** (§0.2) — 322 × 452 at the window floor | the floor makes it a guard, not a redesign; the panel never needs a "too small" state |
 
 Anything a later session wants to revisit is a **new question**, not a re-open
 of these — the file is closed at this revision.

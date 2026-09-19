@@ -1,13 +1,14 @@
 # SALU — right_item.md (the right-button layer)
 
 > **Purpose:** the working spec for SALU's right-mouse-button layer in **Player
-> mode only** — five marks on the picture: shuffle · repeat · info · remote ·
-> settings. **Four ship first** (Remote waits on Phase 8, §9). Written as the handoff for the session that builds it.
+> mode only** — five seats in this order: shuffle · repeat · **remote** · info ·
+> settings. **Four marks ship**; Remote's seat stays empty until its own
+> workstream designs it (§9). Written as the handoff for the session that builds it.
 >
 > **Status: FULLY LOCKED (2026-09-19). No question is open in this file or in
 > `info.md`. Build may start.**
 >
-> Locked by the owner: the layer (Player mode only; five marks, four shipping first), **concept A ·
+> Locked by the owner: the layer (Player mode only; four marks ship, Remote's seat reserved), **concept A ·
 > the second row**, the Info panel (`info.md` §0), both new marks, Remote
 > parked with Phase 8, and the suspended-shuffle ink. The §0 log carries each
 > one with its date; §12 carries the answers with their reasons.
@@ -27,12 +28,15 @@ Preview: `design/right-menu-preview/index.html` (+ its `README.md`).
 | Date | Decision | State |
 |---|---|---|
 | 2026-09-19 | The layer is a **right-button menu in Player mode only** — never over the web surface, never in mini | ✅ LOCKED (owner's brief) |
-| 2026-09-19 | The five marks, in this order: **shuffle · repeat · info · remote · settings** (remote's slot arrives with Phase 8 — four ship first) | ✅ LOCKED (owner's brief) |
+| 2026-09-19 | The order and the marks: **shuffle · repeat ‖ info · settings** — with **remote's seat reserved between repeat and info and left empty** | ✅ LOCKED (owner's brief; remote 2026-09-19) |
 | 2026-09-19 | **Concept A · the second row** — one slim frosted strip at the click point. *Concept B (the ring) is parked, not rejected* | ✅ LOCKED (owner, from `design/right-menu-preview/`) |
 | 2026-09-19 | **Info is defined** — the panel lives in `info.md` §0: left edge, below the control bar, 322 wide, six groups (Identity · Picture · Sound · Clock & file · SALU · Stream) | ✅ LOCKED (`info.md`) |
-| 2026-09-19 | **Info marks locked**: `InfoMark` = circle + i (proposal A). **`RemoteMark` = the scan frame (proposal A)** — proposal B (phone + arcs) is refused on evidence: it merges into a blob at true size | ✅ LOCKED |
-| 2026-09-19 | **Remote is parked** until Phase 8 (the server) exists — the strip ships with **four** marks; the fifth slot returns with the server | ✅ LOCKED |
-| 2026-09-19 | **Suspended shuffle keeps the 55 % ink** — identical to the Playlist header, no second reading | ✅ LOCKED |
+| 2026-09-19 | **`InfoMark` = the sheet** (a page with a folded corner + two content rules). The circle-i proposal is **dropped by the owner** | ✅ LOCKED |
+| 2026-09-19 | **Remote = a reserved placeholder only.** No QR, no payload, no pairing flow here — Remote is its own workstream, designed elsewhere. The strip keeps its **fifth seat empty** and ships **four** marks | ✅ LOCKED |
+| 2026-09-19 | **Suspended shuffle** (my call, delegated): keep the Playlist header's **55 % ink**, and let the hover chip carry the state — `Shuffle · suspended`. One meaning, one reading, no new device | ✅ LOCKED |
+| 2026-09-19 | **The ⚠ property names** (my call, delegated): **no separate probe pass.** Defensive reads with alternates, a row that does not answer is not drawn, one debug log line per Info open, and rows that never answer are deleted after the first real build (`info.md` §7) | ✅ LOCKED |
+| 2026-09-19 | **The Open pill ↔ Info panel collision** (my call, delegated): **the pill joins the one-popup world, both directions.** Measured: 36 px of the pill hangs below the chrome block and would sit under the panel. The panel keeps its flush alignment — no reserved gap | ✅ LOCKED (`info.md` §0.8) |
+| 2026-09-19 | **Panel sizing:** `min(322, windowWidth − 24)` × `windowHeight − 148` — 322 × 452 at the 800 × 600 window floor | ✅ LOCKED (`info.md` §0.2) |
 | 2026-09-19 | Info panel: **no cover thumbnail**; **About stays separate** (Phase 9, entered from Settings) | ✅ LOCKED (`info.md` §0.7, §9) |
 | — | **No question is open in this file or in `info.md`.** Build may start | ✅ |
 
@@ -87,8 +91,8 @@ nothing today and nothing needs changing.
 ### 3.1 A · the second row — the design of record
 
 One slim frosted strip, centred on the cursor and dropped 10 px below it, the
-five marks in order with pitch-only grouping. Reads instantly, extends
-cleanly, and its geometry is the panels' geometry (glass + hairline outline +
+four marks in order with pitch-only grouping (remote's seat between them stays
+empty). Reads instantly, extends cleanly, and its geometry is the panels' geometry (glass + hairline outline +
 radius) — the numbers are in §5.
 
 Locked by the owner after the preview (`design/right-menu-preview/`), where A
@@ -96,7 +100,7 @@ is the default view.
 
 ### 3.2 B · the ring — parked, not rejected
 
-The five marks bloom on a 58 px circle around the cursor, staggered 20 ms
+The marks bloom on a 58 px circle around the cursor, staggered 20 ms
 apart — hairline glass, no rectangle anywhere, and its shapes echo Salu's own
 circular grammar (the volume wheel, the Restart arc, the still light).
 
@@ -120,14 +124,16 @@ ambient `IconTheme`):
 | Shuffle | `ShuffleMark` | exists — reuse as-is |
 | Repeat | `RepeatMark` (quiet / bead) | exists — reuse as-is |
 | Settings | `DotGridIcon` (six dots) | exists — reuse as-is |
-| Info | **`InfoMark`** | **new** — **LOCKED: proposal A · circle + i** (a conventional shape drawn in Salu's hand, the way the chevron and the × already are) |
-| Remote | **`RemoteMark`** | **new** — **LOCKED: proposal A · scan frame** (four brackets + centre dot). **Parked with Phase 8** — the mark is drawn when its server can answer, not before |
+| Info | **`InfoMark`** | **new** — **LOCKED: the sheet** — a page with a folded corner and two content rules, drawn in the family's stroke. (The circle-i proposal was dropped by the owner: a letter-in-a-circle is the one shape in this family that is *borrowed* rather than drawn.) |
+| Remote | — | **not drawn in this build.** The fifth seat is reserved and empty (§9): Remote is a separate workstream with its own design and its own mark, decided there |
 
-**Legibility finding (from the preview's own true-size render, `design/right-menu-preview/marks-true-size.png`):** at the real 18–20 px
-the circle-i, the scan frame, the six dots, the arc and the shuffle marks all
-hold. **Remote proposal B (phone + arcs) fails at 20 px** — the two arcs merge
-into the body and read as a blob. That is the exact reason a mark gets
-rejected here. Do not ship B.
+**Legibility finding (from the preview's own true-size render,
+`design/right-menu-preview/marks-true-size.png`):** at the real 18–20 px the
+**sheet**, the six dots, the ¾ arc and the shuffle marks all hold — the sheet's
+fold and its two content rules survive the downscale, which is what earned it
+the lock. (The render also holds the record of what *failed*: a phone-with-arcs
+mark turned into a blob at 20 px. That is the bar — a new mark is judged at true
+size, not on a card.)
 
 **Two more marks are needed later, not now:** a shuffle/repeat pair that
 carries its state *without* the quiet-ink trick if the suspended state proves
@@ -139,7 +145,7 @@ too subtle in the real app — park until seen on a real build.
 
 | Property | Value | Why |
 |---|---|---|
-| Marks shipped | **four** — shuffle · repeat ‖ info · settings. Remote's slot is drawn when Phase 8 lands (§9) | the strip's geometry is unchanged; one fewer mark is a shorter strip, not a different one |
+| Marks shipped | **four** — shuffle · repeat ‖ info · settings. Remote's seat is reserved and **empty** (§9) | the strip's geometry is unchanged; one fewer mark is a shorter strip, not a different one |
 | Hit box per mark | **30 × 30** | the Playlist header's `_headerButton` size (`SaluIconButton(size: 30)`) — not a new number |
 | Glyph size | **18 px** | the header's own mark size (`RepeatMark(size: 18)`) — stroke `markStrokeFor(18) ≈ 1.5` |
 | Strip padding | **6 px vertical, 8 px horizontal** | reads as a capsule, not a toolbar |
@@ -156,7 +162,9 @@ mark scales **1.06**, nothing drawn behind it (rule 4).
 **Hover chip:** after **600 ms** (`SaluIconButton`'s tooltip delay) a chip
 names the control — reusing the timeline's `HoverChip` surface, width fitted
 to the word. **The chip names, it never teaches** (rule 1) and never shows a
-shortcut (rule 2).
+shortcut (rule 2). Its vocabulary is one word or one word plus a state —
+`Shuffle` · `Shuffle · suspended` · `Repeat · off|all|one` · `Info` ·
+`Settings` — the same way the volume chip carries a value.
 **Press:** scales to **0.90** instantly, springs back.
 **Arrival:** fade + scale 0.96 → 1.0, ~150 ms, ease-out cubic (rule 3) — the
 strip fades in the way the settings window does.
@@ -203,7 +211,7 @@ menu layer, this rule has to be re-implemented by hand.
 | off | ink at ~55 % (`quiet`) — still hoverable |
 | on | full white + a **very faint static glow** (follow.md §2: glow is for active states only) |
 | repeat = one | the solid bead at the arc's centre (already implemented) |
-| shuffle suspended by repeat-one | state kept, ink dropped to 55 % — **the header's existing rule, reused verbatim** |
+| shuffle suspended by repeat-one | state kept, ink dropped to 55 % — **the header's existing rule, reused verbatim** — and the chip reads `Shuffle · suspended`, so the faint mark is never a mystery (no new device: a chip already carries values) |
 
 No labels, no check marks, no text rows, no shortcut letters (rules 1, 2, 6).
 
@@ -218,9 +226,9 @@ No labels, no check marks, no text rows, no shortcut letters (rules 1, 2, 6).
 
 ### 6.5 Esc, clicks and the chrome
 
-- **Esc tiers (outermost first):** door → menu → panel. The panel tier already
-  exists; the menu and door tiers slot in front of it without renumbering the
-  rest.
+- **Esc tiers (outermost first):** door → **info panel** → menu → **Open pill**
+  → playlist panel. The existing tiers keep their order; the new ones slot in
+  front of them without renumbering the rest.
 - **A left-click on the picture** with the menu open **closes the menu and does
   nothing else** — it must never fall through and pause the video.
 - **With the menu open, the chrome never auto-hides:** acquire `ChromeLock`
@@ -228,6 +236,8 @@ No labels, no check marks, no text rows, no shortcut letters (rules 1, 2, 6).
   close/dispose.
 - **One popup at a time** (rule 3): opening the menu is not allowed to leave a
   panel up, and vice versa — satisfied by §6.1's close-first order.
+- **The Open pill now belongs to that world too** (§8 · measured collision):
+  opening the pill closes the Info panel, and opening Info closes an open pill.
 
 ---
 
@@ -237,11 +247,11 @@ No labels, no check marks, no text rows, no shortcut letters (rules 1, 2, 6).
 |---|---|---|
 | State (`rightMenuOpen`, maybe the strip's own tiny notifier) | `lib/core/panel_service.dart` | one notifier beside `playlistOpen` / `trackPanelOpen` / `tunePanelOpen` — "the one-popup world" already lives there |
 | The strip, marks, doors wiring, placement, chip | `lib/ui/osc/right_menu.dart` *(new)* | one widget, built into `HomeScreen`'s player `Stack` **above** the video and **below** the OSD deck |
+| Pill ↔ Info exclusivity | `lib/ui/osc/open_media_control.dart` | the pill's open path clears `PanelService.infoOpen`; the control listens and self-closes when Info opens (§8.3) |
 | Right-button detection | `lib/ui/screens/home_screen.dart` | a `Listener(onPointerDown:)` on the video layer reading `event.buttons == kSecondaryButton` — **not** `showMenu`, which is Material's own popup with ripples, boxes and Material text |
-| `InfoMark`, `RemoteMark` | `lib/ui/widgets/salu_marks.dart` | two new painters in the family |
+| `InfoMark` | `lib/ui/widgets/salu_marks.dart` | one new painter in the family (Remote's mark belongs to the Remote workstream, §9) |
 | Settings door | existing `SettingsDialog(initialTab: SettingsTab.general)` via `HomeScreen._openSettings` | no new window |
 | Info surface | **defined** — `info.md` §0 (left panel); see §8 for the seams | new |
-| QR / pairing payload | *blocked* — see §9 | |
 
 **Why not Material's `showMenu`/`PopupMenuButton`:** they bring a rectangle, a
 ripple, `MenuTheme` typography, elevation and shortcut labels — five separate
@@ -262,38 +272,44 @@ refusals, behaviour). What this file needs to say about it is only the seams:
 2. **It is a panel** (`follow.md` rule 8 — a live read), so it joins the
    one-popup world: opening it closes the Playlist · Track · Tune panels **and
    the Open pill**; opening any of them closes Info.
-3. **Finding — the Open pill collides with it.** Both own the left region below
-   the chrome, and `open_media_control.dart` today makes **no** `PanelService`
-   call, so the pill would open *under* a glass panel that paints above the
-   chrome. Building Info means wiring `PanelService.infoOpen` into the pill's
-   open path. (This is the one code change Info forces outside its own file.)
+   **Sizing:** `min(322, windowWidth − 24)` wide, `windowHeight − 148` tall —
+   322 × 452 at the 800 × 600 window floor (`info.md` §0.2).
+3. **The Open pill shares its corner — wired, both directions.** Measured, not
+   guessed: the `+` button ends at y 136, the pill drops 6 px and its capsule
+   is 42 tall, so the pill spans **y 142–184** while the chrome block ends at
+   **y 148** — **36 px of it lands inside the panel's top strip**, and the
+   panel paints above the chrome. The fix is the app's own rule 3, not a new
+   layout: the pill's open path sets `PanelService.infoOpen = false`, and
+   `OpenMediaControl` listens so that opening **Info** closes a pill that is
+   up. `open_media_control.dart` today makes no `PanelService` call — this is
+   the one code change Info forces outside its own file.
+   *Rejected alternative:* starting the panel 42 px lower to dodge the pill
+   forever — it would break the panel's flush alignment with the chrome's
+   bottom edge (and with the Playlist panel beside it) that the whole fused
+   chrome depends on.
 4. **`InfoMark`** is shared with §4 below — one mark, two places (menu + panel
    header).
 5. **About is not merged.** The owner's Info is strictly *what is playing*; the
    SALU group carries the only Salu-state rows it needs, and Phase 9's About
    stays its own question (`info.md` §9.4).
 
-## 9. Remote — **DECIDED: parked** (2026-09-19)
+## 9. Remote — **a reserved placeholder, nothing more** (2026-09-19)
 
-The QR itself is trivial. What it *points at* is not: Phase 8's server does not
-exist and the Android app does not exist, so today a scan leads nowhere — and
-rule 1 forbids explaining that with text.
+**Decided: Remote is its own workstream.** Nothing about it is designed in
+this file — no QR, no payload, no address, no pairing flow, no mark. What is
+recorded here is only the **seat** it will take, so that this file stays a
+complete picture of the strip:
 
-**Decided 2026-09-19: park it.**
+- The strip's order already reserves **slot 4**: `shuffle · repeat ‖ **remote** ·
+  info · settings`.
+- **The seat ships empty.** The first build draws four marks; nothing is
+  greyed-out or inert to stand in for Remote, because a control that leads
+  nowhere must not exist (rule 1's cousin: the UI never promises what it
+  cannot do).
+- When the Remote workstream lands, it brings its own mark and its own design.
+  `RemoteMark` is **not** defined here — no scan frame, no phone, no QR.
 
-- The strip ships with **four** marks — shuffle · repeat ‖ info · settings —
-  and Remote's fifth slot arrives with Phase 8. Nothing untrue is on screen,
-  and no control ever leads nowhere.
-- **The payload is still the first thing Phase 8 settles**, before any QR
-  dependency is added: the QR is generated inside Salu, and a `qrcode` package
-  is fine once the payload (address + port + token) is defined.
-- If the payload lands early, route (b) survives as a note: the same scan can
-  open a compact dark page in the phone's browser while the app is being
-  built. It brushes against `salu_context.md`'s "No PWA or WebView" line for
-  the companion app — the page would be the *browser's*, not the app's — so it
-  needs the owner's word before it is used.
-
----
+That is the whole of this file's involvement with Remote.
 
 ## 10. Gating summary (build these as tests, not as comments)
 
@@ -331,12 +347,15 @@ so a later session sees why and not only what.
 | # | Question | Decision |
 |---|---|---|
 | 1 | Concept A or B? | **A · the second row** (owner, from the preview). B stays parked |
-| 2 | Which Info mark? | **circle + i** — a conventional shape in Salu's own stroke, like the chevron and the × |
-| 3 | Which Remote mark? | **the scan frame.** The phone-with-arcs proposal is *refused on evidence*: at true size its arcs merge into the body (`design/right-menu-preview/marks-true-size.png`) |
+| 2 | Which Info mark? | **the sheet** — a page with a folded corner and two content rules. The circle-i was dropped by the owner |
+| 3 | Which Remote mark? | **None here.** Remote is its own workstream: no mark, no QR, no payload in this file (§9). Its seat in the strip stays empty |
 | 4 | Info or About — merge? | **No.** Info = what is playing (`info.md` §0). About = Salu itself, Phase 9, entered from Settings. Nothing shared |
 | 5 | Frozen or live Info rows? | **The three clock rows tick** (existing notifiers, no new timer); every other row is read once at open and re-read on media / track changes (`info.md` §0.6) |
-| 6 | Remote — park or payload now? | **Park.** Four marks ship; the fifth arrives with Phase 8, and the payload is settled before any QR dependency is added |
-| 7 | Suspended shuffle ink? | **55 %** — identical to the Playlist header; one meaning, one reading |
+| 6 | Remote — park or payload now? | **Park, and give it nothing but a seat.** Four marks ship; Remote is its own workstream with its own mark and design (§9) |
+| 7 | Suspended shuffle ink? | **55 %** — identical to the Playlist header — plus the chip reading `Shuffle · suspended`, so the faint mark is never a mystery |
+| 8 | How are the ⚠ names verified? | **No probe pass** — defensive reads with alternates, a row that does not answer is simply not drawn, one debug log line per Info open settles the list on the first real build (`info.md` §7) |
+| 9 | The Open pill shares the Info panel's corner? | **The pill joins the one-popup world, both directions** — measured 36 px of overlap; the panel keeps its flush alignment instead of reserving a gap (`info.md` §0.8) |
+| 10 | Panel sizing as the window changes? | **`min(322, windowWidth − 24)` × `windowHeight − 148`** — 322 × 452 at the 800 × 600 floor (`info.md` §0.2) |
 
 **A later session that wants to change one of these is making a new decision,
 not reopening this one.** Nothing here is a blocker: build may start.
@@ -362,6 +381,10 @@ Widget tests, in the style of `test/mini_bar_test.dart`:
     on-screen.
 11. `ChromeLock` counts up on open and back to zero on every close path
     (Esc, click-outside, door, dispose).
+12. **Pill ↔ Info exclusivity:** opening the Open pill closes the Info panel,
+    and opening Info closes an open pill (both directions, `info.md` §0.8).
+13. **Panel sizing:** at an 800 × 600 window the Info panel measures 322 × 452;
+    at a hypothetically narrower window the width clamps to `width − 24`.
 
 ---
 
@@ -376,8 +399,10 @@ Widget tests, in the style of `test/mini_bar_test.dart`:
       §5 numbers — pitch and glass identical to the existing recipe, nothing invented.
 - [ ] §10 gating table holds as tests.
 - [ ] The Info panel per `info.md` §0 and its own checklist §8 — including the
-      Open pill's `PanelService.infoOpen` wiring (the one change outside the
-      panel's own file).
+      Open pill's `PanelService.infoOpen` wiring, both directions (the one
+      change outside the panel's own file).
+- [ ] **Remote's seat stays empty** — four marks drawn, no placeholder control
+      (§9).
 - [ ] `flutter analyze` clean; `test/right_menu_test.dart` green.
 - [ ] README's "What works right now" gains one line; `salu_context.md` Phase 4
       notes the layer under Slide-Out Panels & Menus.
