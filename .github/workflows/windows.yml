@@ -65,14 +65,15 @@ jobs:
         run: ./.github/scripts/flutter-check.ps1 build windows --release --no-pub
 
   baseline:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline_ref != '' }}
+    # Temporary review run; removed after the comparison is recorded.
+    if: ${{ !cancelled() }}
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.baseline_ref }}
+          ref: ${{ inputs.baseline_ref || '1273e1f81f2f531f47b2cbaf2d9b9c9f91cc2fbb' }}
           path: baseline
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
