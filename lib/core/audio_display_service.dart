@@ -6,9 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'audio_tag_fields.dart';
-import 'mpv_metadata.dart';
 import 'lyric_service.dart';
 import 'media_utils.dart';
+import 'mpv_metadata.dart';
 import 'player_service.dart';
 import 'queue_service.dart';
 

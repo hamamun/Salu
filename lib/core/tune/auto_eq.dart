@@ -196,7 +196,9 @@ class AutoEq {
     TuneFileKind kind, {
     bool longVideo = false,
   }) {
-    bool has(List<String> words) => words.any((String w) => hasWord(fileName, w));
+    // hasWord deliberately expects normalized input; fileName preserves case.
+    final String name = fileName.toLowerCase();
+    bool has(List<String> words) => words.any((String w) => hasWord(name, w));
     if (kind == TuneFileKind.video) {
       if (has(<String>['documentary', 'interview', 'lecture', 'talk', 'seminar'])) {
         return 'documentary';
