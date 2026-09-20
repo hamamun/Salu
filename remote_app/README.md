@@ -11,6 +11,11 @@ PC's QR.** No cloud, no accounts, LAN only.
 
 ---
 
+> **Not a coder? Read `SETUP_STEP_BY_STEP.md` instead.** It is the same thing written
+> as numbered clicks — create the repo, upload the skeleton by drag-and-drop, paste each
+> file with GitHub's `Create new file`, do the three Android edits, press Run. Come back
+> here for the reference material (the file map, the rules, the troubleshooting table).
+
 ## 1. Bootstrap — do this once in your new repo
 
 Create the repo, open a terminal in it, and run exactly this:
