@@ -55,6 +55,7 @@ class TuneContinuum extends StatefulWidget {
     this.onGestureEnd,
     this.previewing = false,
     this.focused = false,
+    this.custom = false,
   });
 
   /// The part's name, spoken once at the row's head — never an instruction.
@@ -106,6 +107,11 @@ class TuneContinuum extends StatefulWidget {
   /// time"). No legend, no instruction — the part's name simply comes up
   /// white, the same answer every label in the house gives to attention.
   final bool focused;
+
+  /// The value in force is a hand-edited curve (§4's `Custom`): the knob
+  /// parks on the nearest stop, but that stop's name is not lit — the chip
+  /// says `Custom` and no stop borrows its name for someone else's numbers.
+  final bool custom;
 
   @override
   State<TuneContinuum> createState() => _TuneContinuumState();
@@ -350,7 +356,8 @@ class _TuneContinuumState extends State<TuneContinuum> {
     final double position = widget.line.positionOf(i);
     final double x = _inset + span * position;
     final double est = _labelWidth(stop.label);
-    final bool on = (widget.position - position).abs() < 1e-6;
+    final bool on =
+        !widget.custom && (widget.position - position).abs() < 1e-6;
     // Thirteen names on one line cannot all fit at rest — so at rest the line
     // says every other one, and the moment the pointer is on the line they are
     // all there. Never a scroll, never a truncation, never a tooltip.
