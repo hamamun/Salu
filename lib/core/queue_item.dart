@@ -1,3 +1,4 @@
+import 'm3u/channel_metadata.dart';
 import 'media_utils.dart';
 
 /// One queue entry (playlist_imp.md §10.0 — point 2 FINAL).
@@ -15,6 +16,8 @@ class QueueItem {
     this.group,
     this.language,
     this.country,
+    this.languageSource,
+    this.countrySource,
     this.logoUrl,
     this.searchKey,
   });
@@ -41,6 +44,10 @@ class QueueItem {
   final String? language;
   final String? country;
 
+  /// Provenance retained at mapping time, never re-inferred from normalized data.
+  final MetadataSource? languageSource;
+  final MetadataSource? countrySource;
+
   /// Image *address* only — never image bytes (§10.4). May carry
   /// credentials: never render or log it (§10.10e).
   final String? logoUrl;
@@ -57,6 +64,8 @@ class QueueItem {
         group = null,
         language = null,
         country = null,
+        languageSource = null,
+        countrySource = null,
         logoUrl = null,
         searchKey = null;
 
@@ -89,6 +98,8 @@ class QueueItem {
       group: group,
       language: language,
       country: country,
+      languageSource: languageSource,
+      countrySource: countrySource,
       logoUrl: logoUrl,
       searchKey: searchKey,
     );

@@ -6,7 +6,7 @@
 - [x] **Phase 1: Foundation & Window Framework** ✅ (Setup `pubspec.yaml`, `window_manager` for borderless edge-to-edge window, custom title bar, Segoe UI Variable font, dark theme base).
 - [x] **Phase 2: Core Media Engine** ✅ (Integrate `media_kit`, initialize `mpv`, basic video rendering, hardware acceleration check).
 - [ ] **Phase 3: The UI & OSC** (Floating bottom glass controller using `BackdropFilter`, auto-hide logic, play/pause animations, OSD indicators).
-- [ ] **Phase 4: Slide-Out Panels & Menus** (Right panel for Quick Settings [Video/Audio/Subtitles], slide-out Playlist/Chapter menus).
+- [ ] **Phase 4: Slide-Out Panels & Menus** (Right panel for Quick Settings [Video/Audio/Subtitles], slide-out Playlist/Chapter menus). **Implemented:** Player-only right-button strip (Shuffle · Repeat · Info · Settings), left Info panel with defensive metadata collection/live clocks, and one-popup coordination including Open. Remote stays with Phase 8; Windows release build and all 32 feature tests pass; native playback/4K verification and 14 pre-existing full-suite failures remain (`info.md` §10).
 - [ ] **Phase 5: Media Intelligence** (Drag-and-drop files/folders/srt, smart queuing/folder auto-play, multi-audio/subtitle track selector).
 - [ ] **Phase 6: Web & Stream Manager** (`webview_windows` implementation for built-in browser, saving 10 M3U URLs and 15 Bookmarks using `shared_preferences`, sidebar library UI).
 - [ ] **Phase 7: Advanced Player Tools & Search Logic** (Lyrics engine with `.lrc` parsing and interactive scrolling view, OpenSubtitles API integration, Smart auto-download logic, and Top-3 Match search modal).

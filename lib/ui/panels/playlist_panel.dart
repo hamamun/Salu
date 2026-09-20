@@ -68,6 +68,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// a scroll offset, never 50 000 laid-out widgets (§10.10c).
   static const double _channelRowExtent = 38;
 
+  bool _chromeLocked = false;
   late final AnimationController _open;
   late final Animation<double> _curve;
 
@@ -153,6 +154,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.addListener(_onFavouritesChanged);
     _loads.loadGeneration.addListener(_onLoadGeneration);
     _loads.loading.addListener(_onLoadingChanged);
+    if (_panel.playlistOpen.value) _onOpenChanged();
   }
 
   @override
@@ -173,6 +175,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _searchFocus.dispose();
     _localScroll.dispose();
     _channelScroll.dispose();
+    if (_chromeLocked) ChromeLock.instance.release();
     _open.dispose();
     _pillAnim.dispose();
     super.dispose();
@@ -180,6 +183,10 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   void _onOpenChanged() {
     if (_panel.playlistOpen.value) {
+      if (!_chromeLocked) {
+        _chromeLocked = true;
+        ChromeLock.instance.acquire();
+      }
       _open.forward();
       // Entrance jump — ignore any stale scroll suppression.
       final List<QueueItem> items = _queue.items.value;
@@ -189,6 +196,10 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         _revealPlaying(animate: false, force: true);
       }
     } else {
+      if (_chromeLocked) {
+        _chromeLocked = false;
+        ChromeLock.instance.release();
+      }
       _hidePillNow();
       _open.reverse();
     }
@@ -600,29 +611,41 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   @override
   Widget build(BuildContext context) {
     final bool open = _panel.playlistOpen.value;
-    return Positioned(
-      top: kChromeBlockHeight,
-      right: 0,
-      bottom: 0,
-      width: PlaylistPanel.width,
-      child: IgnorePointer(
-        // Stops hit-testing the instant it starts closing (§4.0).
-        ignoring: !open,
-        child: AnimatedBuilder(
-          animation: _curve,
-          builder: (BuildContext context, Widget? _) {
-            final double v = _curve.value.clamp(0.0, 1.0).toDouble();
-            return Opacity(
-              opacity: v,
-              child: Transform.translate(
-                offset: Offset((1 - v) * PlaylistPanel.width, 0),
-                child: _glass(_body()),
-              ),
-            );
-          },
+    return Stack(children: <Widget>[
+      if (open)
+        Positioned.fill(
+            top: kChromeBlockHeight,
+            child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _panel.closePlaylist,
+                onSecondaryTap: _panel.closePlaylist)),
+      Positioned(
+        top: kChromeBlockHeight,
+        right: 0,
+        bottom: 0,
+        width: PlaylistPanel.width,
+        child: IgnorePointer(
+          // Stops hit-testing the instant it starts closing (§4.0).
+          ignoring: !open,
+          child: AnimatedBuilder(
+            animation: _curve,
+            builder: (BuildContext context, Widget? _) {
+              final double v = _curve.value.clamp(0.0, 1.0).toDouble();
+              return Opacity(
+                opacity: v,
+                child: Transform.translate(
+                  offset: Offset((1 - v) * PlaylistPanel.width, 0),
+                  child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onSecondaryTap: _panel.closePlaylist,
+                      child: _glass(_body())),
+                ),
+              );
+            },
+          ),
         ),
       ),
-    );
+    ]);
   }
 
   /// The panel's frosted-glass body: `AppColors.glass` + blur 18, a

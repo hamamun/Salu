@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 ///   · three rules    — Drag handle         [GripMark]
 ///   · ragged rules   — Playlist (Now Row)  [NowRowMark]
 ///   · ¾ arc + arrow  — Repeat              [RepeatMark] (arc: RestartMark's)
+///   · folded sheet   — Info                [InfoMark]
 ///   · crossing rules — Shuffle             [ShuffleMark]
 ///   · circle + stem  — Search (magnifier)  [MagnifierMark]
 ///   · stem + rungs   — Group by            [GroupByMark] (stable — never morphs)
@@ -1904,4 +1905,46 @@ class _CurvePainter extends CustomPainter {
   @override
   bool shouldRepaint(_CurvePainter old) =>
       old.ink != ink || old.stroke != stroke;
+}
+
+/// Info — a sheet with a folded corner and two content rules, not a circle-i.
+class InfoMark extends StatelessWidget {
+  const InfoMark({super.key, this.size = 20});
+  final double size;
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _InfoPainter(markInk(context), markStrokeFor(size)),
+  );
+}
+
+class _InfoPainter extends CustomPainter {
+  const _InfoPainter(this.ink, this.stroke);
+  final Color ink;
+  final double stroke;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint p = Paint()
+      ..color = ink
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawPath(Path()
+      ..moveTo(s * .23, s * .10)
+      ..lineTo(s * .58, s * .10)
+      ..lineTo(s * .80, s * .32)
+      ..lineTo(s * .80, s * .90)
+      ..lineTo(s * .23, s * .90)
+      ..close(), p);
+    canvas.drawPath(Path()
+      ..moveTo(s * .58, s * .10)
+      ..lineTo(s * .58, s * .32)
+      ..lineTo(s * .80, s * .32), p);
+    canvas.drawLine(Offset(s * .36, s * .53), Offset(s * .65, s * .53), p);
+    canvas.drawLine(Offset(s * .36, s * .70), Offset(s * .60, s * .70), p);
+  }
+  @override
+  bool shouldRepaint(_InfoPainter old) => old.ink != ink || old.stroke != stroke;
 }

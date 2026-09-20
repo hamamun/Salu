@@ -21,6 +21,8 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 
 ## What works right now (Phase 1 + 2 + transport pass)
 
+- **Player right-click layer & Info** — the slim glass Shuffle · Repeat · Info · Settings strip, with a left-side playback facts panel, live clocks, channel metadata provenance, and coordinated popup dismissal. Channel mode keeps Info/Settings only; Remote remains reserved for Phase 8. Native Windows verification is still pending (see `info.md` §10).
+
 - **Borderless window** — the native Windows title bar is gone; SALU draws its own invisible chrome that fades in when the mouse moves and fades out after 3 seconds of stillness.
 - **Custom caption buttons** — Minimize / Maximize / Close drawn as SALU marks in the icon family's own thin stroke (rule 6), riding the shared icon recipe: the mark lights gray → white and scales on hover, sinks on press — nothing is ever drawn behind it, no red close box (rules 2 & 4). Drag anywhere on the top strip to move the window; double-click it to maximize/restore.
 - **Dark theme foundation** — rich dark gray (`#1E1E1E`), Segoe UI Variable typography (system font, falls back to Segoe UI on Windows 10), rounded corners everywhere.
@@ -69,7 +71,7 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 ## Requirements
 
 - Windows 10/11
-- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows) **3.27 or newer** (stable channel)
+- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows) **3.47.5** (CI-pinned stable version for the checked-in lockfile)
 - Visual Studio 2022 with the **Desktop development with C++** workload
 
 ## Build & Run

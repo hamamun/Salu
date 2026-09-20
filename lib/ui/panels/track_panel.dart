@@ -160,7 +160,11 @@ class _TrackPanelState extends State<TrackPanel>
                             1.0,
                           ),
                         alignment: Alignment.topRight,
-                        child: _glass(_body()),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onSecondaryTap: _panels.closeTrackPanel,
+                          child: _glass(_body()),
+                        ),
                       ),
                     ),
                   ),

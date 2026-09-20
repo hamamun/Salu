@@ -25,8 +25,10 @@ import '../../theme/app_theme.dart';
 import '../mini/mini_shell.dart';
 import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
 import '../osc/open_url_dialog.dart';
+import '../osc/right_menu.dart';
 import '../osd/osd_controller.dart';
 import '../osd/osd_deck.dart';
+import '../panels/info_panel.dart';
 import '../panels/playlist_panel.dart';
 import '../panels/track_panel.dart';
 import '../panels/tune_panel.dart';
@@ -81,6 +83,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// never unmounts it (web.md · mode keep-alive). It is disposed only
   /// when the whole screen dies.
   bool _webBorn = false;
+
+  final ValueNotifier<Offset> _rightMenuAnchor =
+      ValueNotifier<Offset>(Offset.zero);
 
   /// Named focus nodes so the keyboard follows whichever surface owns the
   /// window. Offstage keeps a widget in the tree, so `autofocus` does not
@@ -193,6 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_downloadSub?.cancel());
     ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
     _player.transportState.removeListener(_onTransportStateChanged);
+    _rightMenuAnchor.dispose();
     _playerFocus.dispose();
     _webFocus.dispose();
     super.dispose();
@@ -232,9 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// to flash the moment the full window returns.
   void _onWindowModeChanged() {
     if (_windows.isMini) {
-      PanelService.instance.closePlaylist();
-      PanelService.instance.closeTrackPanel();
-      PanelService.instance.closeTunePanel();
+      PanelService.instance.closeAll();
     }
     _osd.dismiss();
   }
@@ -260,9 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool webJustBorn = toWeb && !_webBorn;
     if (toWeb) {
       _webBorn = true;
-      PanelService.instance.closePlaylist();
-      PanelService.instance.closeTrackPanel();
-      PanelService.instance.closeTunePanel();
+      PanelService.instance.closeAll();
       _osd.dismiss();
     }
     setState(() {});
@@ -412,9 +414,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// title strip) — you came from the web section, so the web settings are
   /// the ones already on screen when the window lands.
   void _openSettings({SettingsTab tab = SettingsTab.general}) {
+    PanelService.instance.closeAll();
     _wakeChrome();
     // `showGeneralDialog` — unlike `showDialog` — accepts the transition
     // knobs below, so SALU's own fade + scale can drive the dialog in.
+    ChromeLock.instance.acquire();
     showGeneralDialog<void>(
       context: context,
       barrierColor: const Color(0x99000000),
@@ -437,8 +441,12 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       pageBuilder: (BuildContext context, Animation<double> animation,
           Animation<double> secondaryAnimation) =>
-          SettingsDialog(initialTab: tab),
-    );
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTap: () => Navigator.of(context).pop(),
+            child: SettingsDialog(initialTab: tab),
+          ),
+    ).whenComplete(ChromeLock.instance.release);
   }
 
   /// The browser's two settings doors — its ⋮ menu's "Settings" row and
@@ -525,10 +533,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Esc — dismisses the topmost popup first (follow.md rule 3):
-    // resume toast → tune panel → track panel (its Search window is a
-    // dialog route and closes itself above this) → playlist panel. With
+    // Info → menu → Open pill → existing resume / tune / track / playlist
+    // tiers. Dialog routes own their Esc above this handler. With
     // nothing up it is just another key: activity → chrome wakes.
     if (key == LogicalKeyboardKey.escape) {
+      if (PanelService.instance.infoOpen.value) {
+        PanelService.instance.closeInfo();
+        return KeyEventResult.handled;
+      }
+      if (PanelService.instance.rightMenuOpen.value) {
+        PanelService.instance.closeRightMenu();
+        return KeyEventResult.handled;
+      }
+      if (PanelService.instance.openPillOpen.value) {
+        PanelService.instance.openPillOpen.value = false;
+        return KeyEventResult.handled;
+      }
       if (_osd.isResumeToast) {
         _osd.dismiss();
         return KeyEventResult.handled;
@@ -887,10 +907,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 1 · The video canvas, stretching edge-to-edge. A tap
                 //     goes through the transport facade: pause while
                 //     playing, play while paused, RESUME while stopped.
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: TransportActions.instance.playOrPause,
-                  child: const VideoScreen(),
+                RightMenuTarget(
+                  anchor: _rightMenuAnchor,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: TransportActions.instance.playOrPause,
+                    child: const VideoScreen(),
+                  ),
                 ),
 
                 // 1b · The equalizer curve on the picture (eq_imp.md §1.9)
@@ -916,6 +939,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 //     single fused glass block (one gradient, one motion).
                 _buildTopChrome(chromeVisible),
 
+                // The strip sits below panels: their barriers win close-first.
+                RightMenu(anchor: _rightMenuAnchor, onSettings: _openSettings),
+
                 // 5 · The slide-out playlist panel — glass over the video,
                 //     anchored below the chrome block (top: kChromeBlockHeight).
                 //     Sits under the OSD deck (z-order §4.2) and under the
@@ -933,6 +959,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 //      and Tracks panels, Esc closes it, and it locks the
                 //      chrome awake while it is up.
                 const Positioned.fill(child: TunePanel()),
+                const InfoPanel(),
 
                 // 6 · Resume-toast click-outside: dismiss ONLY — never
                 //     triggers Restart, never swallows the click (the

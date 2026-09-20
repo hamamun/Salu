@@ -31,8 +31,7 @@ library;
 
 import 'm3u_aliases.dart';
 
-/// Where a grouping value came from. Diagnostics and tests only — the queue
-/// record carries the value, never its provenance.
+/// Where a grouping value came from, retained by the queue for Info.
 enum MetadataSource {
   /// The playlist said so: `tvg-country` / `tvg-language`.
   attribute,

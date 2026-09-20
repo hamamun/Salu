@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/open_media_service.dart';
+import '../../core/panel_service.dart';
 import '../../core/ui_lock.dart';
 import '../../core/url_library_service.dart';
 import '../../theme/app_theme.dart';
@@ -18,6 +19,7 @@ import '../widgets/salu_marks.dart';
 Future<void> showOpenUrlDialog(BuildContext context) async {
   await UrlLibraryService.instance.load();
   if (!context.mounted) return;
+  PanelService.instance.closeAll();
   ChromeLock.instance.acquire();
   try {
     await showGeneralDialog<void>(
