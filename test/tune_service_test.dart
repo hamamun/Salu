@@ -212,6 +212,20 @@ void main() {
       );
     });
 
+    test('a band steered back to exactly a preset is that preset again', () {
+      tune.selectStop(TunePart.eq, 'movie');
+      tune.setBandGain(0, 9.5);
+      expect(tune.eqCustom.value, isTrue);
+      expect(tune.labelFor(TunePart.eq), 'Custom');
+      // Movie's own first number is 4: landing on it again is Movie again,
+      // not a Custom that happens to match — the name says the sound.
+      tune.setBandGain(0, 4);
+      expect(tune.eq.value, TunePresets.video[1].curve);
+      expect(tune.eqCustom.value, isFalse);
+      expect(tune.eqStop.value, 'movie');
+      expect(tune.labelFor(TunePart.eq), 'Movie');
+    });
+
     test('the grid is the service’s: halves only, ±12 dB', () {
       tune.setBandGain(1, 9.3);
       expect(tune.eq.value.at(1), 9.5);

@@ -303,6 +303,7 @@ class _TunePanelState extends State<TunePanel>
         line: _tune.eqLine,
         position: _tune.eqKnob.value,
         previewing: _tune.previewing.value,
+        custom: _tune.eqCustom.value,
         enabled: _tune.partActive(TunePart.eq),
         label: _tune.labelFor(TunePart.eq),
         onChanged: (double t, bool commit) =>
@@ -394,6 +395,7 @@ class _TunePanelState extends State<TunePanel>
         line: _tune.pictureLine,
         position: _tune.pictureKnob.value,
         previewing: _tune.previewing.value,
+        custom: _tune.pictureCustom.value,
         enabled: _tune.partActive(TunePart.picture),
         label: _tune.labelFor(TunePart.picture),
         onChanged: (double t, bool commit) =>

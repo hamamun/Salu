@@ -215,27 +215,32 @@ class TuneService {
   ///
   /// The stop is matched EXACTLY: a hover preview and a drag both sit at
   /// positions that are not stops, and naming the nearest one there would
-  /// tell the viewer they are hearing something they are not.
+  /// tell the viewer they are hearing something they are not. The sliders'
+  /// mirror of the rule: a hand-edited curve is `Custom` even though its
+  /// knob parks ON the nearest stop (§4) — that stop's numbers are not what
+  /// is being heard, so its name would lie.
   String labelFor(TunePart part) {
     final Continuum line = lineFor(part);
     final double t = knobFor(part);
     final ContinuumStop? on = line.stopExactlyAt(t);
-    if (on != null) return on.label;
     switch (part) {
-      case TunePart.aspect:
-        return formatAspectValue(aspectRatio.value);
-      case TunePart.speed:
-        return formatSpeedValue(speed.value);
       case TunePart.eq:
       case TunePart.picture:
         final bool custom =
             part == TunePart.eq ? eqCustom.value : pictureCustom.value;
         if (custom) return 'Custom';
+        if (on != null) return on.label;
         final ContinuumSpan span = line.spanOf(t);
         return formatBlendPair(
           line.stopAt(span.a).label,
           line.stopAt(span.b).label,
         );
+      case TunePart.aspect:
+        if (on != null) return on.label;
+        return formatAspectValue(aspectRatio.value);
+      case TunePart.speed:
+        if (on != null) return on.label;
+        return formatSpeedValue(speed.value);
     }
   }
 
@@ -593,13 +598,15 @@ class TuneService {
 
   /// One band gain — the 10 sliders below the audio line. Dragging a slider
   /// leaves the line: the knob parks on the nearest stop and the label reads
-  /// `Custom` (§4's rule, mirrored).
+  /// `Custom` (§4's rule, mirrored) — and a hand that steers every band back
+  /// to exactly a preset's numbers is ON that preset again, and is named so.
   void setBandGain(int index, double db, {bool commit = true}) {
     // The grid is the curve's own (halves, ±12 dB) — a preset stays exactly
     // matchable and the label never lies.
     eq.value = eq.value.withBand(index, db);
-    eqCustom.value = true;
-    eqStop.value = null;
+    final EqPreset? match = TunePresets.matchCurve(eq.value, fileKind.value);
+    eqCustom.value = match == null;
+    eqStop.value = match?.key;
     if (commit) _manualEq();
     final Continuum line = eqLine;
     eqKnob.value = line.positionOf(nearestStopFor(line, eq.value.gains));
