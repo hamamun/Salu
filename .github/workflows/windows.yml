@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: 'Optional existing commit to check for pre-existing test failures'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -44,6 +49,7 @@ jobs:
 
   build:
     needs: validate
+    if: ${{ !cancelled() }}
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -57,3 +63,25 @@ jobs:
         run: ./.github/scripts/flutter-check.ps1 pub get --enforce-lockfile
       - name: Build Windows release
         run: ./.github/scripts/flutter-check.ps1 build windows --release --no-pub
+
+  baseline:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline_ref != '' }}
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.baseline_ref }}
+          path: baseline
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Install baseline dependencies
+        working-directory: baseline
+        run: ../.github/scripts/flutter-check.ps1 pub get --enforce-lockfile
+      - name: Test baseline full suite
+        working-directory: baseline
+        run: ../.github/scripts/flutter-check.ps1 test --reporter expanded
