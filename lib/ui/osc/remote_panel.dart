@@ -132,7 +132,7 @@ class _RemotePanelState extends State<RemotePanel> {
                 const SizedBox(height: 10),
                 Center(child: Text('Scan with SALU Remote', style: _secondaryStyle)),
                 const SizedBox(height: 4),
-                Center(child: Text(formatPairingCode(_remote.pairingCode?.value ?? ''), style: const TextStyle(fontSize: 18, letterSpacing: 2.2, color: AppColors.textPrimary, fontWeight: FontWeight.w600))),
+                Center(child: Text(formatPairingCode(_remote.pairingCode.value ?? ''), style: const TextStyle(fontSize: 18, letterSpacing: 2.2, color: AppColors.textPrimary, fontWeight: FontWeight.w600))),
                 const SizedBox(height: 5),
                 const Center(child: Text('This code is only for pairing. It changes when you close this panel.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
               ],

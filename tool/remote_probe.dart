@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../lib/core/remote/remote_protocol.dart';
+import 'package:salu/core/remote/remote_protocol.dart';
 
 /// Tiny terminal client for R1. It deliberately uses only dart:io and the
 /// pure protocol/pairing files, so it can prove a Windows SALU build before

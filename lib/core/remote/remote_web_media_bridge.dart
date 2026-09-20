@@ -45,12 +45,12 @@ abstract final class RemoteWebMediaScripts {
   ''');
 
   static String seek({double? to, double? delta}) => _write('''
-    var target = ${to == null ? 'el.currentTime + (${delta ?? 0})' : '(${to})'};
+    var target = ${to == null ? 'el.currentTime + (${delta ?? 0})' : '($to)'};
     if (isFinite(target)) el.currentTime = Math.max(0, target);
   ''');
 
   static String volume(double percent) => _write('''
-    el.volume = Math.max(0, Math.min(1, (${percent}) / 100));
+    el.volume = Math.max(0, Math.min(1, ($percent) / 100));
   ''');
 
   static String mute(bool on) => _write('el.muted = ${on ? 'true' : 'false'};');
