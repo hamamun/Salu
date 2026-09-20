@@ -99,7 +99,7 @@ class TransportActions {
 
   /// Play / Pause — and while STOPPED, Play resumes the parked item
   /// from the stop memory (the Resume toast fires from the open path).
-  void playOrPause() {
+  void playOrPause({bool fromRemote = false}) {
     resetSeekRamps(); // every other transport action resets the ramps
     switch (player.transportState.value) {
       case TransportState.idle:
@@ -128,7 +128,7 @@ class TransportActions {
   }
 
   /// Stop — the third state. No card: the canvas change IS the feedback.
-  void stop() {
+  void stop({bool fromRemote = false}) {
     resetSeekRamps();
     switch (player.transportState.value) {
       case TransportState.playing:
@@ -146,7 +146,7 @@ class TransportActions {
   /// During shuffle `|<<` follows the play-order history, so the card
   /// reads the index [PlayerService.previous] returns — never a
   /// list-order guess.
-  void previous() {
+  void previous({bool fromRemote = false}) {
     if (!player.hasPreviousItem) return;
     resetSeekRamps();
     osd.dismissResumeToast();
@@ -170,7 +170,7 @@ class TransportActions {
   /// Next item — dimmed in the UI when there is none. While shuffle
   /// drives the advance there is always a pick, so the guard asks the
   /// player; the card names whatever actually played.
-  void next() {
+  void next({bool fromRemote = false}) {
     if (!player.hasNextItem) return;
     resetSeekRamps();
     osd.dismissResumeToast();
@@ -189,14 +189,14 @@ class TransportActions {
   void seekForward() {
     if (!_seekable) return;
     osd.dismissResumeToast();
-    _applySeek(seekForwardRamp.next(), OsdMark.seekForward);
+    seekBy(seekForwardRamp.next(), mark: OsdMark.seekForward);
   }
 
   /// One seek-backward step — the perfect mirror.
   void seekBackward() {
     if (!_seekable) return;
     osd.dismissResumeToast();
-    _applySeek(seekBackwardRamp.next(), OsdMark.seekBack);
+    seekBy(seekBackwardRamp.next(), mark: OsdMark.seekBack);
   }
 
   bool get _seekable {
@@ -214,7 +214,9 @@ class TransportActions {
     }
   }
 
-  void _applySeek(Duration delta, OsdMark mark) {
+  /// Public relative seek entry point for authenticated remote callers.
+  /// Unlike the desktop ramp, a phone supplies its own fixed step.
+  void seekBy(Duration delta, {required OsdMark mark, bool fromRemote = false}) {
     final Duration from = player.position.value;
     final Duration target = from + delta;
     final Duration clamped = _clamp(target);
@@ -231,6 +233,30 @@ class TransportActions {
     }));
   }
 
+  /// Absolute seek entry point for authenticated remote callers. Keeping
+  /// this beside [seekBy] makes the remote transport surface use the same
+  /// player facade as the desktop timeline without manufacturing an OSD card.
+  Future<void> seekTo(Duration target, {bool fromRemote = false}) async {
+    resetSeekRamps();
+    await player.seekTo(_clamp(target));
+  }
+
+  /// Slider-style volume writes are intentionally silent. The desktop bar
+  /// owns its live readout, and remote volume/mute commands must not flash an
+  /// OSD card.
+  Future<void> setVolume(double volume, {bool fromRemote = false}) =>
+      player.setVolumeUI(volume.clamp(0, 100).toDouble());
+
+  Future<void> toggleShuffle({bool fromRemote = false}) async {
+    resetSeekRamps();
+    await player.toggleShuffle();
+  }
+
+  Future<void> cycleRepeat({bool fromRemote = false}) async {
+    resetSeekRamps();
+    await player.cycleRepeat();
+  }
+
   Duration _clamp(Duration t) {
     if (t < Duration.zero) return Duration.zero;
     final Duration dur = player.duration.value;
@@ -241,13 +267,17 @@ class TransportActions {
   /// Volume +5 (↑ key) — unmutes when it leaves silence. Discrete
   /// actions flash the deck; the volume BAR never does (it has its own
   /// live readout) — so the card is emitted here, not in the bar.
-  void volumeUp() {
-    _run(player.stepVolume(5).then((_) => _volumeCard()));
+  void volumeUp({bool fromRemote = false}) {
+    _run(player.stepVolume(5).then((_) {
+      if (!fromRemote) _volumeCard();
+    }));
   }
 
   /// Volume −5 (↓ key).
-  void volumeDown() {
-    _run(player.stepVolume(-5).then((_) => _volumeCard()));
+  void volumeDown({bool fromRemote = false}) {
+    _run(player.stepVolume(-5).then((_) {
+      if (!fromRemote) _volumeCard();
+    }));
   }
 
   /// Mute toggle (Ctrl+M and the speaker mark).
@@ -255,8 +285,10 @@ class TransportActions {
   /// The bare `M` used to land here; mini.md §4 gives `M` to the mode
   /// toggle, so mute keeps its key with the modifier — the behavior is
   /// unchanged in both modes.
-  void toggleMute() {
-    _run(player.toggleMute().then((_) => _volumeCard()));
+  void toggleMute({bool fromRemote = false}) {
+    _run(player.toggleMute().then((_) {
+      if (!fromRemote) _volumeCard();
+    }));
   }
 
   void _volumeCard() {

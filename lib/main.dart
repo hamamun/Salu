@@ -12,10 +12,12 @@ import 'core/channel_load_service.dart';
 import 'core/folder_autoload_service.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
+import 'core/remote/remote_service.dart';
 import 'core/resume_service.dart';
 import 'core/settings_service.dart';
 import 'core/sub_delay_service.dart';
 import 'core/tune_service.dart';
+import 'core/url_library_service.dart';
 import 'core/window_state_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/home_screen.dart';
@@ -111,6 +113,8 @@ Future<void> main(List<String> args) async {
   // it was left at, clamped into the visible screen (mini.md §2).
   await WindowStateService.instance.applyLoadedMode();
   await SettingsService.instance.load();
+  await UrlLibraryService.instance.load();
+  await RemoteService.instance.load();
   await ResumeService.instance.load();
   await SubDelayService.instance.load();
   await ChannelFavouritesService.instance.load();
@@ -130,6 +134,7 @@ Future<void> main(List<String> args) async {
   // (BrowserService.warmUp caches). By the time the toggle can be clicked
   // the first page is ready to start instantly.
   BrowserService.instance.scheduleStartupWarmUp();
+  RemoteService.instance.scheduleStartup();
 }
 
 /// Intercepts the window close: flush the resume store so the last

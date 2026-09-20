@@ -9,6 +9,7 @@ import '../../core/info_controller.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
+import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../widgets/dot_grid_icon.dart';
 import '../widgets/glass_capsule.dart';
@@ -35,19 +36,21 @@ class RightMenuTarget extends StatelessWidget {
       );
 }
 
-/// Concept A only. Remote has no widget, no disabled mark and no hit target;
-/// its future insertion point is between repeat and Info.
+/// The full-canvas secondary strip. Remote is the deliberate rightmost door
+/// after Settings; it is available only on the Player canvas, never mini/Web.
 class RightMenu extends StatefulWidget {
   const RightMenu({
     super.key,
     required this.anchor,
     required this.onSettings,
+    this.onRemote,
   });
   final ValueNotifier<Offset> anchor;
   final VoidCallback onSettings;
+  final VoidCallback? onRemote;
 
   static const double height = 42;
-  static double widthFor(bool channel) => channel ? 82 : 162;
+  static double widthFor(bool channel) => channel ? 118 : 198;
 
   static Offset placement(Offset cursor, Size window, Size strip) {
     final double x = (cursor.dx - strip.width / 2)
@@ -199,7 +202,7 @@ class _RightMenuState extends State<RightMenu>
                                   _button(
                                     'Shuffle${suspended ? ' · suspended' : ''}',
                                     ShuffleMark(size: 18, quiet: !shuffle),
-                                    () => unawaited(_player.toggleShuffle()),
+                                    () => unawaited(TransportActions.instance.toggleShuffle()),
                                     active: shuffle,
                                   ),
                                   const SizedBox(width: 6),
@@ -210,7 +213,7 @@ class _RightMenuState extends State<RightMenu>
                                       quiet: !ready || repeat == RepeatMode.off,
                                       bead: repeat == RepeatMode.one,
                                     ),
-                                    () => unawaited(_player.cycleRepeat()),
+                                    () => unawaited(TransportActions.instance.cycleRepeat()),
                                     active: ready && repeat != RepeatMode.off,
                                   ),
                                   const SizedBox(width: 14),
@@ -227,6 +230,12 @@ class _RightMenuState extends State<RightMenu>
                                   'Settings',
                                   const DotGridIcon(size: 18),
                                   () => _door(widget.onSettings),
+                                ),
+                                const SizedBox(width: 6),
+                                _button(
+                                  'Remote',
+                                  const QrMark(size: 18),
+                                  () => _door(widget.onRemote ?? () {}),
                                 ),
                               ],
                             ),

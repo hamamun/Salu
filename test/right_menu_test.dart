@@ -209,7 +209,7 @@ void main() {
   );
 
   testWidgets(
-    'idle and stopped Info is inert; channel removes both toggles and reserves no fake Remote',
+    'idle and stopped Info is inert; channel keeps Info, Settings and Remote',
     (tester) async {
       final ValueNotifier<Offset> anchor = ValueNotifier<Offset>(Offset.zero);
       await tester.pumpWidget(
@@ -240,9 +240,9 @@ void main() {
           of: find.byType(RightMenu),
           matching: find.byType(SaluIconButton),
         ),
-        findsNWidgets(2),
+        findsNWidgets(3),
       );
-      expect(tester.getSize(find.byType(GlassCapsule)), const Size(82, 42));
+      expect(tester.getSize(find.byType(GlassCapsule)), const Size(118, 42));
       await tester.pumpWidget(const SizedBox());
       anchor.dispose();
     },

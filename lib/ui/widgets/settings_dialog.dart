@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/language_names.dart';
+import '../../core/remote/remote_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
 import '../../core/tune_service.dart';
@@ -22,13 +23,14 @@ import 'salu_marks.dart';
 /// Current tabs: General · Subtitles · Web. The tab strip is structured
 /// so later phases' Video / Audio tabs can slot right in.
 class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key, this.initialTab = SettingsTab.general});
+  const SettingsDialog({super.key, this.initialTab = SettingsTab.general, this.onOpenRemote});
 
   /// The tab the window opens on. General is the default at every door;
   /// the browser's own doors ask for Web — a viewer who came from the web
   /// section is after the web settings and should not have to hunt for
   /// them through General first.
   final SettingsTab initialTab;
+  final VoidCallback? onOpenRemote;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
@@ -142,7 +144,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Widget _buildBody() {
     return switch (_tab) {
-      SettingsTab.general => const _GeneralTab(),
+      SettingsTab.general => _GeneralTab(onOpenRemote: widget.onOpenRemote),
       SettingsTab.subtitles => const _SubtitlesTab(),
       SettingsTab.web => const _WebTab(),
     };
@@ -956,7 +958,9 @@ class _WebAutoClearTimingPicker extends StatelessWidget {
 // ── General tab ─────────────────────────────────────────────────────────────
 
 class _GeneralTab extends StatelessWidget {
-  const _GeneralTab();
+  const _GeneralTab({this.onOpenRemote});
+
+  final VoidCallback? onOpenRemote;
 
   @override
   Widget build(BuildContext context) {
@@ -1033,10 +1037,154 @@ class _GeneralTab extends StatelessWidget {
           _MouseOverPreviewSwitch(),
           SizedBox(height: 10),
           _ClearEqMemoryRow(),
+          SizedBox(height: 28),
+          _RemoteSection(onOpenRemote: onOpenRemote),
         ],
       ),
     );
   }
+}
+
+/// App-wide PC-side remote controls. The listener itself lives in
+/// RemoteService; these rows are deliberately in General so the off switch
+/// remains reachable from both Player and Web mode.
+class _RemoteSection extends StatelessWidget {
+  const _RemoteSection({this.onOpenRemote});
+
+  final VoidCallback? onOpenRemote;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('Remote', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          const Text('Control SALU from your phone over your Wi-Fi.', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+          const SizedBox(height: 16),
+          const _RemoteControlSwitch(),
+          const SizedBox(height: 10),
+          const _RemoteFileSwitch(),
+          const SizedBox(height: 10),
+          _RemoteOpenPanelRow(onOpen: () {
+            Navigator.of(context).pop();
+            onOpenRemote?.call();
+          }),
+          _RemoteRememberedRow(onOpen: () {
+            Navigator.of(context).pop();
+            onOpenRemote?.call();
+          }),
+        ],
+      );
+}
+
+class _RemoteControlSwitch extends StatelessWidget {
+  const _RemoteControlSwitch();
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: SettingsService.instance.remoteEnabled,
+        builder: (BuildContext context, bool on, Widget? _) => _RemoteTile(
+          title: 'Remote control',
+          helper: 'Let the SALU Remote app control playback. Local network only.',
+          on: on,
+          mark: const QrMark(size: 20),
+          onTap: () => SettingsService.instance.setRemoteEnabled(!on),
+        ),
+      );
+}
+
+class _RemoteFileSwitch extends StatelessWidget {
+  const _RemoteFileSwitch();
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: SettingsService.instance.remoteFileAccess,
+        builder: (BuildContext context, bool on, Widget? _) => _RemoteTile(
+          title: 'Let phones browse PC files',
+          helper: 'Read-only. Folders and media names only.',
+          on: on,
+          mark: const FilmFrameMark(size: 20),
+          onTap: () => SettingsService.instance.setRemoteFileAccess(!on),
+        ),
+      );
+}
+
+class _RemoteTile extends StatelessWidget {
+  const _RemoteTile({required this.title, required this.helper, required this.on, required this.mark, required this.onTap});
+  final String title;
+  final String helper;
+  final bool on;
+  final Widget mark;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(color: on ? const Color(0x144C9EEB) : Colors.transparent, borderRadius: BorderRadius.circular(12), border: Border.all(color: on ? const Color(0x404C9EEB) : Colors.transparent)),
+          child: Row(children: <Widget>[
+            Container(width: 40, height: 40, decoration: BoxDecoration(color: on ? const Color(0x264C9EEB) : AppColors.surface, borderRadius: BorderRadius.circular(10)), alignment: Alignment.center, child: IconTheme.merge(data: IconThemeData(color: on ? AppColors.accent : AppColors.textSecondary), child: mark)),
+            const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)), const SizedBox(height: 3), Text(helper, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary))])),
+            _SaluSwitch(on: on),
+          ]),
+        ),
+      );
+}
+
+class _RemoteOpenPanelRow extends StatelessWidget {
+  const _RemoteOpenPanelRow({required this.onOpen});
+  final VoidCallback onOpen;
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: SettingsService.instance.remoteEnabled,
+        builder: (BuildContext context, bool enabled, Widget? _) => InkWell(
+          onTap: enabled ? onOpen : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(children: <Widget>[
+              Expanded(
+                child: Text(
+                  enabled ? 'Show pairing code…' : 'Turn remote control on to pair a phone.',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: enabled ? AppColors.textPrimary : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: enabled ? AppColors.textSecondary : AppColors.divider,
+              ),
+            ]),
+          ),
+        ),
+      );
+}
+
+class _RemoteRememberedRow extends StatelessWidget {
+  const _RemoteRememberedRow({required this.onOpen});
+  final VoidCallback onOpen;
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<List<RemoteDevice>>(
+        valueListenable: RemoteService.instance.devices,
+        builder: (BuildContext context, List<RemoteDevice> devices, Widget? _) =>
+            InkWell(
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(children: <Widget>[
+              Expanded(
+                child: Text(
+                  'Remembered phones · ${devices.length}',
+                  style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary),
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+            ]),
+          ),
+        ),
+      );
 }
 
 /// Auto EQ (§5) — one switch, default Off, sitting with the Resume and

@@ -142,6 +142,11 @@ class SettingsService {
   // ── Mouse over preview (owner, 2026-09-14) ─────────────────────────────
   static const String _keyMouseOverPreview = 'mouse_over_preview';
 
+  // ── SALU Remote ───────────────────────────────────────────────────────
+  static const String _keyRemoteEnabled = 'remote_enabled';
+  static const String _keyRemoteFileAccess = 'remote_file_access';
+  static const String _keyRemotePort = 'remote_port';
+
   // ── Subtitles (cc.md §2 · D2 · D3 · D5 · D13 amended 2026-09-13) ─────
   static const String _keySubtitleApiKey = 'subtitle_api_key';
   static const String _keySubtitleUsername = 'subtitle_username';
@@ -231,6 +236,16 @@ class SettingsService {
   /// reads it live, and nothing on screen is re-decided. The value already
   /// in force stays exactly as it is.
   final ValueNotifier<bool> mouseOverPreview = ValueNotifier<bool>(false);
+
+  /// LAN-only phone control. ON by default; turning it off tears down the
+  /// listener rather than merely hiding the QR.
+  final ValueNotifier<bool> remoteEnabled = ValueNotifier<bool>(true);
+
+  /// Separate privacy gate for explicit, read-only file browser requests.
+  final ValueNotifier<bool> remoteFileAccess = ValueNotifier<bool>(true);
+
+  /// Preferred remote port. The server may move to a fallback when busy.
+  final ValueNotifier<int> remotePort = ValueNotifier<int>(7258);
 
   /// The OpenSubtitles.com API key (D2). Empty = signed-out state: the
   /// engine no-ops and surfaces its single once-per-session
@@ -326,6 +341,12 @@ class SettingsService {
       webDownloadFolder.value = prefs.getString(_keyWebDownloadFolder) ?? '';
       autoEq.value = prefs.getBool(_keyAutoEq) ?? false;
       mouseOverPreview.value = prefs.getBool(_keyMouseOverPreview) ?? false;
+      remoteEnabled.value = prefs.getBool(_keyRemoteEnabled) ?? true;
+      remoteFileAccess.value = prefs.getBool(_keyRemoteFileAccess) ?? true;
+      final int storedRemotePort = prefs.getInt(_keyRemotePort) ?? 7258;
+      remotePort.value = storedRemotePort >= 1024 && storedRemotePort <= 65535
+          ? storedRemotePort
+          : 7258;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
       if (rawSubtitleKey != null) subtitleApiKey.value = rawSubtitleKey;
       final String? rawSubtitleUser =
@@ -359,6 +380,9 @@ class SettingsService {
       webDownloadFolder.value = '';
       autoEq.value = false;
       mouseOverPreview.value = false;
+      remoteEnabled.value = true;
+      remoteFileAccess.value = true;
+      remotePort.value = 7258;
       subtitleApiKey.value = '';
       subtitleUsername.value = '';
       subtitlePassword.value = '';
@@ -534,6 +558,34 @@ class SettingsService {
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }
+  }
+
+  /// Enables/disables the LAN listener. RemoteService listens to the notifier
+  /// and performs the actual lifecycle change.
+  Future<void> setRemoteEnabled(bool on) async {
+    remoteEnabled.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyRemoteEnabled, on);
+    } catch (_) {}
+  }
+
+  /// Controls only the explicit read-only file browser surface.
+  Future<void> setRemoteFileAccess(bool on) async {
+    remoteFileAccess.value = on;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyRemoteFileAccess, on);
+    } catch (_) {}
+  }
+
+  Future<void> setRemotePort(int port) async {
+    if (port < 1024 || port > 65535) return;
+    remotePort.value = port;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_keyRemotePort, port);
+    } catch (_) {}
   }
 
   /// Subtitles — the API key field (§2.1): applies and persists the

@@ -59,6 +59,18 @@ class BrowserService {
   /// Player mode ignores it (the strip shows the media title).
   final ValueNotifier<String?> stripTitle = ValueNotifier<String?>(null);
 
+  // Narrow, read-only mirror for SALU Remote. Tab ownership stays in
+  // BrowserScreen; these values never contain page bodies or tab contents.
+  final ValueNotifier<String?> webTitle = ValueNotifier<String?>(null);
+  final ValueNotifier<String?> webUrl = ValueNotifier<String?>(null);
+  final ValueNotifier<bool> webCanBack = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> webCanForward = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> webLoading = ValueNotifier<bool>(false);
+  final ValueNotifier<int> webTabCount = ValueNotifier<int>(0);
+
+  Future<void> Function(String action)? _remoteNavHandler;
+  Future<Object?> Function(String script)? _remoteScriptHandler;
+
   /// The download shelf's doorbell. The title bar's badge stands outside
   /// the browser's own tree — it has to, a download started here keeps
   /// running after the mode flips back — so the badge rings this and the
@@ -170,6 +182,57 @@ class BrowserService {
   void setStripTitle(String? title) {
     if (stripTitle.value == title) return;
     stripTitle.value = title;
+  }
+
+  /// Installed by the active browser tab only. Remote commands therefore use
+  /// the same WebTab object and controller as the on-screen buttons.
+  void setRemoteHandlers({
+    Future<void> Function(String action)? navigate,
+    Future<Object?> Function(String script)? executeScript,
+  }) {
+    _remoteNavHandler = navigate;
+    _remoteScriptHandler = executeScript;
+  }
+
+  Future<bool> remoteNavigate(String action) async {
+    final Future<void> Function(String)? handler = _remoteNavHandler;
+    if (handler == null) return false;
+    await handler(action);
+    return true;
+  }
+
+  Future<Object?> remoteExecuteScript(String script) async {
+    final Future<Object?> Function(String)? handler = _remoteScriptHandler;
+    if (handler == null) return null;
+    return handler(script);
+  }
+
+  void setRemoteWebMirror({
+    required String? title,
+    required String? url,
+    required bool canBack,
+    required bool canForward,
+    required bool loading,
+    required int tabCount,
+  }) {
+    webTitle.value = title;
+    webUrl.value = url == null ? null : (url.length > 256 ? url.substring(0, 256) : url);
+    webCanBack.value = canBack;
+    webCanForward.value = canForward;
+    webLoading.value = loading;
+    webTabCount.value = tabCount;
+  }
+
+  void clearRemoteWebMirror() {
+    setRemoteHandlers();
+    setRemoteWebMirror(
+      title: null,
+      url: null,
+      canBack: false,
+      canForward: false,
+      loading: false,
+      tabCount: 0,
+    );
   }
 
   /// The page-fullscreen hand-off: notify + drive the real window. Only
