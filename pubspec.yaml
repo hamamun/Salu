@@ -74,6 +74,9 @@ dependencies:
 
   # Utilities.
   path: ^1.9.0
+  # LAN remote pairing: SHA-256 token hashes and QR payload rendering.
+  crypto: ^3.0.6
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

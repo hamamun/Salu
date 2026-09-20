@@ -25,6 +25,7 @@ import '../../theme/app_theme.dart';
 import '../mini/mini_shell.dart';
 import '../osc/controller_panel.dart' show ControllerPanel, kChromeBlockHeight;
 import '../osc/open_url_dialog.dart';
+import '../osc/remote_panel.dart';
 import '../osc/right_menu.dart';
 import '../osd/osd_controller.dart';
 import '../osd/osd_deck.dart';
@@ -444,7 +445,30 @@ class _HomeScreenState extends State<HomeScreen> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onSecondaryTap: () => Navigator.of(context).pop(),
-            child: SettingsDialog(initialTab: tab),
+            child: SettingsDialog(initialTab: tab, onOpenRemote: _openRemote),
+          ),
+    ).whenComplete(ChromeLock.instance.release);
+  }
+
+  void _openRemote() {
+    PanelService.instance.closeAll();
+    _wakeChrome();
+    ChromeLock.instance.acquire();
+    showGeneralDialog<void>(
+      context: context,
+      barrierColor: const Color(0x99000000),
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      transitionDuration: const Duration(milliseconds: 220),
+      transitionBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+        final CurvedAnimation curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        return FadeTransition(opacity: curved, child: ScaleTransition(scale: Tween<double>(begin: .96, end: 1).animate(curved), child: child));
+      },
+      pageBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTap: () => Navigator.of(context).pop(),
+            child: const RemotePanel(),
           ),
     ).whenComplete(ChromeLock.instance.release);
   }
@@ -940,7 +964,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildTopChrome(chromeVisible),
 
                 // The strip sits below panels: their barriers win close-first.
-                RightMenu(anchor: _rightMenuAnchor, onSettings: _openSettings),
+                RightMenu(anchor: _rightMenuAnchor, onSettings: _openSettings, onRemote: _openRemote),
 
                 // 5 · The slide-out playlist panel — glass over the video,
                 //     anchored below the chrome block (top: kChromeBlockHeight).

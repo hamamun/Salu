@@ -8,6 +8,7 @@ import 'package:webview_windows/webview_windows.dart';
 import '../../core/browser_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
+import '../../core/remote/remote_browser_bridge.dart';
 import '../../core/settings_service.dart';
 import '../../core/web/web_address.dart';
 import '../../core/web/web_download_service.dart';
@@ -162,6 +163,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _suggestTimer?.cancel();
     _addressFocus.removeListener(_onAddressFocusChanged);
     _unbindActive();
+    RemoteBrowserBridge.instance.clear();
+    _service.clearRemoteWebMirror();
     unawaited(_service.setWebFullscreen(false));
     _service.setStripTitle(null);
     for (final WebTab t in _tabs) {
@@ -327,6 +330,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
       tab.startMode,
       tab.failed,
       tab.loading,
+      tab.canGoBack,
+      tab.canGoForward,
       tab.blocked,
     ]) {
       n.addListener(_onActiveChanged);
@@ -334,9 +339,33 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
     tab.wantsFullscreen.addListener(_onFullscreenWanted);
     _bound.add((tab.wantsFullscreen, _onFullscreenWanted));
+    Future<void> navigate(String action) async {
+      switch (action) {
+        case 'back':
+          return tab.goBack();
+        case 'forward':
+          return tab.goForward();
+        case 'reload':
+          return tab.reload();
+        case 'stop':
+          return tab.controller?.stop() ?? Future<void>.value();
+      }
+    }
+    Future<Object?> executeScript(String script) async {
+      final controller = tab.controller;
+      if (controller == null) return null;
+      return controller.executeScript(script);
+    }
+    _service.setRemoteHandlers(navigate: navigate, executeScript: executeScript);
+    RemoteBrowserBridge.instance.register(
+      navigate: navigate,
+      executeScript: executeScript,
+    );
   }
 
   void _unbindActive() {
+    _service.setRemoteHandlers();
+    RemoteBrowserBridge.instance.clear();
     for (final (ValueNotifier<Object?> n, VoidCallback cb) in _bound) {
       n.removeListener(cb);
     }
@@ -364,6 +393,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _blockedCount.value =
         tab.startMode.value ? 0 : tab.blocked.value.length;
     _service.setStripTitle(tab.displayTitle);
+    _service.setRemoteWebMirror(
+      title: tab.displayTitle,
+      url: tab.startMode.value ? null : tab.url.value,
+      canBack: tab.canGoBack.value,
+      canForward: tab.canGoForward.value,
+      loading: tab.loading.value,
+      tabCount: _tabs.length,
+    );
     setState(() {});
   }
 

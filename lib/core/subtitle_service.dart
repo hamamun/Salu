@@ -127,6 +127,14 @@ class SubtitleService {
   /// The one engine for the app.
   static final SubtitleService instance = SubtitleService._();
 
+  /// Read-only engine facts exposed to the authenticated remote. The token
+  /// itself never leaves this service and is never serialized.
+  bool get keyConfigured => SettingsService.instance.subtitleApiKey.value.isNotEmpty;
+  bool get signedIn => _token != null;
+  bool get loginConfigured => _hasLogin;
+  bool get quotaPaused => _quotaPaused;
+  bool get authPaused => _authPaused;
+
   // ── API facts (cc.md §4) ─────────────────────────────────────────────
   static const String _base = 'https://api.opensubtitles.com/api/v1';
   /// Docs' own example format (best-practices: "App name with version
@@ -479,7 +487,7 @@ class SubtitleService {
   /// success; an EMPTY list when there is nothing to show — including
   /// the not-configured / paused / failed cases, which already spoke
   /// their once-per-session card (§6.5 "no new dialog").
-  Future<List<SubtitleResult>> search(String query) async {
+  Future<List<SubtitleResult>> search(String query, {String? language}) async {
     final String q = query.trim();
     if (q.isEmpty) return const <SubtitleResult>[];
     if (SettingsService.instance.subtitleApiKey.value.isEmpty) {
@@ -492,8 +500,11 @@ class SubtitleService {
           '(${_quotaPaused ? 'quota' : 'auth'} wall)');
       return const <SubtitleResult>[];
     }
-    final List<SubtitleResult>? rows =
-        await _search(<String, String>{'query': q});
+    final Map<String, String> params = <String, String>{'query': q};
+    if (language != null && language.trim().isNotEmpty) {
+      params['languages'] = language.trim();
+    }
+    final List<SubtitleResult>? rows = await _search(params);
     if (rows == null) return const <SubtitleResult>[];
     _log('manual search "$q" → ${rows.length} row(s)');
     return rows;

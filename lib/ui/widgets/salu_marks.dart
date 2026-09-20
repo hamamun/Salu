@@ -1948,3 +1948,52 @@ class _InfoPainter extends CustomPainter {
   @override
   bool shouldRepaint(_InfoPainter old) => old.ink != ink || old.stroke != stroke;
 }
+
+/// QR / pairing mark — three finder corners and a sparse dot field. It is
+/// intentionally outlined like the rest of SALU's marks rather than using a
+/// platform QR glyph.
+class QrMark extends StatelessWidget {
+  const QrMark({super.key, this.size = 20});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+        size: Size.square(size),
+        painter: _QrPainter(markInk(context), markStrokeFor(size)),
+      );
+}
+
+class _QrPainter extends CustomPainter {
+  const _QrPainter(this.ink, this.stroke);
+  final Color ink;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Paint line = Paint()
+      ..color = ink
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeJoin = StrokeJoin.miter;
+    final Paint dot = Paint()..color = ink;
+    void finder(double x, double y) {
+      final double n = s * .29;
+      canvas.drawRect(Rect.fromLTWH(x, y, n, n), line);
+      canvas.drawRect(Rect.fromLTWH(x + n * .29, y + n * .29, n * .42, n * .42), dot);
+    }
+    finder(s * .07, s * .07);
+    finder(s * .64, s * .07);
+    finder(s * .07, s * .64);
+    for (final (double x, double y) in <(double, double)>[
+      (0.50, 0.50), (0.66, 0.49), (0.84, 0.51),
+      (0.48, 0.68), (0.63, 0.82), (0.82, 0.76), (0.91, 0.91),
+      (0.47, 0.92),
+    ]) {
+      canvas.drawRect(Rect.fromLTWH(s * x, s * y, stroke, stroke), dot);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_QrPainter old) => old.ink != ink || old.stroke != stroke;
+}
