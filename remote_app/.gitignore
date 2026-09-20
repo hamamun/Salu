@@ -1,0 +1,16 @@
+# Standard Flutter ignores, so copying this folder into the APK repo never
+# carries build output with it.
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+local.properties
+key.properties
+*.jks
+*.keystore
