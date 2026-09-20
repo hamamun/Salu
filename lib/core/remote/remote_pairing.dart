@@ -24,8 +24,19 @@ String formatPairingCode(String code) {
   return '${clean.substring(0, 4)}-${clean.substring(4)}';
 }
 
+/// Case- and separator-insensitive form of a pairing code.
+///
+/// Everything that is not a letter or a digit is dropped, so `7K4M-QP2X`,
+/// `7k4m qp2x` and the QR's `7K4MQP2X` are one and the same code. Two bugs
+/// lived in the previous one-liner and both looked like "the app is flaky":
+///   * `r'[-\\s]'` is a *raw* string, so the regex saw `-`, a backslash and
+///     the letter `s` — it never stripped whitespace, and it ate the `S` out
+///     of any code containing one (about one code in thirty-one could never
+///     be accepted, and it looked random);
+///   * nothing else was tolerated, so a single stray character typed on a
+///     phone keyboard failed the whole pairing with a misleading `bad_code`.
 String normalizePairingCode(String code) =>
-    code.replaceAll(RegExp(r'[-\s]'), '').toUpperCase();
+    code.toUpperCase().replaceAll(RegExp(r'[^0-9A-Z]'), '');
 
 String generateDeviceToken({math.Random? random}) {
   final math.Random source = random ?? math.Random.secure();
