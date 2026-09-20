@@ -71,7 +71,7 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 ## Requirements
 
 - Windows 10/11
-- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows) **3.27 or newer** (stable channel)
+- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows) **3.47.5** (CI-pinned stable version for the checked-in lockfile)
 - Visual Studio 2022 with the **Desktop development with C++** workload
 
 ## Build & Run

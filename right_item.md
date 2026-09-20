@@ -403,7 +403,7 @@ Widget tests, in the style of `test/mini_bar_test.dart`:
       change outside the panel's own file).
 - [x] **Remote's seat stays empty** — four marks drawn, no placeholder control
       (§9).
-- [ ] `flutter analyze` clean; `test/right_menu_test.dart` green.
+- [x] `flutter analyze` clean; `test/right_menu_test.dart` green.
 - [x] README's "What works right now" gains one line; `salu_context.md` Phase 4
       notes the layer under Slide-Out Panels & Menus.
 - [ ] Seen on a real Windows build with hardware decoding on (blur cost over a

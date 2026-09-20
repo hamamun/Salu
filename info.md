@@ -404,7 +404,7 @@ this panel — §0.7.)*
       the right-click menu's Info slot and dimmed when nothing is loaded.
 - [x] Esc / click-outside / CloseMark / `ChromeLock`, all on the existing
       panel recipe.
-- [ ] `flutter analyze` clean; widget tests for the presence rules (§0.5) and
+- [x] `flutter analyze` clean; widget tests for the presence rules (§0.5) and
       the one-popup world (§0.8).
 - [ ] Seen on a real Windows build with hardware decoding on, over a live 4K
       picture — the blur cost is the one thing a test cannot prove.
@@ -445,11 +445,19 @@ Regression suites: `test/info_collector_test.dart`,
 `test/info_controller_test.dart`, `test/info_panel_test.dart`, and
 `test/right_menu_test.dart` (including the real HomeScreen mode/settings seams).
 
-**Verification status:** Dart syntax/format validation and `git diff --check`
-were run in the Linux coding workspace. Flutter is not installed there; the
-Flutter SDK and pub download endpoints were inaccessible. Consequently neither
-`flutter analyze` nor `flutter test` has been run, and the Windows/4K checklist
-above is deliberately still unchecked. No candidate row has been deleted on
+**Verification status:** Windows CI uses Flutter 3.47.5 with the enforced
+lockfile and the documented Visual Studio 2022 toolchain. `flutter analyze` is
+clean; all 20 Info tests and all 12 right-click/integration tests pass.
+`flutter build windows --release --no-pub` also passes. The full
+suite still has 14 failures in existing Tune/browser code. A separate run of
+the original `1273e1f` commit reproduces every one of those failures (19 before
+this change, 14 after the review's small Auto EQ filename-case fix); there are
+no newly failing tests. Comparison evidence:
+https://github.com/hamamun/Salu/actions/runs/35488029702.
+
+The native playback/4K checklist above is deliberately still unchecked. A
+compiled release and headless tests do not verify mpv's actual property
+answers, hardware decoding or blur cost. No candidate row has been deleted on
 unobserved engine evidence.
 
 On a Flutter-equipped Windows checkout:
