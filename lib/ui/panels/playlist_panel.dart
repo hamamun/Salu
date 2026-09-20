@@ -243,13 +243,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _userScrollTimer?.cancel();
     _userScrolled = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_channelScroll.hasClients) return;
+      if (!mounted) return;
+      // `null` covers "not attached yet" and the one swap frame where the
+      // controller carries two positions — see _singlePosition.
+      final ScrollPosition? p = _singlePosition(_channelScroll);
+      if (p == null || !p.hasPixels) return;
       _programmatic = true;
-      try {
-        _channelScroll.jumpTo(0);
-      } catch (_) {
-        // No content yet — the jump is meaningless, not an error.
-      }
+      p.jumpTo(0);
       _programmatic = false;
     });
     if (mounted) setState(() {});
@@ -396,14 +396,16 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   void _revealPlaying({required bool animate, bool force = false}) {
     if (_userScrolled && !force) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_localScroll.hasClients) return;
+      if (!mounted) return;
       final int current = _queue.index.value;
       final int pos = _visibleRows(_queue.items.value).indexOf(current);
       if (pos < 0) return;
-      final ScrollPosition p = _localScroll.position;
+      final ScrollPosition? p = _singlePosition(_localScroll);
       // Skip until content metrics exist — reading them earlier throws a
-      // null check on the very frame a list is added to / resized.
-      if (!p.hasPixels ||
+      // null check on the very frame a list is added to / resized, and a
+      // swap frame's second position is just as unreadable.
+      if (p == null ||
+          !p.hasPixels ||
           !p.hasViewportDimension ||
           !p.hasContentDimensions) {
         return;
@@ -439,9 +441,10 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     final int? pos = _revealTargetPos(items);
     if (pos == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_channelScroll.hasClients) return;
-      final ScrollPosition p = _channelScroll.position;
-      if (!p.hasPixels ||
+      if (!mounted) return;
+      final ScrollPosition? p = _singlePosition(_channelScroll);
+      if (p == null ||
+          !p.hasPixels ||
           !p.hasViewportDimension ||
           !p.hasContentDimensions) {
         return;
@@ -1028,29 +1031,30 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       );
     }
     final bool filterActive = _query.isNotEmpty;
-    final Widget list;
-    if (filterActive) {
-      // A filter is a VIEW — drag reorder is disabled while it is active.
-      list = ListView.builder(
-        controller: _localScroll,
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        itemCount: visible.length,
-        itemBuilder: (BuildContext context, int i) =>
-            _row(items, visible[i], canDrag: false),
-      );
-    } else {
-      list = ReorderableListView.builder(
-        scrollController: _localScroll,
-        buildDefaultDragHandles: false,
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        itemCount: visible.length,
-        onReorderItem: (int oldIndex, int newIndex) {
-          unawaited(_move(oldIndex, newIndex));
-        },
-        itemBuilder: (BuildContext context, int i) =>
-            _row(items, visible[i], canDrag: true),
-      );
-    }
+    // ONE scrollable whatever the filter says. Swapping a
+    // ReorderableListView for a ListView on a keystroke replaced the
+    // rows' scroll view mid-frame: the new position attached to
+    // `_localScroll` before the old one unmounted, and for that one frame
+    // the controller carried two positions — the "attached to multiple
+    // scroll views" assert. Reordering stays disabled under a filter the
+    // same way it was (§4.5: a filter is a VIEW) — the rows lose their
+    // drag handle, and with `buildDefaultDragHandles: false` that handle
+    // is the list's only drag trigger — so the list never changes type,
+    // and the view keeps its offset while it thins out.
+    final Widget list = ReorderableListView.builder(
+      scrollController: _localScroll,
+      buildDefaultDragHandles: false,
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      itemCount: visible.length,
+      onReorderItem: (int oldIndex, int newIndex) {
+        // Belt and braces with the drag handles: a drag cannot start
+        // under a filter, so a reorder event must never reach the queue.
+        if (filterActive) return;
+        unawaited(_move(oldIndex, newIndex));
+      },
+      itemBuilder: (BuildContext context, int i) =>
+          _row(items, visible[i], canDrag: !filterActive),
+    );
 
     // SALU's own thin scrollbar over a transparent track (§4.3) — never
     // the platform / Material one.
@@ -1201,9 +1205,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       }
     }
     if (headPos < 0 || group == null) return null;
-    if (!_channelScroll.hasClients) return null;
-    final ScrollPosition p = _channelScroll.position;
-    if (!p.hasPixels || !p.hasViewportDimension || !p.hasContentDimensions) {
+    final ScrollPosition? p = _singlePosition(_channelScroll);
+    if (p == null ||
+        !p.hasPixels ||
+        !p.hasViewportDimension ||
+        !p.hasContentDimensions) {
       return null;
     }
     final double headTop = 2 + headPos * _channelRowExtent - p.pixels;
@@ -1225,9 +1231,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       builder: (BuildContext context, Widget? _) {
         final int? target = _revealTargetPos(items);
         if (target == null) return const SizedBox.shrink();
-        if (!_channelScroll.hasClients) return const SizedBox.shrink();
-        final ScrollPosition p = _channelScroll.position;
-        if (!p.hasPixels ||
+        final ScrollPosition? p = _singlePosition(_channelScroll);
+        if (p == null ||
+            !p.hasPixels ||
             !p.hasViewportDimension ||
             !p.hasContentDimensions) {
           return const SizedBox.shrink();
@@ -1832,6 +1838,29 @@ class _GroupPillOption extends StatelessWidget {
 
 // ── SALU's own scrollbar ────────────────────────────────────────────────
 
+/// The controller's one attached position, or `null` while it is attached
+/// to zero — or, transiently, MORE THAN ONE.
+///
+/// The rows area swaps which scroll view is mounted more than a reader
+/// expects: a queue flip between local and channel replaces the whole
+/// rows area, and a replaced scroll view is not unmounted the instant it
+/// is replaced — its position stays attached to the controller for that
+/// frame. So when the area comes back, the new scroll view mounts and
+/// attaches its position while the old one is still on the controller:
+/// two positions, and `controller.position` (and `offset`) assert on
+/// exactly that —
+///
+///     ScrollController attached to multiple scroll views.
+///
+/// Every rows-view sample goes through this helper and treats `null` as
+/// "not ready this frame". A thumb absent for one frame is invisible; an
+/// assertion overlay is not.
+ScrollPosition? _singlePosition(ScrollController controller) {
+  final List<ScrollPosition> attached = controller.positions.toList();
+  if (attached.length != 1) return null;
+  return attached.single;
+}
+
 /// Wraps the rows scroll view and paints SALU's own thin rounded thumb
 /// over a transparent track (§4.3) — never the Material / platform
 /// scrollbar, which is suppressed via [_NoScrollbars].
@@ -1934,12 +1963,14 @@ class _SaluScrollbarState extends State<_SaluScrollbar> {
   /// The thumb's geometry for the current scroll metrics, or `null` while
   /// the metrics are not ready yet — a freshly attached (or mid-layout)
   /// scroll position reports clients before its pixels/content dimensions
-  /// exist, so sampling them then throws a null check.
+  /// exist, and a swap frame carries two positions on the controller, so
+  /// sampling through `position` throws — see [_singlePosition].
   _ThumbGeometry? _geometry() {
-    final ScrollController c = widget.controller;
-    if (!c.hasClients) return null;
-    final ScrollPosition p = c.position;
-    if (!p.hasPixels || !p.hasViewportDimension || !p.hasContentDimensions) {
+    final ScrollPosition? p = _singlePosition(widget.controller);
+    if (p == null ||
+        !p.hasPixels ||
+        !p.hasViewportDimension ||
+        !p.hasContentDimensions) {
       return null;
     }
     final double viewport = p.viewportDimension;
@@ -1965,10 +1996,12 @@ class _SaluScrollbarState extends State<_SaluScrollbar> {
     final _ThumbGeometry? g = _geometry();
     if (g == null || !_dragging) return;
     if (g.travel <= 0) return;
+    // `offset` asserts the same way `position` does — sample instead.
+    final ScrollPosition? p = _singlePosition(widget.controller);
+    if (p == null || !p.hasPixels) return;
     // The pointer's vertical travel maps onto the scroll extent in the
     // same proportion the thumb's travel maps onto the track.
-    final double target =
-        widget.controller.offset + details.delta.dy * (g.max / g.travel);
+    final double target = p.pixels + details.delta.dy * (g.max / g.travel);
     widget.controller.jumpTo(target.clamp(0.0, g.max).toDouble());
   }
 
