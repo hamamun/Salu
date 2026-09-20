@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../../ui/osd/osd_controller.dart';
 import '../browser_service.dart';
 import '../channel_load_service.dart';
@@ -127,7 +129,7 @@ class RemoteCommandHandler {
         case 'queue_get':
           return _queueGet(a);
         case 'queue_jump':
-          return _queueJump(a);
+          return await _queueJump(a);
         case 'fs_places':
           return _fsPlaces();
         case 'fs_list':
@@ -297,7 +299,7 @@ class RemoteCommandHandler {
       !queue.isChannelList && player.duration.value > Duration.zero;
 
   Future<void> _focusForPlayback() async {
-    if (_ensurePlayerAndFocus != null) await _ensurePlayerAndFocus!();
+    await _ensurePlayerAndFocus?.call();
   }
 
   RemoteCommandResponse _nothingPlaying() => const RemoteCommandResponse.error(
@@ -403,10 +405,12 @@ class RemoteCommandHandler {
     final List<String> playable = paths
         .where((String value) => MediaUtils.isMedia(value) || MediaUtils.isPlaylist(value))
         .toList(growable: false);
-    if (playable.isEmpty) return const RemoteCommandResponse.error(
-      RemoteErrorCode.pathNotFound,
-      'That folder or file is no longer there.',
-    );
+    if (playable.isEmpty) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.pathNotFound,
+        'That folder or file is no longer there.',
+      );
+    }
     final String mode = args['mode'] as String? ?? 'play';
     if (playable.any(MediaUtils.isPlaylist)) {
       await ChannelLoadService.instance.openSource(playable.first);
@@ -650,10 +654,12 @@ class RemoteCommandHandler {
 
   Future<RemoteCommandResponse> _webMediaGet() async {
     final RemoteWebMediaResult result = await webMedia.get();
-    if (!result.found) return const RemoteCommandResponse.error(
-      RemoteErrorCode.noWebMedia,
-      "This site's player can't be controlled from outside.",
-    );
+    if (!result.found) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebMedia,
+        "This site's player can't be controlled from outside.",
+      );
+    }
     return RemoteCommandResponse.ok(<String, Object?>{
       'type': 'web_media_result',
       ...result.toJson(),
@@ -661,10 +667,12 @@ class RemoteCommandHandler {
   }
 
   Future<RemoteCommandResponse> _webWrite(bool success) async {
-    if (!success) return const RemoteCommandResponse.error(
-      RemoteErrorCode.noWebMedia,
-      "This site's player can't be controlled from outside.",
-    );
+    if (!success) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebMedia,
+        "This site's player can't be controlled from outside.",
+      );
+    }
     return const RemoteCommandResponse.ok();
   }
 

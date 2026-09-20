@@ -186,7 +186,9 @@ class RemoteService {
     }
     _connections.clear();
     connectedCount.value = 0;
-    _removeObservers.forEach((VoidCallback remove) => remove());
+    for (final VoidCallback remove in _removeObservers) {
+      remove();
+    }
     _removeObservers.clear();
     await server?.close(force: true);
     port.value = null;
@@ -410,7 +412,9 @@ class RemoteService {
     }
     _webMediaTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
       if (!_connections.any((connection) => connection.isAuthenticated) ||
-          !BrowserService.instance.isWeb) return;
+          !BrowserService.instance.isWeb) {
+        return;
+      }
       final Object? raw = await BrowserService.instance.remoteExecuteScript(
           '''(${RemoteWebMediaScripts.find})''');
       final bool found = raw == true;
@@ -612,9 +616,10 @@ class RemoteService {
       );
       return;
     }
-    if (known == null || token == null) return;
     // A remembered token identifies the device; the client-supplied id is
-    // only metadata and never overrides that identity.
+    // only metadata and never overrides that identity. Every path above
+    // either returns or leaves both [known] and [token] assigned, so no
+    // null check is needed here.
     await _store.touch(known.id, name: name, platform: platform);
     _store.setOnline(known.id, true);
     connection.authenticated(known.id, name);

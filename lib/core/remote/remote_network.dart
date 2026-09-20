@@ -77,7 +77,9 @@ int remoteAdapterRank(String name) {
   final String lower = name.toLowerCase();
   if (lower.contains('wi-fi') ||
       lower.contains('wifi') ||
-      lower.contains('wireless')) return 0;
+      lower.contains('wireless')) {
+    return 0;
+  }
   if (lower.contains('ethernet')) return 1;
   return 2;
 }

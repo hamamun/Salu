@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/language_names.dart';
+import '../../core/remote/remote_pairing.dart';
 import '../../core/remote/remote_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
@@ -964,13 +965,14 @@ class _GeneralTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The whole General tab is static, so build it once at compile time.
-    return const SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(24, 22, 24, 24),
+    // Every row but the Remote section is static, so the fixed rows stay
+    // compile-time constants while the section takes the runtime callback.
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
+          const Text(
             'Controls',
             style: TextStyle(
               fontSize: 15,
@@ -978,15 +980,15 @@ class _GeneralTab extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          SizedBox(height: 4),
-          Text(
+          const SizedBox(height: 4),
+          const Text(
             'Choose when the top bar hides itself.',
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
-          SizedBox(height: 16),
-          _TitleBarModePicker(),
-          SizedBox(height: 28),
-          Text(
+          const SizedBox(height: 16),
+          const _TitleBarModePicker(),
+          const SizedBox(height: 28),
+          const Text(
             'Resume',
             style: TextStyle(
               fontSize: 15,
@@ -994,15 +996,15 @@ class _GeneralTab extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          SizedBox(height: 4),
-          Text(
+          const SizedBox(height: 4),
+          const Text(
             'Which files continue from where you stopped.',
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
-          SizedBox(height: 16),
-          _ResumeModePicker(),
-          SizedBox(height: 28),
-          Text(
+          const SizedBox(height: 16),
+          const _ResumeModePicker(),
+          const SizedBox(height: 28),
+          const Text(
             'Folder auto-load',
             style: TextStyle(
               fontSize: 15,
@@ -1010,15 +1012,15 @@ class _GeneralTab extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          SizedBox(height: 4),
-          Text(
+          const SizedBox(height: 4),
+          const Text(
             'What loads when a single file is opened.',
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
-          SizedBox(height: 16),
-          _FolderAutoloadPicker(),
-          SizedBox(height: 28),
-          Text(
+          const SizedBox(height: 16),
+          const _FolderAutoloadPicker(),
+          const SizedBox(height: 28),
+          const Text(
             'Equalizer',
             style: TextStyle(
               fontSize: 15,
@@ -1026,18 +1028,18 @@ class _GeneralTab extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          SizedBox(height: 4),
-          Text(
+          const SizedBox(height: 4),
+          const Text(
             'What SALU may decide for itself about sound.',
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
-          SizedBox(height: 16),
-          _AutoEqSwitch(),
-          SizedBox(height: 10),
-          _MouseOverPreviewSwitch(),
-          SizedBox(height: 10),
-          _ClearEqMemoryRow(),
-          SizedBox(height: 28),
+          const SizedBox(height: 16),
+          const _AutoEqSwitch(),
+          const SizedBox(height: 10),
+          const _MouseOverPreviewSwitch(),
+          const SizedBox(height: 10),
+          const _ClearEqMemoryRow(),
+          const SizedBox(height: 28),
           _RemoteSection(onOpenRemote: onOpenRemote),
         ],
       ),
