@@ -1,5 +1,18 @@
 # Phase 8: Android Remote Server
-**Status:** ⏳ Not Started
+**Status:** ⏳ Not Started — **spec locked, see `remote.md`**
+
+> **⚠️ Superseded in parts (2026-09-20).** The decisions in `remote.md` are the current
+> authority for the PC side. The changes from this original sketch:
+> · QR pairing is the primary path, **not** mDNS (`remote.md` D2/D3 — discovery is a
+>   later UDP beacon, never Bonjour);
+> · every connection is **authenticated** with a pairing code → device token (D4);
+> · commands go into **`TransportActions`**, not `PlayerService` (D12);
+> · state updates are **throttled** — full snapshots, ~4/s position, events instantly (D5);
+> · the QR door is the **rightmost item in the right-click strip**, and the toggle is
+>   **ON by default** in Settings → General → Remote (D9/D10).
+> · The Android app's design lives in `remote_apk_ui.md` (opinion only — the APK is a
+>   separate project, built later).
+
 
 ## 🎯 Goal
 Prepare SALU to be controlled remotely. By the end of this phase, the Windows application will run a lightweight, invisible local server in the background that is ready to accept commands (Play, Pause, Volume, Seek) from the future Android companion app.
