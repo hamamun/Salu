@@ -249,6 +249,8 @@ class InfoRows extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Map<String, List<InfoRow>> groups = <String, List<InfoRow>>{};
+    final Duration elapsed =
+        position < Duration.zero ? Duration.zero : position;
     for (final String name in <String>[
       'Identity',
       'Picture',
@@ -266,7 +268,7 @@ class InfoRows extends StatelessWidget {
           InfoRow(
             'Position',
             formatClockCompact(
-              position < Duration.zero ? Duration.zero : position,
+              elapsed,
             ),
           ),
         );
@@ -275,7 +277,7 @@ class InfoRows extends StatelessWidget {
             InfoRow(
               'Remaining',
               formatClockCompact(
-                position > duration ? Duration.zero : duration - position,
+                elapsed > duration ? Duration.zero : duration - elapsed,
               ),
             ),
           );

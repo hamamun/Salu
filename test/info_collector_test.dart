@@ -271,6 +271,27 @@ void main() {
     },
   );
 
+  test('invalid or empty titles fall back instead of removing Identity',
+      () async {
+    final InfoSnapshot info = await collector(<String, String>{
+      'metadata': '{"title":"bad\\u0000title"}',
+      'media-title': 'bad\u0000title',
+    }).collect(const InfoContext(path: 'C:/honest.mp3', title: '  '));
+    expect(value(info, 'Identity', 'Title'), 'honest');
+    final InfoSnapshot tagged = await collector(<String, String>{
+      'metadata/by-key/TITLE': 'unknown',
+    }).collect(const InfoContext(path: 'C:/honest.mp3'));
+    expect(value(tagged, 'Identity', 'Title'), 'unknown');
+  });
+
+  test('file URIs describe local media, not a stream', () async {
+    final InfoSnapshot info = await collector(<String, String>{}, size: 1024)
+        .collect(const InfoContext(path: 'file:///C:/song.wav', tracks: audio));
+    expect(info.local, isTrue);
+    expect(value(info, 'Clock & file', 'File size'), '1 KiB');
+    expect(info.groups.containsKey('Stream'), isFalse);
+  });
+
   test('safe text and numeric formatting never invent placeholders', () {
     expect(infoText('binary\u0000bytes'), isNull);
     expect(infoText('  \n first line\nsecond'), 'first line');

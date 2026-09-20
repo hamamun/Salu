@@ -21,6 +21,7 @@ void main() {
       Future<void> render(
         InfoSnapshot snapshot, {
         Duration duration = Duration.zero,
+        Duration position = const Duration(seconds: 5),
       }) =>
           tester.pumpWidget(
             MaterialApp(
@@ -30,7 +31,7 @@ void main() {
                   width: 322,
                   child: InfoRows(
                     snapshot: snapshot,
-                    position: const Duration(seconds: 5),
+                    position: position,
                     duration: duration,
                   ),
                 ),
@@ -60,6 +61,16 @@ void main() {
       );
       expect(find.text('PICTURE'), findsOneWidget);
       expect(find.text('00:15'), findsOneWidget);
+      await render(const InfoSnapshot(identity, local: true),
+          duration: const Duration(seconds: 20),
+          position: const Duration(seconds: -5));
+      expect(find.text('00:00'), findsOneWidget);
+      expect(find.text('00:20'), findsNWidgets(2));
+      await render(const InfoSnapshot(identity, local: true),
+          duration: const Duration(seconds: 20),
+          position: const Duration(seconds: 99));
+      expect(find.text('00:00'), findsOneWidget);
+      expect(find.text('01:39'), findsOneWidget);
       await render(
         const InfoSnapshot(<String, List<InfoRow>>{
           ...identity,

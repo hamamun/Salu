@@ -57,7 +57,9 @@ class InfoContext {
   final double subDelay;
   final bool buffering;
 
-  bool get local => !(item?.isChannel ?? false) && !path.contains('://');
+  bool get local =>
+      !(item?.isChannel ?? false) &&
+      (!path.contains('://') || Uri.tryParse(path)?.scheme == 'file');
 
   factory InfoContext.current() {
     final PlayerService p = PlayerService.instance;
@@ -108,7 +110,10 @@ class InfoCollector {
 
   static Future<int?> _stat(String path) async {
     try {
-      final FileStat stat = await File(path).stat();
+      final Uri? uri = Uri.tryParse(path);
+      final File file =
+          uri != null && uri.scheme == 'file' ? File.fromUri(uri) : File(path);
+      final FileStat stat = await file.stat();
       return stat.type == FileSystemEntityType.file && stat.size > 0
           ? stat.size
           : null;
