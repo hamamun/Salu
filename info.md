@@ -393,16 +393,16 @@ this panel — §0.7.)*
 
 ## 8. Build checklist for the Info panel
 
-- [ ] `PanelService.infoOpen` — the one notifier, beside the other three.
-- [ ] `lib/ui/panels/info_panel.dart` — glass, geometry and motion copied from
+- [x] `PanelService.infoOpen` — the one notifier, beside the other three.
+- [x] `lib/ui/panels/info_panel.dart` — glass, geometry and motion copied from
       `playlist_panel.dart`, mirrored to the left (§0.2).
-- [ ] The one-read collector: one pass over the §0 rows at open, one pass on
+- [x] The one-read collector: one pass over the §0 rows at open, one pass on
       media/track/resolution/subtitle change, nothing on a timer.
-- [ ] The clock rows bound to the existing `position` / `duration` notifiers.
-- [ ] The Open pill's open path closes the panel (the §0.8 finding).
-- [ ] `InfoMark` added to `salu_marks.dart` (see `right_item.md` §4), wired to
+- [x] The clock rows bound to the existing `position` / `duration` notifiers.
+- [x] The Open pill's open path closes the panel (the §0.8 finding).
+- [x] `InfoMark` added to `salu_marks.dart` (see `right_item.md` §4), wired to
       the right-click menu's Info slot and dimmed when nothing is loaded.
-- [ ] Esc / click-outside / CloseMark / `ChromeLock`, all on the existing
+- [x] Esc / click-outside / CloseMark / `ChromeLock`, all on the existing
       panel recipe.
 - [ ] `flutter analyze` clean; widget tests for the presence rules (§0.5) and
       the one-popup world (§0.8).
@@ -429,3 +429,43 @@ reader sees the reasoning, not just the verdict.
 Anything a later session wants to revisit is a **new question**, not a re-open
 of these — the file is closed at this revision.
 
+
+
+## 10. Implementation handoff — 2026-09-20
+
+The surface and collector are implemented. `InfoCollector` shares the existing
+unfiltered metadata reader with the audio canvas; `InfoController` coalesces
+media/selection/resolution notifications and rejects obsolete async results.
+Only the three clocks rebuild from the existing position/duration notifiers.
+Channel mapping now retains `MetadataSource` in each queue record (previously
+it was discarded); the player retains configured starting offsets independently
+of both the ticking resume database and the one-shot resume toast.
+
+Regression suites: `test/info_collector_test.dart`,
+`test/info_controller_test.dart`, `test/info_panel_test.dart`, and
+`test/right_menu_test.dart` (including the real HomeScreen mode/settings seams).
+
+**Verification status:** Dart syntax/format validation and `git diff --check`
+were run in the Linux coding workspace. Flutter is not installed there; the
+Flutter SDK and pub download endpoints were inaccessible. Consequently neither
+`flutter analyze` nor `flutter test` has been run, and the Windows/4K checklist
+above is deliberately still unchecked. No candidate row has been deleted on
+unobserved engine evidence.
+
+On a Flutter-equipped Windows checkout:
+
+```sh
+flutter pub get
+flutter analyze
+flutter test
+flutter run -d windows
+```
+
+Exercise tagged audio, SDR/HDR video, direct URLs and an IPTV list; Next and
+track/subtitle changes while Info stays open; stopped/empty states; both
+Open-pill handoffs; right-click/Esc/outside dismissal; window-edge placement;
+and Web/mini transitions. Read the single `[SALU/info]` diagnostic per open
+(property names only, never values/URLs), then apply §7's row-pruning rule to
+properties that never answer across suitable media. Finally check live 4K
+hardware-decoded playback with the blur open. This environment cannot certify
+that native performance or those engine answers.

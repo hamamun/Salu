@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/open_media_service.dart';
+import '../../core/panel_service.dart';
 import '../../core/ui_lock.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/salu_icon_button.dart';
@@ -60,7 +61,22 @@ class _OpenMediaControlState extends State<OpenMediaControl>
   );
 
   @override
+  void initState() {
+    super.initState();
+    PanelService.instance.openPillOpen.addListener(_onPopupChanged);
+  }
+
+  void _onPopupChanged() {
+    if (_open && !PanelService.instance.openPillOpen.value) {
+      _closePill();
+      _portal.hide();
+    }
+  }
+
+  @override
   void dispose() {
+    PanelService.instance.openPillOpen.removeListener(_onPopupChanged);
+    PanelService.instance.openPillOpen.value = false;
     _hideTimer?.cancel();
     if (_open) ChromeLock.instance.release();
     _anim.dispose();
@@ -73,6 +89,7 @@ class _OpenMediaControlState extends State<OpenMediaControl>
 
   void _openPill() {
     if (_open) return;
+    PanelService.instance.openPillOpen.value = true;
     _hideTimer?.cancel();
     ChromeLock.instance.acquire();
     _focusBefore = FocusManager.instance.primaryFocus;
@@ -84,6 +101,7 @@ class _OpenMediaControlState extends State<OpenMediaControl>
   void _closePill() {
     if (!_open) return;
     setState(() => _open = false);
+    PanelService.instance.openPillOpen.value = false;
     _anim.reverse();
     ChromeLock.instance.release();
     _focusBefore?.requestFocus();
@@ -115,12 +133,15 @@ class _OpenMediaControlState extends State<OpenMediaControl>
       controller: _portal,
       overlayLocation: OverlayChildLocation.rootOverlay,
       overlayChildBuilder: (BuildContext context, OverlayChildLayoutInfo info) {
-        return _PillOverlay(
-          childPaintTransform: info.childPaintTransform,
-          childSize: info.childSize,
-          animation: _anim,
-          onDismiss: _closePill,
-          onAction: _runAction,
+        return IgnorePointer(
+          ignoring: !_open,
+          child: _PillOverlay(
+            childPaintTransform: info.childPaintTransform,
+            childSize: info.childSize,
+            animation: _anim,
+            onDismiss: _closePill,
+            onAction: _runAction,
+          ),
         );
       },
       child: SaluIconButton(

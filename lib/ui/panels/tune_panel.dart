@@ -150,7 +150,11 @@ class _TunePanelState extends State<TunePanel>
                                 1.0,
                               ),
                             alignment: Alignment.topCenter,
-                            child: _glass(_body()),
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onSecondaryTap: _panels.closeTunePanel,
+                              child: _glass(_body()),
+                            ),
                           ),
                         ),
                       ),

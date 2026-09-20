@@ -112,7 +112,7 @@ on a real build.
 
 ---
 
-## 4. Marks — three reused, two new
+## 4. Marks — three reused, one new
 
 Rule 6 says the family is closed and every new mark is drawn by hand in the
 same stroke language. Geometry to add to `lib/ui/widgets/salu_marks.dart`
@@ -300,7 +300,7 @@ this file — no QR, no payload, no address, no pairing flow, no mark. What is
 recorded here is only the **seat** it will take, so that this file stays a
 complete picture of the strip:
 
-- The strip's order already reserves **slot 4**: `shuffle · repeat ‖ **remote** ·
+- The strip's order already reserves the seat **between Repeat and Info**: `shuffle · repeat ‖ **remote** ·
   info · settings`.
 - **The seat ships empty.** The first build draws four marks; nothing is
   greyed-out or inert to stand in for Remote, because a control that leads
@@ -320,7 +320,7 @@ That is the whole of this file's involvement with Remote.
 | Player mode, menu open | right-click closes it |
 | **Web mode** | **never** — the player tree is not built |
 | **Mini mode** | **never** — the 32 px bar builds no popups |
-| Channel (IPTV) list playing | opens with **four** marks (no shuffle/repeat) |
+| Channel (IPTV) list playing | opens with **two** marks: Info · Settings (no shuffle/repeat; Remote reserved) |
 | Nothing loaded / STOPPED | opens; toggles idle-quiet, Info's mark is dimmed and inert |
 | Clean screen, left-click | play/pause — unchanged, the menu never eats it |
 
@@ -373,10 +373,10 @@ Widget tests, in the style of `test/mini_bar_test.dart`:
 4. Shuffle and repeat taps **keep the strip open**; the marks flip state.
 5. Repeat cycling reaches `one` and the bead is drawn; shuffle goes quiet while
    `one` is active and keeps its state.
-6. Info / Remote / Settings taps close the strip before the surface appears.
+6. Info / Settings taps close the strip before the surface appears (Remote has no control).
 7. Settings opens the existing dialog on the **General** tab.
 8. `SaluMode.web` → right-click produces no menu (the tree is not even built).
-9. Channel-mode queue → the strip builds **four** marks, no shuffle/repeat.
+9. Channel-mode queue → the strip builds **two** marks (Info · Settings), no shuffle/repeat.
 10. Edge placement: a right-click 4 px from each edge keeps the strip fully
     on-screen.
 11. `ChromeLock` counts up on open and back to zero on every close path
@@ -392,19 +392,36 @@ Widget tests, in the style of `test/mini_bar_test.dart`:
 
 - [x] **Concept locked in this file** — §3 and the §0 log carry A · the second row (2026-09-19).
 - [x] **§12 answered and written into this file** — nothing is pending (2026-09-19).
-- [ ] `InfoMark` added to the family and listed in the family's own header
+- [x] `InfoMark` added to the family and listed in the family's own header
       comment in `salu_marks.dart`. (`RemoteMark` is drawn when Phase 8 lands —
       §9 — so it is *not* part of this build.)
-- [ ] Strip ships **four marks** (shuffle · repeat ‖ info · settings) with the
+- [x] Strip ships **four marks** (shuffle · repeat ‖ info · settings) with the
       §5 numbers — pitch and glass identical to the existing recipe, nothing invented.
-- [ ] §10 gating table holds as tests.
-- [ ] The Info panel per `info.md` §0 and its own checklist §8 — including the
+- [ ] §10 gating table holds as executed tests (regression tests written; Flutter runtime unavailable here).
+- [x] The Info panel per `info.md` §0 and its own checklist §8 — including the
       Open pill's `PanelService.infoOpen` wiring, both directions (the one
       change outside the panel's own file).
-- [ ] **Remote's seat stays empty** — four marks drawn, no placeholder control
+- [x] **Remote's seat stays empty** — four marks drawn, no placeholder control
       (§9).
 - [ ] `flutter analyze` clean; `test/right_menu_test.dart` green.
-- [ ] README's "What works right now" gains one line; `salu_context.md` Phase 4
+- [x] README's "What works right now" gains one line; `salu_context.md` Phase 4
       notes the layer under Slide-Out Panels & Menus.
 - [ ] Seen on a real Windows build with hardware decoding on (blur cost over a
       live 4K texture is the one thing a test cannot prove).
+
+
+### Implementation note — 2026-09-20
+
+Info was implemented before its menu door. The shipping strip is 162 × 42;
+channel mode is 82 × 42. There is no Remote widget or empty hit target. The
+stale channel count in §10/§13 and stale “slot 4” wording in §9 were corrected
+to match the locked exclusions, not to change the design.
+
+The Playlist previously had no general outside-dismiss barrier (only its
+internal group-by pill did). It now follows the same opaque, close-first
+barrier and chrome-lock recipe as Tracks/Tune/Info; right-click inside each
+panel closes it too. Open joins `PanelService`'s exclusive popup set, including
+programmatic openings. Settings and the URL modal clear the popup set before
+opening, so silent shortcut doors cannot strand a strip behind a modal.
+
+See `info.md` §10 for the exact verification limits and Windows handoff.

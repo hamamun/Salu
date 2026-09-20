@@ -6,7 +6,18 @@ import 'package:flutter/foundation.dart';
 /// keyboard handler and the panel itself all read ONE notifier, exactly as
 /// `QueueService` does for the queue.
 class PanelService {
-  PanelService._internal();
+  PanelService._internal() {
+    // Also enforce exclusivity for callers writing the public notifiers.
+    for (final ValueNotifier<bool> popup in _popups) {
+      popup.addListener(() {
+        if (popup.value) {
+          for (final ValueNotifier<bool> other in _popups) {
+            if (other != popup) other.value = false;
+          }
+        }
+      });
+    }
+  }
 
   /// The one and only panel-state holder for the whole app.
   static final PanelService instance = PanelService._internal();
@@ -23,6 +34,38 @@ class PanelService {
   /// the same recipe a third time: one notifier for the mark, the Esc tier
   /// and the panel.
   final ValueNotifier<bool> tunePanelOpen = ValueNotifier<bool>(false);
+
+  final ValueNotifier<bool> infoOpen = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> rightMenuOpen = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> openPillOpen = ValueNotifier<bool>(false);
+
+  List<ValueNotifier<bool>> get _popups => <ValueNotifier<bool>>[
+        playlistOpen,
+        trackPanelOpen,
+        tunePanelOpen,
+        infoOpen,
+        rightMenuOpen,
+        openPillOpen,
+      ];
+
+  void openInfo() => infoOpen.value = true;
+  void closeInfo() => infoOpen.value = false;
+  void closeRightMenu() => rightMenuOpen.value = false;
+  void closeAll() {
+    for (final ValueNotifier<bool> popup in _popups) {
+      popup.value = false;
+    }
+  }
+
+  /// Close-first: never replace an existing popup on the same right click.
+  bool handleSecondaryClick() {
+    if (anyOpen) {
+      closeAll();
+      return false;
+    }
+    rightMenuOpen.value = true;
+    return true;
+  }
 
   /// Toggle (the control-row mark; Ctrl+L). Opening the playlist closes
   /// other popups (follow.md rule 3's one-popup world).
@@ -67,6 +110,5 @@ class PanelService {
   void closeTunePanel() => tunePanelOpen.value = false;
 
   /// Whether any panel is up — the chrome's "do not hide under me" check.
-  bool get anyOpen =>
-      playlistOpen.value || trackPanelOpen.value || tunePanelOpen.value;
+  bool get anyOpen => _popups.any((ValueNotifier<bool> popup) => popup.value);
 }

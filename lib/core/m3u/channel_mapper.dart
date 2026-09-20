@@ -93,6 +93,8 @@ class ChannelMapper {
       group: group,
       language: language,
       country: country,
+      languageSource: meta.languageSource,
+      countrySource: meta.countrySource,
       logoUrl: logoUrl,
       searchKey: searchKey,
     );

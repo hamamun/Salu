@@ -229,8 +229,8 @@ class TrackSurface {
           lang: (m['lang'] as String?)?.trim().isEmpty ?? true
               ? null
               : (m['lang'] as String?),
-          codec: m['codec'] as String?,
-          channels: m['demux-channels'] as String?,
+          codec: (m['codec'] ?? m['codec-desc']) as String?,
+          channels: m['demux-channels']?.toString(),
           external: external,
           externalFilename: m['external-filename'] as String?,
           selected: m['selected'] == true,
@@ -284,7 +284,19 @@ class PlayerService {
 
   /// The one and only player instance for the whole app (single window,
   /// single engine).
-  static final PlayerService instance = PlayerService._internal();
+  static PlayerService? _instance;
+  static PlayerService get instance => _instance ??= PlayerService._internal();
+
+  PlayerService._notifierOnly();
+
+  /// Widget tests exercise the real shared notifiers/commands without loading
+  /// a Windows DLL. Must be installed before the singleton is first read;
+  /// production still constructs exactly one eagerly initialized engine.
+  @visibleForTesting
+  static void installNotifierOnlyForTesting() {
+    if (_instance != null) throw StateError('Player already constructed');
+    _instance = PlayerService._notifierOnly();
+  }
 
   /// Core `media_kit` player (wraps libmpv).
   late final Player player;
@@ -325,6 +337,10 @@ class PlayerService {
   /// idle/stopped.
   final ValueNotifier<String?> currentPath = ValueNotifier<String?>(null);
 
+
+  /// The actual starting offset for this playback, not the resume database's
+  /// continuously updated position. Info must never call the latter “resumed”.
+  final ValueNotifier<Duration?> resumedFrom = ValueNotifier<Duration?>(null);
 
   /// The parked position taken by Stop, until Play resumes it.
   final ValueNotifier<StopMemory?> stopMemory =
@@ -413,6 +429,11 @@ class PlayerService {
   /// toast when the playlist stream lands on them (normalized path →
   /// resumed position). Filled by every open path; consumed once.
   final Map<String, Duration> _pendingResume = <String, Duration>{};
+
+  /// Start offsets actually configured on the current engine playlist. Unlike
+  /// toast bookkeeping these survive repeated playlist notifications and also
+  /// include silent (Undo) resumes. They never follow the ticking disk memory.
+  final Map<String, Duration> _playbackStarts = <String, Duration>{};
 
   /// Fallback for containers that ignore `Media(start:)`: normalized
   /// path → expected offset, checked once when a real duration arrives.
@@ -518,6 +539,8 @@ class PlayerService {
       hasMedia.value = true;
       unawaited(_setWindowTitle(title == null ? 'SALU' : '$title — SALU'));
 
+      final Duration? resumeAt = _pendingResume.remove(key);
+      resumedFrom.value = _playbackStarts[key];
       currentPath.value = key;
 
       // Subtitle sync (owner 2026-09-13): this file's remembered
@@ -535,7 +558,6 @@ class PlayerService {
       }
 
       // Resume: this item was opened with a remembered offset → toast.
-      final Duration? resumeAt = _pendingResume.remove(key);
       if (resumeAt != null) {
         OsdController.instance
             .show(OsdResumeCard(position: resumeAt));
@@ -1097,6 +1119,7 @@ class PlayerService {
       // Streams never carry the graph — clear whatever an earlier
       // audio load installed.
       await _applySubAutoloadForLoad(channel.url);
+      _playbackStarts.clear();
       await player.open(Media(channel.url), play: play);
       if (play) _userPaused = false;
       // A live stream carries no remembered offset (`resume_service`
@@ -1130,6 +1153,7 @@ class PlayerService {
     }
 
     // Build the full playlist; every item with a memory gets its start.
+    _playbackStarts.clear();
     final List<Media> medias = <Media>[];
     for (int i = 0; i < paths.length; i++) {
       final String p = paths[i];
@@ -1140,6 +1164,7 @@ class PlayerService {
       if (offset != null && offset > Duration.zero) {
         medias.add(Media(p, start: offset));
         final String key = normalizePathKey(p);
+        _playbackStarts[key] = offset;
         if (!(isTarget && (fresh || silent))) {
           _pendingResume[key] = offset;
         }
@@ -1243,6 +1268,8 @@ class PlayerService {
     videoWidth.value = 0;
     videoHeight.value = 0;
     _pendingResume.clear();
+    _playbackStarts.clear();
+    resumedFrom.value = null;
     _expectedStartAfterLoad.clear();
     _openingWithPlay = false;
     transportState.value = TransportState.stopped;

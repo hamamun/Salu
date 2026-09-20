@@ -1,0 +1,39 @@
+name: Windows validation
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          # Matches the minimum SDK recorded in pubspec.lock.
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        id: dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: flutter test --reporter expanded
+      - name: Build Windows release
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: flutter build windows --release --no-pub
