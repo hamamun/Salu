@@ -18,9 +18,13 @@ python3 -m http.server 8533 --bind 0.0.0.0
 
 Right-click the picture and four marks arrive at the cursor —
 **shuffle · repeat ‖ info · settings** — in a slim frosted strip (**concept A ·
-the second row**). Toggles stay open; doors leave. Player mode only. **Remote's
-seat between repeat and info is reserved and stays empty** — it is a separate
-workstream with its own design (`right_item.md` §9).
+the second row**). Toggles stay open; doors leave. Player mode only.
+
+> **Superseded 2026-09-20.** Remote is no longer a reserved empty seat. `remote.md`
+> **D9** puts it as the **last** item, after Settings — not between repeat and Info —
+> and the stale comment in `right_menu.dart` that reserved the old slot must be
+> rewritten. The QR door, the pairing panel and the phone it pairs with are built out
+> in `design/remote-preview/`. This page still shows the four-mark strip as locked.
 
 ## Status: locked (2026-09-19)
 
@@ -28,7 +32,7 @@ workstream with its own design (`right_item.md` §9).
 |---|---|
 | Concept **A · the second row** | ✅ LOCKED — the default view of this page |
 | **Info mark = the sheet** | ✅ LOCKED (the circle-i proposal was dropped by the owner) |
-| **Remote** | ⏸ a reserved, **empty seat** — no mark, no QR, no payload here |
+| **Remote** | ↗ moved out of this page — **D9** makes it the **fifth and last** seat. See `design/remote-preview/` |
 | **Suspended shuffle** | ✅ 55 % ink + the chip reading `Shuffle · suspended` |
 | Concept B · the ring | ⏸ parked, not rejected — still switchable in the toolbar |
 
