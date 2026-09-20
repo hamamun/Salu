@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU Remote — APK + PC pairing preview</title>
+<style>
+  /* ── SALU palette (lib/theme/app_theme.dart · AppColors) ───────────── */
+  :root{
+    --bg:#1E1E1E; --video:#121212; --surface:#252526; --surface-hi:#2D2D30;
+    --text:#EDEDED; --idle:#A6A6A6; --sec:#9A9A9A; --divider:#3A3A3C;
+    --outline:#333336; --accent:#4C9EEB; --alive:#57C777; --dead:#E05B5B;
+    --unknown:#5A5A5E; --bar-track:#35353C; --glass:rgba(30,30,30,.80);
+    --amber:#E8A33D;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:#101013;color:var(--text);
+    font:13px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    padding:30px 24px 80px;display:flex;flex-direction:column;align-items:center;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{width:1240px;max-width:100%}
+  h1{font-size:21px;font-weight:600;letter-spacing:.01em}
+  .kicker{font-size:10px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+    color:#7c7c80;margin-bottom:7px}
+  .lede{color:var(--sec);font-size:12.5px;margin-top:7px;max-width:900px}
+  .lede b{color:var(--text);font-weight:600}
+  .lede code{font:11.5px/1.4 "Cascadia Mono",Consolas,monospace;color:#9fc4e8}
+
+  /* ── toolbar ───────────────────────────────────────────────────────── */
+  .bar{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px;align-items:center}
+  .btn{background:#1a1c20;border:1px solid #2a2d33;color:var(--text);border-radius:8px;
+    padding:7px 12px;font:inherit;font-size:12px;cursor:pointer;transition:.12s}
+  .btn:hover{background:#22252a;border-color:#3a3e46}
+  .btn.on{border-color:var(--accent);color:#bcd9f6}
+  .btn.warn{border-color:#4a3a22;color:#e8c48a}
+  .hint{color:#77777c;font-size:11.5px;margin-left:2px}
+
+  /* ── the stage ─────────────────────────────────────────────────────── */
+  .stage{display:flex;gap:26px;align-items:flex-start;margin-top:20px;flex-wrap:wrap}
+
+  /* ── PC window ─────────────────────────────────────────────────────── */
+  .pc{width:760px;max-width:100%;flex:1 1 620px}
+  .pc-frame{background:var(--bg);border:1px solid #3a3a3c;border-radius:9px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  .titlebar{height:40px;display:flex;align-items:center;gap:9px;padding:0 6px 0 12px;
+    background:var(--surface);border-bottom:1px solid var(--divider);user-select:none}
+  .titlebar .app{font-size:12.5px;font-weight:600;letter-spacing:.04em}
+  .titlebar .now{color:var(--sec);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;flex:1}
+  .cap{display:flex;gap:2px}
+  .cap svg{width:15px;height:15px;stroke:var(--idle);fill:none;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round}
+  .capbtn{width:34px;height:28px;display:grid;place-items:center;border-radius:5px;cursor:default}
+  .capbtn:hover{background:rgba(255,255,255,.10)}
+  .capbtn:hover svg{stroke:var(--text)}
+
+  .chrome{height:108px;background:var(--surface);border-bottom:1px solid var(--divider);
+    display:flex;align-items:center;gap:10px;padding:0 14px}
+  .openpill{height:42px;display:flex;align-items:center;gap:9px;padding:0 16px 0 13px;
+    border-radius:21px;background:var(--glass);border:1px solid var(--outline);
+    backdrop-filter:blur(18px);font-size:12.5px;cursor:default}
+  .openpill svg{width:15px;height:15px;stroke:var(--text);fill:none;stroke-width:1.9;
+    stroke-linecap:round}
+  .chrome .sp{flex:1}
+  .chrome .meta{color:var(--sec);font-size:11.5px}
+
+  .canvas{position:relative;height:392px;background:var(--video);overflow:hidden;
+    cursor:default}
+  .canvas.web{background:#15181d}
+  .vid{position:absolute;inset:0;display:grid;place-items:center;
+    background:radial-gradient(120% 90% at 50% 40%,#2a2f38 0%,#14171c 55%,#0e1013 100%)}
+  .vid .glyph{opacity:.5}
+  .vid .glyph svg{width:74px;height:74px;stroke:#6d7783;fill:none;stroke-width:1.1;
+    stroke-linecap:round;stroke-linejoin:round}
+  .webpage{position:absolute;inset:0;display:flex;flex-direction:column;color:#c9d2dc}
+  .webpage .urow{height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;
+    background:#1c2027;border-bottom:1px solid #262b33;font-size:11.5px}
+  .webpage .addr{flex:1;background:#12151a;border:1px solid #2b313a;border-radius:14px;
+    padding:5px 12px;color:#9aa5b1;font-size:11px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap}
+  .webpage .body{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:12px;padding:20px;text-align:center}
+  .webpage .vframe{width:74%;aspect-ratio:16/9;border-radius:6px;background:#0b0d10;
+    border:1px solid #2b313a;display:grid;place-items:center}
+  .webpage .vframe svg{width:44px;height:44px;stroke:#5d6773;fill:none;stroke-width:1.2}
+  .webpage h4{font-size:13px;font-weight:600;color:#dfe6ee}
+  .webpage p{font-size:11.5px;color:#8d97a3;max-width:420px}
+  /* Focusable elements the D-pad walks. The ring is the whole point: with no
+     visible focus, the phone would be steering the PC blind. */
+  .webpage .frow{display:flex;align-items:center;gap:9px;width:74%;padding:6px 11px;margin:3px 0;
+    border:2px solid transparent;border-radius:6px;font-size:11.5px;color:#a9b4c0;background:#191d23}
+  .webpage .frow .tag{font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:#5d6773}
+  .webpage .frow.on{border-color:var(--accent);color:#eaf3fb;background:#1b2733;
+    box-shadow:0 0 0 3px rgba(76,158,235,.18)}
+  .webpage .frow.on .tag{color:var(--accent)}
+  .webpage .body{justify-content:flex-start;padding:12px 0;overflow:hidden}
+  .webpage .vframe{width:40%;margin-bottom:2px}
+  .webpage h4{margin:4px 0 6px}
+  /* the phone's own one-line toast — a tab this mode does not offer */
+  .ptoast{position:absolute;left:14px;right:14px;bottom:64px;z-index:60;padding:9px 12px;
+    background:rgba(24,24,27,.96);border:1px solid #3a3a3e;border-radius:10px;color:var(--text);
+    font-size:11px;line-height:1.5;box-shadow:0 10px 28px rgba(0,0,0,.55);animation:rise .18s ease}
+
+  /* OSD card */
+  .osd{position:absolute;left:50%;top:22px;transform:translateX(-50%);
+    background:var(--glass);border:1px solid var(--outline);border-radius:10px;
+    backdrop-filter:blur(18px);padding:9px 15px;font-size:12.5px;letter-spacing:.02em;
+    opacity:0;transition:opacity .18s ease;pointer-events:none;white-space:nowrap}
+  .osd.show{opacity:1}
+
+  /* OSC bottom bar */
+  .osc{position:absolute;left:0;right:0;bottom:0;height:74px;display:flex;align-items:center;
+    gap:12px;padding:0 14px;background:linear-gradient(to top,rgba(18,18,18,.94),rgba(18,18,18,.55) 70%,transparent)}
+  .osc .t{font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--sec);min-width:42px}
+  .osc .t.r{text-align:right}
+  .track{flex:1;height:14px;display:flex;align-items:center;cursor:pointer}
+  .track .rail{position:relative;width:100%;height:4px;border-radius:2px;background:var(--bar-track)}
+  .track .fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:rgba(255,255,255,.5)}
+  .track.seeking .fill{background:var(--amber)}
+  .icb{width:34px;height:34px;display:grid;place-items:center;cursor:pointer;border-radius:6px}
+  .icb svg{width:18px;height:18px;stroke:var(--idle);fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round;transition:stroke .12s ease,transform .12s ease}
+  .icb:hover svg{stroke:var(--text);transform:scale(1.06)}
+  .icb:active svg{transform:scale(.90)}
+  .icb.active svg{stroke:#fff;filter:drop-shadow(0 0 5px rgba(255,255,255,.35))}
+  .icb.off svg{opacity:.38}
+  .icb.off:hover svg{stroke:var(--idle);transform:none}
+  .icb.big{width:40px;height:40px}
+  .icb.big svg{width:22px;height:22px}
+
+  /* ── right-click strip ─────────────────────────────────────────────── */
+  .strip{position:absolute;height:42px;display:flex;align-items:center;padding:5px 7px;
+    border-radius:12px;background:var(--glass);border:1px solid var(--outline);
+    backdrop-filter:blur(18px);z-index:30;transform-origin:top left;
+    animation:pop .15s cubic-bezier(.22,1,.36,1)}
+  @keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+  /* remote.md §5.3 — `_button` renders a `SaluIconButton(size: 30)`. The strip's
+     arithmetic (30+6+30+14+30+6+30+6+30 + 16 = 198) only holds at exactly that
+     size, so the generic 34 px button is overridden here. */
+  .strip .icb{width:30px;height:30px;flex:0 0 30px}
+  .strip .g{width:14px;flex:0 0 14px}
+  .strip .s{width:6px;flex:0 0 6px}
+  .newseat{position:absolute;top:-30px;right:-6px;display:flex;align-items:center;gap:6px;
+    background:#2a2416;border:1px solid #5a4a24;color:#e8c48a;border-radius:7px;
+    padding:3px 9px;font-size:10.5px;font-weight:600;letter-spacing:.04em;white-space:nowrap}
+  .newseat::after{content:'';position:absolute;right:22px;bottom:-5px;width:8px;height:8px;
+    background:#2a2416;border-right:1px solid #5a4a24;border-bottom:1px solid #5a4a24;
+    transform:rotate(45deg)}
+
+  /* ── Remote modal ──────────────────────────────────────────────────── */
+  .barrier{position:absolute;inset:0;background:rgba(0,0,0,.6);z-index:40;display:grid;
+    place-items:center;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{width:400px;background:var(--surface);border:1px solid var(--outline);
+    border-radius:16px;padding:16px 18px 16px;animation:rise .22s cubic-bezier(.22,1,.36,1);
+    box-shadow:0 24px 60px rgba(0,0,0,.6)}
+  @keyframes rise{from{opacity:0;transform:scale(.965)}to{opacity:1;transform:scale(1)}}
+  .modal .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .modal .hd h3{font-size:14.5px;font-weight:600}
+  .xbtn{width:26px;height:26px;display:grid;place-items:center;cursor:pointer;border-radius:6px}
+  .xbtn svg{width:13px;height:13px;stroke:var(--idle);stroke-width:1.9;stroke-linecap:round}
+  .xbtn:hover svg{stroke:var(--text)}
+  .statusline{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--sec);
+    margin-bottom:14px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--unknown);flex:none}
+  .dot.alive{background:var(--alive)}
+  .dot.dead{background:var(--dead)}
+  .dot.wait{background:var(--amber);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .qrcard{width:232px;margin:0 auto;padding:12px;background:#fff;border-radius:8px}
+  .qrcard svg{display:block;width:208px;height:208px}
+  .qrnote{text-align:center;font-size:11.5px;color:var(--sec);margin-top:11px;line-height:1.6}
+  .qrnote .code{font:13px/1.4 "Cascadia Mono",Consolas,monospace;color:var(--text);
+    letter-spacing:.08em}
+  .sect{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+    color:#7c7c80;margin:16px 0 7px}
+  .prow{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;font-size:12px}
+  .prow:hover{background:var(--surface-hi)}
+  .prow .nm{flex:1}
+  .prow .st{color:var(--sec);font-size:11px}
+  .prow .fg{color:var(--sec);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:5px}
+  .prow .fg:hover{color:var(--dead);background:rgba(224,91,91,.10)}
+  .empty{color:#77777c;font-size:11.5px;padding:4px 8px}
+  .fw{margin-top:14px;padding:10px 12px;border:1px solid #4a3a22;background:#241f16;
+    border-radius:9px;font-size:11.5px;color:#e0c79a;line-height:1.5}
+  .fw button{margin-top:7px;background:transparent;border:1px solid #5a4a24;color:#e8c48a;
+    border-radius:6px;padding:4px 10px;font:inherit;font-size:11px;cursor:pointer}
+  .fw button:hover{background:#2f2718}
+  .foot{margin-top:12px;font-size:10.5px;color:#6e6e73;line-height:1.5}
+
+  /* ── Settings preview ──────────────────────────────────────────────── */
+  .settings{width:760px;max-width:100%;margin-top:18px;background:var(--surface);
+    border:1px solid var(--outline);border-radius:12px;padding:16px 18px}
+  .settings h3{font-size:13px;font-weight:600;margin-bottom:3px}
+  .settings .sub{color:var(--sec);font-size:11.5px;margin-bottom:13px}
+  .srow{display:flex;align-items:flex-start;gap:12px;padding:11px 12px;border-radius:9px;
+    border:1px solid transparent}
+  .srow:hover{background:var(--surface-hi)}
+  .srow .tile{width:30px;height:30px;flex:none;display:grid;place-items:center;
+    border-radius:7px;background:#2c2c2f}
+  .srow .tile svg{width:16px;height:16px;stroke:var(--idle);fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  .srow .txt{flex:1}
+  .srow .txt .t{font-size:12.5px}
+  .srow .txt .h{font-size:11px;color:var(--sec);margin-top:2px;line-height:1.45}
+  .sw{width:34px;height:20px;flex:none;border-radius:10px;padding:2px;cursor:pointer;
+    background:#3A3A3C;transition:background .15s cubic-bezier(.22,1,.36,1);margin-top:5px}
+  .sw i{display:block;width:16px;height:16px;border-radius:50%;background:#fff;
+    transition:transform .15s cubic-bezier(.22,1,.36,1)}
+  .sw.on{background:var(--accent)}
+  .sw.on i{transform:translateX(14px)}
+  .sw.dis{opacity:.4;cursor:default}
+  .chev{color:var(--sec);font-size:14px;margin-top:6px}
+  .srow.dis .t,.srow.dis .h{opacity:.45}
+
+  /* ── the phone ─────────────────────────────────────────────────────── */
+  .phonecol{width:344px;flex:none}
+  .phone{width:344px;background:#0c0d10;border-radius:38px;padding:11px;
+    border:1px solid #2b2d33;box-shadow:0 22px 60px rgba(0,0,0,.6)}
+  .screen{position:relative;width:322px;height:678px;border-radius:28px;overflow:hidden;
+    background:var(--bg);display:flex;flex-direction:column}
+  .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:112px;height:24px;
+    background:#0c0d10;border-radius:0 0 15px 15px;z-index:20}
+  .statbar{height:32px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 18px 4px;font-size:10.5px;color:var(--sec);font-variant-numeric:tabular-nums}
+  .phead{flex:none;padding:6px 14px 9px;border-bottom:1px solid var(--divider)}
+  .phead .r1{display:flex;align-items:center;gap:8px}
+  .phead .nm{flex:1;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .phead .act{width:6px;height:6px;border-radius:50%;background:var(--amber);opacity:0;
+    transition:opacity .2s}
+  .phead .act.on{opacity:1;animation:pulse 1.1s ease-in-out infinite}
+  .chevbtn{width:26px;height:26px;display:grid;place-items:center;cursor:pointer;border-radius:6px}
+  .chevbtn svg{width:13px;height:13px;stroke:var(--idle);fill:none;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round;transition:transform .18s}
+  .chevbtn:hover svg{stroke:var(--text)}
+  .chevbtn.up svg{transform:rotate(180deg)}
+  .pill{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 11px 4px 9px;
+    border-radius:13px;border:1px solid var(--outline);background:#232326;font-size:11.5px;
+    cursor:pointer;transition:.14s}
+  .pill:hover{border-color:#454549;background:#2a2a2e}
+  .pill svg{width:13px;height:13px;stroke:var(--idle);fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  .pill.web{border-color:#3b4a5e;background:#20262e}
+  .pbody{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+  .pbody::-webkit-scrollbar{width:6px}
+  .pbody::-webkit-scrollbar-thumb{background:#33353a;border-radius:3px}
+
+  .mini{flex:none;display:flex;align-items:center;gap:9px;padding:8px 14px;
+    border-top:1px solid var(--divider);background:#202024;cursor:pointer}
+  .mini:hover{background:#26262b}
+  .mini svg{width:14px;height:14px;stroke:var(--idle);fill:none;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .mini .ti{flex:1;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mini .tm{font-size:10.5px;color:var(--sec);font-variant-numeric:tabular-nums}
+
+  .tabs{flex:none;display:flex;border-top:1px solid var(--divider);background:#1a1a1e}
+  .tab{flex:1;padding:9px 0 10px;text-align:center;font-size:11px;font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase;color:#7c7c80;cursor:pointer;
+    border-top:2px solid transparent;transition:.14s}
+  .tab:hover{color:var(--sec)}
+  .tab.on{color:var(--text);border-top-color:var(--accent)}
+
+  /* ── the mode switch: both seats always visible ───────────────────────── */
+  .modeseg{display:inline-flex;margin-top:9px;background:#202024;border:1px solid var(--divider);
+    border-radius:9px;padding:3px;gap:3px}
+  .modeseg button{display:inline-flex;align-items:center;gap:5px;background:transparent;border:0;
+    color:var(--sec);font:inherit;font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;
+    cursor:pointer;transition:background .13s ease,color .13s ease}
+  .modeseg button:hover{color:var(--text)}
+  .modeseg button.on{background:#33353b;color:var(--text)}
+  .modeseg button.on.web{background:#20303f;color:#8fc4f2}
+  .bar .modeseg{margin-top:0}
+  .bar .modeseg button{font-size:11.5px;padding:6px 13px}
+
+  /* ── a tab the current mode does not offer ────────────────────────────── */
+  .tab.dis{color:#4c4c52;cursor:not-allowed}
+  .tab.dis:hover{color:#4c4c52}
+
+  /* ── the D-pad: Tune, in Web mode ─────────────────────────────────────── */
+  .dpadwrap{display:flex;flex-direction:column;align-items:center;padding:18px 0 4px}
+  .dpad{display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,48px);gap:6px}
+  .dpad button{background:#26262b;border:1px solid #34343a;color:var(--sec);border-radius:9px;
+    font:inherit;font-size:9.5px;font-weight:600;cursor:pointer;display:grid;place-items:center;
+    gap:1px;transition:background .12s ease,color .12s ease,transform .1s ease}
+  .dpad button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+  .dpad button:hover{background:#2f2f35;color:var(--text)}
+  .dpad button:active{transform:scale(.94)}
+  .dpad .sp{visibility:hidden}
+  .dpad .ok{background:#2c3d4f;border-color:#3d5a75;color:#a9d3f7;font-size:11px;letter-spacing:.06em}
+  .dpad .ok:hover{background:#33485d}
+  .dpadhint{margin-top:11px;font-size:10.5px;color:#6e6e73;text-align:center;line-height:1.75}
+  .focused{margin:12px 16px 0;padding:8px 11px;background:#202024;border:1px solid var(--divider);
+    border-radius:9px;font-size:11px;color:var(--text);display:flex;align-items:center;gap:7px}
+  .focused b{color:var(--accent);font-weight:600}
+  .focused .lbl{color:#6e6e73;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em}
+
+    .seg{display:flex;gap:0;margin:12px 14px 4px;background:#202024;border-radius:9px;padding:3px}
+  .seg button{flex:1;background:transparent;border:0;color:var(--sec);font:inherit;
+    font-size:11.5px;padding:6px 0;border-radius:7px;cursor:pointer;transition:.14s}
+  .seg button:hover{color:var(--text)}
+  .seg button.on{background:#33353b;color:var(--text)}
+
+  .pad{padding:12px 14px 18px}
+  .pTitle{font-size:15px;font-weight:600;line-height:1.35;margin-bottom:10px}
+  .pTitle .sub{display:block;font-size:11px;color:var(--sec);font-weight:400;margin-top:3px}
+  .seekrow{margin:14px 0 6px}
+  .ptrack{height:22px;display:flex;align-items:center;cursor:pointer}
+  .ptrack .rail{position:relative;width:100%;height:3px;border-radius:2px;background:var(--bar-track)}
+  .ptrack .fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:rgba(255,255,255,.55)}
+  .ptrack.seeking .fill{background:var(--amber)}
+  .times{display:flex;justify-content:space-between;font-size:10.5px;color:var(--sec);
+    font-variant-numeric:tabular-nums;margin-top:3px}
+  .transport{display:flex;align-items:center;justify-content:space-between;margin:20px 6px 6px}
+  .transport .icb.play{width:66px;height:66px}
+  .transport .icb.play svg{width:30px;height:30px;stroke-width:1.5}
+  .transport .icb{width:46px;height:46px}
+  .transport .icb svg{width:21px;height:21px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin:14px 2px}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:15px;
+    border:1px solid var(--outline);background:#232326;font-size:11px;color:var(--sec);
+    cursor:pointer;transition:.14s}
+  .chip:hover{color:var(--text);border-color:#454549}
+  .chip.on{color:#fff;border-color:var(--accent);background:#22303d}
+  .chip svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round}
+  .volrow{display:flex;align-items:center;gap:11px;margin:16px 4px 4px}
+  .volrow svg{width:17px;height:17px;stroke:var(--idle);fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .volrow .vtrack{flex:1;height:24px;display:flex;align-items:center;cursor:pointer}
+  .volrow .rail{position:relative;width:100%;height:3px;border-radius:2px;background:var(--bar-track)}
+  .volrow .fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:rgba(255,255,255,.55)}
+  .volrow .val{font-size:11px;color:var(--sec);width:24px;text-align:right;
+    font-variant-numeric:tabular-nums}
+
+  .card{border:1px solid var(--outline);border-radius:11px;background:#202024;
+    margin:14px 2px 0;overflow:hidden}
+  .card .ch{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;
+    font-size:11.5px;font-weight:600}
+  .card .ch:hover{background:#26262b}
+  .card .ch .n{color:var(--sec);font-weight:400}
+  .card .ch .cv{margin-left:auto;color:var(--sec);font-size:11px;transition:transform .18s}
+  .card.closed .cv{transform:rotate(-90deg)}
+  .card .cb{max-height:400px;overflow:hidden;transition:max-height .2s ease}
+  .card.closed .cb{max-height:0}
+  .qrow{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:11.5px;
+    cursor:pointer;border-top:1px solid #2a2a2e}
+  .qrow:hover{background:#26262b}
+  .qrow .ix{width:16px;color:#6e6e73;font-size:10.5px;font-variant-numeric:tabular-nums}
+  .qrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sec)}
+  .qrow.now .nm{color:var(--text)}
+  .qrow.now .ix{color:var(--accent)}
+  .qrow svg{width:11px;height:11px;stroke:var(--accent);fill:none;stroke-width:2.2;
+    stroke-linecap:round;stroke-linejoin:round}
+
+  .crumb{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sec);
+    padding:8px 14px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+  .crumb::-webkit-scrollbar{display:none}
+  .crumb span{cursor:pointer;padding:2px 4px;border-radius:4px}
+  .crumb span:hover{color:var(--text);background:#26262b}
+  .crumb i{color:#55565b;font-style:normal}
+  .places{display:flex;flex-wrap:wrap;gap:7px;padding:4px 14px 10px}
+  .flist{padding:0 14px 14px}
+  .frow{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #26262a;
+    cursor:pointer;font-size:12px}
+  .frow:hover{background:#232327}
+  .frow svg{width:15px;height:15px;stroke:var(--idle);fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .frow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .frow .sz{color:#6e6e73;font-size:10.5px;font-variant-numeric:tabular-nums}
+  .frow .qk{display:flex;gap:4px;opacity:0;transition:opacity .14s}
+  .frow:hover .qk{opacity:1}
+  .frow .qk b{width:22px;height:22px;display:grid;place-items:center;border-radius:5px;
+    border:1px solid var(--outline);font-weight:400;color:var(--sec);font-size:11px}
+  .frow .qk b:hover{color:#fff;border-color:var(--accent)}
+  .frow.dim{opacity:.42;cursor:default}
+  .frow.dim:hover{background:transparent}
+  .more{padding:10px 4px;font-size:11px;color:var(--sec);display:flex;justify-content:space-between}
+  .more span{cursor:pointer}
+  .more span:hover{color:var(--text)}
+
+  .urlrow{display:flex;align-items:center;gap:9px;margin:10px 14px;padding:11px 13px;
+    border-radius:10px;border:1px solid #2c3f52;background:#1d2733;cursor:pointer;
+    font-size:12px;color:#bcd9f6}
+  .urlrow:hover{background:#22303d}
+  .urlrow svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.9;
+    stroke-linecap:round;stroke-linejoin:round}
+  .srow2{display:flex;align-items:center;gap:10px;padding:10px 14px;
+    border-bottom:1px solid #26262a;cursor:pointer}
+  .srow2:hover{background:#232327}
+  .srow2 .nm{flex:1;font-size:12px}
+  .srow2 .u{display:block;font-size:10px;color:#6e6e73;margin-top:2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srow2 svg{width:13px;height:13px;stroke:var(--idle);fill:none;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+
+  .curve{height:96px;margin:10px 14px 4px;border-radius:10px;background:#191b1f;
+    border:1px solid var(--outline)}
+  .curve svg{width:100%;height:100%;display:block}
+  .sliders{display:flex;justify-content:space-between;gap:2px;padding:12px 12px 4px}
+  .sl{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .sl .well{position:relative;width:22px;height:104px;display:flex;justify-content:center;
+    cursor:pointer;touch-action:none}
+  .sl .wrail{position:absolute;top:0;bottom:0;width:3px;border-radius:2px;background:var(--bar-track)}
+  .sl .wfill{position:absolute;width:3px;border-radius:2px;background:var(--accent)}
+  .sl .knob{position:absolute;width:15px;height:8px;border-radius:3px;background:#dfe3e8;
+    left:50%;transform:translateX(-50%);box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .sl .lb{font-size:8.5px;color:#6e6e73}
+  .sl.act .lb{color:var(--text)}
+  .subhead{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+    color:#7c7c80;margin:16px 14px 7px;display:flex;align-items:center;gap:8px}
+  .subhead .cv{margin-left:auto;cursor:pointer;font-size:11px;letter-spacing:0;
+    text-transform:none;font-weight:400}
+  .track2{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:12px;
+    cursor:pointer;border-bottom:1px solid #26262a}
+  .track2:hover{background:#232327}
+  .track2 .rd{width:11px;height:11px;border-radius:50%;border:1.6px solid var(--idle);flex:none}
+  .track2.on .rd{border-color:var(--accent);background:var(--accent);
+    box-shadow:inset 0 0 0 2.4px var(--bg)}
+  .track2 .nm{flex:1}
+  .track2 .mt{color:#6e6e73;font-size:10.5px}
+  .syncrow{display:flex;align-items:center;gap:9px;padding:10px 14px}
+  .syncrow button{background:#232326;border:1px solid var(--outline);color:var(--text);
+    border-radius:7px;padding:6px 12px;font:inherit;font-size:11.5px;cursor:pointer}
+  .syncrow button:hover{background:#2b2b30}
+  .syncrow .v{flex:1;text-align:center;font-size:12px;font-variant-numeric:tabular-nums}
+  .linebtn{display:flex;align-items:center;gap:10px;margin:8px 14px;padding:11px 13px;
+    border-radius:10px;border:1px solid var(--outline);background:#202024;cursor:pointer;
+    font-size:12px}
+  .linebtn:hover{background:#26262b}
+  .linebtn svg{width:14px;height:14px;stroke:var(--idle);fill:none;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round}
+  .swrow{display:flex;align-items:center;gap:10px;margin:14px;padding:11px 13px;
+    border-radius:10px;border:1px solid var(--outline);background:#202024;font-size:12px}
+  .swrow .t{flex:1}
+  .swrow .t .h{display:block;font-size:10.5px;color:var(--sec);margin-top:2px}
+  .nothing{padding:38px 20px;text-align:center;color:var(--sec);font-size:12px;line-height:1.6}
+  .nothing b{display:block;color:var(--text);font-size:13px;margin-bottom:5px;font-weight:600}
+  .nothing button{margin-top:13px;background:transparent;border:1px solid var(--outline);
+    color:var(--text);border-radius:8px;padding:7px 15px;font:inherit;font-size:11.5px;
+    cursor:pointer}
+  .nothing button:hover{border-color:var(--accent);color:#bcd9f6}
+
+  /* connect sheet */
+  .sheet{position:absolute;inset:0;z-index:30;background:rgba(0,0,0,.55);display:flex;
+    align-items:flex-end;animation:fade .2s ease}
+  .sheet .panel{width:100%;background:var(--surface);border-radius:18px 18px 0 0;
+    padding:18px 18px 22px;border-top:1px solid var(--outline);
+    animation:up .26s cubic-bezier(.22,1,.36,1)}
+  @keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+  .sheet h3{font-size:15px;font-weight:600;margin-bottom:5px}
+  .sheet p{font-size:11.5px;color:var(--sec);line-height:1.55;margin-bottom:14px}
+  .sheet .big{width:100%;background:var(--accent);color:#0d1720;border:0;border-radius:10px;
+    padding:12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .sheet .big:hover{filter:brightness(1.08)}
+  .sheet .alt{width:100%;background:transparent;color:var(--sec);border:1px solid var(--outline);
+    border-radius:10px;padding:11px;font:inherit;font-size:12px;cursor:pointer;margin-top:8px}
+  .sheet .alt:hover{color:var(--text);border-color:#454549}
+  .sheet input{width:100%;background:#1b1b1f;border:1px solid var(--outline);border-radius:9px;
+    padding:10px 12px;color:var(--text);font:13px "Cascadia Mono",Consolas,monospace;
+    letter-spacing:.09em;margin-bottom:9px}
+  .sheet input:focus{outline:none;border-color:var(--accent)}
+  .sheet .err{color:var(--dead);font-size:11px;margin-top:8px;min-height:15px}
+
+  /* ── lower sections ────────────────────────────────────────────────── */
+  section{margin-top:34px}
+  section>h2{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+    color:#8f8f94;margin-bottom:5px}
+  section>.sub{color:var(--sec);font-size:12px;margin-bottom:14px;max-width:900px;line-height:1.6}
+  section>.sub b{color:var(--text);font-weight:600}
+  section>.sub code{font:11.5px/1.4 "Cascadia Mono",Consolas,monospace;color:#9fc4e8}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid #23252a;vertical-align:top}
+  th{color:#8f8f94;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+  td b{color:var(--text);font-weight:600}
+  td code,p code,li code{font:11.5px/1.4 "Cascadia Mono",Consolas,monospace;color:#9fc4e8}
+  .log{background:#14161a;border:1px solid #23252a;border-radius:10px;padding:10px 12px;
+    font:11px/1.75 "Cascadia Mono",Consolas,monospace;color:#8d97a3;max-height:230px;
+    overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+  .log .out{color:#7fb7e8}
+  .log .in{color:#8ec79b}
+  .log .t{color:#5c6169}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Design preview · SALU Remote</div>
+    <h1>The APK, and the right-click door that pairs it</h1>
+    <p class="lede">
+      An interactive mock of both halves of <b>SALU Remote</b>, built from
+      <code>remote.md</code> (the PC side) and <code>remote_apk_ui.md</code> (the APK).
+      <b>Right-click the picture</b> to open the strip — <b>Remote</b> is the new rightmost
+      seat (D9) — then click it for the QR panel. On the phone, the <b>Connect</b> sheet
+      scans it. After that the two mockups drive each other: transport, seek, volume,
+      the <b>Player</b> / <b>Web</b> switch, and tapping a file in <b>Browse</b> plays it on the PC.
+      The QR is a <b>real, scannable</b> code for the real pairing payload.
+    </p>
+    <div class="bar">
+      <button class="btn" id="btnReset">Reset states</button>
+      <span class="modeseg" id="barMode">
+        <button data-act="setmode" data-v="player">Player</button>
+        <button data-act="setmode" data-v="web">Web</button>
+      </span>
+      <button class="btn warn" id="btnForget">Forget the phone</button>
+      <span class="hint">Nothing here is Flutter — it is a review artifact, wired to no <code>lib/</code> code.</span>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="pc">
+      <div class="pc-frame">
+        <div class="titlebar">
+          <span class="app">SALU</span>
+          <span class="now" id="pcTitle">Big Buck Bunny</span>
+          <span class="cap">
+            <span class="capbtn"><svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg></span>
+            <span class="capbtn"><svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1"/></svg></span>
+            <span class="capbtn"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></span>
+          </span>
+        </div>
+        <div class="chrome">
+          <div class="openpill">
+            <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
+            <span>Open</span>
+          </div>
+          <span class="sp"></span>
+          <span class="meta" id="pcMeta">Video · 1080p · h264</span>
+        </div>
+        <div class="canvas" id="canvas">
+          <div class="vid" id="vid">
+            <span class="glyph"><svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="1.6"/><path d="M2.5 9h19M6.5 4.5v4.5M17.5 4.5v4.5"/></svg></span>
+          </div>
+          <div class="webpage" id="webpage" style="display:none">
+            <div class="urow">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#8d97a3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5L2.5 8l4 4.5"/><path d="M9.5 3.5L13.5 8l-4 4.5"/></svg>
+              <span class="addr" id="pcUrl">https://www.youtube.com/watch?v=dune-trailer</span>
+            </div>
+            <div class="body" id="webbody"></div>
+          </div>
+          <div class="osd" id="osd"></div>
+          <div class="osc" id="osc"></div>
+        </div>
+      </div>
+
+      <div class="settings" id="settings"></div>
+    </div>
+
+    <div class="phonecol">
+      <div class="phone"><div class="screen" id="screen">
+        <div class="notch"></div>
+        <div class="statbar"><span>9:41</span><span>LTE ▮▮▮ 84%</span></div>
+        <div id="phone"></div>
+      </div></div>
+    </div>
+  </div>
+
+  <section>
+    <h2>The socket, as it would actually read</h2>
+    <p class="sub">Every line is a message from <code>remote.md</code> §6 — one JSON object
+      per WebSocket frame. Commands are fire-and-forget; <b>state is always a full
+      snapshot</b>, never a diff (D5). Watch it while you press things.</p>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section>
+    <h2>What to look at</h2>
+    <table>
+      <thead><tr><th style="width:210px">Thing</th><th>Decision it demonstrates</th></tr></thead>
+      <tbody>
+        <tr><td><b>Remote</b>, rightmost in the strip</td><td><b>D9</b> — the QR door is the last item, after Settings. Widths go <code>162 → 198</code> (full canvas) and <code>82 → 118</code> (channel list), per <code>remote.md</code> §5.3.</td></tr>
+        <tr><td><b>The strip closes before the panel opens</b></td><td>The same <code>_door()</code> every other item uses — one popup at a time.</td></tr>
+        <tr><td><b>QR on a white card</b></td><td>A dark code on dark glass scans badly. 12 px quiet zone, pure black modules, no animation. The payload is a <code>salu://</code> URI so any camera app can read it.</td></tr>
+        <tr><td><b>The code rotates on close</b></td><td><b>A5</b> — close the panel and reopen it: a new code. A QR photographed over a shoulder stops working.</td></tr>
+        <tr><td><b>The mode switch shows both seats</b></td><td>Not one pill that toggles — <b>Player</b> and <b>Web</b> are both on screen, on the phone header and in the toolbar above. Pick either and the other side follows.</td></tr>
+        <tr><td><b>Web mode shrinks the remote</b></td><td>Dead buttons make an app feel broken, so the transport rows disappear and the page's own player takes over.</td></tr>
+        <tr><td><b>Browse greys out in Web mode</b></td><td>Opening a PC file pulls the PC straight back to Player mode (<b>D8</b>), so the tab would only ever bounce you. Tapping it says why instead of failing quietly — and switching to Web moves you off it.</td></tr>
+        <tr><td><b>Tune becomes a D-pad in Web mode</b></td><td>No equalizer, no subtitles, no audio track — mpv is not in the picture. What is left is a page to get around: <b>▲▼</b> walk the focus, <b>◀▶</b> are history, <b>OK</b> clicks.</td></tr>
+        <tr><td><b>The PC draws a ring on the focused element</b></td><td>The part that makes the D-pad usable at all. With no visible focus the phone is steering the browser blind.</td></tr>
+        <tr><td><b><code>web_key</code> is a new verb</b></td><td><code>remote.md</code> §17.4 has <code>browser_nav</code> and the <code>web_media_*</code> family but nothing that moves focus. The side keys reuse <code>browser_nav</code>; the arrows and OK need <code>web_key {key}</code> added to the spec.</td></tr>
+        <tr><td><b>Volume changes show nothing on the PC</b></td><td><b>A1</b> — remote commands raise an OSD card except volume and mute; you are already looking at your phone.</td></tr>
+        <tr><td><b>Browse → Files, tap a row</b></td><td>The file never travels. The phone sends a <i>path</i>, the PC opens it locally — a 40 GB file costs one message.</td></tr>
+        <tr><td><b>Settings → Remote toggle</b></td><td><b>D10</b>, default ON. Off tears the listener down: the port frees, <code>Show pairing code</code> disables, and the phone drops.</td></tr>
+        <tr><td><b>Tune says "Nothing is playing"</b></td><td>EQ, subtitles and audio are meaningless with no media — the tab says so in one place instead of showing dead sliders.</td></tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<script>
+/* ==== QR-BLOCK-START ==== */
+/* Minimal, honest QR encoder — byte mode, versions 1–10.
+ * Ported so this preview can draw the REAL pairing payload as a real code.
+ * Verified against Python `qrcode` 8.2 (design/remote-preview/qr_test.mjs). */
+
+/* Two different orderings meet here, and mixing them up is the classic bug:
+ *  · QR_EC — the index of the level's column in QR_BLOCKS below (L, M, Q, H).
+ *  · QR_EC_BITS — the 2-bit value the standard puts in the format info, where
+ *    the levels are numbered L=01, M=00, Q=11, H=10. */
+const QR_EC = { L: 0, M: 1, Q: 2, H: 3 };
+const QR_EC_BITS = { L: 0b01, M: 0b00, Q: 0b11, H: 0b10 };
+
+/* [ecBits][version-1] = [ecCodewordsPerBlock, group1Blocks, group1DataCw,
+ *                        group2Blocks, group2DataCw]
+ * Generated from qrcode.base.rs_blocks for versions 1–10 and checked against
+ * the standard's total-codeword counts (v1 26 … v10 346). */
+const QR_BLOCKS = {
+  1: [[ 7,1,19, 0, 0],[10,1,16, 0, 0],[13,1,13, 0, 0],[17,1, 9, 0, 0]],
+  2: [[10,1,34, 0, 0],[16,1,28, 0, 0],[22,1,22, 0, 0],[28,1,16, 0, 0]],
+  3: [[15,1,55, 0, 0],[26,1,44, 0, 0],[18,2,17, 0, 0],[22,2,13, 0, 0]],
+  4: [[20,1,80, 0, 0],[18,2,32, 0, 0],[26,2,24, 0, 0],[16,4, 9, 0, 0]],
+  5: [[26,1,108,0, 0],[24,2,43, 0, 0],[18,2,15, 2,16],[22,2,11, 2,12]],
+  6: [[18,2,68, 0, 0],[16,4,27, 0, 0],[24,4,19, 0, 0],[28,4,15, 0, 0]],
+  7: [[20,2,78, 0, 0],[18,4,31, 0, 0],[18,2,14, 4,15],[26,4,13, 1,14]],
+  8: [[24,2,97, 0, 0],[22,2,38, 2,39],[22,4,18, 2,19],[26,4,14, 2,15]],
+  9: [[30,2,116,0, 0],[22,3,36, 2,37],[20,4,16, 4,17],[24,4,12, 4,13]],
+  10:[[18,2,68, 2,69],[26,4,43, 1,44],[24,6,19, 2,20],[28,6,15, 2,16]],
+};
+
+/* Alignment-pattern centre coordinates (ISO Table E.1), version → rows. */
+const QR_ALIGN = {
+  1: [], 2: [6,18], 3: [6,22], 4: [6,26], 5: [6,30],
+  6: [6,34], 7: [6,22,38], 8: [6,24,42], 9: [6,26,46], 10: [6,28,50],
+};
+
+/* Galois field GF(256), primitive polynomial 0x11D. */
+const QR_EXP = new Uint8Array(512);
+const QR_LOG = new Uint8Array(256);
+(() => {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    QR_EXP[i] = x;
+    QR_LOG[x] = i;
+    x <<= 1;
+    if (x & 0x100) x ^= 0x11d;
+  }
+  for (let i = 255; i < 512; i++) QR_EXP[i] = QR_EXP[i - 255];
+})();
+
+const qrMul = (a, b) => (a === 0 || b === 0) ? 0 : QR_EXP[QR_LOG[a] + QR_LOG[b]];
+
+/** Generator polynomial of degree `deg`, as coefficients high-order first. */
+function qrGenerator(deg) {
+  let poly = [1];
+  for (let i = 0; i < deg; i++) {
+    const next = new Array(poly.length + 1).fill(0);
+    for (let j = 0; j < poly.length; j++) {
+      next[j] ^= poly[j];                       // × x
+      next[j + 1] ^= qrMul(poly[j], QR_EXP[i]); // × α^i
+    }
+    poly = next;
+  }
+  return poly;
+}
+
+/** Reed–Solomon error-correction codewords for one data block. */
+function qrEcc(data, ecCount) {
+  const gen = qrGenerator(ecCount);
+  const res = new Array(ecCount).fill(0);
+  for (const byte of data) {
+    const factor = byte ^ res[0];
+    res.shift();
+    res.push(0);
+    for (let i = 0; i < gen.length - 1; i++) {
+      res[i] ^= qrMul(gen[i + 1], factor);
+    }
+  }
+  return res;
+}
+
+/**
+ * Smallest version (1–10) whose level-`ec` byte capacity holds `len`.
+ * The table's data codewords already cover the 4 mode bits (half a byte),
+ * so the only overhead to allow for is the 8-bit length indicator.
+ */
+function qrPickVersion(len, ec) {
+  const e = QR_EC[ec];
+  for (let v = 1; v <= 10; v++) {
+    if (4 + 8 * len <= qrDataCodewords(v, ec) * 8) return v;
+  }
+  throw new Error('payload too long for this preview encoder (max version 10)');
+}
+
+/** Data codewords available at this version/level. */
+function qrDataCodewords(version, ec) {
+  const [, g1Blocks, g1Data, g2Blocks, g2Data] = QR_BLOCKS[version][QR_EC[ec]];
+  return g1Blocks * g1Data + g2Blocks * g2Data;
+}
+
+/** The 15 format bits: 5 data + 10 BCH(15,5), then the fixed XOR mask. */
+function qrFormatBits(ec, mask) {
+  const data = (QR_EC_BITS[ec] << 3) | mask;
+  let rem = data << 10;
+  for (let i = 14; i >= 10; i--) {
+    if (rem & (1 << i)) rem ^= 0b10100110111 << (i - 10);
+  }
+  return ((data << 10) | rem) ^ 0b101010000010010;
+}
+
+const QR_MASKS = [
+  (r, c) => (r + c) % 2 === 0,
+  (r, c) => r % 2 === 0,
+  (r, c) => c % 3 === 0,
+  (r, c) => (r + c) % 3 === 0,
+  (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+  (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+  (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+  (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0,
+];
+
+/**
+ * Encode `text` (byte mode, ISO-8859-1/ASCII) → { version, size, modules }.
+ * `opts.fixedMask` pins the mask (used by qr_test.mjs for deterministic
+ * cross-checking); without it the ISO penalty score picks the best mask.
+ */
+function encodeQr(text, ec = 'M', opts = {}) {
+  const bytes = [];
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code > 255) throw new Error('byte mode only: character out of range');
+    bytes.push(code);
+  }
+  if (!(ec in QR_EC)) throw new Error('ec must be L, M, Q or H');
+
+  const version = qrPickVersion(bytes.length, ec);
+  const size = version * 4 + 17;
+  const [ecPerBlock, g1Blocks, g1Data, g2Blocks, g2Data] =
+    QR_BLOCKS[version][QR_EC[ec]];
+
+  // ── bit stream: mode · length · data · terminator · pad ──────────────
+  const bits = [];
+  const push = (value, n) => { for (let i = n - 1; i >= 0; i--) bits.push((value >> i) & 1); };
+  push(0b0100, 4);                 // byte mode
+  push(bytes.length, 8);           // count indicator (versions 1–9)
+  for (const b of bytes) push(b, 8);
+
+  const totalDataCw = g1Blocks * g1Data + g2Blocks * g2Data;
+  const capacity = totalDataCw * 8;
+  for (let i = 0; i < 4 && bits.length < capacity; i++) bits.push(0);
+  while (bits.length % 8 !== 0) bits.push(0);
+
+  const dataCw = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j];
+    dataCw.push(byte);
+  }
+  const pads = [0xec, 0x11];
+  for (let i = 0; dataCw.length < totalDataCw; i++) dataCw.push(pads[i % 2]);
+
+  // ── blocks, Reed–Solomon, interleaving ───────────────────────────────
+  const dataBlocks = [], eccBlocks = [];
+  let at = 0;
+  for (let i = 0; i < g1Blocks; i++) {
+    dataBlocks.push(dataCw.slice(at, at + g1Data)); at += g1Data;
+  }
+  for (let i = 0; i < g2Blocks; i++) {
+    dataBlocks.push(dataCw.slice(at, at + g2Data)); at += g2Data;
+  }
+  for (const block of dataBlocks) eccBlocks.push(qrEcc(block, ecPerBlock));
+
+  const finalCw = [];
+  const maxData = Math.max(...dataBlocks.map(b => b.length));
+  for (let i = 0; i < maxData; i++) {
+    for (const block of dataBlocks) if (i < block.length) finalCw.push(block[i]);
+  }
+  for (let i = 0; i < ecPerBlock; i++) {
+    for (const block of eccBlocks) finalCw.push(block[i]);
+  }
+
+  // ── matrix ───────────────────────────────────────────────────────────
+  const mod = Array.from({ length: size }, () => new Array(size).fill(false));
+  const fn = Array.from({ length: size }, () => new Array(size).fill(false));
+
+  const setFn = (r, c, v) => { mod[r][c] = v; fn[r][c] = true; };
+  const box = (r0, c0, h, w) => {
+    for (let r = r0; r < r0 + h; r++) {
+      for (let c = c0; c < c0 + w; c++) {
+        if (r >= 0 && r < size && c >= 0 && c < size) fn[r][c] = true;
+      }
+    }
+  };
+
+  // Finder patterns + separators.
+  const finder = (r0, c0) => {
+    box(r0 - 1, c0 - 1, 9, 9);
+    for (let dr = 0; dr < 7; dr++) {
+      for (let dc = 0; dc < 7; dc++) {
+        const edge = dr === 0 || dr === 6 || dc === 0 || dc === 6;
+        const core = dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4;
+        setFn(r0 + dr, c0 + dc, edge || core);
+      }
+    }
+  };
+  finder(0, 0);
+  finder(0, size - 7);
+  finder(size - 7, 0);
+
+  // Timing patterns.
+  for (let i = 8; i < size - 8; i++) {
+    const on = i % 2 === 0;
+    setFn(6, i, on);
+    setFn(i, 6, on);
+  }
+
+  // Alignment patterns (skipping the three that meet a finder).
+  const centres = QR_ALIGN[version];
+  for (const r of centres) {
+    for (const c of centres) {
+      const hitsFinder =
+        (r <= 8 && c <= 8) || (r <= 8 && c >= size - 9) || (r >= size - 9 && c <= 8);
+      if (hitsFinder) continue;
+      for (let dr = -2; dr <= 2; dr++) {
+        for (let dc = -2; dc <= 2; dc++) {
+          const ring = Math.max(Math.abs(dr), Math.abs(dc));
+          setFn(r + dr, c + dc, ring !== 1);
+        }
+      }
+    }
+  }
+
+  // Dark module + format reservation.
+  setFn(size - 8, 8, true);
+  box(0, 8, 9, 1);            // top-left: rows 0-8 of column 8
+  box(8, 0, 1, 9);            // top-left: columns 0-8 of row 8
+  box(size - 8, 8, 8, 1);     // bottom-left column
+  box(8, size - 8, 1, 8);     // top-right row
+
+  // Version information (versions 7+).
+  if (version >= 7) {
+    let rem = version << 12;
+    for (let i = 17; i >= 12; i--) if (rem & (1 << i)) rem ^= 0b1111100100101 << (i - 12);
+    const vinfo = (version << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const bit = (vinfo >> i) & 1;
+      const r = Math.floor(i / 3), c = size - 11 + (i % 3);
+      setFn(r, c, !!bit);
+      setFn(c, r, !!bit);
+    }
+  }
+
+  // ── place the data bits, then score all eight masks ──────────────────
+  const totalBits = finalCw.length * 8;
+  const bitAt = (i) => (i >= totalBits)
+    ? false                                      // remainder bits read as light
+    : !!((finalCw[i >> 3] >> (7 - (i & 7))) & 1);
+
+  // Two-module-wide columns, right to left, snaking up then down. Each pair
+  // restarts at the same edge it ended on, and the whole pair shifts left by
+  // one once it reaches the vertical timing column. The walk is a fixed
+  // sequence — the shift must NOT feed back into the next column, and the
+  // last pair really is (1, 0): the leftmost column is data, not timing.
+  const dataCells = [];                        // in placement order
+  let inc = -1;
+  let row = size - 1;
+  for (let col = size - 1; col >= 0; col -= 2) {
+    const right = col <= 6 ? col - 1 : col;
+    for (;;) {
+      for (const c of [right, right - 1]) {
+        if (c >= 0 && !fn[row][c]) dataCells.push([row, c]);
+      }
+      row += inc;
+      if (row < 0 || row >= size) {
+        row -= inc;
+        inc = -inc;
+        break;
+      }
+    }
+  }
+
+  // Read the whole bit stream once, up front: each mask below reuses it.
+  const dataBits = new Array(dataCells.length);
+  for (let i = 0; i < dataCells.length; i++) dataBits[i] = bitAt(i);
+
+  let best = null;
+  const maskRange = opts.fixedMask == null ? [0, 8] : [opts.fixedMask, opts.fixedMask + 1];
+  for (let mask = maskRange[0]; mask < maskRange[1]; mask++) {
+    const grid = mod.map(row => row.slice());
+    for (let i = 0; i < dataCells.length; i++) {
+      const [r, c] = dataCells[i];
+      grid[r][c] = dataBits[i] !== QR_MASKS[mask](r, c);
+    }
+    const f = qrFormatBits(ec, mask);
+    // Bit i of the 15-bit format word goes to COPY[i] — least significant bit
+    // first, running up the left edge and out along the top. The second copy
+    // carries the same bits down the bottom-left column and along the top-right
+    // row, so a damaged corner still leaves a readable one.
+    const COPY1 = [[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[7,8],[8,8],[8,7],
+                   [8,5],[8,4],[8,3],[8,2],[8,1],[8,0]];
+    const COPY2 = [[8,size-1],[8,size-2],[8,size-3],[8,size-4],[8,size-5],
+                   [8,size-6],[8,size-7],[8,size-8],[size-7,8],[size-6,8],
+                   [size-5,8],[size-4,8],[size-3,8],[size-2,8],[size-1,8]];
+    for (let i = 0; i < 15; i++) {
+      const bit = !!((f >> i) & 1);
+      grid[COPY1[i][0]][COPY1[i][1]] = bit;
+      grid[COPY2[i][0]][COPY2[i][1]] = bit;
+    }
+    // Scored with the format cells blanked, exactly as the `qrcode` reference
+    // library scores them. Which mask wins depends on this: scored on the
+    // finished symbol the same rule can pick a different mask. Matching the
+    // reference means this page renders the code other QR tools render.
+    const scoring = grid.map(r => r.slice());
+    for (const [r, c] of [...COPY1, ...COPY2]) scoring[r][c] = false;
+    const penalty = qrPenalty(scoring, size);
+    if (!best || penalty < best.penalty) best = { mask, grid, penalty };
+  }
+
+  return { version, size, ec, mask: best.mask, modules: best.grid };
+}
+
+/**
+ * Mask penalty score — the four ISO rules, implemented to match the widely
+ * used `qrcode` reference library exactly (verified in qr_test.mjs), so this
+ * page renders the same mask that other QR tools would choose.
+ *
+ * Two places deliberately follow that library rather than a literal reading
+ * of the standard: rule 1 scores a run of n as n − 2 (not 3 + (n − 5)), and
+ * rules 2 and 3 skip a position after a hit. Both only affect which mask is
+ * judged cheapest — every mask still yields a valid, scannable symbol.
+ */
+function qrPenalty(g, size) {
+  // Rule 1 — runs of five or more, both directions.
+  const runs = new Array(size + 1).fill(0);
+  const tally = (line) => {
+    let previous = line[0];
+    let length = 0;
+    for (const v of line) {
+      if (v === previous) {
+        length++;
+      } else {
+        if (length >= 5) runs[length]++;
+        length = 1;
+        previous = v;
+      }
+    }
+    if (length >= 5) runs[length]++;
+  };
+  for (let r = 0; r < size; r++) tally(g[r]);
+  for (let c = 0; c < size; c++) {
+    const column = new Array(size);
+    for (let r = 0; r < size; r++) column[r] = g[r][c];
+    tally(column);
+  }
+  let score = 0;
+  for (let length = 5; length <= size; length++) score += runs[length] * (length - 2);
+
+  // Rule 2 — 2x2 blocks of one colour, skipping the next column after a hit.
+  for (let r = 0; r < size - 1; r++) {
+    for (let c = 0; c < size - 1; c++) {
+      const topRight = g[r][c + 1];
+      if (topRight !== g[r + 1][c + 1]) {
+        c++;                                  // nothing down this column pairs
+      } else if (topRight === g[r][c] && topRight === g[r + 1][c]) {
+        score += 3;
+      }
+    }
+  }
+
+  // Rule 3 — the 1:1:3:1:1 finder-like run with a 4-module light shoulder.
+  const finderLike = (at) =>
+    !at(1) && at(4) && !at(5) && at(6) && !at(9) &&
+    ((at(0) && at(2) && at(3) && !at(7) && !at(8) && !at(10)) ||
+     (!at(0) && !at(2) && !at(3) && at(7) && at(8) && at(10)));
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size - 10; c++) {
+      if (finderLike((k) => g[r][c + k])) score += 40;
+      if (g[r][c + 10]) c++;
+    }
+  }
+  for (let c = 0; c < size; c++) {
+    for (let r = 0; r < size - 10; r++) {
+      if (finderLike((k) => g[r + k][c])) score += 40;
+      if (g[r + 10][c]) r++;
+    }
+  }
+
+  // Rule 4 — departure from a 50 % dark ratio.
+  let dark = 0;
+  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (g[r][c]) dark++;
+  score += Math.floor(Math.abs((dark * 100) / (size * size) - 50) / 5) * 10;
+
+  return score;
+}
+/* ==== QR-BLOCK-END ==== */
+</script>
+<script src="app.js"></script>
+</body>
+</html>

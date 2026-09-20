@@ -64,6 +64,25 @@ the bottom bar:
 Tap it → jump to **Play**. The pause button works without leaving the screen. This one
 strip removes most of the reason to switch tabs mid-movie.
 
+### 2.1 What each mode offers (added 2026-09-20)
+
+The three tabs are not equally available in both modes, and pretending otherwise
+produces buttons that do nothing:
+
+| Tab | Player mode | Web mode |
+|---|---|---|
+| **Play** | transport · volume · queue | page nav · the page's own player (§4.2) |
+| **Browse** | Files · Streams | **disabled** — greyed, with the reason on tap |
+| **Tune** | Equalizer · Subtitles · Audio | **a D-pad** (§6.0) |
+
+**Browse is Player-only** because opening a PC file pulls the PC straight back to
+Player mode anyway (D8) — the tab would only ever bounce the user. It greys out
+rather than vanishing, so the bar does not reshuffle under the thumb, and tapping
+it says why. Switching into Web mode while Browse is up moves the user to Play.
+
+The **mode switch shows both seats** — `Player` and `Web` side by side, not one
+pill that toggles. You should be able to see where you are going before you go.
+
 **Connect** stops being a screen most of the time: it is a **sheet** that slides up only
 when a connection is missing or the user taps the header. First launch = the Connect
 sheet; every launch after that = straight to Play, already connected.
@@ -302,7 +321,48 @@ episode is always two taps away (SALU already knows that folder).
 ## 6. Tab 3 — Tune
 
 Segmented: **Equalizer | Subtitles | Audio**. All three show *"Nothing is playing"* (with
-a Play shortcut) when the PC has no media.
+a Play shortcut) when the PC has no media. **In Web mode none of the three exist** — mpv
+is not in the picture — and the tab becomes a D-pad instead (§6.0).
+
+### 6.0 Web mode — the tab becomes a D-pad (added 2026-09-20)
+
+In Web mode there is no equalizer, no subtitle track and no audio track to choose.
+What there *is* is a web page the user cannot reach from the couch. So Tune turns
+into the thing a TV remote is for:
+
+```
+        ▲
+   ◀    [ OK ]    ▶
+        ▼
+  ▲▼ move the focus · ◀▶ back and forward · OK clicks
+  Focused:  Subscribe · 4.2M                    BUTTON
+```
+
+| Key | Does | Verb |
+|---|---|---|
+| `▲` `▼` | walk the page's focusable elements (link · button · input) | **`web_key {key:"ArrowUp"\|"ArrowDown"}`** — **new** |
+| `◀` `▶` | history back / forward — the escape hatch when focus-walking lands somewhere useless | `browser_nav {action:"back"\|"forward"}` (already in §17.4) |
+| `OK` | activate the focused element | **`web_key {key:"Enter"}`** — **new** |
+
+**The PC must draw a ring on whatever the phone has focused.** Without it the user
+is steering the browser blind and the feature is worse than useless. The ring is
+part of the design, not a nicety.
+
+**Where a text field has focus, the arrows belong to the caret** and `OK` submits
+rather than clicking. The phone shows what is focused and what kind of element it
+is, so the user can tell which of the two they are about to get.
+
+**Honest limits.** This walks the page's own tab order, so it is exactly as good as
+the site's markup. Well-built pages (link lists, forms, YouTube's own player
+controls) work. Single-page apps that draw everything into a `<canvas>` and manage
+focus themselves will not, and nothing injected from outside can fix that. The
+preview in `design/remote-preview/` shows the interaction with a mock focus order.
+
+**Implementation.** `remote.md` §17.4 defines `browser_nav` and the `web_media_*`
+family but nothing that moves focus, so `web_key` has to be added. It is injected
+JavaScript through the same `WebTab.executeScript` path `remote_web_media_bridge.dart`
+already uses (§17.11): read `document.activeElement`, walk to the next/previous
+focusable, `scrollIntoView`, and `click()` on Enter.
 
 ### 6.1 Equalizer
 
