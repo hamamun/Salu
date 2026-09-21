@@ -1,12 +1,14 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/remote/remote_firewall.dart';
 import '../../core/remote/remote_pairing.dart';
 import '../../core/remote/remote_service.dart';
 import '../../core/settings_service.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/remote_firewall_dialog.dart';
 import '../widgets/salu_marks.dart';
 
 /// QR pairing surface. The pairing code is owned by RemoteService and is
@@ -102,6 +104,7 @@ class _RemotePanelState extends State<RemotePanel> {
           _remote.devices,
           _remote.connectedCount,
           _remote.firewallTick,
+          RemoteFirewallService.instance.status,
           SettingsService.instance.remoteEnabled,
           SettingsService.instance.remoteFileAccess,
         ]),
@@ -138,10 +141,7 @@ class _RemotePanelState extends State<RemotePanel> {
               ],
               const SizedBox(height: 18),
               _phones(),
-              if (_remote.firewallHintVisible) ...<Widget>[
-                const SizedBox(height: 16),
-                _firewallHint(),
-              ],
+              _firewallArea(),
             ],
           );
         },
@@ -208,15 +208,61 @@ class _RemotePanelState extends State<RemotePanel> {
     );
   }
 
-  Widget _firewallHint() => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
-          const Expanded(child: Text("Can't connect? Windows Firewall may be blocking SALU.", style: _secondaryStyle)),
-          TextButton(onPressed: () => Process.start('control', <String>['firewall.cpl'], mode: ProcessStartMode.detached), child: const Text('Open firewall settings', style: TextStyle(fontSize: 11))),
-        ],
+  /// The panel's firewall surface (remote.md §8.3, amended 2026-09-21).
+  ///
+  /// Two tiers, one truth: when the fresh probe knows the firewall is the
+  /// problem — missing rule, Cancel-trap block rule, dead rule of a moved
+  /// build, Public Wi-Fi profile — the row names it and offers the one-UAC
+  /// fix. When the probe can't say (third-party firewall, group policy),
+  /// the original 90-second hint still lands after a connectionless wait,
+  /// with the manual settings door.
+  Widget _firewallArea() {
+    if (_remote.status.value != RemoteStatus.running) {
+      return const SizedBox.shrink();
+    }
+    final RemoteFirewallStatus firewall = RemoteFirewallService.instance.status.value;
+    if (firewall.needsAttention) {
+      final String copy = switch (firewall.ruleState) {
+        RemoteFirewallRuleState.blocked => 'Windows Firewall is blocking SALU.',
+        RemoteFirewallRuleState.missing => 'Phones need a Windows Firewall permission to reach SALU.',
+        RemoteFirewallRuleState.stalePath => 'SALU moved — its firewall rule points at the old location.',
+        _ => 'This Wi-Fi is Public — phones can’t see SALU on it.',
+      };
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.textSecondary),
+            const SizedBox(width: 8),
+            Expanded(child: Text(copy, style: _secondaryStyle)),
+            TextButton(
+              onPressed: () => unawaited(showRemoteFirewallDialog(context)),
+              child: const Text('Fix…', style: TextStyle(fontSize: 11)),
+            ),
+          ],
+        ),
       );
+    }
+    if (_remote.firewallHintVisible) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.textSecondary),
+            const SizedBox(width: 8),
+            const Expanded(child: Text("Can't connect? Windows Firewall may be blocking SALU.", style: _secondaryStyle)),
+            TextButton(
+              onPressed: () => RemoteFirewallService.instance.openWindowsFirewallSettings(),
+              child: const Text('Open firewall settings', style: TextStyle(fontSize: 11)),
+            ),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
 
   String _lastSeen(RemoteDevice device) {
     final DateTime? seen = device.lastSeenAt;

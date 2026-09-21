@@ -14,6 +14,7 @@ import '../tune_service.dart';
 import '../url_library_service.dart';
 import '../window_state_service.dart';
 import 'remote_command_handler.dart';
+import 'remote_firewall.dart';
 import 'remote_network.dart';
 import 'remote_pairing.dart';
 import 'remote_protocol.dart';
@@ -75,6 +76,8 @@ class RemoteService {
     await _store.load();
     _refreshDevices();
     final SettingsService settings = SettingsService.instance;
+    RemoteFirewallService.instance.preferredPortOf =
+        () => settings.remotePort.value;
     settings.remoteEnabled.addListener(_onRemoteEnabledChanged);
     settings.remotePort.addListener(_onPortChanged);
     if (!settings.remoteEnabled.value) {
@@ -162,6 +165,11 @@ class RemoteService {
         _markDirty();
       });
       status.value = RemoteStatus.running;
+      // §8.3 (2026-09-21): every start re-verifies the firewall rule covers
+      // the *running* exe — the moved-folder trap and the Cancel trap both
+      // surface here, and the result feeds the panel's Fix row. Silent on
+      // healthy machines; it never blocks or delays the listener itself.
+      unawaited(RemoteFirewallService.instance.recheck());
       if (statusDetail.value == null) {
         debugPrint('[SALU] remote: listening on 0.0.0.0:$boundPort '
             '(${usable.isEmpty ? 'no private adapter' : '${usable.first.interfaceName} ${usable.first.host}'})');
@@ -246,6 +254,10 @@ class RemoteService {
   void openPairingPanel() {
     pairing.openPanel();
     pairingCode.value = pairing.code;
+    // Opening the help surface is worth one fresh probe — a stale answer
+    // (rule allowed moments ago in Windows' own popup) must never show the
+    // Fix row.
+    unawaited(RemoteFirewallService.instance.recheck());
     _markDirty();
   }
 
