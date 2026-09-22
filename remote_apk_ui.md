@@ -162,9 +162,9 @@ set once and never touched again.
 │                          │
 │  🔊 ███████░░░░   80     │
 ├──────────────────────────┤
-│ ▾ Queue · 12 items       │ ← collapsible card · 5 rows max
-│   3  Episode 2.mkv       │ ← auto-scrolls so the current
-│ ▶ 4  Episode 3.mkv       │    row always stays in view
+│ ▾ Queue · 12 items     ✕ │ ← collapsible card · clear button · 5 rows max
+│   3  Episode 2.mkv       │ ← the whole playlist scrolls inside and
+│ ▶ 4  Episode 3.mkv       │    auto-scrolls so the current row stays in view
 └──────────────────────────┘
 ```
 
@@ -174,9 +174,12 @@ set once and never touched again.
 - **Fullscreen `⛶`** is a chip, not a toggle on the Play button — you press it when you
   sit down, not mid-scene.
 - **Queue is the playlist** (user, 2026-09-20): a collapsible card that shows **at most
-  5 rows**, scrolls inside, and **auto-scrolls so the now-playing row stays in view** the
-  moment the track changes. Tap a row to jump to it. It never pushes the transport
-  controls off-screen.
+  5 rows** and scrolls inside whenever there are **more than 5 items** — the whole
+  queue is fetched, 100 rows per `queue_get` call (user, 2026-09-22) — and
+  **auto-scrolls so the now-playing row stays in view** the moment the track changes.
+  Tap a row to jump to it. The **✕ in the header clears the playlist** (user,
+  2026-09-22): confirm → `queue_clear` → the PC stops and empties the queue (§17.4).
+  It never pushes the transport controls off-screen.
 - **Activity dot:** during any long PC job (folder read, subtitle search or download,
   queue page), a small dot pulses once next to the connection dot — appearing only after
   300 ms, so quick jobs never make it flicker. One dot, no text (user: "do what is best").
@@ -528,7 +531,7 @@ later.** One table, so nobody has to guess:
 | File list | Skeleton rows while loading; never a spinner over the whole screen | Paged, 200 rows, cached by path in RAM |
 | Subtitle search / download | Progress row with the PC's reason on failure | One request, one result message, then a state push |
 | Queue jump | Row highlights immediately, PC catches up | One command |
-| Playlist card | Auto-scrolls to the current row on every track change | Nothing — the snapshot's `queue.index/count` drives it; titles cached per index |
+| Playlist card | Auto-scrolls to the current row on every track change; >5 rows scroll inside the 5-row window (user, 2026-09-22) | Titles fetched in `queue_get` pages of 100 when `queue.count` changes; an index-only move is pure local scroll. Clear = confirm + one `queue_clear` |
 | Web media controls (play/pause/seek/volume/mute/fullscreen) | Optimistic icon + slider state, like transport | Position read ~1/s (`web_media_get`); commands one at a time |
 
 ---

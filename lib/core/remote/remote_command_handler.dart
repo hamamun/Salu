@@ -130,6 +130,8 @@ class RemoteCommandHandler {
           return _queueGet(a);
         case 'queue_jump':
           return await _queueJump(a);
+        case 'queue_clear':
+          return await _queueClear();
         case 'fs_places':
           return _fsPlaces();
         case 'fs_list':
@@ -347,6 +349,23 @@ class RemoteCommandHandler {
     final int index = _number(args['index']).round().clamp(0, queue.length - 1).toInt();
     await _focusForPlayback();
     await player.playIndex(index);
+    return const RemoteCommandResponse.ok();
+  }
+
+  /// `queue_clear` — the phone's Queue-card ✕ (remote.md §17.4).
+  ///
+  /// The phone has already asked "Clear the playlist?"; the PC then does
+  /// exactly what its own bin does — stop and empty, with the same Undo card
+  /// on screen ([TransportActions.clearQueue], the single definition of the
+  /// action). Deliberately idempotent: an already-empty queue answers `ok`,
+  /// because "the playlist is empty" is the state the phone asked for, not a
+  /// failure — a double tap, or a phone that never saw the first ack, must
+  /// not produce an error line.
+  ///
+  /// No window focus here: clearing never starts playback (§7.5/D8), and
+  /// stealing focus to show an empty canvas would be rude.
+  Future<RemoteCommandResponse> _queueClear() async {
+    await transport.clearQueue();
     return const RemoteCommandResponse.ok();
   }
 

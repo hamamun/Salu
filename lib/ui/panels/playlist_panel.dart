@@ -11,6 +11,7 @@ import '../../core/channel_view_service.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
+import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
@@ -574,14 +575,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     ));
   }
 
+  /// The absolute clear, defined once in the transport facade — the remote's
+  /// `queue_clear` is the same call (remote.md §17.4), so the bin and a phone
+  /// tap can never drift. The panel only adds its own query reset on top.
   Future<void> _clearAll() async {
-    final ClearedQueueUndo? undo = await _player.clearQueue();
-    if (!mounted || undo == null) return;
+    if (!await TransportActions.instance.clearQueue()) return;
+    if (!mounted) return;
     _clearQuery();
-    OsdController.instance.show(OsdUndoCard(
-      label: undo.text,
-      onUndo: () => unawaited(_player.undoClearQueue(undo)),
-    ));
   }
 
   Future<void> _move(int from, int to) async {
