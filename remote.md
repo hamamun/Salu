@@ -478,6 +478,10 @@ One consistent prefix, matching the repo's existing style:
 > What genuinely remains v2: `seek_chapter`, `track_set` for *style* overrides, full
 > browser tab management (new / close / select / downloads shelf), and queue *editing*
 > (remove / reorder — the phone can play and add, never rearrange).
+>
+> **⚠ Updated 2026-09-22:** one exception in queue editing — `queue_clear` (empty the
+> whole playlist) moved into §17.4 for the phone's queue-card clear button. Per-row
+> remove and reorder stay v2.
 
 `jump_to_index {index}` · `queue_get {from,count}` · `seek_chapter {delta}` ·
 `open_url {url}` · `channel_search {query}` · `channel_play {id}` ·
@@ -814,15 +818,22 @@ already exposes `search` / `save` / `saveAndLoad`; `OpenMediaService.playUrl` al
 
 ### 17.4 Verbs added in v1.1
 
-**Queue (read + jump only)** — the phone's playlist card. The v1 snapshot already carries
-`queue:{kind,count,index}`, so the card can auto-scroll from the snapshot alone; these two
-verbs fetch the row titles and jump. **Implement with R1, not R4** — the Play tab wants its
-playlist card on day one.
+**Queue (read + jump + clear)** — the phone's playlist card. The v1 snapshot already
+carries `queue:{kind,count,index}`, so the card can auto-scroll from the snapshot alone;
+these verbs fetch the row titles, jump, and clear. **Implement `queue_get`/`queue_jump`
+with R1, not R4** — the Play tab wants its playlist card on day one. `queue_clear` was
+added 2026-09-22 (user request: the playlist card's clear button) — until the PC ships it,
+the phone answers its own `unknown_command` with one plain line ("needs a newer SALU on
+the PC"), so an old PC degrades visibly but safely.
 
 | Verb | Args | PC call |
 |---|---|---|
 | `queue_get` | `{from, count}` (count ≤ 100) | `QueueService` rows → `[{index, title, durationMs?, now}]` — titles only, never paths |
 | `queue_jump` | `{index}` | jump the queue to that row and play it (the reserved `jump_to_index`, renamed for symmetry) |
+| `queue_clear` | — | stop playback and empty `QueueService` — `TransportActions.clearQueue()`, the *same* door the playlist panel's own bin uses (`PlayerService.clearQueue`: stop, empty, back to the initial state) → snapshot with `queue:{kind:"empty",count:0,index:-1}`. Idempotent: an already-empty queue is `ok`, never an error. The PC's own **Undo** card is the feedback (A1), so a mis-tap on the phone is still recoverable for 5 s. |
+
+`queue_clear` deliberately does **not** focus the window or pull SALU out of Web mode —
+§7.5's focus rule is about commands that *begin* playback, and clearing never does.
 
 **Files** — all require `remote_file_access` ON (§17.6), else `file_access_off`.
 
@@ -987,8 +998,10 @@ paging, path validation, **and an assertion that no write API exists**),
 `remote_tune_test.dart` (preset sets per `fileKind`, ±12 dB clamp, 0.5 dB quantization,
 gesture begin/end pairing, speed-stop key mapping),
 `remote_subs_test.dart` (engine-state mapping, outcome → error
-mapping, `subLine` formatting), `remote_queue_test.dart` (paging windows, jump clamping,
-titles-never-paths), and a **snapshot size test** asserting the serialized state
+mapping, `subLine` formatting), `remote_queue_test.dart` (paging windows, the ≤ 100 count
+cap, titles-never-paths on local rows *and* streams, and `queue_clear` — its idempotency
+and the Undo card it raises; `queue_jump` needs a live engine, so it stays on the manual
+list), and a **snapshot size test** asserting the serialized state
 stays under 1 KB. The web-media JS builder (`remote_web_media_bridge.dart`) gets its own
 pure-Dart test: the generated script strings are asserted against fixture pages (one video,
 video inside an iframe, no media) — `executeScript` itself cannot run in unit tests.
@@ -1015,6 +1028,10 @@ Manual checklist additions:
 20. Open a page whose player sits in a cross-origin iframe (or a DRM site) → the phone hides
     the media controls, shows *"This site's player can't be controlled from outside"*, and
     the nav shape still works.
+21. Tap the phone's Queue `✕` → confirm → the PC stops, the queue empties (`queue.count = 0`
+    in the next snapshot), and the PC screen shows the same *Playlist cleared · Undo* card
+    its own bin shows → **Undo** on the PC brings the whole list back. Tap `✕` again on the
+    now-empty queue → nothing happens, no error toast.
 
 ### 17.10 Build-order impact
 

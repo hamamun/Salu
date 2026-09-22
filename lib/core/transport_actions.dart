@@ -257,6 +257,31 @@ class TransportActions {
     await player.cycleRepeat();
   }
 
+  /// The absolute Clear — the playlist panel's bin and the remote's
+  /// `queue_clear` (remote.md §17.4).
+  ///
+  /// "Clear" has exactly one definition in SALU
+  /// ([PlayerService.clearQueue]: stop, empty the queue, back to the
+  /// initial state) and one piece of feedback: the Undo card the PC has
+  /// always shown for it. Both doors come through here so they can never
+  /// drift; the phone's own confirm dialog is the other half of the same
+  /// rule, and [OsdUndoCard] is the one thing a mis-tap on the phone can
+  /// still take back. Going through [_show] also keeps the mini bar honest:
+  /// there is no deck there, so the card simply does not exist in that mode
+  /// (the stopped state's own title swap speaks instead).
+  ///
+  /// An already-empty queue is a no-op — the remote answers `ok` for it,
+  /// never an error. Returns whether anything was actually cleared.
+  Future<bool> clearQueue() async {
+    final ClearedQueueUndo? undo = await player.clearQueue();
+    if (undo == null) return false;
+    _show(OsdUndoCard(
+      label: undo.text,
+      onUndo: () => _run(player.undoClearQueue(undo)),
+    ));
+    return true;
+  }
+
   Duration _clamp(Duration t) {
     if (t < Duration.zero) return Duration.zero;
     final Duration dur = player.duration.value;
