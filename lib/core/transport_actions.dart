@@ -344,6 +344,12 @@ class TransportActions {
 
   /// The Resume toast's Restart action — the only way Stop ever becomes
   /// "start over": jump to `0:00` and play.
+  ///
+  /// The remote's `restart` verb is the same call (remote.md §17.4), so the
+  /// phone's Start over seat and the toast's own word-action can never drift.
+  /// No `fromRemote` flag exists here on purpose: this action shows no card of
+  /// its own (dismissing the toast *is* its feedback), so there is nothing for
+  /// A1's policy to suppress.
   void restart() {
     resetSeekRamps();
     osd.dismiss();

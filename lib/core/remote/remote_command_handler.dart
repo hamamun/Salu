@@ -132,6 +132,8 @@ class RemoteCommandHandler {
           return await _queueJump(a);
         case 'queue_clear':
           return await _queueClear();
+        case 'restart':
+          return await _restart();
         case 'fs_places':
           return _fsPlaces();
         case 'fs_list':
@@ -366,6 +368,26 @@ class RemoteCommandHandler {
   /// stealing focus to show an empty canvas would be rude.
   Future<RemoteCommandResponse> _queueClear() async {
     await transport.clearQueue();
+    return const RemoteCommandResponse.ok();
+  }
+
+  /// `restart` — the phone's **Start over** seat, the mirror of the PC's
+  /// Resume toast (remote.md §17.4).
+  ///
+  /// The same door as the toast's own Restart word-action
+  /// ([TransportActions.restart]: jump to 0:00 and play), which also closes
+  /// the toast — so the phone's seat disappears on the very next snapshot,
+  /// exactly as it does when the PC closes the toast itself.
+  ///
+  /// The verb is deliberately *not* gated on the offer still being up: the
+  /// seat's life is driven by the toast, and a tap that races the close (the
+  /// 120 ms snapshot window) must do the obvious thing — start the loaded
+  /// item over — rather than fail. All it needs is something loaded; with an
+  /// empty engine it is `nothing_playing`, like every other transport verb.
+  Future<RemoteCommandResponse> _restart() async {
+    if (!player.hasMedia.value) return _nothingPlaying();
+    await _focusForPlayback();
+    transport.restart();
     return const RemoteCommandResponse.ok();
   }
 
