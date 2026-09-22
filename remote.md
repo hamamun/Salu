@@ -237,6 +237,7 @@ One message type, one shape, always complete:
 | `playback.title` | Display title only — **never a path** (A3) |
 | `playback.kind` | `video` \| `audio` \| `channel` (omit if not cheaply available) |
 | `playback.seekable` | `duration > 0 && kind != channel` — the phone greys its seek controls on this alone |
+| `playback.resume` | **v1.1 (§17.5, added 2026-09-22).** The PC's Resume toast, mirrored: `null` while no toast is up, else `{"position": 754000}` (the resumed-at clock it displays). Presence *is* the offer — it is what makes and unmakes the phone's **Start over** seat, and the phone draws no other conclusion from it. |
 | `queue.kind` | `files` \| `channels` \| `empty` (`QueueService.isChannelList`) |
 | `control` | Who is driving, for the phone's "Another phone has control" line (A2) |
 | `devices` | Online + remembered devices. Names only, no tokens, no IPs |
@@ -331,6 +332,12 @@ The facade keeps being the single definition of every transport action (D12).
 3. Remote `seek_to` (the phone's slider) uses `PlayerService.seekTo()` +
    `TransportActions.instance.resetSeekRamps()` — the same pair the PC timeline
    already uses on a committed seek.
+4. **`clearQueue()`** (v1.1, 2026-09-22) — the absolute Clear, so the playlist panel's bin
+   and the remote's `queue_clear` are one call rather than two that can drift (§17.4).
+5. **`restart()`** (v1.1, 2026-09-22) — already exists for the Resume toast's own
+   word-action; the remote's `restart` verb calls the same method and needs **no**
+   `fromRemote` flag. On purpose: this action shows no card of its own (closing the toast
+   *is* its feedback), so there is nothing for A1 to suppress.
 
 Nothing else in `TransportActions` changes. There is exactly one implementation of
 "what Pause means" in SALU, and the phone uses it.
@@ -338,8 +345,8 @@ Nothing else in `TransportActions` changes. There is exactly one implementation 
 ### 7.5 Web mode and focus (D8)
 
 After every command that can begin playback (`play_pause`, `next`, `previous`,
-`jump_to_index`, `open_url`), if the result is actually playing **and** SALU is not
-showing the player:
+`jump_to_index`, `open_url`, and v1.1's `restart`), if the result is actually playing
+**and** SALU is not showing the player:
 
 ```dart
 if (BrowserService.instance.isWeb) await BrowserService.instance.setMode(SaluMode.player);
@@ -494,7 +501,8 @@ One consistent prefix, matching the repo's existing style:
 `PlayerService`'s `transportState`, `isPlaying`, `hasMedia`, `currentTitle`,
 `position`, `duration`, `volumeLevel`, `isMuted`, `isBuffering`, `shuffleOn`,
 `repeatMode`; `BrowserService.mode`; `WindowStateService.mode` + `isFullscreen`;
-`QueueService.items`; plus its own device/controller notifiers.
+`QueueService.items`; `OsdController.current` (v1.1 — the deck's one slot, which is
+what the Resume toast appears on, §17.5); plus its own device/controller notifiers.
 
 ---
 
@@ -667,7 +675,10 @@ routers that drop multicast, needs no Bonjour, and cannot half-work.
 
 **Done when:** a terminal session can pair with a code, print a live snapshot every
 250 ms, and drive play/pause, seek, volume, mute, shuffle and repeat on a real SALU
-window — with no phone involved.
+window — with no phone involved. (v1.1's additions to this step: `queue_get` /
+`queue_jump` / `queue_clear`, and `restart` + a `resume` block in the snapshot — the
+probe's `o` sends it, and a toast appearing on screen must show up in the printed
+snapshot within ~120 ms.)
 
 ### R2 — The PC UI
 
@@ -752,6 +763,21 @@ correct in the first frame.
 4. ~~**Web-mode verbs (v2)** — the protocol has room; the decision is when.~~
    **Answered 2026-09-20:** they are in — see §17 (mode_set, browser_nav, the web-media
    bridge). The three questions above are still genuinely open.
+5. **How long the phone may offer *Start over* (added 2026-09-22).** Today the phone's
+   seat lives exactly as long as the PC's toast — **4 seconds** — because mirroring the
+   toast is the whole point (§17.4) and nothing on the two screens can disagree. If real
+   use says 4 s is too short to reach the phone (the user is across the room, the phone is
+   face-down), the fix is a decision, not a hack, and there are exactly two honest shapes:
+   **(a)** lengthen the PC's toast TTL (one constant, PC-only — both screens follow), or
+   **(b)** let the offer outlive the toast: the PC keeps `playback.resume` non-null until
+   the item is restarted, played past the resumed point, or another item loads — a PC-side
+   rule, so the phone still invents nothing. Not built; the phone's seek bar remains the
+   always-available way to start over for as long as the item is playing.
+6. **The same slot, other toast actions (added 2026-09-22).** The Undo toast is
+   interactive too (`Playlist cleared · Undo`), and the remote's `queue_clear` currently
+   leaves that Undo on the PC screen only. Mirroring it the way §17.4 mirrors the Resume
+   toast would need the undo *token* to travel as an id (never the queue itself) — a real
+   design, deliberately out of v1.1.
 
 Decisions recorded from the APK-scope answers: **§17.12**.
 
@@ -834,6 +860,42 @@ the PC"), so an old PC degrades visibly but safely.
 
 `queue_clear` deliberately does **not** focus the window or pull SALU out of Web mode —
 §7.5's focus rule is about commands that *begin* playback, and clearing never does.
+
+**Start over · the Resume toast, mirrored (added 2026-09-22).** SALU's Resume toast is
+the one *interactive* card on the PC deck: when an item lands at a remembered position it
+says **“you resumed at 12:34 — Restart?”** and it lives for 4 seconds (or until Esc, a
+click-outside, or any transport action). The phone gets the same offer, in the Play tab's
+toggle row beside shuffle/repeat — **not** a second offer of its own.
+
+The rule that makes it one thing instead of two:
+
+| PC (the deck's one slot, `OsdController.current`) | Phone (Play tab, `playback.resume`) |
+|---|---|
+| `OsdResumeCard` is shown — the toast is up | `playback.resume` is `{"position": 754000}` → the **Start over** seat is on screen, reading the same clock |
+| the toast is gone — its 4 s TTL, Esc, a click-outside, any transport action, or another card taking the slot | `playback.resume` is `null` → the seat is gone, within one snapshot (≤ 120 ms) |
+
+| Verb | Args | PC call |
+|---|---|---|
+| `restart` | — | `TransportActions.restart()` — the toast's own Restart word-action, verbatim: jump to `0:00` and play, which also closes the toast, so the phone's seat disappears on the next snapshot like every other change. `nothing_playing` when the engine holds nothing. |
+
+- **The phone never invents an offer, and the PC never pushes one the phone cannot end.**
+  There is no "dismiss the toast from the phone" verb on purpose: the PC closes its own
+  toast (4 s, Esc, click-outside), and every one of those paths is already visible to the
+  phone as `resume: null`. One direction of truth.
+- **`restart` is not gated on the offer still being up.** The 120 ms snapshot window means
+  a tap can race the toast's close; when it does, the honest answer is to do the obvious
+  thing — start the loaded item over — not to fail. A tap on a seat that is still drawn is
+  always a user who wants the item restarted.
+- **No new snapshot cost:** one int while the toast is up, one `null` token otherwise.
+  An older APK ignores the field (unknown fields are ignored, §6) and simply has no seat —
+  which is the truth for it, and costs the PC nothing.
+- **One gap, left honest:** if the PC is in Web mode while the toast is still up, the
+  phone's Web body has no toggle row, so the offer has nowhere to be drawn. The PC keeps
+  mirroring the deck; the 4 s TTL closes it either way.
+- **The phone's word is "Start over"**, the PC's is "Restart": the same action, and the
+  toast's own documentation already calls it the way Stop becomes "start over"
+  (`player_service` / `transport_actions`). The phone-facing wording follows the user's
+  own words (2026-09-22); the tooltip carries the resumed-at clock the toast shows.
 
 **Files** — all require `remote_file_access` ON (§17.6), else `file_access_off`.
 
@@ -926,6 +988,18 @@ so the 250 ms tick stays cheap:
 "library":{"count":7}
 ```
 
+**And one field inside `playback`** (added 2026-09-22) — the Resume toast, mirrored:
+
+```json
+"playback":{ …, "resume":{"position":754000} }   // or "resume":null when no toast is up
+```
+
+It is nested in `playback` because it is about the loaded item, and it stays one int while
+the toast lives. `null` and `{"position":…}` are the whole vocabulary: presence is the
+offer (§17.4). The PC's `OsdController.current` is the source, and the deck's slot is
+observed like any other notifier (§9), so a card replacing the toast — or the toast timing
+out on its own — reaches the phone within one snapshot.
+
 `web.url` is capped at 256 characters in the snapshot (the full URL is one `browser_get`
 away if it is ever needed). Nothing else about the file system appears in the snapshot —
 no paths, no entries. `web.hasMedia` is a *boolean only* — the position/duration of a web
@@ -1001,7 +1075,11 @@ gesture begin/end pairing, speed-stop key mapping),
 mapping, `subLine` formatting), `remote_queue_test.dart` (paging windows, the ≤ 100 count
 cap, titles-never-paths on local rows *and* streams, and `queue_clear` — its idempotency
 and the Undo card it raises; `queue_jump` needs a live engine, so it stays on the manual
-list), and a **snapshot size test** asserting the serialized state
+list), `remote_snapshot_test.dart` (the resume offer: a `OsdResumeCard` → `{position}` and
+*every* other deck card → `null` — including the zero-position case, which is an offer and
+must not be mistaken for "no toast"; the block survives `RemoteSnapshot.fromValues` and the
+default playback map declares it as `null`; and `restart` with nothing loaded →
+`nothing_playing`), and a **snapshot size test** asserting the serialized state
 stays under 1 KB. The web-media JS builder (`remote_web_media_bridge.dart`) gets its own
 pure-Dart test: the generated script strings are asserted against fixture pages (one video,
 video inside an iframe, no media) — `executeScript` itself cannot run in unit tests.
@@ -1032,6 +1110,12 @@ Manual checklist additions:
     in the next snapshot), and the PC screen shows the same *Playlist cleared · Undo* card
     its own bin shows → **Undo** on the PC brings the whole list back. Tap `✕` again on the
     now-empty queue → nothing happens, no error toast.
+22. Play an item with a resume memory on the PC → the Resume toast appears → the phone's
+    Play tab shows **Start over** in the toggle row within a beat, carrying the same clock.
+    Tap it → the PC plays the item from `0:00` and the toast closes; the phone's seat goes
+    with it. Repeat and let the toast time out (4 s) → the seat disappears **without** a
+    tap, and playback is untouched. Repeat and press Esc on the PC → same. The seat must
+    never outlive the toast on either screen.
 
 ### 17.10 Build-order impact
 
@@ -1039,7 +1123,9 @@ The APK order in `remote_apk_ui.md` §10 is A1 Play (+playlist card) · A2 Brows
 A3 Subtitles · A4 EQ (+Speed chips, select mode) · A5 Web body + polish.
 On this side that means: **R1 and R2 (§13) are unchanged and still come first** — R1 gains
 the two tiny queue verbs (`queue_get` / `queue_jump`, §17.4) so the Play tab's playlist
-card works on day one — then
+card works on day one, and (2026-09-22) the *start over* pair: the `restart` verb and
+`playback.resume`, so the Play tab's toggle row can mirror the PC's Resume toast the day
+the phone's Play body exists — then
 
 - **R4 — Files and Streams:** `remote_fs_service.dart`, the `fs_*` / `library_*` /
   `open_url` verbs, the `remote_file_access` switch, `subs_get`'s engine getters.
