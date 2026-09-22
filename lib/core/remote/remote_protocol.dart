@@ -290,6 +290,10 @@ class RemoteSnapshot {
             'muted': false,
             'shuffle': false,
             'repeat': 'off',
+            // v1.1 (§17.5): the PC's Resume toast, mirrored — `null` unless
+            // it is on screen. Presence IS the offer (the phone's Start over
+            // chip), so there is no second flag to disagree with it.
+            'resume': null,
           },
       'queue': _copyMap(values['queue']) ??
           <String, Object?>{

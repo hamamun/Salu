@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../ui/osd/osd_controller.dart';
 import '../browser_service.dart';
 import '../media_utils.dart';
 import '../player_service.dart';
@@ -22,6 +23,22 @@ import 'remote_web_media_bridge.dart';
 
 /// Lifecycle visible to the Remote panel and Settings.
 enum RemoteStatus { off, starting, running, failed }
+
+/// The PC's Resume toast as the snapshot carries it (remote.md §17.5).
+///
+/// The toast is the one *interactive* card on the PC deck: it appears when an
+/// item lands at a remembered position and offers **Restart** ("you resumed at
+/// 12:34 — start over?"). The phone mirrors it rather than inventing an offer
+/// of its own, so the two always agree; `null` means the toast is not on
+/// screen, and **presence is the offer** — there is no separate `offered`
+/// flag for the phone to disagree with.
+///
+/// Pure and card-in/card-out, so the mapping is unit-testable without the
+/// deck, the engine or a socket.
+Map<String, Object?>? remoteResumeOffer(OsdCard? card) =>
+    card is OsdResumeCard
+        ? <String, Object?>{'position': card.position.inMilliseconds}
+        : null;
 
 class RemoteService {
   RemoteService._internal();
@@ -398,6 +415,10 @@ class RemoteService {
       TuneService.instance.eqStop,
       TuneService.instance.eqCustom,
       TuneService.instance.speedStop,
+      // The deck's one slot: the Resume toast appearing (or closing on its
+      // own 4 s TTL, on Esc, on a click-outside, or on any transport action)
+      // is what makes and unmakes the phone's Start over seat (§17.5).
+      OsdController.instance.current,
     ];
     browser.mode.addListener(_onBrowserModeChanged);
     _removeObservers.add(() => browser.mode.removeListener(_onBrowserModeChanged));
@@ -489,6 +510,8 @@ class RemoteService {
         'muted': player.isMuted.value,
         'shuffle': player.shuffleOn.value,
         'repeat': player.repeatMode.value.name,
+        // Mirrors the Resume toast exactly — `null` whenever it is not up.
+        'resume': remoteResumeOffer(OsdController.instance.current.value),
       },
       'queue': <String, Object?>{
         'kind': queueKind,

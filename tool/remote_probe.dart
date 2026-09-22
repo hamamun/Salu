@@ -41,7 +41,8 @@ Future<void> main(List<String> args) async {
     platform: 'cli',
   )));
   stdout.writeln('Connected. Commands: p play/pause, n next, b previous, s stop, '
-      'f +10s, r -10s, v volume, m mute, h shuffle, t repeat, q quit.');
+      'f +10s, r -10s, v volume, m mute, h shuffle, t repeat, c clear queue, '
+      'o restart (start over), q quit.');
   stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((String line) {
     final String c = line.trim().toLowerCase();
     switch (c) {
@@ -74,6 +75,12 @@ Future<void> main(List<String> args) async {
         break;
       case 't':
         send('repeat_cycle');
+        break;
+      case 'c':
+        send('queue_clear');
+        break;
+      case 'o':
+        send('restart');
         break;
       case 'q':
         unawaited(socket.close());
