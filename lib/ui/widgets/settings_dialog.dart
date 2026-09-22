@@ -15,6 +15,7 @@ import '../../core/web/web_popup_service.dart';
 import '../../theme/app_theme.dart';
 import '../osd/osd_controller.dart';
 import 'dot_grid_icon.dart';
+import 'remote_firewall_dialog.dart';
 import 'salu_marks.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
@@ -1089,7 +1090,13 @@ class _RemoteControlSwitch extends StatelessWidget {
           helper: 'Let the SALU Remote app control playback. Local network only.',
           on: on,
           mark: const QrMark(size: 20),
-          onTap: () => SettingsService.instance.setRemoteEnabled(!on),
+          // Remote.md §8.3 (amended 2026-09-21): the firewall ask belongs
+          // to this moment. A blocked phone-call never reaches the PC, so
+          // SALU could never know to ask later — the toggle is the trigger.
+          onTap: () {
+            SettingsService.instance.setRemoteEnabled(!on);
+            if (!on) unawaited(maybePromptRemoteFirewall(context));
+          },
         ),
       );
 }
