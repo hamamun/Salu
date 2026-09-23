@@ -39,6 +39,23 @@ class PanelService {
   final ValueNotifier<bool> rightMenuOpen = ValueNotifier<bool>(false);
   final ValueNotifier<bool> openPillOpen = ValueNotifier<bool>(false);
 
+  /// Whether the playlist panel's group-by pill is currently open
+  /// (pc_part.md §10).
+  ///
+  /// Published out of the panel's State so the remote layer can exempt
+  /// the pill from its web-mode focus grab: the pill closes only through
+  /// its three intentional doors (tap outside, Esc, a choice), never
+  /// through a window focus event. Deliberately NOT in [_popups] — the
+  /// one-popup world covers the panels and the right menu, and the pill
+  /// was never one of them.
+  final ValueNotifier<bool> groupPillOpen = ValueNotifier<bool>(false);
+
+  /// Bumped after a remote focus grab has run while the group-by pill
+  /// was open (pc_part.md §10): the grab may have torn the pill's
+  /// root-overlay surface down without closing the pill, and the panel
+  /// re-asserts the overlay on every new tick.
+  final ValueNotifier<int> focusGrabTick = ValueNotifier<int>(0);
+
   List<ValueNotifier<bool>> get _popups => <ValueNotifier<bool>>[
         playlistOpen,
         trackPanelOpen,

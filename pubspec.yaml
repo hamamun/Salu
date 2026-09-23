@@ -74,6 +74,11 @@ dependencies:
 
   # Utilities.
   path: ^1.9.0
+  # Native memory for the remote drive scan's `toNativeUtf16` buffers
+  # (pc_part.md §3 — the Win32 FFI in remote_fs_service.dart). Pure Dart,
+  # zero native code; already in the lockfile transitively via
+  # shared_preferences_windows.
+  ffi: ^2.1.0
   # LAN remote pairing: SHA-256 token hashes and QR payload rendering.
   crypto: ^3.0.6
   qr_flutter: ^4.1.0

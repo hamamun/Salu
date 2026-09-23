@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter/services.dart';
 
@@ -155,6 +156,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.addListener(_onFavouritesChanged);
     _loads.loadGeneration.addListener(_onLoadGeneration);
     _loads.loading.addListener(_onLoadingChanged);
+    _panel.focusGrabTick.addListener(_onFocusGrabTick);
     if (_panel.playlistOpen.value) _onOpenChanged();
   }
 
@@ -167,11 +169,15 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.removeListener(_onFavouritesChanged);
     _loads.loadGeneration.removeListener(_onLoadGeneration);
     _loads.loading.removeListener(_onLoadingChanged);
+    _panel.focusGrabTick.removeListener(_onFocusGrabTick);
     _localScroll.removeListener(_onScroll);
     _channelScroll.removeListener(_onScroll);
     _userScrollTimer?.cancel();
     _pillHideTimer?.cancel();
     if (_pillOpen) ChromeLock.instance.release();
+    // The notifier outlives this panel — never leave it claiming a pill
+    // that no longer exists (the remote layer exempts the grab on it).
+    _panel.groupPillOpen.value = false;
     _search.dispose();
     _searchFocus.dispose();
     _localScroll.dispose();
@@ -201,7 +207,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         _chromeLocked = false;
         ChromeLock.instance.release();
       }
-      _hidePillNow();
+      _hidePillNow('panel close');
       _open.reverse();
     }
     setState(() {});
@@ -209,13 +215,19 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   void _onItemsChanged() {
     // The pill's availability snapshot belongs to the old list.
-    if (_queue.items.value.isEmpty) _hidePillNow();
+    if (_queue.items.value.isEmpty) _hidePillNow('queue emptied');
     setState(() {});
   }
 
   void _onSearchFocusChanged() {
     if (!mounted) return;
-    setState(() => _searchFocused = _searchFocus.hasFocus);
+    final bool focused = _searchFocus.hasFocus;
+    // Focusing the field steps the mode pair — and with it the pill's
+    // portal anchor — out of the header. The pill must close through its
+    // normal door so its overlay, lock and open flag all settle, instead
+    // of leaking an "open" state over a torn overlay (pc_part.md §10).
+    if (focused) _closePill('search focus');
+    setState(() => _searchFocused = focused);
   }
 
   void _onFavouritesChanged() {
@@ -236,7 +248,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// the top. Undo restores rows WITHOUT bumping the generation, so the
   /// filters it preserves carry over untouched.
   void _onLoadGeneration() {
-    _hidePillNow();
+    _hidePillNow('new channel load');
     _search.clear();
     _query = '';
     _favOnly = false;
@@ -499,7 +511,16 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   // ── Group-by pill ────────────────────────────────────────────────────
 
-  void _togglePill() => _pillOpen ? _closePill() : _openPill();
+  void _togglePill() {
+    // pc_part.md §10 instrumentation (temporary — drop after the live
+    // pill check passes): the tap the user believes opens the pill.
+    debugPrint('[SALU] pill: group-by tap (open=$_pillOpen)');
+    if (_pillOpen) {
+      _closePill('group-by re-tap');
+    } else {
+      _openPill();
+    }
+  }
 
   void _openPill() {
     if (_pillOpen) return;
@@ -508,14 +529,24 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     // Opening the pill blurs the search field (§10.5) — the pill owns
     // the keyboard until Esc or a choice closes it.
     _searchFocus.unfocus();
-    setState(() => _pillOpen = true);
+    setState(() {
+      _pillOpen = true;
+      // The remote layer reads this to exempt the pill from its focus
+      // grab (pc_part.md §10) — it must flip with the state.
+      _panel.groupPillOpen.value = true;
+    });
+    debugPrint('[SALU] pill: open');
     _pillAnim.forward();
     _pill.show();
   }
 
-  void _closePill() {
+  void _closePill([String reason = 'dismiss']) {
     if (!_pillOpen) return;
-    setState(() => _pillOpen = false);
+    debugPrint('[SALU] pill: close ($reason)');
+    setState(() {
+      _pillOpen = false;
+      _panel.groupPillOpen.value = false;
+    });
     _pillAnim.reverse();
     ChromeLock.instance.release();
     // Let the reverse fade play out before tearing the overlay down.
@@ -527,21 +558,34 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   /// Immediate teardown (panel close, emptied list, new load) — no exit
   /// fade; the surface the pill belongs to is already gone.
-  void _hidePillNow() {
+  void _hidePillNow([String reason = 'teardown']) {
     if (!_pillOpen) return;
+    debugPrint('[SALU] pill: hide-now ($reason)');
     _pillHideTimer?.cancel();
     _pillHideTimer = null;
     _pillOpen = false;
     _pillAnim.value = 0;
     ChromeLock.instance.release();
+    _panel.groupPillOpen.value = false;
     _pill.hide();
+  }
+
+  /// A remote focus grab has just run while the pill was open
+  /// (pc_part.md §10): the grab may have torn the pill's root-overlay
+  /// surface down without closing the pill. The pill is still logically
+  /// open, so put the overlay back — [OverlayPortalController.show] is a
+  /// no-op while the entry is already in.
+  void _onFocusGrabTick() {
+    if (!_pillOpen) return;
+    debugPrint('[SALU] pill: re-asserting overlay after a focus grab');
+    _pill.show();
   }
 
   /// Applies a pill choice: selecting a grouped mode opens the group
   /// holding the playing channel (§10.5); Flat closes the accordion.
   /// A pure view change — the queue is never touched (M45).
   void _chooseMode(ChannelGroupMode mode) {
-    _closePill();
+    _closePill('choice');
     if (mode == _view.groupMode.value) return;
     final List<QueueItem> items = _queue.items.value;
     setState(() {
@@ -823,7 +867,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           childSize: info.childSize,
           animation: _pillAnim,
           mode: _view.groupMode.value,
-          onDismiss: _closePill,
+          onDismiss: () => _closePill('tap outside / Esc'),
           onChoose: _chooseMode,
         );
       },
