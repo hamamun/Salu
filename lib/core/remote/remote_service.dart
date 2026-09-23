@@ -6,8 +6,12 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../ui/osd/osd_controller.dart';
 import '../browser_service.dart';
+import '../channel_grouping.dart';
+import '../channel_view_service.dart';
 import '../media_utils.dart';
+import '../panel_service.dart';
 import '../player_service.dart';
+import '../queue_item.dart';
 import '../queue_service.dart';
 import '../settings_service.dart';
 import '../subtitle_service.dart';
@@ -39,6 +43,34 @@ Map<String, Object?>? remoteResumeOffer(OsdCard? card) =>
     card is OsdResumeCard
         ? <String, Object?>{'position': card.position.inMilliseconds}
         : null;
+
+/// The channel grouping the snapshot's queue block carries
+/// (pc_part.md §11): which grouped modes this playlist offers, and the
+/// one the PC panel is on — so the phone's chips row mirrors the pill
+/// exactly, in the phone's direction (PC picks → next snapshot) and its
+/// own (its `queue_group_set` lands on the same [ChannelViewService]).
+///
+/// `null` off a channel list: the chips are a channel surface, and a
+/// file queue has no grouping to mirror. Pure, so the shape is
+/// unit-testable without the server.
+Map<String, Object?>? remoteQueueGrouping(
+  List<QueueItem> items,
+  ChannelGroupMode mode,
+) {
+  if (items.isEmpty || !items.any((QueueItem item) => item.name != null)) {
+    return null;
+  }
+  final Map<ChannelGroupMode, bool> available =
+      ChannelGrouping.availability(items);
+  return <String, Object?>{
+    'available': <String>[
+      if (available[ChannelGroupMode.category] ?? false) 'category',
+      if (available[ChannelGroupMode.language] ?? false) 'language',
+      if (available[ChannelGroupMode.country] ?? false) 'country',
+    ],
+    'mode': mode.name,
+  };
+}
 
 class RemoteService {
   RemoteService._internal();
@@ -393,6 +425,10 @@ class RemoteService {
       player.subDelay,
       queue.items,
       queue.index,
+      // The channel view's grouping choice: the phone's chips row mirrors
+      // the PC panel's pill (pc_part.md §11), so a pill choice on the PC
+      // must ride the very next snapshot.
+      ChannelViewService.instance.groupMode,
       browser.webTitle,
       browser.webUrl,
       browser.webCanBack,
@@ -488,6 +524,12 @@ class RemoteService {
         : path == null
             ? null
             : (MediaUtils.isVideo(path) ? 'video' : 'audio');
+    // The phone's chips row mirrors the PC pill (pc_part.md §11) —
+    // `null` off a channel list, where the block stays absent.
+    final Map<String, Object?>? grouping = remoteQueueGrouping(
+      queue.items.value,
+      ChannelViewService.instance.groupMode.value,
+    );
     final Map<String, Object?> snapshot = <String, Object?>{
       'proto': protocolVersion,
       'rev': revision ?? _revision,
@@ -517,6 +559,7 @@ class RemoteService {
         'kind': queueKind,
         'count': queue.length,
         'index': queue.index.value,
+        if (grouping != null) 'grouping': grouping,
       },
       'control': _controllerId == null ? null : <String, Object?>{
         'deviceId': _controllerId,
@@ -691,11 +734,23 @@ class RemoteService {
     // already the Player surface (or the always-on-top mini bar). Web mode
     // is the one case where the command deliberately pulls SALU forward.
     if (!BrowserService.instance.isWeb) return;
+    // pc_part.md §10: the grab below (and the web→player tree swap it
+    // carries) can tear the group-by pill's root-overlay surface down.
+    // The pill closes only through its own three doors (tap outside,
+    // Esc, a choice) — so the grab never runs while the pill is open.
+    final PanelService panel = PanelService.instance;
+    if (panel.groupPillOpen.value) return;
     await BrowserService.instance.setMode(SaluMode.player);
     try {
       await windowManager.show();
       await windowManager.focus();
     } catch (_) {}
+    // The awaits above yield to the event loop — a tap may have opened
+    // the pill mid-grab. If it did, the panel re-asserts the pill's
+    // overlay from this tick (it is still logically open).
+    if (panel.groupPillOpen.value) {
+      panel.focusGrabTick.value++;
+    }
   }
 }
 

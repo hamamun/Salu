@@ -1,8 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../../ui/osd/osd_controller.dart';
 import '../browser_service.dart';
+import '../channel_grouping.dart';
 import '../channel_load_service.dart';
+import '../channel_view_service.dart';
 import '../media_utils.dart';
 import '../open_media_service.dart';
 import '../player_service.dart';
@@ -130,12 +134,16 @@ class RemoteCommandHandler {
           return _queueGet(a);
         case 'queue_jump':
           return await _queueJump(a);
+        case 'queue_groups':
+          return _queueGroups();
+        case 'queue_group_set':
+          return _queueGroupSet(a);
         case 'queue_clear':
           return await _queueClear();
         case 'restart':
           return await _restart();
         case 'fs_places':
-          return _fsPlaces();
+          return await _fsPlaces();
         case 'fs_list':
           return _fsList(a);
         case 'fs_open':
@@ -303,6 +311,11 @@ class RemoteCommandHandler {
       !queue.isChannelList && player.duration.value > Duration.zero;
 
   Future<void> _focusForPlayback() async {
+    // pc_part.md §10 instrumentation (temporary — drop after the live
+    // pill check passes): every phone-driven play/seek funnels through
+    // here, so a pill that dies on a remote action names this line in
+    // the log first.
+    debugPrint('[SALU] remote: focus-for-playback');
     await _ensurePlayerAndFocus?.call();
   }
 
@@ -354,6 +367,65 @@ class RemoteCommandHandler {
     return const RemoteCommandResponse.ok();
   }
 
+  /// `queue_groups` — the phone's group chips (pc_part.md §11): the
+  /// CURRENT mode's groups in exactly [ChannelGrouping]'s descriptor-head
+  /// order, each with the stable accordion key, its display name, its row
+  /// count and the absolute queue index of its first row — what the phone
+  /// inserts its headers at and `queue_jump`s to. Empty in Flat, and off
+  /// a channel list, where the chips row has nothing to offer at all.
+  RemoteCommandResponse _queueGroups() {
+    final List<QueueItem> items = queue.items.value;
+    if (items.isEmpty || !queue.isChannelList) {
+      return const RemoteCommandResponse.ok(<String, Object?>{
+        'groups': <Object?>[],
+      });
+    }
+    final ChannelGroupMode mode = ChannelViewService.instance.groupMode.value;
+    if (mode == ChannelGroupMode.flat) {
+      return const RemoteCommandResponse.ok(<String, Object?>{
+        'groups': <Object?>[],
+      });
+    }
+    final List<int> all = List<int>.generate(items.length, (int i) => i);
+    final List<ChannelGroup> groups =
+        ChannelGrouping.buildGroups(items, all, mode);
+    return RemoteCommandResponse.ok(<String, Object?>{
+      'groups': <Object?>[
+        for (final ChannelGroup group in groups)
+          <String, Object?>{
+            'key': group.key,
+            'name': group.label,
+            'count': group.indexes.length,
+            'start': group.indexes.first,
+          },
+      ],
+    });
+  }
+
+  /// `queue_group_set {by}` — the phone's chip moving the PC panel's
+  /// pill choice (pc_part.md §11). A pure view change mirroring the
+  /// panel's own `_chooseMode` at service level: set the mode, and when a
+  /// grouped mode is chosen also open the group holding the playing
+  /// channel (the panel's §10.5 rule). The queue is never touched; the
+  /// next snapshot carries the new `queue.grouping`.
+  RemoteCommandResponse _queueGroupSet(Map<String, Object?> args) {
+    final String? by = args['by'] as String?;
+    final ChannelGroupMode? mode = switch (by) {
+      'flat' => ChannelGroupMode.flat,
+      'category' => ChannelGroupMode.category,
+      'language' => ChannelGroupMode.language,
+      'country' => ChannelGroupMode.country,
+      _ => null,
+    };
+    if (mode == null) return _invalid();
+    final ChannelViewService view = ChannelViewService.instance;
+    view.groupMode.value = mode;
+    view.openGroup.value = mode == ChannelGroupMode.flat
+        ? null
+        : ChannelGrouping.keyFor(queue.items.value, queue.index.value, mode);
+    return const RemoteCommandResponse.ok();
+  }
+
   /// `queue_clear` — the phone's Queue-card ✕ (remote.md §17.4).
   ///
   /// The phone has already asked "Clear the playlist?"; the PC then does
@@ -391,11 +463,16 @@ class RemoteCommandHandler {
     return const RemoteCommandResponse.ok();
   }
 
-  RemoteCommandResponse _fsPlaces() {
+  /// `fs_places` — now awaits (pc_part.md §4): the drive scan runs the
+  /// label pass off the handler isolate with a 2 s budget, so the answer
+  /// is millisecond-fast on a healthy machine and budget-fast on a
+  /// sleeping disk — the 3-second `busy` guard simply never fires.
+  Future<RemoteCommandResponse> _fsPlaces() async {
     if (!settings.remoteFileAccess.value) return _fileAccessOff();
     return RemoteCommandResponse.ok(<String, Object?>{
       'type': 'fs_places_result',
-      'places': RemoteFsService.instance.places(nowPlayingPath: player.currentPath.value).toJson(),
+      'places': (await RemoteFsService.instance
+              .places(nowPlayingPath: player.currentPath.value)).toJson(),
     });
   }
 
