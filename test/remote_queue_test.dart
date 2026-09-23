@@ -305,11 +305,13 @@ void main() {
   group('remote m3u doors keep channel names (pc_part §11.6)', () {
     test('an m3u via fs_open queues through the channel loader', () async {
       final Directory tmp =
-          await Directory.systemTemp.createTempAsync('salu_fs_open');
+          await Directory.systemTemp.createTemp('salu_fs_open');
       addTearDown(() {
         try {
           tmp.deleteSync(recursive: true);
-        } on FileSystemException {}
+        } on FileSystemException {
+          // The temporary directory may already have been removed.
+        }
       });
       final File m3u = File(p.join(tmp.path, 'list.m3u'));
       m3u.writeAsStringSync(
@@ -336,7 +338,11 @@ void main() {
         // zone handler before the assertions run.
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }, (Object error, StackTrace stack) {
-        if (error is! LateInitializationError) zoneError = error;
+        // Late-initialized engine fields are expected to fail in this
+        // notifier-only fixture. Keep all other zone errors visible.
+        if (error.runtimeType.toString() != 'LateInitializationError') {
+          zoneError = error;
+        }
       });
 
       expect(zoneError, isNull);

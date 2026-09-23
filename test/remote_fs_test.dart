@@ -22,7 +22,7 @@ void main() {
   // The one fake table the whole group shares: A..Z all present, C fixed,
   // E removable, F cdrom, R ramdisk; W and Z network, N no root, the rest
   // unknown.
-  int _fakeTypeOf(String root) => switch (root) {
+  int fakeTypeOf(String root) => switch (root) {
         'C:\\' => RemoteFsService.driveTypeFixed,
         'E:\\' => RemoteFsService.driveTypeRemovable,
         'F:\\' => RemoteFsService.driveTypeCdrom,
@@ -37,7 +37,7 @@ void main() {
     test('keeps exactly the local letters, with the right medium', () {
       const int mask = (1 << 26) - 1; // A..Z all present
       final List<DriveInfo> drives =
-          RemoteFsService.classifyDrives(mask, _fakeTypeOf);
+          RemoteFsService.classifyDrives(mask, fakeTypeOf);
       expect(drives.map((DriveInfo d) => d.root),
           <String>[r'C:\', r'E:\', r'F:\', r'R:\']);
       expect(drives.map((DriveInfo d) => d.medium),
@@ -75,7 +75,7 @@ void main() {
     test('network letters never reach a label read', () {
       const int mask = (1 << 26) - 1;
       final List<DriveInfo> classified =
-          RemoteFsService.classifyDrives(mask, _fakeTypeOf);
+          RemoteFsService.classifyDrives(mask, fakeTypeOf);
       final List<String> read = <String>[];
       final List<DriveInfo> labelled = RemoteFsService.readLabels(
         classified,
@@ -285,13 +285,15 @@ void main() {
     late Directory tmp;
 
     setUp(() async {
-      tmp = await Directory.systemTemp.createTempAsync('salu_remote_fs');
+      tmp = await Directory.systemTemp.createTemp('salu_remote_fs');
     });
 
     tearDown(() {
       try {
         tmp.deleteSync(recursive: true);
-      } on FileSystemException {}
+      } on FileSystemException {
+        // The temporary directory may already have been removed.
+      }
     });
 
     test('a UNC now-playing path is skipped without any I/O', () async {
@@ -346,31 +348,26 @@ void main() {
 
   group('list() — the read-only listing rules', () {
     late Directory tmp;
-    late File video;
-    late File audio;
-    late File subtitle;
-    late File playlist;
-    late File other;
-
     setUp(() async {
-      tmp = await Directory.systemTemp.createTempAsync('salu_remote_fs_list');
+      tmp = await Directory.systemTemp.createTemp('salu_remote_fs_list');
       Directory(p.join(tmp.path, 'System Volume Information')).createSync();
       Directory(p.join(tmp.path, 'windows')).createSync();
       Directory(p.join(tmp.path, 'Season 1')).createSync();
-      video = File(p.join(tmp.path, 'Show.S01E01.mkv'))
-        ..writeAsStringSync('x');
-      audio = File(p.join(tmp.path, 'track.mp3'))..writeAsStringSync('x');
-      subtitle = File(p.join(tmp.path, 'Show.S01E01.srt'))
-        ..writeAsStringSync('x');
-      playlist = File(p.join(tmp.path, 'list.m3u'))
-        ..writeAsStringSync('#EXTM3U');
-      other = File(p.join(tmp.path, 'notes.txt'))..writeAsStringSync('x');
+      File(p.join(tmp.path, 'Show.S01E01.mkv'))
+          .writeAsStringSync('x');
+      File(p.join(tmp.path, 'track.mp3')).writeAsStringSync('x');
+      File(p.join(tmp.path, 'Show.S01E01.srt'))
+          .writeAsStringSync('x');
+      File(p.join(tmp.path, 'list.m3u')).writeAsStringSync('#EXTM3U');
+      File(p.join(tmp.path, 'notes.txt')).writeAsStringSync('x');
     });
 
     tearDown(() {
       try {
         tmp.deleteSync(recursive: true);
-      } on FileSystemException {}
+      } on FileSystemException {
+        // The temporary directory may already have been removed.
+      }
     });
 
     test('the media filter keeps media + playlists, drops subs and text', () {
