@@ -271,7 +271,7 @@ class RemoteFsService {
     if (!Platform.isWindows) return null;
     final _Win32 w = _Win32.instance;
     final Pointer<Utf16> nativeRoot = root.toNativeUtf16();
-    final Pointer<Utf16> buffer = calloc<Utf16>(260);
+    final Pointer<Utf16> buffer = calloc<Uint16>(260).cast<Utf16>();
     try {
       final int ok = w.getVolumeInformationW(nativeRoot, buffer, 260);
       if (ok == 0) return null;
@@ -481,7 +481,7 @@ class RemoteFsService {
     }
     final Pointer<Pointer<Utf16>> out = calloc<Pointer<Utf16>>();
     try {
-      final int hr = w.shGetKnownFolderPath(nativeGuid, 0, nullptr, out);
+      final int hr = w.shGetKnownFolderPath(nativeGuid, 0, 0, out);
       if ((hr & 0x80000000) != 0) return null; // FAILED(hr)
       final Pointer<Utf16> path = out.value;
       if (path == nullptr) return null;
@@ -655,13 +655,13 @@ class _Win32 {
             Pointer<Utf16>, Pointer<Utf16>, Uint32, Pointer<Uint32>,
             Pointer<Uint32>, Pointer<Uint32>, Pointer<Utf16>, Uint32),
         int Function(
-            Pointer<Utf16>, Pointer<Utf16>, Uint32, Pointer<Uint32>,
-            Pointer<Uint32>, Pointer<Uint32>, Pointer<Utf16>, Uint32)>(
+            Pointer<Utf16>, Pointer<Utf16>, int, Pointer<Uint32>,
+            Pointer<Uint32>, Pointer<Uint32>, Pointer<Utf16>, int)>(
         'GetVolumeInformationW');
     _shGetKnownFolderPath = _shell32.lookupFunction<
         Int32 Function(Pointer<Uint8>, Uint32, IntPtr, Pointer<Pointer<Utf16>>),
         int Function(
-            Pointer<Uint8>, Uint32, IntPtr, Pointer<Pointer<Utf16>>)>(
+            Pointer<Uint8>, int, int, Pointer<Pointer<Utf16>>)>(
         'SHGetKnownFolderPath');
     _coTaskMemFree = _ole32.lookupFunction<Void Function(Pointer<Void>),
         void Function(Pointer<Void>)>('CoTaskMemFree');
@@ -676,10 +676,10 @@ class _Win32 {
 
   late final int Function() _getLogicalDrives;
   late final int Function(Pointer<Utf16>) _getDriveTypeW;
-  late final int Function(Pointer<Utf16>, Pointer<Utf16>, Uint32,
+  late final int Function(Pointer<Utf16>, Pointer<Utf16>, int,
       Pointer<Uint32>, Pointer<Uint32>, Pointer<Uint32>, Pointer<Utf16>,
-      Uint32) _getVolumeInformationW;
-  late final int Function(Pointer<Uint8>, Uint32, IntPtr,
+      int) _getVolumeInformationW;
+  late final int Function(Pointer<Uint8>, int, int,
       Pointer<Pointer<Utf16>>) _shGetKnownFolderPath;
   late final void Function(Pointer<Void>) _coTaskMemFree;
 
@@ -700,7 +700,7 @@ class _Win32 {
   /// The volume label of one local root: nonzero on success. Never called
   /// for a `DRIVE_REMOTE` letter (the filter runs first, always).
   int getVolumeInformationW(Pointer<Utf16> root, Pointer<Utf16> label,
-          Uint32 labelSize) =>
+          int labelSize) =>
       _getVolumeInformationW(root, label, labelSize, nullptr, nullptr,
           nullptr, nullptr, 0);
 
@@ -708,7 +708,7 @@ class _Win32 {
   /// [RemoteFsService.guidBytes]); [out] receives the COM-allocated
   /// answer. Returns the HRESULT — call [RemoteFsService.knownFolderPath]
   /// rather than this directly.
-  int shGetKnownFolderPath(Pointer<Uint8> guid, Uint32 flags, IntPtr token,
+  int shGetKnownFolderPath(Pointer<Uint8> guid, int flags, int token,
           Pointer<Pointer<Utf16>> out) =>
       _shGetKnownFolderPath(guid, flags, token, out);
 

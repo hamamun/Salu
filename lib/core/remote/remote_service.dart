@@ -11,7 +11,6 @@ import '../channel_view_service.dart';
 import '../media_utils.dart';
 import '../panel_service.dart';
 import '../player_service.dart';
-import '../queue_item.dart';
 import '../queue_service.dart';
 import '../settings_service.dart';
 import '../subtitle_service.dart';
