@@ -289,6 +289,47 @@ phone sits idle nothing fires — matches "disconnect and it's fine".
 3. No protocol or phone changes involved — pure PC UI bug. Keep
    `ChromeLock` semantics (pill holds a lock) intact.
 
+### 10a. Round 2 (2026-09-23) — pill never appears at all; the root-overlay surface is gone
+
+**Symptom (user, 2026-09-23):** after the round-1 fix landed, the pill no
+longer appears **even with no phone connected** — "that panel is not
+appearing anymore", no error in the log.
+
+**The log proves the state machine is sound.** The instrumented run shows
+exactly: `group-by tap (open=false)` → `open` → `group-by tap (open=true)`
+→ `close (group-by re-tap)` — open and close both fire, no remote commands,
+no exception. The smoking gun is the **`group-by re-tap`** line: the pill's
+full-screen dismiss layer is `HitTestBehavior.opaque`, so a tap on the
+button's spot can only reach the button if the pill's surface is **not in
+front of the panel**. The `OverlayPortal.overlayChildLayoutBuilder` /
+`OverlayChildLocation.rootOverlay` surface (the 3.38+ overlay-rewrite
+placement machinery) never painted in front of the panel on the user's
+Flutter 3.47.5 build — silently: no assert, no exception, just a surface
+the opaque glass paints over.
+
+**Regression window exonerated:** every file the pill touches is unchanged
+vs 09-20 except the pill's own wiring/instrumentation (playlist_panel,
+panel_service, transport_actions, pubspec.lock — all diffed). This is
+framework behavior vs the app's placement assumption, not an app-code
+regression.
+
+**Fix (no more fighting the framework's placement):** the pill's surface
+is now the **panel's own topmost layer** in the app tree
+(`_pillSurfaceLayer` in `playlist_panel.dart`): a full-screen opaque
+dismiss layer (same contract — the closing click never zaps a channel
+underneath) + the four options 6 px under the group-by button, anchored at
+panel-local (10, 42) from `kChromeBlockHeight`. Same doors — tap outside,
+Esc (the surface owns focus while up), a choice — same 150 ms fade/scale,
+same `ChromeLock`, same `groupPillOpen` exemption for the remote's web-mode
+focus grab. The `OverlayPortalController`, its `focusGrabTick`
+re-assertion band-aid, and `_GroupPillOverlay` are gone; the
+`PanelService.focusGrabTick` field stays (the remote layer still bumps
+it; no listener is harmless).
+
+**Acceptance (user's machine):** tap group-by → the four options appear
+below the button; tap outside / Esc / a choice / re-tap all close it; the
+temp `[SALU] pill:` prints then get dropped.
+
 ## 11. Channel grouping on the phone (new protocol + PC duties)
 
 The phone must offer the same four modes as the PC's pill

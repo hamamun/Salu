@@ -103,11 +103,28 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// header's mode pair steps aside so the field can breathe (§10.3).
   bool _searchFocused = false;
 
-  /// The group-by pill: an overlay under the header button (the Open
-  /// pill's recipe — root overlay, 150 ms fade, Esc/outside to close).
-  final OverlayPortalController _pill = OverlayPortalController();
+  /// The group-by pill: a full-screen dismiss layer + the four options 6 px
+  /// under the header button (the Open pill's recipe — 150 ms fade,
+  /// Esc/outside to close).
+  ///
+  /// Rendered in the APP TREE, not the root overlay (pc_part.md §10,
+  /// round 2): on the user's Flutter 3.47.5 build the
+  /// `OverlayPortal.overlayChildLayoutBuilder` surface never came in front
+  /// of the panel — the state machine was sound (the log proved it:
+  /// `open`, then `close (group-by re-tap)`, i.e. taps reached the button
+  /// THROUGH where the pill's opaque dismiss layer should have been) yet
+  /// nothing painted. A surface the framework does not have to place is a
+  /// surface it cannot place behind the glass.
   late final AnimationController _pillAnim;
+  late final CurvedAnimation _pillCurve;
+
+  /// The pill's logical state — the button's glow, the toggle answer and
+  /// the remote layer's grab exemption ([PanelService.groupPillOpen]).
   bool _pillOpen = false;
+
+  /// The pill's surface is in the tree — open, or still playing its exit
+  /// fade (torn down 160 ms after the last close).
+  bool _pillSurface = false;
   Timer? _pillHideTimer;
 
   /// Cached channel view: the descriptor list the rows paint. Rebuilt
@@ -145,6 +162,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       vsync: this,
       duration: const Duration(milliseconds: 150),
     );
+    _pillCurve = CurvedAnimation(
+      parent: _pillAnim,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
     _panel.playlistOpen.addListener(_onOpenChanged);
     _queue.index.addListener(_onIndexChanged);
     _localScroll.addListener(_onScroll);
@@ -155,7 +177,6 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.addListener(_onFavouritesChanged);
     _loads.loadGeneration.addListener(_onLoadGeneration);
     _loads.loading.addListener(_onLoadingChanged);
-    _panel.focusGrabTick.addListener(_onFocusGrabTick);
     if (_panel.playlistOpen.value) _onOpenChanged();
   }
 
@@ -168,7 +189,6 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.removeListener(_onFavouritesChanged);
     _loads.loadGeneration.removeListener(_onLoadGeneration);
     _loads.loading.removeListener(_onLoadingChanged);
-    _panel.focusGrabTick.removeListener(_onFocusGrabTick);
     _localScroll.removeListener(_onScroll);
     _channelScroll.removeListener(_onScroll);
     _userScrollTimer?.cancel();
@@ -177,6 +197,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     // The notifier outlives this panel — never leave it claiming a pill
     // that no longer exists (the remote layer exempts the grab on it).
     _panel.groupPillOpen.value = false;
+    _pillCurve.dispose();
     _search.dispose();
     _searchFocus.dispose();
     _localScroll.dispose();
@@ -222,9 +243,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     if (!mounted) return;
     final bool focused = _searchFocus.hasFocus;
     // Focusing the field steps the mode pair — and with it the pill's
-    // portal anchor — out of the header. The pill must close through its
-    // normal door so its overlay, lock and open flag all settle, instead
-    // of leaking an "open" state over a torn overlay (pc_part.md §10).
+    // anchor button — out of the header. The pill must close through its
+    // normal door so its surface, lock and open flag all settle, instead
+    // of leaking an "open" state over a torn surface (pc_part.md §10).
     if (focused) _closePill('search focus');
     setState(() => _searchFocused = focused);
   }
@@ -530,13 +551,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _searchFocus.unfocus();
     setState(() {
       _pillOpen = true;
+      _pillSurface = true;
       // The remote layer reads this to exempt the pill from its focus
       // grab (pc_part.md §10) — it must flip with the state.
       _panel.groupPillOpen.value = true;
     });
     debugPrint('[SALU] pill: open');
     _pillAnim.forward();
-    _pill.show();
   }
 
   void _closePill([String reason = 'dismiss']) {
@@ -548,36 +569,30 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     });
     _pillAnim.reverse();
     ChromeLock.instance.release();
-    // Let the reverse fade play out before tearing the overlay down.
+    // Let the reverse fade play out before tearing the surface down.
     _pillHideTimer?.cancel();
     _pillHideTimer = Timer(const Duration(milliseconds: 160), () {
-      if (mounted) _pill.hide();
+      if (mounted) setState(() => _pillSurface = false);
     });
   }
 
   /// Immediate teardown (panel close, emptied list, new load) — no exit
   /// fade; the surface the pill belongs to is already gone.
   void _hidePillNow([String reason = 'teardown']) {
-    if (!_pillOpen) return;
+    if (!_pillOpen && !_pillSurface) return;
+    // The lock belongs to the LOGICALLY open pill — a surface that is
+    // only finishing its exit fade no longer holds one (do not steal a
+    // count from whoever does).
+    final bool heldLock = _pillOpen;
     debugPrint('[SALU] pill: hide-now ($reason)');
     _pillHideTimer?.cancel();
     _pillHideTimer = null;
     _pillOpen = false;
+    _pillSurface = false;
     _pillAnim.value = 0;
-    ChromeLock.instance.release();
+    if (heldLock) ChromeLock.instance.release();
     _panel.groupPillOpen.value = false;
-    _pill.hide();
-  }
-
-  /// A remote focus grab has just run while the pill was open
-  /// (pc_part.md §10): the grab may have torn the pill's root-overlay
-  /// surface down without closing the pill. The pill is still logically
-  /// open, so put the overlay back — [OverlayPortalController.show] is a
-  /// no-op while the entry is already in.
-  void _onFocusGrabTick() {
-    if (!_pillOpen) return;
-    debugPrint('[SALU] pill: re-asserting overlay after a focus grab');
-    _pill.show();
+    if (mounted) setState(() {});
   }
 
   /// Applies a pill choice: selecting a grouped mode opens the group
@@ -688,6 +703,69 @@ class _PlaylistPanelState extends State<PlaylistPanel>
                 ),
               );
             },
+          ),
+        ),
+      ),
+      // The group-by pill's surface — the LAST layer, so it sits over the
+      // panel, the chrome and the picture while it is up (pc_part.md §10,
+      // round 2: the root-overlay version of this surface never painted in
+      // front of the panel on the user's Flutter 3.47.5 build, so the pill
+      // is rendered where the tree can never hide it). Gone the instant
+      // the panel closes.
+      if (open && _pillSurface) _pillSurfaceLayer(),
+    ]);
+  }
+
+  /// The pill's full-window surface: a dismiss layer over EVERYTHING
+  /// (the closing click must never fall through and zap a channel
+  /// underneath — the same contract the root-overlay version had) plus
+  /// the four options 6 px under the group-by button. The button sits
+  /// 10 px in and 6 px down from the panel's top-left corner and is 30 px
+  /// tall, so the pill's top-left is (10, 42) of the panel's box, which
+  /// starts at `kChromeBlockHeight` from the window's top.
+  ///
+  /// Esc is owned by the surface's focus while it is up (the full order
+  /// is pill → field → panel); every other key is left alone.
+  Widget _pillSurfaceLayer() {
+    return Stack(children: <Widget>[
+      Positioned.fill(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _closePill('tap outside / Esc'),
+          onSecondaryTap: () => _closePill('tap outside / Esc'),
+        ),
+      ),
+      Positioned(
+        top: kChromeBlockHeight,
+        right: 0,
+        width: PlaylistPanel.width,
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (FocusNode node, KeyEvent event) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.escape) {
+              _closePill('tap outside / Esc');
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Padding(
+            padding: const EdgeInsets.only(top: 42, left: 10),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: FadeTransition(
+                opacity: _pillCurve,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.96, end: 1.0)
+                      .animate(_pillCurve),
+                  alignment: Alignment.topLeft,
+                  child: _GroupPillBody(
+                    mode: _view.groupMode.value,
+                    onChoose: _chooseMode,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -855,28 +933,17 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// it — the mark never morphs into four glyphs (§10.2). It stays
   /// active (glowing) while the pill is open and drops to quiet ink
   /// while a search suspends the grouping (§10.3).
+  ///
+  /// No portal here (pc_part.md §10, round 2): the pill's surface is the
+  /// panel's own topmost layer ([_pillSurfaceLayer]) — the button only
+  /// toggles the state; the surface answers for the rest.
   Widget _groupByButton(bool searching) {
-    return OverlayPortal.overlayChildLayoutBuilder(
-      controller: _pill,
-      overlayLocation: OverlayChildLocation.rootOverlay,
-      overlayChildBuilder:
-          (BuildContext context, OverlayChildLayoutInfo info) {
-        return _GroupPillOverlay(
-          childPaintTransform: info.childPaintTransform,
-          childSize: info.childSize,
-          animation: _pillAnim,
-          mode: _view.groupMode.value,
-          onDismiss: () => _closePill('tap outside / Esc'),
-          onChoose: _chooseMode,
-        );
-      },
-      child: SaluIconButton(
-        tooltip: _pillOpen ? null : 'Group by',
-        size: 30,
-        active: _pillOpen,
-        onTap: _togglePill,
-        child: GroupByMark(size: 18, quiet: searching),
-      ),
+    return SaluIconButton(
+      tooltip: _pillOpen ? null : 'Group by',
+      size: 30,
+      active: _pillOpen,
+      onTap: _togglePill,
+      child: GroupByMark(size: 18, quiet: searching),
     );
   }
 
@@ -1698,94 +1765,12 @@ class _RevealChip extends StatelessWidget {
 }
 
 // ── Group-by pill (§10.2) ───────────────────────────────────────────────
-
-/// The floating pill: a full-screen dismiss layer + the option list
-/// anchored below the group-by button — the Open pill's recipe
-/// ([OverlayPortal.overlayChildLayoutBuilder] on the root overlay, so
-/// the pill tracks the button without a [CompositedTransformFollower]).
-class _GroupPillOverlay extends StatelessWidget {
-  const _GroupPillOverlay({
-    required this.childPaintTransform,
-    required this.childSize,
-    required this.animation,
-    required this.mode,
-    required this.onDismiss,
-    required this.onChoose,
-  });
-
-  final Matrix4 childPaintTransform;
-  final Size childSize;
-  final Animation<double> animation;
-
-  /// The panel's mode when the pill opened — a snapshot is correct: a
-  /// choice closes the pill, so the selection cannot drift while it is
-  /// up. (The overlay builds outside the panel's subtree, so the mode
-  /// arrives as a plain value, not an inherited lookup.)
-  final ChannelGroupMode mode;
-  final VoidCallback onDismiss;
-  final ValueChanged<ChannelGroupMode> onChoose;
-
-  @override
-  Widget build(BuildContext context) {
-    // Mirrors RawAutocomplete's own guard: a zero determinant means the
-    // button isn't currently visible/laid out (e.g. mid-transition), so
-    // there is nothing sane to anchor the pill to yet.
-    if (childPaintTransform.determinant() == 0.0) {
-      return const SizedBox.shrink();
-    }
-    final CurvedAnimation curved = CurvedAnimation(
-      parent: animation,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
-    return Focus(
-      // Esc closes (the pill owns Esc while it is open — the full order
-      // is pill → field → panel). Every other key is left alone.
-      autofocus: true,
-      onKeyEvent: (FocusNode node, KeyEvent event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape) {
-          onDismiss();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Stack(
-        children: <Widget>[
-          // Click-outside-to-close. Opaque: the closing click must never
-          // fall through and zap a channel underneath.
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onDismiss,
-              onSecondaryTap: onDismiss,
-            ),
-          ),
-          // Re-anchors this subtree to the button's on-screen box —
-          // (0, 0) here is the button's top-left corner — then drops the
-          // pill 6px below it.
-          Transform(
-            transform: childPaintTransform,
-            child: Padding(
-              padding: EdgeInsets.only(top: childSize.height + 6),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: FadeTransition(
-                  opacity: curved,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved),
-                    alignment: Alignment.topLeft,
-                    child: _GroupPillBody(mode: mode, onChoose: onChoose),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+//
+// The pill's surface (dismiss layer + options + Esc focus) is the
+// panel's own topmost layer — see [_PlaylistPanelState._pillSurfaceLayer].
+// It was a root-overlay [OverlayPortal] for a while (pc_part.md §10); on
+// the user's Flutter 3.47.5 build that surface never painted in front of
+// the panel, so the pill now lives in the tree where it cannot be hidden.
 
 /// The pill's four options — Flat, Category, Language, Country (§10.2).
 /// ONE horizontal row of icon-only marks, exactly the approved preview's
