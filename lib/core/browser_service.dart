@@ -10,6 +10,26 @@ import 'web/web_history_service.dart';
 import 'web/web_popup_service.dart';
 import 'window_state_service.dart';
 
+/// One tab, as the phone's tab sheet sees it (remote.md §17.13.1): the
+/// values the tab bar already paints, and nothing else. A **mirror**, never
+/// the controllers — `WebTab` keeps owning its `WebviewController`.
+@immutable
+class WebTabMirror {
+  const WebTabMirror({
+    required this.title,
+    required this.url,
+    required this.active,
+    required this.loading,
+    required this.hasMedia,
+  });
+
+  final String? title;
+  final String? url;
+  final bool active;
+  final bool loading;
+  final bool hasMedia;
+}
+
 /// Which surface owns the window (web.md · the Player/Web toggle, LOCKED
 /// to the top-left of the title strip).
 enum SaluMode { player, web }
@@ -32,10 +52,13 @@ class WebOpenRequest {
 /// open-request channel, and the small piece of window state the browser
 /// borrows (page fullscreen, the strip's title text).
 ///
-/// The service holds NO tab state — tabs live and die inside
-/// `BrowserScreen`'s tree. That tree now outlives the mode switch
-/// (web.md · mode keep-alive): leaving for Player mode HIDES the surface
-/// (Offstage) and parks its running pages — media paused, renderers
+/// Tabs still live and die inside `BrowserScreen`'s tree — the service
+/// holds at most a **mirror** (`webTabs`, a `List<WebTabMirror>`, plus the
+/// scalars), never the `WebviewController`s (pc_part.md A4 · §17.13.1) —
+/// and the screen installs one write-side handler so remote tab verbs and
+/// on-screen actions share a single code path. That tree outlives the mode
+/// switch (web.md · mode keep-alive): leaving for Player mode HIDES the
+/// surface (Offstage) and parks its running pages — media paused, renderers
 /// suspended — and coming back finds every page intact and paused. Only
 /// an app close tears it down: every `WebviewController` destroyed and
 /// each engine's session cache cleared before disposal (web.md · key
@@ -67,6 +90,44 @@ class BrowserService {
   final ValueNotifier<bool> webCanForward = ValueNotifier<bool>(false);
   final ValueNotifier<bool> webLoading = ValueNotifier<bool>(false);
   final ValueNotifier<int> webTabCount = ValueNotifier<int>(0);
+
+  /// Whether the ACTIVE tab's page reports a reachable media element — set
+  /// by the remote server's 500 ms find poll (only while a device is
+  /// connected in Web mode) and read by the browser screen for the mirror's
+  /// per-tab `hasMedia`, and by the snapshot's `web.hasMedia`.
+  final ValueNotifier<bool> webHasMedia = ValueNotifier<bool>(false);
+
+  /// The tab-strip mirror (pc_part.md A4 · remote.md §17.13.1) — the strip's
+  /// own list, one entry per tab, refreshed only by the browser screen where
+  /// it already calls [setStripTitle] / [setRemoteWebMirror], plus the tab
+  /// add/remove/select paths. Nothing here rides the snapshot; the phone
+  /// asks with `web_tabs_get`, capped and truncated at the handler edge.
+  final ValueNotifier<List<WebTabMirror>> webTabs =
+      ValueNotifier<List<WebTabMirror>>(const <WebTabMirror>[]);
+
+  /// Writes come back through this one handler the browser screen installs,
+  /// exactly like the nav handler for `browser_nav` (pc_part.md A4.3): each
+  /// closure is the screen's OWN tab method, so a remote tab action and its
+  /// on-screen twin can never disagree. [action] is one of [tabActions]; the
+  /// returned code is how the strip answers:
+  /// `'ok'`, `'tab_not_found'` (a stale index), or `'invalid'` (negative).
+  Future<String?> Function(String action, int? index, String? url)?
+      _tabHandler;
+
+  /// One D-pad's focus answers run through this script seam — the active
+  /// tab's own `executeScript`, registered by the browser screen alongside
+  /// the media seam (pc_part.md A3). The focus ring is part of the package:
+  /// the key script injects it page-side on every answer.
+  Future<Object?> Function(String script)? _remoteFocusHandler;
+
+  /// The one tab verb enum (pc_part.md A4.3): the screen's own select,
+  /// close, new — its confirmation, its session bookkeeping, its last-tab
+  /// rule — with no second code path.
+  static const Set<String> tabActions = <String>{
+    'activate',
+    'close',
+    'new',
+  };
 
   Future<void> Function(String action)? _remoteNavHandler;
   Future<Object?> Function(String script)? _remoteScriptHandler;
@@ -207,6 +268,71 @@ class BrowserService {
     return handler(script);
   }
 
+  /// Installed by the browser screen alongside [setRemoteHandlers]: the one
+  /// write path for `web_tab_activate` / `web_tab_close` / `web_tab_new`.
+  void setTabHandler(
+    Future<String?> Function(String action, int? index, String? url)? handler,
+  ) {
+    _tabHandler = handler;
+  }
+
+  /// Refreshes the tab-strip mirror from the screen's live strip. Pure data
+  /// in, one direction only (pc_part.md A4.2): the screen owns the tabs; the
+  /// service just mirrors the fields the phone's sheet wants to paint. The
+  /// per-tab `hasMedia` the screen passes in is what its own media-detection
+  /// already knows (the active page's real state, `false` for the rest).
+  ValueNotifier<List<WebTabMirror>> mirrorTabs(
+    List<WebTabMirror> tabs,
+    int activeIndex,
+  ) {
+    final List<WebTabMirror> marked = <WebTabMirror>[
+      for (int i = 0; i < tabs.length; i++)
+        WebTabMirror(
+          title: tabs[i].title,
+          url: tabs[i].url,
+          active: i == activeIndex,
+          loading: tabs[i].loading,
+          hasMedia: tabs[i].hasMedia,
+        ),
+    ];
+    webTabs.value = marked;
+    webTabCount.value = tabs.length;
+    return webTabs;
+  }
+
+  /// The screen's own tab method, one hop away for the remote handler
+  /// (pc_part.md A4.3). Returns `'ok'` / `'tab_not_found'` / `'invalid'`
+  /// from the strip, or `null` when no handler is registered (the command
+  /// layer answers `no_web_tabs`).
+  Future<String?> remoteTabAction(
+    String action,
+    int? index, {
+    String? url,
+  }) async {
+    final Future<String?> Function(String, int?, String?)? handler =
+        _tabHandler;
+    if (handler == null) return null;
+    if (!tabActions.contains(action)) return null;
+    return handler(action, index, url);
+  }
+
+  /// The D-pad's script seam, registered by the active tab (pc_part.md A3):
+  /// the same `executeScript` as the media bridge, so `web_key`/`web_focus_get`
+  /// reach the identical document.
+  void setRemoteFocusHandler(
+    Future<Object?> Function(String script)? handler,
+  ) {
+    _remoteFocusHandler = handler;
+  }
+
+  /// Runs a focus script on the active tab (the D-pad's own current page),
+  /// or null when the tab is gone.
+  Future<Object?> remoteFocusScript(String script) async {
+    final Future<Object?> Function(String)? handler = _remoteFocusHandler;
+    if (handler == null) return null;
+    return handler(script);
+  }
+
   void setRemoteWebMirror({
     required String? title,
     required String? url,
@@ -225,6 +351,9 @@ class BrowserService {
 
   void clearRemoteWebMirror() {
     setRemoteHandlers();
+    setTabHandler(null);
+    setRemoteFocusHandler(null);
+    webTabs.value = const <WebTabMirror>[];
     setRemoteWebMirror(
       title: null,
       url: null,

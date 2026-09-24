@@ -140,6 +140,34 @@ class _BrowserScreenState extends State<BrowserScreen> {
     // The title bar's badge stands outside this tree — it has to, a
     // download outlives Web mode — so it rings the service's doorbell.
     _service.downloadsRequest.addListener(_onDownloadsRequest);
+    // The remote server's 500 ms find poll flips this; the mirror's
+    // per-tab `hasMedia` (and the snapshot's scalar) both follow it.
+    _service.webHasMedia.addListener(_refreshTabMirror);
+    // The one write path for the remote tab verbs (pc_part.md A4.3): route
+    // them through this screen's own select/close/add methods, never a
+    // second code path. After any change the mirror re-reads, so a stale
+    // phone index self-heals on the next `web_tabs_get`.
+    _service.setTabHandler((String action, int? index, String? url) async {
+      if (action == 'activate') {
+        if (index == null || index < 0 || index >= _tabs.length) {
+          return 'tab_not_found';
+        }
+        _select(_tabs[index]);
+        return 'ok';
+      }
+      if (action == 'close') {
+        if (index == null || index < 0 || index >= _tabs.length) {
+          return 'tab_not_found';
+        }
+        _closeTab(index);
+        return 'ok';
+      }
+      // 'new' — the screen's own add-tab, then the tab's own first
+      // navigation (a null url lands on SALU's start page).
+      if (_tabs.length >= kWebMaxTabs) return 'invalid';
+      _newTab(url: url);
+      return 'ok';
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _tabs.isNotEmpty) return;
       final WebOpenRequest? pending = _service.takePendingRequest();
@@ -160,6 +188,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     unawaited(_openSub.cancel());
     _service.mode.removeListener(_onModeChanged);
     _service.downloadsRequest.removeListener(_onDownloadsRequest);
+    _service.webHasMedia.removeListener(_refreshTabMirror);
     _suggestTimer?.cancel();
     _addressFocus.removeListener(_onAddressFocusChanged);
     _unbindActive();
@@ -316,6 +345,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       // A tab before the stage died: the active tab is untouched, only its
       // index shifted — it keeps its bindings and its page.
     });
+    _refreshTabMirror();
   }
 
   // ── Active-tab plumbing ────────────────────────────────────────────────
@@ -357,6 +387,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       return controller.executeScript(script);
     }
     _service.setRemoteHandlers(navigate: navigate, executeScript: executeScript);
+    _service.setRemoteFocusHandler(executeScript);
     RemoteBrowserBridge.instance.register(
       navigate: navigate,
       executeScript: executeScript,
@@ -365,6 +396,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   void _unbindActive() {
     _service.setRemoteHandlers();
+    _service.setRemoteFocusHandler(null);
     RemoteBrowserBridge.instance.clear();
     for (final (ValueNotifier<Object?> n, VoidCallback cb) in _bound) {
       n.removeListener(cb);
@@ -401,7 +433,30 @@ class _BrowserScreenState extends State<BrowserScreen> {
       loading: tab.loading.value,
       tabCount: _tabs.length,
     );
+    _refreshTabMirror();
     setState(() {});
+  }
+
+  /// Refreshes the remote tab-strip mirror (pc_part.md A4.2) from the
+  /// screen's own `_tabs`/`_active`. One place, one direction: the service
+  /// holds a mirror of what the strip paints, never the controllers. Called
+  /// on every tab add/remove/select/title change (via `_onActiveChanged`)
+  /// and whenever the active page's media presence flips.
+  void _refreshTabMirror() {
+    final bool hasMedia = _service.webHasMedia.value;
+    _service.mirrorTabs(
+      <WebTabMirror>[
+        for (int i = 0; i < _tabs.length; i++)
+          WebTabMirror(
+            title: _tabs[i].displayTitle,
+            url: _tabs[i].startMode.value ? null : _tabs[i].url.value,
+            active: i == _active,
+            loading: _tabs[i].loading.value,
+            hasMedia: i == _active && hasMedia,
+          ),
+      ],
+      _active,
+    );
   }
 
   void _onFullscreenWanted() {
