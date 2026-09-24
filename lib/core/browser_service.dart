@@ -132,6 +132,26 @@ class BrowserService {
   Future<void> Function(String action)? _remoteNavHandler;
   Future<Object?> Function(String script)? _remoteScriptHandler;
 
+  /// The one fullscreen seat's two host-side legs (pc_part.md C1 ·
+  /// remote.md §17.14.1), installed by the browser screen for the ACTIVE
+  /// tab alongside the nav/script handlers: a **real** click in the view
+  /// (device pixels of the view → the composition controller's
+  /// `SendMouseInput`, the same path a physical mouse takes — user
+  /// activation included), and the screen's own page-fullscreen release.
+  Future<bool> Function(double x, double y)? _remotePageClick;
+  Future<void> Function()? _remotePageExitFullscreen;
+
+  /// The `browser_nav` actions the screen answers. `home` (added 2026-09-24,
+  /// remote.md §17.14.2) is the screen's own Home button: the loaded page
+  /// goes to its site's front page, in the same tab.
+  static const Set<String> navActions = <String>{
+    'back',
+    'forward',
+    'reload',
+    'stop',
+    'home',
+  };
+
   /// The download shelf's doorbell. The title bar's badge stands outside
   /// the browser's own tree — it has to, a download started here keeps
   /// running after the mode flips back — so the badge rings this and the
@@ -258,6 +278,7 @@ class BrowserService {
   Future<bool> remoteNavigate(String action) async {
     final Future<void> Function(String)? handler = _remoteNavHandler;
     if (handler == null) return false;
+    if (!navActions.contains(action)) return false;
     await handler(action);
     return true;
   }
@@ -266,6 +287,32 @@ class BrowserService {
     final Future<Object?> Function(String)? handler = _remoteScriptHandler;
     if (handler == null) return null;
     return handler(script);
+  }
+
+  /// Installed by the browser screen with the active tab (pc_part.md C1):
+  /// the real-click and page-fullscreen-release legs of `web_fullscreen`.
+  void setRemotePageHandlers({
+    Future<bool> Function(double x, double y)? click,
+    Future<void> Function()? exitFullscreen,
+  }) {
+    _remotePageClick = click;
+    _remotePageExitFullscreen = exitFullscreen;
+  }
+
+  /// A real click at [x]/[y] device pixels of the active view. False when
+  /// no view can take it.
+  Future<bool> remotePageClick(double x, double y) async {
+    final Future<bool> Function(double, double)? handler = _remotePageClick;
+    if (handler == null) return false;
+    return handler(x, y);
+  }
+
+  /// The screen's own page-fullscreen release, or — when no screen is
+  /// mounted — the hand-off's plain `false`, which never strands the window.
+  Future<void> remotePageExitFullscreen() async {
+    final Future<void> Function()? handler = _remotePageExitFullscreen;
+    if (handler != null) return handler();
+    await setWebFullscreen(false);
   }
 
   /// Installed by the browser screen alongside [setRemoteHandlers]: the one
@@ -351,6 +398,7 @@ class BrowserService {
 
   void clearRemoteWebMirror() {
     setRemoteHandlers();
+    setRemotePageHandlers();
     setTabHandler(null);
     setRemoteFocusHandler(null);
     webTabs.value = const <WebTabMirror>[];

@@ -614,6 +614,38 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     return _methodChannel.invokeMethod('setPreferredColorScheme', scheme);
   }
 
+  /// A real mouse click at [position] (SALU addition, VENDOR_NOTES.md
+  /// Delta 3), in the view's own logical pixels — the same coordinate
+  /// space the [Webview] widget's pointer listener uses. It rides the exact
+  /// path a physical mouse over the view takes (`setCursorPos` →
+  /// `setPointerButton`, i.e. `ICoreWebView2CompositionController::
+  /// SendMouseInput`), so the page sees a trusted click that carries user
+  /// activation — which is what `requestFullscreen()` on a site's own
+  /// fullscreen button needs, and an injected `element.click()` lacks.
+  ///
+  /// The cursor lands first and [settle] passes before the press, so a
+  /// player that fades its controls in on hover has them on stage when the
+  /// button goes down.
+  Future<void> sendMouseClick(
+    Offset position, {
+    PointerButton button = PointerButton.primary,
+    Duration settle = const Duration(milliseconds: 120),
+  }) async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    await _setCursorPos(position);
+    if (settle > Duration.zero) {
+      await Future<void>.delayed(settle);
+    }
+    if (_isDisposed) {
+      return;
+    }
+    await _setPointerButtonState(button, true);
+    await _setPointerButtonState(button, false);
+  }
+
   /// Tells the engine where downloads go (SALU addition, VENDOR_NOTES.md).
   ///
   /// [askWhereToSave] decides whether the host is asked about each

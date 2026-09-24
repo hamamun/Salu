@@ -92,6 +92,8 @@ void main() {
         'muted': false,
         'canFull': true,
         'seekable': true,
+        // §17.14.1 (2026-09-24): the element's fullscreen state NOW.
+        'fullscreen': false,
         'unit': 'ms',
         'volumeUnit': 'percent',
       });

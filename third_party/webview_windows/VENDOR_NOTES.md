@@ -3,7 +3,7 @@
 SALU vendors the `webview_windows` plugin (upstream:
 <https://github.com/jnschulze/flutter-webview-windows>, pub 0.4.0,
 upstream commit `ed81bbe`) so it can reach WebView2 controls the upstream
-plugin never exposed. There are exactly **two** deltas, both small and both
+plugin never exposed. There are exactly **three** deltas, all small and all
 marked with "SALU addition"/"SALU delta" in the comments where they live.
 Everything else is byte-identical to upstream.
 
@@ -93,9 +93,31 @@ SALU's handler asks first, when the viewer wants to be asked:
 
 ---
 
+## Delta 3 — A trusted click from the host (`sendMouseClick`)
+
+> SALU Remote's one fullscreen seat (`remote.md` §17.14.1, `pc_part.md`
+> C1) has to press a site's **own** fullscreen button when the page
+> refuses an injected `requestFullscreen()` — YouTube does, because an
+> injected call carries no user activation. A click that arrives through
+> `ICoreWebView2CompositionController::SendMouseInput` *is* user input as
+> far as the page is concerned.
+
+Upstream already routes the physical mouse through that path, but only via
+the library-private `_setCursorPos` / `_setPointerButtonState` the
+`Webview` widget's `Listener` calls. Delta 3 is **Dart only** — one public
+method that chains those two private calls:
+
+| File | Change |
+| --- | --- |
+| `lib/src/webview.dart` | `WebviewController.sendMouseClick(Offset position, {PointerButton button, Duration settle})` — move the view's virtual cursor to `position` (logical px, view-local), wait `settle`, press and release `button` |
+
+No native file changed; the method channel verbs it uses are upstream's.
+
+---
+
 ## Upgrading
 
 Re-copy upstream over this folder (keep `VENDOR_NOTES.md`), re-apply the
-edits in **both** tables above (they are small and marked with "SALU
+edits in **all three** tables above (they are small and marked with "SALU
 addition"/"SALU delta" in comments), and update the upstream commit in
 this file.

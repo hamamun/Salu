@@ -164,8 +164,20 @@ class _BrowserScreenState extends State<BrowserScreen> {
       }
       // 'new' — the screen's own add-tab, then the tab's own first
       // navigation (a null url lands on SALU's start page).
+      //
+      // pc_part.md C5 — the new tab must be NAVIGATED, not left blank. A
+      // bare "youtube.com" handed straight to the engine's `loadUrl` is not
+      // an absolute URI and lands on an empty page, so the address is
+      // resolved the way SALU's own omnibox resolves it first (`https://`
+      // added to a bare host). Something that still cannot be loaded
+      // answers `invalid_url` (→ invalid_arguments) rather than a blank tab.
+      String? target;
+      if (url != null && url.trim().isNotEmpty) {
+        target = WebAddress.urlFrom(url);
+        if (target == null) return 'invalid_url';
+      }
       if (_tabs.length >= kWebMaxTabs) return 'invalid';
-      _newTab(url: url);
+      _newTab(url: target);
       return 'ok';
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -379,6 +391,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
           return tab.reload();
         case 'stop':
           return tab.controller?.stop() ?? Future<void>.value();
+        case 'home':
+          // pc_part.md C2 · remote.md §17.14.2 — the screen's OWN Home
+          // button, no second code path: a loaded page goes to its site's
+          // front page in this same tab (`/watch?v=…` → youtube.com), a
+          // page with no website home keeps SALU's start page.
+          if (!mounted || !identical(tab, _tab)) return;
+          _goHome();
+          return;
       }
     }
     Future<Object?> executeScript(String script) async {
@@ -388,6 +408,38 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
     _service.setRemoteHandlers(navigate: navigate, executeScript: executeScript);
     _service.setRemoteFocusHandler(executeScript);
+    // pc_part.md C1 — the one fullscreen seat's host legs. The click is a
+    // REAL one (the composition controller's SendMouseInput, exactly what a
+    // physical mouse over the view sends), which is what gives a site's own
+    // fullscreen button the user activation an injected call lacks. The
+    // plan script answers device pixels of the view; the controller takes
+    // the widget's logical pixels, so divide by the view's own ratio (the
+    // same ratio the `Webview` widget hands the engine as its scale).
+    Future<bool> click(double x, double y) async {
+      final WebviewController? controller = tab.controller;
+      if (controller == null || !mounted || !identical(tab, _tab)) {
+        return false;
+      }
+      final double scale = View.of(context).devicePixelRatio;
+      final double ratio = scale.isFinite && scale > 0 ? scale : 1;
+      try {
+        await controller.sendMouseClick(Offset(x / ratio, y / ratio));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+    Future<void> exitFullscreen() async {
+      if (!mounted || !identical(tab, _tab)) {
+        await _service.setWebFullscreen(false);
+        return;
+      }
+      _releasePageFullscreen();
+    }
+    _service.setRemotePageHandlers(
+      click: click,
+      exitFullscreen: exitFullscreen,
+    );
     RemoteBrowserBridge.instance.register(
       navigate: navigate,
       executeScript: executeScript,
@@ -396,6 +448,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   void _unbindActive() {
     _service.setRemoteHandlers();
+    _service.setRemotePageHandlers();
     _service.setRemoteFocusHandler(null);
     RemoteBrowserBridge.instance.clear();
     for (final (ValueNotifier<Object?> n, VoidCallback cb) in _bound) {

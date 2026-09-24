@@ -28,7 +28,9 @@ class RemoteBrowserBridge {
   Future<bool> navigate(String action) async {
     final Future<void> Function(String)? handler = _navigate;
     if (handler == null) return false;
-    if (!<String>{'back', 'forward', 'reload', 'stop'}.contains(action)) return false;
+    if (!<String>{'back', 'forward', 'reload', 'stop', 'home'}.contains(action)) {
+      return false;
+    }
     try {
       await handler(action);
       return true;
