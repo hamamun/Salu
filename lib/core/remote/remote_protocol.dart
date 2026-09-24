@@ -34,6 +34,14 @@ abstract final class RemoteErrorCode {
   static const String quota = 'quota';
   static const String noPreset = 'no_preset';
   static const String noWebMedia = 'no_web_media';
+  // pc_part.md A6.2 · remote.md §17.8 — the web tab/bookmark mirrors'
+  // own errors (added 2026-09-23). The phone's copy of this file is
+  // marked "COPIED FROM THE SALU PC REPO — DO NOT EDIT SEPARATELY"; mirror
+  // these into salu-remote/lib/protocol/remote_protocol.dart in the same
+  // sitting, header comment and all.
+  static const String noWebTabs = 'no_web_tabs';
+  static const String tabNotFound = 'tab_not_found';
+  static const String noWebBookmarks = 'no_web_bookmarks';
   static const String busy = 'busy';
   static const String invalidArguments = 'invalid_arguments';
 }

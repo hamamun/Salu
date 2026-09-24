@@ -18,9 +18,11 @@ import '../tune/tune_model.dart';
 import '../tune/tune_presets.dart';
 import '../tune_service.dart';
 import '../url_library_service.dart';
+import '../web/web_favourites_service.dart';
 import '../window_state_service.dart';
 import 'remote_fs_service.dart';
 import 'remote_protocol.dart';
+import 'remote_web_focus_bridge.dart';
 import 'remote_web_media_bridge.dart';
 
 class RemoteCommandResponse {
@@ -44,13 +46,16 @@ class RemoteCommandHandler {
     Future<void> Function()? ensurePlayerAndFocus,
     void Function()? onControl,
     RemoteWebMediaBridge? webMedia,
+    RemoteWebFocusBridge? webFocus,
   })  : _ensurePlayerAndFocus = ensurePlayerAndFocus,
         _onControl = onControl,
-        webMedia = webMedia ?? RemoteWebMediaBridge();
+        webMedia = webMedia ?? RemoteWebMediaBridge(),
+        webFocus = webFocus ?? RemoteWebFocusBridge();
 
   final Future<void> Function()? _ensurePlayerAndFocus;
   final void Function()? _onControl;
   final RemoteWebMediaBridge webMedia;
+  final RemoteWebFocusBridge webFocus;
   final Map<int, SubtitleResult> _subtitleResults = <int, SubtitleResult>{};
   DateTime? _lastFsList;
 
@@ -290,6 +295,20 @@ class RemoteCommandHandler {
           return await _webWrite(await webMedia.mute(a['on'] == true));
         case 'web_media_fullscreen':
           return await _webWrite(await webMedia.fullscreen());
+        case 'web_tabs_get':
+          return _webTabsGet();
+        case 'web_tab_activate':
+          return await _webTabActivate(a);
+        case 'web_tab_close':
+          return await _webTabClose(a);
+        case 'web_tab_new':
+          return await _webTabNew(a);
+        case 'web_bookmarks_get':
+          return _webBookmarksGet();
+        case 'web_key':
+          return await _webKey(a);
+        case 'web_focus_get':
+          return await _webFocusGet();
         default:
           return const RemoteCommandResponse.error(
             RemoteErrorCode.unknownCommand,
@@ -778,6 +797,14 @@ class RemoteCommandHandler {
         "This site's player can't be controlled from outside.",
       );
     }
+    // pc_part.md A1.5 — log the raw args of every web_media_* call for one
+    // build; `el` names the element the read picked (A2.5, one line ends
+    // every argument about which element a site exposed).
+    debugPrint(
+      '[SALU] remote: web_media_get → position=${result.position} '
+      'duration=${result.duration} volume=${result.volume} '
+      'seekable=${result.seekable}',
+    );
     return RemoteCommandResponse.ok(<String, Object?>{
       'type': 'web_media_result',
       ...result.toJson(),
@@ -794,6 +821,188 @@ class RemoteCommandHandler {
     return const RemoteCommandResponse.ok();
   }
 
+  // ── Web tab strip + bookmarks + D-pad (pc_part.md A3–A5) ───────────────
+
+  /// The tab-strip mirror (pc_part.md A4 · §17.13.2): bounded at the edge so
+  /// a strip can never overflow the 8 KB frame — at most 50 rows, `title`
+  /// capped at 80 and `url` at 180 characters, the real total always in
+  /// `count`.
+  RemoteCommandResponse _webTabsGet() {
+    if (!BrowserService.instance.isWeb) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebTabs,
+        'Tab control needs the browser open on the PC.',
+      );
+    }
+    final List<WebTabMirror> tabs = BrowserService.instance.webTabs.value;
+    final List<Object?> rows = <Object?>[];
+    for (int i = 0; i < tabs.length && i < 50; i++) {
+      final WebTabMirror t = tabs[i];
+      rows.add(<String, Object?>{
+        'index': i,
+        'title': _truncate(t.title, 80),
+        'url': t.url == null ? null : _truncate(t.url, 180),
+        'active': t.active,
+        'loading': t.loading,
+        'hasMedia': t.hasMedia,
+      });
+    }
+    return RemoteCommandResponse.ok(<String, Object?>{
+      'type': 'web_tabs_result',
+      'tabs': rows,
+      'active': tabs.indexWhere((WebTabMirror t) => t.active),
+      'count': tabs.length,
+    });
+  }
+
+  Future<RemoteCommandResponse> _webTabActivate(Map<String, Object?> a) =>
+      _webTabChange('activate', _tabIndex(a));
+
+  Future<RemoteCommandResponse> _webTabClose(Map<String, Object?> a) =>
+      _webTabChange('close', _tabIndex(a));
+
+  Future<RemoteCommandResponse> _webTabNew(Map<String, Object?> a) async {
+    if (!BrowserService.instance.isWeb) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebTabs,
+        'Tab control needs the browser open on the PC.',
+      );
+    }
+    final String? url = a['url'] as String?;
+    if (url != null && !_looksLikeUrl(url)) return _invalid();
+    final String? outcome = await BrowserService.instance
+        .remoteTabAction('new', null, url: url?.trim());
+    if (outcome == null) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebTabs,
+        'Tab control needs an updated SALU on the PC.',
+      );
+    }
+    if (outcome == 'invalid') {
+      // Only the screen refuses a new tab — its own cap (the strip's `+`
+      // goes quiet there). Not a malformed argument, so say it plainly
+      // rather than blaming the request.
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.invalidArguments,
+        'The tab strip is at its limit.',
+      );
+    }
+    // The new tab is active — the mirror now answers the index the screen
+    // owns. A cheap re-read keeps the ack's `index` honest without racing
+    // the frame the screen's own setState is about to paint.
+    final int index = BrowserService.instance.webTabs.value
+        .indexWhere((WebTabMirror t) => t.active);
+    return RemoteCommandResponse.ok(<String, Object?>{
+      'index': index < 0 ? null : index,
+    });
+  }
+
+  Future<RemoteCommandResponse> _webTabChange(
+    String action,
+    int index,
+  ) async {
+    if (!BrowserService.instance.isWeb) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebTabs,
+        'Tab control needs the browser open on the PC.',
+      );
+    }
+    if (index < 0) return _invalid();
+    final String? outcome =
+        await BrowserService.instance.remoteTabAction(action, index);
+    if (outcome == null) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebTabs,
+        'Tab control needs an updated SALU on the PC.',
+      );
+    }
+    if (outcome == 'tab_not_found') {
+      // pc_part.md A4: a stale index answers tab_not_found — never close the
+      // wrong page silently. The phone re-reads after every change, so a
+      // stale index self-heals in one round trip.
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.tabNotFound,
+        'That tab is no longer open.',
+      );
+    }
+    if (outcome == 'invalid') return _invalid();
+    return const RemoteCommandResponse.ok();
+  }
+
+  /// A stale index answers `tab_not_found` rather than closing the wrong page
+  /// (pc_part.md A4): the handler is the screen's own close, and only the
+  /// screen knows what its strip holds *now*.
+  int _tabIndex(Map<String, Object?> a) {
+    final Object? raw = a['index'];
+    if (raw is! num || raw.toInt() < 0) return -1;
+    return raw.toInt();
+  }
+
+  /// The read-only bookmark mirror (pc_part.md A5 · §17.13.4). Every entry
+  /// is the browser's own favourited page, never SALU's URL library — a phone
+  /// that can silently rewrite the bookmark bar is a phone that can lose it.
+  RemoteCommandResponse _webBookmarksGet() {
+    final List<WebFavourite> entries =
+        WebFavouritesService.instance.favourites.value;
+    final List<Object?> rows = <Object?>[];
+    for (int i = 0; i < entries.length && i < 200; i++) {
+      final WebFavourite f = entries[i];
+      rows.add(<String, Object?>{
+        'name': _truncate(f.name, 80),
+        'url': _truncate(f.url, 180),
+        'folder': f.folder.isEmpty ? '' : _truncate(f.folder, 80),
+      });
+    }
+    return RemoteCommandResponse.ok(<String, Object?>{
+      'type': 'web_bookmarks_result',
+      'entries': rows,
+    });
+  }
+
+  String _truncate(String? value, int max) {
+    if (value == null || value.length <= max) return value ?? '';
+    return value.substring(0, max);
+  }
+
+  /// `web_key` (pc_part.md A3 · §17.13.5): walk the page's own tab order.
+  /// The ack carries the focus payload — label/tag/index/count/editable —
+  /// so the phone's card names what it is about to click. The focus ring is
+  /// drawn page-side by the injected script (part of the package, not a
+  /// follow-up): every key re-injects it onto the current element.
+  Future<RemoteCommandResponse> _webKey(Map<String, Object?> a) async {
+    final String? key = a['key'] as String?;
+    if (key == null || !RemoteWebFocusBridge.supportedKeys.contains(key)) {
+      // pc_part.md A3.8 — an unknown key is invalid_arguments, never a
+      // silent ack that leaves the pad lying about what happened.
+      return _invalid();
+    }
+    final RemoteWebFocusResult focus = await webFocus.key(key);
+    return _focusAck(focus);
+  }
+
+  /// `web_focus_get` (pc_part.md A3.6): the current seat, reported without
+  /// moving it — the same payload every `web_key` ack carries.
+  Future<RemoteCommandResponse> _webFocusGet() async {
+    final RemoteWebFocusResult focus = await webFocus.get();
+    return _focusAck(focus);
+  }
+
+  /// No page reachable (no focus reported, or not in Web mode at all) is the
+  /// honest "nothing focused" answer — the phone draws *Nothing focused yet*.
+  /// A fake seat would be worse (pc_part.md A3's found:false honesty).
+  RemoteCommandResponse _focusAck(RemoteWebFocusResult focus) {
+    final Map<String, Object?> payload = focus.found
+        ? focus.toJson()
+        : <String, Object?>{
+            'label': '',
+            'tag': 'body',
+            'index': 0,
+            'count': 0,
+            'editable': false,
+          };
+    return RemoteCommandResponse.ok(<String, Object?>{'focus': payload});
+  }
+
   Future<bool> _navigateBrowser(String action) async {
     if (!<String>{'back', 'forward', 'reload', 'stop'}.contains(action)) return false;
     // BrowserService's callback is installed by BrowserScreen. The bridge
@@ -802,6 +1011,16 @@ class RemoteCommandHandler {
   }
 
   static double _number(Object? value) => value is num ? value.toDouble() : 0;
+
+  /// The loose URL acceptance `web_tab_new` uses — the same family as
+  /// `UrlLibraryService.looksLikeUrl` but permissive about schemes, because
+  /// "youtube.com" is a legitimate new-tab target the address bar resolves.
+  static bool _looksLikeUrl(String value) {
+    final String v = value.trim();
+    if (v.isEmpty || v.contains(' ')) return false;
+    if (v.contains('://')) return true;
+    return v.contains('.') && !v.startsWith('.') && !v.endsWith('.');
+  }
   static List<double>? _numbers(Object? raw) => raw is List
       ? raw.whereType<num>().map((num n) => n.toDouble()).toList()
       : null;

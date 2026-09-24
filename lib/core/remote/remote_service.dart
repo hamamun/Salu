@@ -22,6 +22,7 @@ import 'remote_firewall.dart';
 import 'remote_network.dart';
 import 'remote_pairing.dart';
 import 'remote_protocol.dart';
+import 'remote_web_focus_bridge.dart';
 import 'remote_web_media_bridge.dart';
 
 /// Lifecycle visible to the Remote panel and Settings.
@@ -381,6 +382,7 @@ class RemoteService {
         version: '0.1.0',
         name: serverName,
         state: _snapshot(),
+        features: _helloFeatures(),
       ));
       connection.start();
       _startWebMediaPolling();
@@ -468,12 +470,32 @@ class RemoteService {
     _markDirty();
   }
 
+  /// The truthfully advertised web feature set (pc_part.md A6.1 · remote.md
+  /// §17.13): every flag here has a working implementation in this repo — the
+  /// phone draws only what has been promised. `web_media_unit`/`web_key`/
+  /// `web_tabs`/`web_bookmarks` were all implemented 2026-09-24.
+  static List<String> _helloFeatures() => const <String>[
+        'state',
+        'queue',
+        'files',
+        'library',
+        'tune',
+        'subtitles',
+        'web',
+        'web_media_unit',
+        'web_key',
+        'web_tabs',
+        'web_bookmarks',
+      ];
+
   void _startWebMediaPolling() {
     _webMediaTimer?.cancel();
+    final BrowserService browser = BrowserService.instance;
     if (!_connections.any((connection) => connection.isAuthenticated) ||
-        !BrowserService.instance.isWeb) {
+        !browser.isWeb) {
       if (_webHasMedia) {
         _webHasMedia = false;
+        browser.webHasMedia.value = false;
         _markDirty();
       }
       return;
@@ -488,6 +510,10 @@ class RemoteService {
       final bool found = raw == true;
       if (found != _webHasMedia) {
         _webHasMedia = found;
+        // The mirror's per-tab `hasMedia` and the snapshot's `web.hasMedia`
+        // both read this one notifier — one source, two readers, no
+        // disagreement (pc_part.md A4.1/A2).
+        BrowserService.instance.webHasMedia.value = found;
         _markDirty();
       }
     });
@@ -859,6 +885,9 @@ class _RemoteConnection {
       onControl: () => service.takeControl(deviceId!),
       webMedia: RemoteWebMediaBridge(
         executeScript: BrowserService.instance.remoteExecuteScript,
+      ),
+      webFocus: RemoteWebFocusBridge(
+        executeScript: BrowserService.instance.remoteFocusScript,
       ),
     );
   }

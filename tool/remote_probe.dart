@@ -42,7 +42,11 @@ Future<void> main(List<String> args) async {
   )));
   stdout.writeln('Connected. Commands: p play/pause, n next, b previous, s stop, '
       'f +10s, r -10s, v volume, m mute, h shuffle, t repeat, c clear queue, '
-      'o restart (start over), q quit.');
+      'o restart (start over), q quit.\n'
+      'Web section (pc_part.md A): g web_media_get, k +60s seek, j -10s seek, '
+      'd web_media_volume 10, l web_tabs_get, a web_tab_close 0, '
+      'w web_tab_new example.com, u web_bookmarks_get, 1/2/3/4 web_key '
+      '(↓/↑/Enter/Escape), e web_focus_get.');
   stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((String line) {
     final String c = line.trim().toLowerCase();
     switch (c) {
@@ -81,6 +85,47 @@ Future<void> main(List<String> args) async {
         break;
       case 'o':
         send('restart');
+        break;
+      // ── Web section (pc_part.md A — the units bridge, tabs, bookmarks,
+      //    the D-pad) ──────────────────────────────────────────────────────
+      case 'g':
+        send('web_media_get');
+        break;
+      case 'k':
+        send('web_media_seek', <String, Object?>{'to': 60000});
+        break;
+      case 'j':
+        send('web_media_seek', <String, Object?>{'delta': -10000});
+        break;
+      case 'd':
+        send('web_media_volume', <String, Object?>{'percent': 10});
+        break;
+      case 'l':
+        send('web_tabs_get');
+        break;
+      case 'a':
+        send('web_tab_close', <String, Object?>{'index': 0});
+        break;
+      case 'w':
+        send('web_tab_new', <String, Object?>{'url': 'https://example.com'});
+        break;
+      case 'u':
+        send('web_bookmarks_get');
+        break;
+      case '1':
+        send('web_key', <String, Object?>{'key': 'ArrowDown'});
+        break;
+      case '2':
+        send('web_key', <String, Object?>{'key': 'ArrowUp'});
+        break;
+      case '3':
+        send('web_key', <String, Object?>{'key': 'Enter'});
+        break;
+      case '4':
+        send('web_key', <String, Object?>{'key': 'Escape'});
+        break;
+      case 'e':
+        send('web_focus_get');
         break;
       case 'q':
         unawaited(socket.close());
