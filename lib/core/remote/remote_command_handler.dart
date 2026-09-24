@@ -55,7 +55,7 @@ class RemoteCommandHandler {
         _onControl = onControl,
         webMedia = webMedia ?? RemoteWebMediaBridge(),
         webFocus = webFocus ?? RemoteWebFocusBridge(),
-        _webFullscreen = webFullscreen,
+        _injectedWebFullscreen = webFullscreen,
         input = input ?? RemoteInputService.instance;
 
   final Future<void> Function()? _ensurePlayerAndFocus;
@@ -66,12 +66,12 @@ class RemoteCommandHandler {
   /// The PC's own pointer (pc_part.md C3).
   final RemoteInputService input;
 
-  final RemoteWebFullscreen? _webFullscreen;
+  final RemoteWebFullscreen? _injectedWebFullscreen;
 
   /// The one fullscreen seat (pc_part.md C1). Built on demand from the live
   /// services unless a test injected its own seams.
   RemoteWebFullscreen get webFullscreen =>
-      _webFullscreen ??
+      _injectedWebFullscreen ??
       RemoteWebFullscreen(
         executeScript: BrowserService.instance.isWeb
             ? webMedia.executeScript
