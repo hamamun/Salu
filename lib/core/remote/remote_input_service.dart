@@ -1,7 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' show FlutterView;
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/widgets.dart';
@@ -117,10 +116,9 @@ class RemoteInputService {
 
   static double _viewScale() {
     try {
-      final Iterable<FlutterView> views =
-          WidgetsBinding.instance.platformDispatcher.views;
-      if (views.isEmpty) return 1;
-      return views.first.devicePixelRatio;
+      return WidgetsBinding
+              .instance.platformDispatcher.implicitView?.devicePixelRatio ??
+          1.0;
     } catch (_) {
       return 1;
     }

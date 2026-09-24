@@ -299,10 +299,6 @@ class BrowserService {
     _remotePageExitFullscreen = exitFullscreen;
   }
 
-  /// Whether a view is ready to take a real click — `false` outside Web
-  /// mode or before the screen installed its handler.
-  bool get canRemotePageClick => _remotePageClick != null;
-
   /// A real click at [x]/[y] device pixels of the active view. False when
   /// no view can take it.
   Future<bool> remotePageClick(double x, double y) async {

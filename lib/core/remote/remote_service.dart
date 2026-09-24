@@ -474,12 +474,12 @@ class RemoteService {
   /// The truthfully advertised web feature set (pc_part.md A6.1 · remote.md
   /// §17.13): every flag here has a working implementation in this repo — the
   /// phone draws only what has been promised. `web_media_unit`/`web_key`/
-  /// `web_tabs`/`web_bookmarks` were all implemented 2026-09-24.
-  /// What this PC implements, truthfully (remote.md §17.13 / §17.14.5).
-  /// `proto` stays 1 — every flag is additive. `web_mouse` is advertised
-  /// only where the pointer can really be delivered (Win32 `SendInput`
-  /// bound): a flag that answers `no_web_mouse` puts a sentence under the
-  /// user's trackpad (pc_part.md C3.4).
+  /// `web_tabs`/`web_bookmarks` were all implemented 2026-09-24, and Part C's
+  /// `web_home`/`web_fullscreen`/`web_mouse`/`web_bookmark_add` the same day
+  /// (remote.md §17.14.5). `proto` stays 1 — every flag is additive.
+  /// `web_mouse` is advertised only where the pointer can really be
+  /// delivered (Win32 `SendInput` bound): a flag that answers `no_web_mouse`
+  /// puts a sentence under the user's trackpad (pc_part.md C3.4).
   static List<String> _helloFeatures() => helloFeatures(
         mouse: RemoteInputService.instance.available,
       );
