@@ -18,9 +18,11 @@ import '../tune/tune_model.dart';
 import '../tune/tune_presets.dart';
 import '../tune_service.dart';
 import '../url_library_service.dart';
+import '../web/web_address.dart';
 import '../web/web_favourites_service.dart';
 import '../window_state_service.dart';
 import 'remote_fs_service.dart';
+import 'remote_input_service.dart';
 import 'remote_protocol.dart';
 import 'remote_web_focus_bridge.dart';
 import 'remote_web_media_bridge.dart';
@@ -47,15 +49,41 @@ class RemoteCommandHandler {
     void Function()? onControl,
     RemoteWebMediaBridge? webMedia,
     RemoteWebFocusBridge? webFocus,
+    RemoteWebFullscreen? webFullscreen,
+    RemoteInputService? input,
   })  : _ensurePlayerAndFocus = ensurePlayerAndFocus,
         _onControl = onControl,
         webMedia = webMedia ?? RemoteWebMediaBridge(),
-        webFocus = webFocus ?? RemoteWebFocusBridge();
+        webFocus = webFocus ?? RemoteWebFocusBridge(),
+        _webFullscreen = webFullscreen,
+        input = input ?? RemoteInputService.instance;
 
   final Future<void> Function()? _ensurePlayerAndFocus;
   final void Function()? _onControl;
   final RemoteWebMediaBridge webMedia;
   final RemoteWebFocusBridge webFocus;
+
+  /// The PC's own pointer (pc_part.md C3).
+  final RemoteInputService input;
+
+  final RemoteWebFullscreen? _webFullscreen;
+
+  /// The one fullscreen seat (pc_part.md C1). Built on demand from the live
+  /// services unless a test injected its own seams.
+  RemoteWebFullscreen get webFullscreen =>
+      _webFullscreen ??
+      RemoteWebFullscreen(
+        executeScript: BrowserService.instance.isWeb
+            ? webMedia.executeScript
+            : null,
+        pageClick: BrowserService.instance.isWeb
+            ? BrowserService.instance.remotePageClick
+            : null,
+        pageFullscreen: () => BrowserService.instance.pageFullscreen.value,
+        exitPage: BrowserService.instance.remotePageExitFullscreen,
+        windowFullscreen: () => WindowStateService.instance.isFullscreen.value,
+        setWindowFullscreen: WindowStateService.instance.setFullscreen,
+      );
   final Map<int, SubtitleResult> _subtitleResults = <int, SubtitleResult>{};
   DateTime? _lastFsList;
 
@@ -270,8 +298,10 @@ class RemoteCommandHandler {
           return const RemoteCommandResponse.ok();
         case 'browser_nav':
           final String? action = a['action'] as String?;
-          if (action == null ||
-              !const <String>{'back', 'forward', 'reload', 'stop'}.contains(action)) {
+          // `home` added 2026-09-24 (pc_part.md C2 · remote.md §17.14.2).
+          // An unknown action keeps answering invalid_arguments — the phone
+          // falls back to `browser_open` with the origin it computes.
+          if (action == null || !BrowserService.navActions.contains(action)) {
             return _invalid();
           }
           if (!await _navigateBrowser(action)) return _busy();
@@ -294,7 +324,17 @@ class RemoteCommandHandler {
         case 'web_media_mute':
           return await _webWrite(await webMedia.mute(a['on'] == true));
         case 'web_media_fullscreen':
+          // Superseded by `web_fullscreen` (§17.14.1); kept for the phone's
+          // older-PC fallback path.
           return await _webWrite(await webMedia.fullscreen());
+        case 'web_fullscreen':
+          return await _webFullscreen(a);
+        case 'web_mouse_move':
+          return _webMouseMove(a);
+        case 'web_mouse_click':
+          return _webMouseClick(a);
+        case 'web_bookmark_add':
+          return _webBookmarkAdd(a);
         case 'web_tabs_get':
           return _webTabsGet();
         case 'web_tab_activate':
@@ -805,9 +845,16 @@ class RemoteCommandHandler {
       'duration=${result.duration} volume=${result.volume} '
       'seekable=${result.seekable}',
     );
+    // §17.14.1 — `fullscreen` is the element's state NOW: the document's
+    // own reading, or the host's (a page element that owns the screen via
+    // ContainsFullScreenElementChanged), whichever says yes.
+    final RemoteWebMediaResult shown = result.fullscreen ||
+            BrowserService.instance.pageFullscreen.value
+        ? result.withFullscreen(true)
+        : result;
     return RemoteCommandResponse.ok(<String, Object?>{
       'type': 'web_media_result',
-      ...result.toJson(),
+      ...shown.toJson(),
     });
   }
 
@@ -876,6 +923,14 @@ class RemoteCommandHandler {
       return const RemoteCommandResponse.error(
         RemoteErrorCode.noWebTabs,
         'Tab control needs an updated SALU on the PC.',
+      );
+    }
+    if (outcome == 'invalid_url') {
+      // pc_part.md C5 — an address the browser cannot load answers
+      // invalid_arguments rather than leaving the user on a blank tab.
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.invalidArguments,
+        "That address can't be opened.",
       );
     }
     if (outcome == 'invalid') {
@@ -1003,8 +1058,108 @@ class RemoteCommandHandler {
     return RemoteCommandResponse.ok(<String, Object?>{'focus': payload});
   }
 
+  // ── One fullscreen seat · trackpad · add-only bookmarks (Part C) ──────
+
+  /// `web_fullscreen {on?}` (pc_part.md C1 · remote.md §17.14.1): the PC
+  /// picks the target — the page's own player first (injected request, then
+  /// a real click on the player's own control), the SALU window only when
+  /// the page has no reachable player — and says which one happened, so
+  /// the phone's icon never lies.
+  Future<RemoteCommandResponse> _webFullscreen(Map<String, Object?> a) async {
+    final Object? rawOn = a['on'];
+    if (rawOn != null && rawOn is! bool) return _invalid();
+    final RemoteFullscreenOutcome outcome =
+        await webFullscreen.run(on: rawOn as bool?);
+    debugPrint('[SALU] remote: web_fullscreen on=$rawOn → '
+        'fullscreen=${outcome.fullscreen} target=${outcome.target}');
+    return RemoteCommandResponse.ok(outcome.toJson());
+  }
+
+  /// `web_mouse_move {dx, dy}` (pc_part.md C3): relative, CSS pixels, the
+  /// phone's gain already applied. Synchronous — move, ack, next; never a
+  /// page-side await (25 of these arrive a second).
+  RemoteCommandResponse _webMouseMove(Map<String, Object?> a) {
+    final Object? dx = a['dx'];
+    final Object? dy = a['dy'];
+    if (dx is! num || dy is! num || !dx.isFinite || !dy.isFinite) {
+      return _invalid();
+    }
+    if (!input.available) return _noWebMouse();
+    if (!input.moveBy(dx.toDouble(), dy.toDouble())) return _noWebMouse();
+    return const RemoteCommandResponse.ok();
+  }
+
+  /// `web_mouse_click {button, count}` (pc_part.md C3): a real click at the
+  /// pointer's current position. `button` defaults to left, `count` to 1.
+  RemoteCommandResponse _webMouseClick(Map<String, Object?> a) {
+    final Object? rawButton = a['button'];
+    final Object? rawCount = a['count'];
+    final String button = rawButton == null ? 'left' : '$rawButton';
+    final int? count = rawCount == null
+        ? 1
+        : (rawCount is num && rawCount == rawCount.roundToDouble()
+            ? rawCount.toInt()
+            : null);
+    if (!RemoteInputService.buttons.contains(button) ||
+        count == null ||
+        !RemoteInputService.clickCounts.contains(count)) {
+      return _invalid();
+    }
+    if (!input.available) return _noWebMouse();
+    if (!input.click(button, count)) return _noWebMouse();
+    return const RemoteCommandResponse.ok();
+  }
+
+  RemoteCommandResponse _noWebMouse() => const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebMouse,
+        "The PC's pointer can't be moved right now.",
+      );
+
+  /// `web_bookmark_add {url, name?}` (pc_part.md C4 · remote.md §17.14.4):
+  /// **append only** into the browser's own bookmark store (the one
+  /// `web_bookmarks_get` reads), top level. The same page twice is a no-op,
+  /// never a duplicate; nothing else in the store can change — this verb
+  /// has no way to rename, delete or reorder.
+  RemoteCommandResponse _webBookmarkAdd(Map<String, Object?> a) {
+    final Object? rawUrl = a['url'];
+    final Object? rawName = a['name'];
+    if (rawUrl is! String || (rawName != null && rawName is! String)) {
+      return _invalid();
+    }
+    final String? url = WebAddress.urlFrom(rawUrl);
+    if (url == null) return _invalid();
+    final WebFavouritesService store = WebFavouritesService.instance;
+    final WebFavourite? existing = store.findFor(url);
+    if (existing != null) return _bookmarkAck(existing);
+    final String? name = rawName is String && rawName.trim().isNotEmpty
+        ? _truncate(rawName.trim(), 200)
+        : null;
+    if (!store.add(url: url, name: name)) {
+      // The store has a fixed number of seats (WebFavouritesService
+      // .maxEntries). A full store is honest `no_web_bookmarks`: the phone
+      // then saves into SALU's own list and its snackbar says where it went.
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.noWebBookmarks,
+        "The PC's bookmarks are full.",
+      );
+    }
+    final WebFavourite? added = store.findFor(url);
+    return added == null
+        ? const RemoteCommandResponse.ok()
+        : _bookmarkAck(added);
+  }
+
+  RemoteCommandResponse _bookmarkAck(WebFavourite f) =>
+      RemoteCommandResponse.ok(<String, Object?>{
+        'entry': <String, Object?>{
+          'name': _truncate(f.name, 80),
+          'url': _truncate(f.url, 180),
+          'folder': f.folder.isEmpty ? '' : _truncate(f.folder, 80),
+        },
+      });
+
   Future<bool> _navigateBrowser(String action) async {
-    if (!<String>{'back', 'forward', 'reload', 'stop'}.contains(action)) return false;
+    if (!BrowserService.navActions.contains(action)) return false;
     // BrowserService's callback is installed by BrowserScreen. The bridge
     // lives there to keep the active WebTab private to that widget.
     return BrowserService.instance.remoteNavigate(action);

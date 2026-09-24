@@ -42,6 +42,11 @@ abstract final class RemoteErrorCode {
   static const String noWebTabs = 'no_web_tabs';
   static const String tabNotFound = 'tab_not_found';
   static const String noWebBookmarks = 'no_web_bookmarks';
+  // pc_part.md C6.2 · remote.md §17.14.6 — the trackpad's own error (added
+  // 2026-09-24): the PC's pointer could not be moved or clicked (no
+  // injectable input, a locked session). Mirror into the phone's copy in
+  // the same sitting.
+  static const String noWebMouse = 'no_web_mouse';
   static const String busy = 'busy';
   static const String invalidArguments = 'invalid_arguments';
 }
