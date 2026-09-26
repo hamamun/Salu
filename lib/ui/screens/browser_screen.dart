@@ -450,6 +450,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     _service.setRemoteHandlers();
     _service.setRemotePageHandlers();
     _service.setRemoteFocusHandler(null);
+    _service.detachMediaSurface();
     RemoteBrowserBridge.instance.clear();
     for (final (ValueNotifier<Object?> n, VoidCallback cb) in _bound) {
       n.removeListener(cb);
@@ -485,6 +486,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       canForward: tab.canGoForward.value,
       loading: tab.loading.value,
       tabCount: _tabs.length,
+      tabId: tab.id,
     );
     _refreshTabMirror();
     setState(() {});

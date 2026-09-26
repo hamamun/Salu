@@ -102,10 +102,19 @@ class ChannelRowDescriptor extends ChannelDescriptor {
 class ChannelGrouping {
   ChannelGrouping._();
 
+  /// Incremented by [descriptors] so a view-sync test can prove a mode
+  /// change regroups once, not once per notifier.
+  static int descriptorBuildsForTest = 0;
+
+  /// Incremented by [availability] so the shared cache can prove a
+  /// snapshot flush does not rescan.
+  static int availabilityScansForTest = 0;
+
   /// Which modes the **underlying playlist** offers (M7). Reads the full
   /// [items], never a search/favourites subset: filtering rows must not
   /// dim a mode. Flat is always available.
   static Map<ChannelGroupMode, bool> availability(List<QueueItem> items) {
+    availabilityScansForTest++;
     bool category = false, language = false, country = false;
     for (final QueueItem item in items) {
       if (item.group != null) category = true;
@@ -186,15 +195,18 @@ class ChannelGrouping {
     required ChannelGroupMode mode,
     required String? openGroupKey,
     required bool flattened,
+    List<ChannelGroup>? groups,
   }) {
+    descriptorBuildsForTest++;
     if (flattened || mode == ChannelGroupMode.flat) {
       return List<ChannelDescriptor>.unmodifiable(
         filtered.map((int i) => ChannelRowDescriptor(i)),
       );
     }
-    final List<ChannelGroup> groups = buildGroups(items, filtered, mode);
+    final List<ChannelGroup> built =
+        groups ?? buildGroups(items, filtered, mode);
     final List<ChannelDescriptor> out = <ChannelDescriptor>[];
-    for (final ChannelGroup group in groups) {
+    for (final ChannelGroup group in built) {
       final bool open = group.key == openGroupKey;
       out.add(GroupHeadDescriptor(group, expanded: open));
       if (open) {

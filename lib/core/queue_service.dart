@@ -26,10 +26,47 @@ export 'queue_item.dart';
 /// so string comparisons with `PlayerService.currentPath` and the resume
 /// store always agree.
 class QueueService {
-  QueueService._internal();
+  QueueService._internal() {
+    items.addListener(_onItemsRevision);
+    _publishRevision(items.value, bump: false);
+  }
 
   /// The one and only queue for the whole app.
   static final QueueService instance = QueueService._internal();
+
+  /// Process-unique prefix so a restarted PC does not reuse a content
+  /// token (pc_part.md Part F2). The serial after the hyphen changes only
+  /// when the published item list changes — not on position, play/pause,
+  /// the current index, or the grouping-mode choice.
+  static final String sessionToken = _newSessionToken();
+
+  static String _newSessionToken() {
+    final math.Random random = math.Random.secure();
+    final StringBuffer hex = StringBuffer('q');
+    for (int i = 0; i < 8; i++) {
+      hex.write(random.nextInt(256).toRadixString(16).padLeft(2, '0'));
+    }
+    return hex.toString();
+  }
+
+  int _contentSerial = 0;
+  List<QueueItem>? _revisionItems;
+  late final String _contentRevisionSeed = sessionToken;
+  String _contentRevision = '';
+
+  /// Opaque content/order/metadata token. Non-empty. Not the snapshot `rev`.
+  String get contentRevision => _contentRevision;
+
+  void _onItemsRevision() {
+    if (identical(items.value, _revisionItems)) return;
+    _publishRevision(items.value, bump: true);
+  }
+
+  void _publishRevision(List<QueueItem> next, {required bool bump}) {
+    _revisionItems = next;
+    if (bump) _contentSerial++;
+    _contentRevision = '$_contentRevisionSeed-$_contentSerial';
+  }
 
   /// Ordered entries of the queue (canonical local paths or stream URLs,
   /// plus a channel's details). Always an unmodifiable list; every

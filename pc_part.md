@@ -1,10 +1,14 @@
 # Part F — large playlists, grouping parity and Web-mode stability (2026-09-26)
 
-**Status: Remote implementation written in this branch; PC implementation pending.**
+**Status: PC implementation written in this branch; not accepted.**
 This work order supersedes Part B §11's `start + count` membership assumption
 and Part E's claim that transport keepalive cannot be affected by a busy app.
-Do not mark this complete until both apps pass the acceptance tests below.
-No PC source has been modified in this Remote session.
+Do not mark this complete until `flutter analyze` and `flutter test` pass
+here, and until the phone plus a 30-minute live soak pass on the user's PC.
+The 30-minute soak is user-PC acceptance and is not claimed by this session.
+This implementation session could not run `flutter analyze` or `flutter test`:
+the Flutter/Dart SDK is not installed here, and the SDK download host
+(`storage.googleapis.com`) resets TLS. Do not treat that absence as a pass.
 
 ## F0. What the Remote now does / rollout
 

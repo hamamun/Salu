@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'channel_grouping.dart';
+import 'queue_item.dart';
 
 /// The channel list's view choices — grouping mode, open accordion group,
 /// and whether a search is flattening the list.
@@ -35,5 +36,23 @@ class ChannelViewService {
     groupMode.value = ChannelGroupMode.flat;
     openGroup.value = null;
     searching.value = false;
+  }
+
+  /// One mode change for the PC pill and the phone's chips.
+  ///
+  /// Sets the mode and, for a grouped mode, opens the group holding
+  /// [playingIndex]. Does not reorder [items], does not move the playing
+  /// index, and does not require the playlist panel to be mounted. Both
+  /// notifiers update in this call so a listener can coalesce them into
+  /// one frame.
+  void applyMode(
+    ChannelGroupMode mode, {
+    required List<QueueItem> items,
+    required int playingIndex,
+  }) {
+    groupMode.value = mode;
+    openGroup.value = mode == ChannelGroupMode.flat
+        ? null
+        : ChannelGrouping.keyFor(items, playingIndex, mode);
   }
 }

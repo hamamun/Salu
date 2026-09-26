@@ -10,6 +10,7 @@ import '../../core/channel_load_service.dart';
 import '../../core/channel_view_service.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
+import '../../core/queue_grouping_cache.dart';
 import '../../core/queue_service.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
@@ -145,6 +146,16 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   int _targetCurrent = -2;
   int? _cachedTarget;
 
+  /// Coalesces [ChannelViewService.groupMode] and [ChannelViewService.openGroup]
+  /// into one frame. `_queueGroupSet` / [ChannelViewService.applyMode] write
+  /// both, and a 50 000-row regroup must not run twice for that.
+  bool _viewCoalesced = false;
+  bool _revealAfterView = false;
+  late ChannelGroupMode _observedMode;
+  bool _groupsPending = false;
+  String? _groupsPendingRevision;
+  ChannelGroupMode? _groupsPendingMode;
+
   @override
   void initState() {
     super.initState();
@@ -177,6 +188,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.addListener(_onFavouritesChanged);
     _loads.loadGeneration.addListener(_onLoadGeneration);
     _loads.loading.addListener(_onLoadingChanged);
+    _observedMode = _view.groupMode.value;
+    _view.groupMode.addListener(_onSharedViewChanged);
+    _view.openGroup.addListener(_onSharedViewChanged);
     if (_panel.playlistOpen.value) _onOpenChanged();
   }
 
@@ -189,6 +203,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _favourites.favourites.removeListener(_onFavouritesChanged);
     _loads.loadGeneration.removeListener(_onLoadGeneration);
     _loads.loading.removeListener(_onLoadingChanged);
+    _view.groupMode.removeListener(_onSharedViewChanged);
+    _view.openGroup.removeListener(_onSharedViewChanged);
     _localScroll.removeListener(_onScroll);
     _channelScroll.removeListener(_onScroll);
     _userScrollTimer?.cancel();
@@ -231,6 +247,45 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       _open.reverse();
     }
     setState(() {});
+  }
+
+  /// Remote (or any other owner) changed the shared view. Invalidate the
+  /// descriptor and reveal caches immediately, then rebuild once per frame
+  /// even when both notifiers fire.
+  void _onSharedViewChanged() {
+    if (_view.groupMode.value != _observedMode) {
+      _observedMode = _view.groupMode.value;
+      _revealAfterView = true;
+    }
+    _invalidateViewCaches();
+    if (_viewCoalesced) return;
+    _viewCoalesced = true;
+    scheduleMicrotask(() {
+      _viewCoalesced = false;
+      if (!mounted) {
+        _revealAfterView = false;
+        return;
+      }
+      final bool reveal = _revealAfterView;
+      _revealAfterView = false;
+      setState(() {});
+      if (!reveal) return;
+      _userScrollTimer?.cancel();
+      _userScrolled = false;
+      final List<QueueItem> items = _queue.items.value;
+      if (items.isNotEmpty && items.first.isChannel) {
+        _revealChannel(items, animate: true, force: true);
+      }
+    });
+  }
+
+  void _invalidateViewCaches() {
+    _cacheItems = null;
+    _cacheFavs = null;
+    _targetDescs = null;
+    _targetCurrent = -2;
+    _cachedTarget = null;
+    _groupsPending = false;
   }
 
   void _onItemsChanged() {
@@ -359,21 +414,81 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       }
       filtered.add(i);
     }
+    // A search flattens the list whatever the mode is (§10.3) — the
+    // grouping is suspended, not forgotten. An unfiltered grouped list
+    // reuses the shared membership cache so the panel and the phone do
+    // not each scan the queue. Cache fields are stored only once the
+    // descriptors exist, so a worker still in flight is not treated as done.
+    final bool unfiltered = _query.isEmpty && !_favOnly;
+    final ChannelGroupMode mode = _view.groupMode.value;
+    List<ChannelGroup>? groups;
+    if (unfiltered && mode != ChannelGroupMode.flat) {
+      final String revision = _queue.contentRevision;
+      groups = QueueGroupingCache.instance.peekGroups(items, revision, mode);
+      if (groups == null &&
+          items.length >= QueueGroupingCache.isolateThreshold) {
+        _scheduleGroupBuild(items, revision, mode, _view.openGroup.value);
+        return;
+      }
+      groups ??= QueueGroupingCache.instance.groupsSync(
+        items,
+        revision,
+        mode,
+      );
+    }
+    _groupsPending = false;
     _cacheItems = items;
     _cacheQuery = _query;
     _cacheFavOnly = _favOnly;
-    _cacheMode = _view.groupMode.value;
+    _cacheMode = mode;
     _cacheOpen = _view.openGroup.value;
     _cacheFavs = favs;
-    // A search flattens the list whatever the mode is (§10.3) — the
-    // grouping is suspended, not forgotten.
     _cachedDescriptors = ChannelGrouping.descriptors(
       items: items,
       filtered: filtered,
-      mode: _view.groupMode.value,
+      mode: mode,
       openGroupKey: _view.openGroup.value,
       flattened: _query.isNotEmpty,
+      groups: groups,
     );
+  }
+
+  /// Large cold lists are built off the UI isolate. This frame keeps the
+  /// previous descriptors only when they already match; otherwise the list
+  /// stays empty until the worker's revision is still current.
+  void _scheduleGroupBuild(
+    List<QueueItem> items,
+    String revision,
+    ChannelGroupMode mode,
+    String? open,
+  ) {
+    if (!_groupsPending ||
+        _groupsPendingRevision != revision ||
+        _groupsPendingMode != mode) {
+      _groupsPending = true;
+      _groupsPendingRevision = revision;
+      _groupsPendingMode = mode;
+      unawaited(QueueGroupingCache.instance
+          .payloadAsync(
+            items: items,
+            revision: revision,
+            mode: mode,
+            by: mode.name,
+          )
+          .then((_) {
+        if (!mounted) return;
+        if (_queue.contentRevision != revision) return;
+        if (_view.groupMode.value != mode || _view.openGroup.value != open) {
+          return;
+        }
+        _groupsPending = false;
+        _invalidateViewCaches();
+        setState(() {});
+      }));
+    }
+    if (!identical(items, _cacheItems) || _cacheMode != mode) {
+      _cachedDescriptors = const <ChannelDescriptor>[];
+    }
   }
 
   /// Descriptor position the reveal (and the edge chevrons) aim at: the
@@ -601,16 +716,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   void _chooseMode(ChannelGroupMode mode) {
     _closePill('choice');
     if (mode == _view.groupMode.value) return;
-    final List<QueueItem> items = _queue.items.value;
-    setState(() {
-      _view.groupMode.value = mode;
-      _view.openGroup.value = mode == ChannelGroupMode.flat
-          ? null
-          : ChannelGrouping.keyFor(items, _queue.index.value, mode);
-    });
-    _userScrollTimer?.cancel();
-    _userScrolled = false;
-    _revealChannel(items, animate: true, force: true);
+    // The shared operation also serves a closed panel and the phone.
+    // The view listener coalesces the two notifier writes and reveals.
+    _view.applyMode(
+      mode,
+      items: _queue.items.value,
+      playingIndex: _queue.index.value,
+    );
   }
 
   // ── Actions (each shows a 5 s Undo toast when it changed the queue) ──
@@ -1792,7 +1904,7 @@ class _GroupPillBody extends StatelessWidget {
       valueListenable: QueueService.instance.items,
       builder: (BuildContext context, List<QueueItem> items, Widget? _) {
         final Map<ChannelGroupMode, bool> available =
-            ChannelGrouping.availability(items);
+            QueueGroupingCache.instance.availability(items);
         const List<ChannelGroupMode> modes = <ChannelGroupMode>[
           ChannelGroupMode.flat,
           ChannelGroupMode.category,

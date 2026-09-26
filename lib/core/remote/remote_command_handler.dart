@@ -10,6 +10,7 @@ import '../channel_view_service.dart';
 import '../media_utils.dart';
 import '../open_media_service.dart';
 import '../player_service.dart';
+import '../queue_grouping_cache.dart';
 import '../queue_service.dart';
 import '../settings_service.dart';
 import '../subtitle_service.dart';
@@ -21,6 +22,7 @@ import '../url_library_service.dart';
 import '../web/web_address.dart';
 import '../web/web_favourites_service.dart';
 import '../window_state_service.dart';
+import 'queue_pages.dart';
 import 'remote_fs_service.dart';
 import 'remote_input_service.dart';
 import 'remote_power_service.dart';
@@ -174,11 +176,13 @@ class RemoteCommandHandler {
         case 'state_get':
           return const RemoteCommandResponse.ok(<String, Object?>{'state': true});
         case 'queue_get':
-          return _queueGet(a);
+          return _queueGet(command);
         case 'queue_jump':
           return await _queueJump(a);
         case 'queue_groups':
           return _queueGroups();
+        case queueGroupsPageVerb:
+          return _queueGroupsPage(command);
         case 'queue_group_set':
           return _queueGroupSet(a);
         case 'queue_clear':
@@ -408,28 +412,57 @@ class RemoteCommandHandler {
         RemoteErrorCode.busy,
         'The PC is busy — try again in a moment.',
       );
+  RemoteCommandResponse _staleQueue() => const RemoteCommandResponse.error(
+        RemoteErrorCode.staleQueue,
+        remoteStaleQueueMessage,
+      );
+  RemoteCommandResponse _tooLarge() => const RemoteCommandResponse.error(
+        RemoteErrorCode.tooLarge,
+        remoteTooLargeMessage,
+      );
 
-  RemoteCommandResponse _queueGet(Map<String, Object?> args) {
-    final int from = _number(args['from']).round().clamp(0, queue.length).toInt();
-    final int count = _number(args['count'] ?? 20).round().clamp(1, 100).toInt();
-    final List<Object?> rows = <Object?>[];
-    for (int i = from; i < queue.length && rows.length < count; i++) {
-      final item = queue.itemAt(i);
-      if (item == null) continue;
-      rows.add(<String, Object?>{
-        'index': i,
-        'title': item.label,
-        if (!queue.isChannelList) 'durationMs': null,
-        'now': i == queue.index.value,
-      });
+  RemoteCommandResponse _queueGet(RemoteCommand command) {
+    final Map<String, Object?> args = command.args;
+    final String revision = queue.contentRevision;
+    final List<QueueItem> items = queue.items.value;
+    if (args.containsKey('revision')) {
+      final Object? supplied = args['revision'];
+      if (supplied is! String || supplied.isEmpty) return _invalid();
+      if (supplied != revision) return _staleQueue();
     }
-    return RemoteCommandResponse.ok(<String, Object?>{
-      'type': 'queue_result',
-      'from': from,
-      'count': rows.length,
-      'total': queue.length,
-      'rows': rows,
-    });
+    final int from =
+        _number(args['from']).round().clamp(0, items.length).toInt();
+    final int count =
+        _number(args['count'] ?? 20).round().clamp(1, queueRowPageMaxCount).toInt();
+    final bool channel = queue.isChannelList;
+    final int now = queue.index.value;
+    final List<QueueRowCandidate> candidates = <QueueRowCandidate>[];
+    for (int i = from; i < items.length && candidates.length < count; i++) {
+      candidates.add(QueueRowCandidate(
+        index: i,
+        title: items[i].label,
+        now: i == now,
+        includeDuration: !channel,
+      ));
+    }
+    final PackedQueueRows packed = packQueueRows(
+      id: command.id,
+      from: from,
+      total: items.length,
+      revision: revision,
+      count: count,
+      candidates: candidates,
+    );
+    if (packed.tooLarge) return _tooLarge();
+    // Built from the captured list. A mutation during this synchronous
+    // pack cannot mix revisions; an async gap is not introduced here.
+    if (queue.contentRevision != revision) return _staleQueue();
+    return RemoteCommandResponse.ok(queueResultBody(
+      from: from,
+      total: items.length,
+      revision: revision,
+      rows: packed.rows,
+    ));
   }
 
   Future<RemoteCommandResponse> _queueJump(Map<String, Object?> args) async {
@@ -446,7 +479,10 @@ class RemoteCommandHandler {
   /// count and the absolute queue index of its first row — what the phone
   /// inserts its headers at and `queue_jump`s to. Empty in Flat, and off
   /// a channel list, where the chips row has nothing to offer at all.
-  RemoteCommandResponse _queueGroups() {
+  ///
+  /// Legacy range metadata only. New phones use [queueGroupsPageVerb] and
+  /// must not treat `start`/`count` as membership.
+  Future<RemoteCommandResponse> _queueGroups() async {
     final List<QueueItem> items = queue.items.value;
     if (items.isEmpty || !queue.isChannelList) {
       return const RemoteCommandResponse.ok(<String, Object?>{
@@ -459,15 +495,24 @@ class RemoteCommandHandler {
         'groups': <Object?>[],
       });
     }
-    final List<int> all = List<int>.generate(items.length, (int i) => i);
-    final List<ChannelGroup> groups =
-        ChannelGrouping.buildGroups(items, all, mode);
+    final String revision = queue.contentRevision;
+    final QueueFragmentPayload payload =
+        await QueueGroupingCache.instance.payloadAsync(
+      items: items,
+      revision: revision,
+      mode: mode,
+      by: mode.name,
+    );
+    if (queue.contentRevision != revision ||
+        !identical(queue.items.value, items)) {
+      return _busy();
+    }
     return RemoteCommandResponse.ok(<String, Object?>{
       'groups': <Object?>[
-        for (final ChannelGroup group in groups)
+        for (final ChannelGroup group in payload.groups)
           <String, Object?>{
             'key': group.key,
-            'name': group.label,
+            'name': remoteSafeTitle(group.label),
             'count': group.indexes.length,
             'start': group.indexes.first,
           },
@@ -475,14 +520,84 @@ class RemoteCommandHandler {
     });
   }
 
+  /// `queue_groups_page` — exact membership fragments (pc_part.md Part F2).
+  /// Evaluates [by] independently of the panel's current mode. A stale or
+  /// mid-read revision never mixes into the page.
+  Future<RemoteCommandResponse> _queueGroupsPage(RemoteCommand command) async {
+    final Map<String, Object?> args = command.args;
+    final Object? rawBy = args['by'];
+    if (rawBy is! String) return _invalid();
+    final String by = rawBy;
+    final ChannelGroupMode? mode = switch (by) {
+      'category' => ChannelGroupMode.category,
+      'language' => ChannelGroupMode.language,
+      'country' => ChannelGroupMode.country,
+      _ => null,
+    };
+    if (mode == null) return _invalid();
+    final Object? supplied = args['revision'];
+    if (supplied is! String || supplied.isEmpty) return _invalid();
+    if (args.containsKey('from') && _strictInt(args['from']) == null) {
+      return _invalid();
+    }
+    if (args.containsKey('count') && _strictInt(args['count']) == null) {
+      return _invalid();
+    }
+    final int from = _strictInt(args['from']) ?? 0;
+    final int count = _strictInt(args['count']) ?? queueGroupsPageDefaultCount;
+    if (from < 0 || count < 1) return _invalid();
+    final String revision = queue.contentRevision;
+    if (supplied != revision) return _staleQueue();
+    final List<QueueItem> items = queue.items.value;
+    if (items.isEmpty || !queue.isChannelList) {
+      return RemoteCommandResponse.ok(queueGroupsResultBody(
+        revision: revision,
+        by: by,
+        groups: const <Map<String, Object?>>[],
+        next: null,
+      ));
+    }
+    final QueueFragmentPayload payload =
+        await QueueGroupingCache.instance.payloadAsync(
+      items: items,
+      revision: revision,
+      mode: mode,
+      by: by,
+    );
+    await QueuePageHooks.beforePublish();
+    if (queue.contentRevision != revision ||
+        !identical(queue.items.value, items)) {
+      return _staleQueue();
+    }
+    final QueueGroupsPage page = packGroupFragments(
+      id: command.id,
+      revision: revision,
+      by: by,
+      fragments: payload.fragments,
+      from: from,
+      count: count,
+    );
+    if (page.tooLarge) return _tooLarge();
+    if (queue.contentRevision != revision ||
+        !identical(queue.items.value, items)) {
+      return _staleQueue();
+    }
+    return RemoteCommandResponse.ok(queueGroupsResultBody(
+      revision: revision,
+      by: by,
+      groups: page.groups,
+      next: page.next,
+    ));
+  }
+
   /// `queue_group_set {by}` — the phone's chip moving the PC panel's
-  /// pill choice (pc_part.md §11). A pure view change mirroring the
-  /// panel's own `_chooseMode` at service level: set the mode, and when a
-  /// grouped mode is chosen also open the group holding the playing
-  /// channel (the panel's §10.5 rule). The queue is never touched; the
-  /// next snapshot carries the new `queue.grouping`.
+  /// pill choice (pc_part.md §11). The same [ChannelViewService.applyMode]
+  /// the panel's pill uses, so the queue order and playing index stay put
+  /// whether or not the panel is open.
   RemoteCommandResponse _queueGroupSet(Map<String, Object?> args) {
-    final String? by = args['by'] as String?;
+    final Object? rawBy = args['by'];
+    if (rawBy is! String) return _invalid();
+    final String by = rawBy;
     final ChannelGroupMode? mode = switch (by) {
       'flat' => ChannelGroupMode.flat,
       'category' => ChannelGroupMode.category,
@@ -491,11 +606,11 @@ class RemoteCommandHandler {
       _ => null,
     };
     if (mode == null) return _invalid();
-    final ChannelViewService view = ChannelViewService.instance;
-    view.groupMode.value = mode;
-    view.openGroup.value = mode == ChannelGroupMode.flat
-        ? null
-        : ChannelGrouping.keyFor(queue.items.value, queue.index.value, mode);
+    ChannelViewService.instance.applyMode(
+      mode,
+      items: queue.items.value,
+      playingIndex: queue.index.value,
+    );
     return const RemoteCommandResponse.ok();
   }
 
@@ -1227,6 +1342,15 @@ class RemoteCommandHandler {
   }
 
   static double _number(Object? value) => value is num ? value.toDouble() : 0;
+
+  /// Integral JSON numbers only. `null` when the value is absent from the
+  /// caller — the caller distinguishes "missing" from "not an integer".
+  static int? _strictInt(Object? value) {
+    if (value == null) return null;
+    if (value is! num || !value.isFinite) return null;
+    if (value != value.roundToDouble()) return null;
+    return value.toInt();
+  }
 
   /// The loose URL acceptance `web_tab_new` uses — the same family as
   /// `UrlLibraryService.looksLikeUrl` but permissive about schemes, because

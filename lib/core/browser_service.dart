@@ -92,10 +92,38 @@ class BrowserService {
   final ValueNotifier<int> webTabCount = ValueNotifier<int>(0);
 
   /// Whether the ACTIVE tab's page reports a reachable media element — set
-  /// by the remote server's 500 ms find poll (only while a device is
-  /// connected in Web mode) and read by the browser screen for the mirror's
+  /// by the remote server's completion-based find poll (only while a device
+  /// is connected in Web mode) and read by the browser screen for the mirror's
   /// per-tab `hasMedia`, and by the snapshot's `web.hasMedia`.
   final ValueNotifier<bool> webHasMedia = ValueNotifier<bool>(false);
+
+  /// Identity of the browser surface a media script was aimed at. Bumped on
+  /// navigation, tab switch/close, mode switch and shutdown so an in-flight
+  /// script result can be ignored (pc_part.md Part F4).
+  int mediaGeneration = 0;
+  int? _mediaTabId;
+  String? _mediaUrl;
+
+  /// A live tab has registered its script seam. Polling skips otherwise.
+  bool get hasLiveRemoteTab => _remoteScriptHandler != null;
+
+  /// Records the surface a media read is about. No-ops when [tabId] and
+  /// [url] are unchanged, so a title-only mirror refresh does not discard
+  /// a read that is still about this page.
+  void noteMediaSurface({int? tabId, String? url, bool live = true}) {
+    if (!live) {
+      _mediaTabId = null;
+      _mediaUrl = null;
+      mediaGeneration++;
+      return;
+    }
+    if (tabId == _mediaTabId && url == _mediaUrl) return;
+    _mediaTabId = tabId;
+    _mediaUrl = url;
+    mediaGeneration++;
+  }
+
+  void detachMediaSurface() => noteMediaSurface(live: false);
 
   /// The tab-strip mirror (pc_part.md A4 · remote.md §17.13.1) — the strip's
   /// own list, one entry per tab, refreshed only by the browser screen where
@@ -210,6 +238,7 @@ class BrowserService {
       if (next == SaluMode.player) await _releaseWebSurface();
       return;
     }
+    mediaGeneration++;
     if (next == SaluMode.web) {
       // The mini bar is a 32-px strip with no room for a browser
       // (mini.md §8) — the full window comes back first.
@@ -387,13 +416,26 @@ class BrowserService {
     required bool canForward,
     required bool loading,
     required int tabCount,
+    int? tabId,
   }) {
+    final String? shown =
+        url == null ? null : (url.length > 256 ? url.substring(0, 256) : url);
+    if (loading && !webLoading.value) {
+      // Navigation or reload started — a script already in flight is about
+      // the previous document.
+      mediaGeneration++;
+    }
     webTitle.value = title;
-    webUrl.value = url == null ? null : (url.length > 256 ? url.substring(0, 256) : url);
+    webUrl.value = shown;
     webCanBack.value = canBack;
     webCanForward.value = canForward;
     webLoading.value = loading;
     webTabCount.value = tabCount;
+    if (tabId != null) {
+      // Identity uses the full URL. The mirror above is capped at 256
+      // characters, which must not hide a navigation past that prefix.
+      noteMediaSurface(tabId: tabId, url: url);
+    }
   }
 
   void clearRemoteWebMirror() {
@@ -402,6 +444,7 @@ class BrowserService {
     setTabHandler(null);
     setRemoteFocusHandler(null);
     webTabs.value = const <WebTabMirror>[];
+    detachMediaSurface();
     setRemoteWebMirror(
       title: null,
       url: null,

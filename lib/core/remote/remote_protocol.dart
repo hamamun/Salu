@@ -49,7 +49,23 @@ abstract final class RemoteErrorCode {
   static const String noWebMouse = 'no_web_mouse';
   static const String busy = 'busy';
   static const String invalidArguments = 'invalid_arguments';
+  // pc_part.md Part F · remote.md §17.16. Mirror into salu-remote's copy
+  // of this file in the same sitting (`stale_queue`, `too_large`).
+  static const String staleQueue = 'stale_queue';
+  static const String tooLarge = 'too_large';
 }
+
+/// Generic oversized-response copy. Used for queue pages that cannot fit
+/// even one row/fragment, and for any other command whose encoded reply
+/// exceeds 8 KiB. Never masquerade this as [RemoteErrorCode.busy].
+const String remoteTooLargeMessage =
+    'The response is too large; request a smaller page.';
+
+/// Supplied queue content token is no longer current.
+const String remoteStaleQueueMessage = 'The playlist changed.';
+
+/// Advertised only once paged group membership is implemented (Part F2).
+const String remoteFeatureQueueGroupsPaged = 'queue_groups_paged';
 
 /// The one exception a protocol parser exposes to its caller.
 class RemoteProtocolException implements Exception {
