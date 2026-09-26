@@ -1,8 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:ffi/ffi.dart';
-
 /// Small Windows power service for remote sleep and shutdown (pc_part.md Part D ·
 /// remote.md §17.15).
 ///
@@ -68,8 +66,8 @@ class UnavailablePowerPlatform extends RemotePowerPlatform {
 class Win32PowerPlatform extends RemotePowerPlatform {
   Win32PowerPlatform() {
     try {
-      _powrprof = DynamicLibrary.open('powrprof.dll');
-      _setSuspendState = _powrprof.lookupFunction<
+      final DynamicLibrary powrprof = DynamicLibrary.open('powrprof.dll');
+      _setSuspendState = powrprof.lookupFunction<
           Int32 Function(Int32, Int32, Int32),
           int Function(int, int, int)>('SetSuspendState');
     } catch (_) {
@@ -77,7 +75,6 @@ class Win32PowerPlatform extends RemotePowerPlatform {
     }
   }
 
-  DynamicLibrary? _powrprof;
   int Function(int, int, int)? _setSuspendState;
 
   @override
