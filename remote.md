@@ -256,6 +256,9 @@ diffs it if it wants a toast. Fewer moving parts, one less way to be wrong.
 | `not_seekable` | (slider disabled) | Live / unknown duration. |
 | `unknown_command` | (silent, logged) | Verb the PC does not know. |
 | `too_fast` | (silent) | Rate limit — 30 commands/second. |
+| `stale_queue` | (retry the read) | `queue_get` / `queue_groups_page` saw a playlist revision that is no longer current (§17.16). No rows from the old revision are included. |
+| `too_large` | (request a smaller page) | Even the smallest legal response for this command cannot fit in 8 KiB. Not `busy`, and it does not close a healthy socket. Other commands keep the generic oversized-frame failure. |
+| `busy` | (retry) | The PC could not finish the command in time, or a legacy `queue_groups` read saw the list change mid-build. Retryable. Never used to hide an oversized queue page. |
 
 | Close code | Meaning |
 |---|---|
@@ -454,7 +457,10 @@ One consistent prefix, matching the repo's existing style:
 [SALU] remote: auth failed from 192.168.0.77 (bad_code)
 [SALU] remote: rejected 203.0.113.9 (not a private address)
 [SALU] remote: stopped (toggle off) — 2 phones remembered
+[SALU] remote: socket closed code=1001 reason=none at=… authed=true ageMs=… frameAgeMs=… snapshotAgeMs=… heartbeatAgeMs=… eventLoopLagMs=… pendingBrowser=… lastCommandMs=…
 ```
+
+A close line records the code, a redacted reason, the timestamp, whether the socket had authenticated, connection age, age of the last valid frame / snapshot / heartbeat, event-loop lag, pending browser scripts, and the last command duration. It never includes a URL, token, pairing code, or path. **Code 1001 alone does not mean the Wi-Fi failed** — the ages and the lag are what distinguish a stall from a disconnect (§17.16).
 
 ---
 
@@ -861,7 +867,7 @@ the PC"), so an old PC degrades visibly but safely.
 
 | Verb | Args | PC call |
 |---|---|---|
-| `queue_get` | `{from, count}` (count ≤ 100) | `QueueService` rows → `[{index, title, durationMs?, now}]` — titles only, never paths |
+| `queue_get` | `{from, count, revision?}` (count ≤ 100) | `queue_result` — titles only, never paths. Full contract in §17.16. |
 | `queue_jump` | `{index}` | jump the queue to that row and play it (the reserved `jump_to_index`, renamed for symmetry) |
 | `queue_clear` | — | stop playback and empty `QueueService` — `TransportActions.clearQueue()`, the *same* door the playlist panel's own bin uses (`PlayerService.clearQueue`: stop, empty, back to the initial state) → snapshot with `queue:{kind:"empty",count:0,index:-1}`. Idempotent: an already-empty queue is `ok`, never an error. The PC's own **Undo** card is the feedback (A1), so a mis-tap on the phone is still recoverable for 5 s. |
 
@@ -1044,8 +1050,10 @@ out on its own — reaches the phone within one snapshot.
 away if it is ever needed). Nothing else about the file system appears in the snapshot —
 no paths, no entries. `web.hasMedia` is a *boolean only* — the position/duration of a web
 page's player never enters the snapshot; the phone asks with `web_media_get` (~1/s, same
-throttle as player positions). The v1 queue block (`queue:{kind,count,index}`) is already
-everything the playlist card's auto-scroll needs — row titles come from `queue_get`.
+throttle as player positions). The queue block is `queue:{kind,count,index,revision}` plus the optional
+`grouping` mirror. `revision` is an opaque content/order/metadata token, **not**
+the snapshot `rev` (§17.16). Row titles still come from `queue_get`; group
+membership comes from `queue_groups_page`, not from `start`/`count`.
 
 ### 17.6 Security, privacy and the new switch
 
@@ -1589,4 +1597,120 @@ The remote's ⋮ menu exposes authenticated PC sleep and shutdown.
 - **Pre-dispatch ack.** The command's `ack` is sent before dispatching the OS action after a short delay so the WebSocket receives the reply before the OS suspends or shuts down.
 - **Single in-flight guard.** A second power request while one is pending is rejected with `busy`.
 - **Feature flag.** `pc_power` is advertised in `hello.features` only when both verbs work on the host system.
+
+---
+
+### 17.16 Large playlists and paged groups (added 2026-09-26)
+
+`proto` stays **1**. This section supersedes the assumption that a group's
+`start` + `count` is its membership, and it is the contract Part F implements
+on the PC. The phone gates the new read on `hello.features` containing
+`queue_groups_paged` **and** a non-empty `state.queue.revision`. Without those
+it stays on a flat list and may still send `queue_group_set`.
+
+#### Content revision
+
+`state.queue.revision` is a non-empty opaque token of the published list's
+content, order and metadata. It changes when the list is loaded, cleared,
+replaced, appended, removed, reordered, or its metadata is republished, and a
+restarted PC does not reuse a previous token. It does **not** change on
+position ticks, play/pause, the current index, or the grouping-mode choice.
+It is not the snapshot `rev`.
+
+The token is on every queue block, including a file queue. A file queue still
+omits `grouping`.
+
+#### `queue_get`
+
+```json
+{"type":"cmd","id":7,"verb":"queue_get","args":{"from":0,"count":20,"revision":"q…-3"}}
+{"id":7,"proto":1,"type":"queue_result","ok":true,"from":0,"count":2,"total":40,
+ "revision":"q…-3","rows":[{"index":0,"title":"BBC One","now":true}]}
+```
+
+- `from` is an absolute queue index, clamped to the list. `count` is a maximum
+  (1…100; default 20), not a promise.
+- Rows are ascending and consecutive. The response returns fewer rows instead
+  of `busy` when the encoded frame would pass 8192 bytes.
+- A supplied `revision` is echoed when it is current. A mismatch is
+  `stale_queue` and includes no rows. An old phone that omits `revision` keeps
+  the previous request behaviour; `revision`, `ok` and `type` on the reply are
+  extra fields and harmless.
+- An oversized display title is shortened. The row's index and identity are
+  not. Titles never contain a stream URL or a private path.
+- `too_large` only when even one shortened row cannot fit.
+
+#### `queue_groups_page`
+
+Read-only. Evaluates the requested `by` independently of the panel's current
+mode. Does not reorder the queue or move the playing index.
+
+```json
+{"type":"cmd","id":7,"verb":"queue_groups_page",
+ "args":{"by":"country","revision":"q…-3","from":0,"count":20}}
+{"id":7,"proto":1,"type":"queue_groups_result","ok":true,
+ "revision":"q…-3","by":"country","next":2,
+ "groups":[{"key":"o0","name":"Albania","count":4,"start":1,"indexes":[1,3]}]}
+```
+
+- Groups are precomputed in descriptor-head order: category in first-appearance
+  order; country and language alphabetical; `Unknown` last. Every channel is in
+  exactly one group, including `Unknown`.
+- Those groups are flattened into a deterministic fragment sequence. A fragment
+  holds at most 100 indexes, fewer when the encoded fragment would not fit a
+  worst-case single-fragment frame. Boundaries depend on the revision and mode
+  only — not on the requested `count`.
+- `from` is an offset into that fragment sequence, not a queue index and not a
+  byte offset. `count` caps how many fragments this page returns (the phone
+  starts at 20). `next` is `from + groups.length` when more fragments remain,
+  otherwise `null`.
+- A page is never empty unless it is terminal (`next` is null, `from` is past
+  the end) or the list itself has no groups. Fragments are not skipped.
+- Each fragment repeats the group's stable `key`, `name`, total `count`, and
+  `start` (the first absolute member). `indexes` is exact membership, not a
+  range. `start` is descriptive only: Albania `[1,3]` is not the range 1…3.
+  The same key always carries the same name, count and start.
+- Indexes are unique across the whole sequence and lie in `[0, queue.count)`.
+- The full encoded response, envelope included, is ≤ 8192 bytes. Whole
+  fragments are dropped from the end of the page to fit; they are not split
+  differently per requested count.
+- Invalid `by`, a missing/empty `revision`, or a non-integral `from`/`count`
+  is `invalid_arguments`. A revision that is stale before the read, or that
+  changes while the page is prepared, is `stale_queue` with no mixed page.
+- `too_large` only when even one fragment cannot fit. It is not reported as
+  `busy`, and it does not close the socket.
+
+`hello.features` includes `queue_groups_paged` only because this verb is
+implemented. Protocol version is not bumped.
+
+#### Legacy `queue_groups`
+
+Unchanged for old phones: the current panel mode, descriptor-head order,
+`key` / `name` / `count` / `start`, no indexes. `start` + `count` is **not**
+membership. A list change during that read is `busy` (retry), not
+`stale_queue`, because the old verb has no revision argument.
+
+#### Quiet reads
+
+`queue_get`, `queue_groups` and `queue_groups_page` do not restart browser
+polling and do not mark the snapshot dirty. Heartbeats are answered before
+any queue work. A large membership build runs off the UI isolate, so a
+playback command is not stuck behind a 50,000-row scan. A page that exceeds
+the handler budget returns `busy` and does not hold the socket.
+
+#### Web media polling
+
+One browser script is outstanding at a time, shared by the PC's media-find
+poll and `web_media_get`. The next poll is scheduled when the previous script
+settles, not on a timer that can overlap itself. Restarting that schedule does
+not submit a second script. A Dart timeout does not cancel the WebView call
+and does not clear the in-flight guard.
+
+Results are bound to the browser/tab generation. Navigation, tab switch, tab
+close, an actual mode switch, and shutdown discard an in-flight result. A
+title-only mirror refresh does not. Polling does not run without an
+authenticated phone, a live tab, and Web mode. One failed script cannot stop
+the loop.
+
+Close diagnostics are the log line in §8.4. Keepalive intervals are unchanged.
 

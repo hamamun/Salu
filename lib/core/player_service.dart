@@ -15,6 +15,7 @@ import 'channel_load_service.dart';
 import 'channel_view_service.dart';
 import 'lyric_service.dart';
 import 'media_utils.dart';
+import 'queue_grouping_cache.dart';
 import 'queue_service.dart';
 import 'resume_service.dart';
 import 'sub_delay_service.dart';
@@ -1416,7 +1417,13 @@ class PlayerService {
       _stepSearching = searching;
       _stepMembers = (open == null || searching)
           ? const <int>[]
-          : ChannelGrouping.membersOf(items, mode, open);
+          : (QueueGroupingCache.instance.peekMembers(
+                items,
+                QueueService.instance.contentRevision,
+                mode,
+                open,
+              ) ??
+              ChannelGrouping.membersOf(items, mode, open));
     }
     return _stepMembers;
   }

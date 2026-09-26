@@ -11,13 +11,16 @@ import '../channel_view_service.dart';
 import '../media_utils.dart';
 import '../panel_service.dart';
 import '../player_service.dart';
+import '../queue_grouping_cache.dart';
 import '../queue_service.dart';
 import '../settings_service.dart';
 import '../subtitle_service.dart';
 import '../tune_service.dart';
 import '../url_library_service.dart';
 import '../window_state_service.dart';
+import 'guarded_script.dart';
 import 'remote_command_handler.dart';
+import 'remote_connection_log.dart';
 import 'remote_firewall.dart';
 import 'remote_input_service.dart';
 import 'remote_network.dart';
@@ -26,6 +29,7 @@ import 'remote_power_service.dart';
 import 'remote_protocol.dart';
 import 'remote_web_focus_bridge.dart';
 import 'remote_web_media_bridge.dart';
+import 'web_media_poller.dart';
 
 /// Lifecycle visible to the Remote panel and Settings.
 enum RemoteStatus { off, starting, running, failed }
@@ -55,15 +59,30 @@ Map<String, Object?>? remoteResumeOffer(OsdCard? card) =>
 /// `null` off a channel list: the chips are a channel surface, and a
 /// file queue has no grouping to mirror. Pure, so the shape is
 /// unit-testable without the server.
+Map<String, Object?> remoteQueueBlock({
+  required String kind,
+  required int count,
+  required int index,
+  required String revision,
+  Map<String, Object?>? grouping,
+}) =>
+    <String, Object?>{
+      'kind': kind,
+      'count': count,
+      'index': index,
+      'revision': revision,
+      if (grouping != null) 'grouping': grouping,
+    };
+
 Map<String, Object?>? remoteQueueGrouping(
   List<QueueItem> items,
   ChannelGroupMode mode,
 ) {
-  if (items.isEmpty || !items.any((QueueItem item) => item.name != null)) {
+  if (items.isEmpty || !QueueGroupingCache.instance.isChannelList(items)) {
     return null;
   }
   final Map<ChannelGroupMode, bool> available =
-      ChannelGrouping.availability(items);
+      QueueGroupingCache.instance.availability(items);
   return <String, Object?>{
     'available': <String>[
       if (available[ChannelGroupMode.category] ?? false) 'category',
@@ -103,7 +122,6 @@ class RemoteService {
   Timer? _positionTimer;
   Timer? _retryTimer;
   Timer? _firewallTimer;
-  Timer? _webMediaTimer;
   bool _loaded = false;
   bool _dirty = false;
   bool _everConnected = false;
@@ -113,6 +131,26 @@ class RemoteService {
   DateTime? _startedAt;
   Duration _lastPosition = Duration.zero;
   Duration _lastDuration = Duration.zero;
+  Timer? _lagTimer;
+  DateTime _lagMark = DateTime.now();
+
+  /// How late the 1 s lag probe last fired. A large value means the UI
+  /// isolate was busy; it is not, by itself, a dead socket.
+  Duration eventLoopLag = Duration.zero;
+
+  /// Most recent command-handler duration, for the close diagnostic.
+  int lastCommandMs = 0;
+
+  /// When the last snapshot frame was handed to a socket.
+  DateTime? lastSnapshotAt;
+
+  late final WebMediaPoller _webMediaPoller = WebMediaPoller(
+    shouldPoll: _shouldPollWebMedia,
+    read: _readWebMedia,
+    apply: _applyWebHasMedia,
+    generationOf: () => BrowserService.instance.mediaGeneration,
+    onStopped: _clearWebHasMedia,
+  );
 
   String get serverName => Platform.localHostname;
   bool get isRunning => _server != null;
@@ -215,6 +253,7 @@ class RemoteService {
         firewallTick.value++;
         _markDirty();
       });
+      _startLagProbe();
       status.value = RemoteStatus.running;
       // §8.3 (2026-09-21): every start re-verifies the firewall rule covers
       // the *running* exe — the moved-folder trap and the Cancel trap both
@@ -377,10 +416,14 @@ class RemoteService {
   Future<void> _upgrade(HttpRequest request) async {
     try {
       final WebSocket socket = await WebSocketTransformer.upgrade(request);
+      // F4.6: keep the 20 s protocol ping. Do not raise it without measured
+      // evidence — a longer interval would hide real Wi-Fi loss. Close code
+      // 1001 alone is not that evidence.
       socket.pingInterval = const Duration(seconds: 20);
       final _RemoteConnection connection = _RemoteConnection(this, socket);
       _connections.add(connection);
       _updateConnectedCount();
+      _noteSnapshot();
       await connection.send(RemoteProtocol.hello(
         version: '0.1.0',
         name: serverName,
@@ -500,6 +543,7 @@ class RemoteService {
   }) => <String>[
         'state',
         'queue',
+        remoteFeatureQueueGroupsPaged,
         'files',
         'library',
         'tune',
@@ -522,40 +566,67 @@ class RemoteService {
   /// moves a second; restarting the 500 ms media-find poll and dirtying
   /// the snapshot on each one would starve the poll (it would never get to
   /// fire) and push a state frame per packet for nothing.
-  static const Set<String> _quietVerbs = <String>{
+  /// Reads that must not restart browser polling or dirty unrelated state.
+  /// Heartbeats are answered before this set is consulted.
+  static const Set<String> quietVerbs = <String>{
     'web_mouse_move',
     'web_mouse_click',
+    'queue_get',
+    'queue_groups',
+    'queue_groups_page',
   };
 
-  void _startWebMediaPolling() {
-    _webMediaTimer?.cancel();
-    final BrowserService browser = BrowserService.instance;
-    if (!_connections.any((connection) => connection.isAuthenticated) ||
-        !browser.isWeb) {
-      if (_webHasMedia) {
-        _webHasMedia = false;
-        browser.webHasMedia.value = false;
-        _markDirty();
-      }
-      return;
+  bool _shouldPollWebMedia() {
+    if (_server == null) return false;
+    if (!_connections.any((connection) => connection.isAuthenticated)) {
+      return false;
     }
-    _webMediaTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
-      if (!_connections.any((connection) => connection.isAuthenticated) ||
-          !BrowserService.instance.isWeb) {
-        return;
-      }
-      final Object? raw = await BrowserService.instance.remoteExecuteScript(
-          '''(${RemoteWebMediaScripts.find})''');
-      final bool found = raw == true;
-      if (found != _webHasMedia) {
-        _webHasMedia = found;
-        // The mirror's per-tab `hasMedia` and the snapshot's `web.hasMedia`
-        // both read this one notifier — one source, two readers, no
-        // disagreement (pc_part.md A4.1/A2).
-        BrowserService.instance.webHasMedia.value = found;
-        _markDirty();
-      }
+    final BrowserService browser = BrowserService.instance;
+    return browser.isWeb && browser.hasLiveRemoteTab;
+  }
+
+  Future<Object?> _readWebMedia() {
+    return GuardedBrowserScript.instance.run(
+      '(${RemoteWebMediaScripts.find})',
+      generation: BrowserService.instance.mediaGeneration,
+      generationOf: () => BrowserService.instance.mediaGeneration,
+    );
+  }
+
+  void _applyWebHasMedia(Object? raw) {
+    if (raw is! bool || raw == _webHasMedia) return;
+    _webHasMedia = raw;
+    // The mirror's per-tab `hasMedia` and the snapshot's `web.hasMedia`
+    // both read this one notifier — one source, two readers, no
+    // disagreement (pc_part.md A4.1/A2).
+    BrowserService.instance.webHasMedia.value = raw;
+    _markDirty();
+  }
+
+  void _clearWebHasMedia() {
+    if (!_webHasMedia) return;
+    _webHasMedia = false;
+    BrowserService.instance.webHasMedia.value = false;
+    _markDirty();
+  }
+
+  void _startWebMediaPolling() {
+    _webMediaPoller.start();
+  }
+
+  void _startLagProbe() {
+    _lagTimer?.cancel();
+    _lagMark = DateTime.now();
+    _lagTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final DateTime now = DateTime.now();
+      final int lateMs = now.difference(_lagMark).inMilliseconds - 1000;
+      eventLoopLag = Duration(milliseconds: lateMs < 0 ? 0 : lateMs);
+      _lagMark = now;
     });
+  }
+
+  void _noteSnapshot() {
+    lastSnapshotAt = DateTime.now();
   }
 
   void _markDirty() {
@@ -566,6 +637,7 @@ class RemoteService {
   void _flushState() {
     if (!_dirty || _server == null) return;
     _dirty = false;
+    _noteSnapshot();
     final Map<String, Object?> message =
         RemoteProtocol.state(_snapshot(revision: ++_revision));
     for (final _RemoteConnection connection in List<_RemoteConnection>.of(_connections)) {
@@ -619,12 +691,13 @@ class RemoteService {
         // Mirrors the Resume toast exactly — `null` whenever it is not up.
         'resume': remoteResumeOffer(OsdController.instance.current.value),
       },
-      'queue': <String, Object?>{
-        'kind': queueKind,
-        'count': queue.length,
-        'index': queue.index.value,
-        if (grouping != null) 'grouping': grouping,
-      },
+      'queue': remoteQueueBlock(
+        kind: queueKind,
+        count: queue.length,
+        index: queue.index.value,
+        revision: queue.contentRevision,
+        grouping: grouping,
+      ),
       'control': _controllerId == null ? null : <String, Object?>{
         'deviceId': _controllerId,
         'name': _store.find(_controllerId!)?.name,
@@ -687,12 +760,13 @@ class RemoteService {
     _positionTimer?.cancel();
     _retryTimer?.cancel();
     _firewallTimer?.cancel();
-    _webMediaTimer?.cancel();
+    _lagTimer?.cancel();
+    _webMediaPoller.stop();
     _eventTimer = null;
     _positionTimer = null;
     _retryTimer = null;
     _firewallTimer = null;
-    _webMediaTimer = null;
+    _lagTimer = null;
   }
 
   void _updateConnectedCount() {
@@ -777,6 +851,7 @@ class RemoteService {
       serverName: serverName,
       version: '0.1.0',
     ));
+    _noteSnapshot();
     await connection.send(RemoteProtocol.state(_snapshot(revision: ++_revision)));
   }
 
@@ -824,6 +899,7 @@ class _RemoteConnection {
 
   final RemoteService service;
   final WebSocket socket;
+  final DateTime _openedAt = DateTime.now();
   StreamSubscription<Object?>? _subscription;
   Timer? _authTimer;
   bool _authenticated = false;
@@ -833,6 +909,9 @@ class _RemoteConnection {
   String? deviceName;
   RemoteCommandHandler? _handler;
   final List<DateTime> _commands = <DateTime>[];
+  DateTime? _lastFrameAt;
+  DateTime? _lastHeartbeatAt;
+  int _lastCommandMs = 0;
 
   void start() {
     _authTimer = Timer(const Duration(seconds: 5), () {
@@ -840,8 +919,14 @@ class _RemoteConnection {
     });
     _subscription = socket.listen(
       (Object? event) => unawaited(_message(event)),
-      onDone: () => unawaited(close()),
-      onError: (Object error, StackTrace stack) => unawaited(close()),
+      onDone: () {
+        final int code = socket.closeCode ?? 1000;
+        final String reason = socket.closeReason ?? '';
+        unawaited(close(code, reason));
+      },
+      onError: (Object error, StackTrace stack) {
+        unawaited(close(1006, error.runtimeType.toString()));
+      },
       cancelOnError: true,
     );
   }
@@ -855,6 +940,7 @@ class _RemoteConnection {
       await close(RemoteCloseCode.unauthorized, error.message);
       return;
     }
+    _lastFrameAt = DateTime.now();
     if (!_authenticated) {
       if (message['type'] != 'auth') {
         await failAuth('auth_required', 'Authenticate before sending commands.');
@@ -882,6 +968,7 @@ class _RemoteConnection {
     // E1: ping must be answered inline on the WebSocket's own event loop,
     // never enqueued behind the command isolate or the 3-second handler guard.
     if (command.verb == 'ping') {
+      _lastHeartbeatAt = DateTime.now();
       await send(<String, Object?>{
         'id': command.id,
         'proto': protocolVersion,
@@ -900,13 +987,21 @@ class _RemoteConnection {
       await failAuth('auth_required', 'Authenticate before sending commands.');
       return;
     }
-    final RemoteCommandResponse response = await handler.handle(command).timeout(
-      const Duration(seconds: 3),
-      onTimeout: () => const RemoteCommandResponse.error(
-        RemoteErrorCode.busy,
-        'The PC is busy — try again in a moment.',
-      ),
-    );
+    final Stopwatch commandWatch = Stopwatch()..start();
+    final RemoteCommandResponse response;
+    try {
+      response = await handler.handle(command).timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => const RemoteCommandResponse.error(
+          RemoteErrorCode.busy,
+          'The PC is busy — try again in a moment.',
+        ),
+      );
+    } finally {
+      commandWatch.stop();
+      _lastCommandMs = commandWatch.elapsedMilliseconds;
+      service.lastCommandMs = _lastCommandMs;
+    }
     if (response.ok) {
       if (response.result != null && response.result!.containsKey('type')) {
         await send(<String, Object?>{
@@ -921,7 +1016,7 @@ class _RemoteConnection {
         service._markDirty();
         service._flushState();
       }
-      if (!RemoteService._quietVerbs.contains(command.verb)) {
+      if (!RemoteService.quietVerbs.contains(command.verb)) {
         service._startWebMediaPolling();
         service._markDirty();
       }
@@ -939,7 +1034,12 @@ class _RemoteConnection {
       ensurePlayerAndFocus: service._ensurePlayerAndFocus,
       onControl: () => service.takeControl(deviceId!),
       webMedia: RemoteWebMediaBridge(
-        executeScript: BrowserService.instance.remoteExecuteScript,
+        executeScript: (String script) => GuardedBrowserScript.instance.run(
+          script,
+          timeout: const Duration(seconds: 2),
+          generation: BrowserService.instance.mediaGeneration,
+          generationOf: () => BrowserService.instance.mediaGeneration,
+        ),
       ),
       webFocus: RemoteWebFocusBridge(
         executeScript: BrowserService.instance.remoteFocusScript,
@@ -967,8 +1067,8 @@ class _RemoteConnection {
         try {
           socket.add(RemoteProtocol.encode(RemoteProtocol.error(
             rawId.toInt(),
-            RemoteErrorCode.busy,
-            'The response is too large; request a smaller page.',
+            RemoteErrorCode.tooLarge,
+            remoteTooLargeMessage,
           )));
           return;
         } catch (_) {}
@@ -980,10 +1080,26 @@ class _RemoteConnection {
   Future<void> close([int code = 1000, String reason = '']) async {
     if (_closed) return;
     _closed = true;
+    final DateTime at = DateTime.now();
+    debugPrint(formatRemoteCloseLine(
+      code: code,
+      reason: reason,
+      at: at,
+      openedAt: _openedAt,
+      authenticated: _authenticated,
+      lastFrameAt: _lastFrameAt,
+      lastSnapshotAt: service.lastSnapshotAt,
+      lastHeartbeatAt: _lastHeartbeatAt,
+      eventLoopLag: service.eventLoopLag,
+      pendingBrowser: GuardedBrowserScript.instance.pending,
+      lastCommandMs: _lastCommandMs,
+    ));
     _authTimer?.cancel();
     await _subscription?.cancel();
     try {
-      await socket.close(code, reason);
+      // The phone records this reason in connection history. Same redaction
+      // as the log line — a peer reason must not echo a URL or token.
+      await socket.close(code, wireCloseReason(reason));
     } catch (_) {}
     service._onConnectionClosed(this);
   }
