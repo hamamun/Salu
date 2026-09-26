@@ -550,78 +550,76 @@ class WebSuggestionMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-          elevation: 0,
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.surfaceOutline),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: EdgeInsets.zero,
-              itemCount: items.length,
-              itemExtent: rowHeight,
-              itemBuilder: (BuildContext context, int i) {
-                final WebSuggestion item = items[i];
-                final bool hot = i == cursorIndex;
-                final Widget row = GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onPick(item),
-                  child: Container(
-                    color: hot ? AppColors.surfaceHighlight : null,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: <Widget>[
-                        SizedBox(
-                          width: 16,
-                          child: Center(
-                            child: switch (item.kind) {
-                              WebSuggestionKind.favourite =>
-                                const StarMark(size: 12, filled: true),
-                              WebSuggestionKind.history =>
-                                const ClockMark(size: 13),
-                              WebSuggestionKind.search => const Text(
-                                  '?',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            item.text,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              height: 1.4,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-                // The pointer lights the row it rests on; ↑/↓ move the
-                // very same cursor through [onHover].
-                return MouseRegion(
-                  onEnter: (_) => onHover(i),
-                  child: row,
-                );
-              },
-            ),
+    // Keep mouse-down inside the address field's tap region. Otherwise
+    // TextField can unfocus and dismiss this menu before onTap fires.
+    return TextFieldTapRegion(
+      child: Material(
+        elevation: 0,
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.surfaceOutline),
           ),
-        );
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: ListView.builder(
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            itemCount: items.length,
+            itemExtent: rowHeight,
+            itemBuilder: (BuildContext context, int i) {
+              final WebSuggestion item = items[i];
+              final bool hot = i == cursorIndex;
+              final Widget row = GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onPick(item),
+                child: Container(
+                  color: hot ? AppColors.surfaceHighlight : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: <Widget>[
+                      SizedBox(
+                        width: 16,
+                        child: Center(
+                          child: switch (item.kind) {
+                            WebSuggestionKind.favourite =>
+                              const StarMark(size: 12, filled: true),
+                            WebSuggestionKind.history =>
+                              const ClockMark(size: 13),
+                            WebSuggestionKind.search =>
+                              const MagnifierMark(size: 13),
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          item.text,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+              // The pointer lights the row it rests on; ↑/↓ move the
+              // very same cursor through [onHover].
+              return MouseRegion(
+                onEnter: (_) => onHover(i),
+                child: row,
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 }

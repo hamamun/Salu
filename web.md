@@ -18,8 +18,13 @@ Implementation notes, lock by lock:
   × on the tab's right, `+` right of the last tab, middle/right-click also
   closes. Last tab closed → Web mode stays, strip keeps its `+`, the
   content is the plain-Flutter start page (logo + “SALU Web Browser”).
+- **Tab sizing** — tabs share the available strip width as the window
+  resizes or tabs are added, capped at 208 px each. Narrow tabs hide their
+  badge and ellipsize the title; the close and new-tab controls stay visible.
 - **Address bar** — typing only ever fills the dropdown (debounced),
-  Enter/row-pick navigates; Google suggest + history + favourites merged,
+  Enter/row-pick navigates immediately (arrow keys highlight, one Enter
+  accepts; one mouse click accepts). Search rows use a magnifier, not `?`.
+  Google suggest + history + favourites merged,
   own data first; the Settings “Search suggestions” toggle mutes the
   Google leg only; Google is the only search engine SALU ever navigates to.
 - **Favourite star** — the URL bar's left-corner two-state mark: outline

@@ -50,19 +50,26 @@ class BrowserTabStrip extends StatelessWidget {
       child: Row(
         children: <Widget>[
           if (hub != null) ...<Widget>[hub!, const SizedBox(width: 2)],
+          // Loose flex caps roomy tabs at 208 px, then shares the remaining
+          // width equally as tabs are added or the window shrinks. The +
+          // keeps its own space rather than scrolling out of view.
           Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 for (int i = 0; i < tabs.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: _TabChip(
-                      tab: tabs[i],
-                      active: i == activeIndex,
-                      onTap: () => onSelect(i),
-                      onClose: () => onClose(i),
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 5),
+                      child: SizedBox(
+                        width: 208,
+                        child: _TabChip(
+                          tab: tabs[i],
+                          active: i == activeIndex,
+                          onTap: () => onSelect(i),
+                          onClose: () => onClose(i),
+                        ),
+                      ),
                     ),
                   ),
                 // The “+” grows with the list and stops answering at the
@@ -108,49 +115,58 @@ class _TabChip extends StatelessWidget {
         child: GestureDetector(
           onTap: onTap,
           onSecondaryTap: onClose,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOutCubic,
-            constraints: const BoxConstraints(maxWidth: 208, minWidth: 118),
-            padding: const EdgeInsets.only(left: 10, right: 6),
-            decoration: BoxDecoration(
-              color: active ? AppColors.surfaceHighlight : AppColors.surface,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: active ? AppColors.accent : AppColors.surfaceOutline,
-              ),
-            ),
-            child: Row(
-              children: <Widget>[
-                _TabBadge(tab: tab, active: active),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ValueListenableBuilder<String?>(
-                    valueListenable: tab.title,
-                    builder: (BuildContext context, String? _, Widget? __) {
-                      return Text(
-                        tab.displayTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.4,
-                          color: active
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
-                        ),
-                      );
-                    },
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool compact = constraints.maxWidth < 100;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
+                padding: EdgeInsets.only(
+                  left: compact ? 4 : 10,
+                  right: compact ? 2 : 6,
+                ),
+                decoration: BoxDecoration(
+                  color: active ? AppColors.surfaceHighlight : AppColors.surface,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: active ? AppColors.accent : AppColors.surfaceOutline,
                   ),
                 ),
-                // The close × sits on the RIGHT side of the tab (web.md).
-                SaluIconButton(
-                  size: 22,
-                  onTap: onClose,
-                  child: const CloseMark(size: 10),
+                child: Row(
+                  children: <Widget>[
+                    if (!compact) ...<Widget>[
+                      _TabBadge(tab: tab, active: active),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: ValueListenableBuilder<String?>(
+                        valueListenable: tab.title,
+                        builder: (BuildContext context, String? _, Widget? __) {
+                          return Text(
+                            tab.displayTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.4,
+                              color: active
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    // The close × sits on the RIGHT side of the tab (web.md).
+                    SaluIconButton(
+                      size: 22,
+                      onTap: onClose,
+                      child: const CloseMark(size: 10),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

@@ -612,11 +612,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
   void _pickSuggestion(WebSuggestion item) {
     _hideSuggestions();
     if (item.kind == WebSuggestionKind.search) {
-      // Search rows fill the bar (web.md · address bar lock (1)) — Enter
-      // is still the sentence's period.
+      // A click or Enter accepts and navigates in one action, just like
+      // history and favourites. Use the row's search URL, even when its
+      // query happens to look like a domain.
       _address.text = item.text;
-      _addressFocus.requestFocus();
-      return;
     }
     final WebTab? tab = _tab;
     if (tab == null) {

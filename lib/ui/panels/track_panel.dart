@@ -214,6 +214,8 @@ class _TrackPanelState extends State<TrackPanel>
         if (surface.audio.isNotEmpty) {
           children.add(const _PartLabel('Audio'));
           children.add(_PartRows(
+            key: const ValueKey<String>('audio-tracks'),
+            panelOpen: _panels.trackPanelOpen.value,
             rows: surface.audio
                 .map((MpvTrack t) => _TrackRowData.fromAudio(t,
                     surface.audio.indexOf(t) + 1))
@@ -231,6 +233,8 @@ class _TrackPanelState extends State<TrackPanel>
         if (hasEmbedded) {
           children.add(const _PartLabel('Subtitles'));
           children.add(_PartRows(
+            key: const ValueKey<String>('embedded-tracks'),
+            panelOpen: _panels.trackPanelOpen.value,
             rows: <_TrackRowData>[
               _TrackRowData.offRow(selected: offMarked),
               ...surface.embeddedSubs.map((MpvTrack t) =>
@@ -247,6 +251,8 @@ class _TrackPanelState extends State<TrackPanel>
         if (hasLocal) {
           children.add(const _PartLabel('Local'));
           children.add(_PartRows(
+            key: const ValueKey<String>('local-tracks'),
+            panelOpen: _panels.trackPanelOpen.value,
             rows: <_TrackRowData>[
               if (!hasEmbedded) _TrackRowData.offRow(selected: offMarked),
               ...surface.localSubs.map((MpvTrack t) =>
@@ -396,14 +402,15 @@ class _PartLabel extends StatelessWidget {
 /// One part's rows, scrolling on its own once past five (§6.3) — the
 /// panel NEVER grows, only the inner list scrolls.
 class _PartRows extends StatefulWidget {
-  // No `key`: the parts are singletons of the panel's body — identity
-  // is positional, never keyed.
   const _PartRows({
+    super.key,
+    required this.panelOpen,
     required this.rows,
     required this.onTap,
     this.onOffTap,
   });
 
+  final bool panelOpen;
   final List<_TrackRowData> rows;
   final ValueChanged<MpvTrack> onTap;
   final VoidCallback? onOffTap;
@@ -418,9 +425,64 @@ class _PartRows extends StatefulWidget {
 class _PartRowsState extends State<_PartRows> {
   final ScrollController _scroll = ScrollController();
 
-  /// Tap selections must NOT reset the scroll (the mock: re-mark rows
-  /// without rebuilding). The controller survives surface refreshes;
-  /// the clamp only matters when a brand-new shorter list arrives.
+  bool _revealPending = false;
+
+  static int _selectedIndex(_PartRows part) =>
+      part.rows.indexWhere((_TrackRowData row) => row.selected);
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleReveal();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PartRows oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final int oldIndex = _selectedIndex(oldWidget);
+    final int newIndex = _selectedIndex(widget);
+    final String? oldId =
+        oldIndex < 0 ? null : oldWidget.rows[oldIndex].track?.id;
+    final String? newId =
+        newIndex < 0 ? null : widget.rows[newIndex].track?.id;
+    if ((!oldWidget.panelOpen && widget.panelOpen) ||
+        oldIndex != newIndex ||
+        oldId != newId ||
+        oldWidget.rows.length != widget.rows.length) {
+      _scheduleReveal();
+    }
+  }
+
+  void _scheduleReveal() {
+    if (!widget.panelOpen || _revealPending) return;
+    _revealPending = true;
+    // Wait for this snapshot's list and scroll extents to be laid out.
+    // Read the latest widget so rapid remote changes cannot reveal an
+    // obsolete selection. No work survives closing or disposing the panel.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _revealPending = false;
+      if (!mounted || !widget.panelOpen || !_scroll.hasClients) return;
+      final int index = _selectedIndex(widget);
+      if (index < 0) return;
+      final ScrollPosition position = _scroll.position;
+      if (!position.hasContentDimensions) return;
+      final double top = index * _PartRows.rowHeight;
+      final double bottom = top + _PartRows.rowHeight;
+      double target = position.pixels;
+      if (top < target) {
+        target = top;
+      } else if (bottom > target + position.viewportDimension) {
+        target = bottom - position.viewportDimension;
+      }
+      target = target.clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ).toDouble();
+      // Keep manual scrolling and already-visible selections untouched.
+      if (target != position.pixels) _scroll.jumpTo(target);
+    });
+  }
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -453,6 +515,7 @@ class _PartRowsState extends State<_PartRows> {
         thumbVisibility: false,
         child: ListView(
           controller: _scroll,
+          itemExtent: _PartRows.rowHeight,
           padding: EdgeInsets.zero,
           children: children,
         ),
