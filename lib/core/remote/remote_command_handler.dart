@@ -180,9 +180,9 @@ class RemoteCommandHandler {
         case 'queue_jump':
           return await _queueJump(a);
         case 'queue_groups':
-          return _queueGroups();
+          return await _queueGroups();
         case queueGroupsPageVerb:
-          return _queueGroupsPage(command);
+          return await _queueGroupsPage(command);
         case 'queue_group_set':
           return _queueGroupSet(a);
         case 'queue_clear':

@@ -80,13 +80,14 @@ class WebMediaPoller {
       // A failed script must not disable polling.
     } finally {
       _active = false;
-      if (!shouldPoll()) return;
-      if (generation == _generation) {
-        _arm(generation, interval);
-      } else if (_started) {
-        // stop() then start() arrived while this read was outstanding.
-        // The in-flight script was the only one; arm the next now.
-        _arm(_generation, interval);
+      if (shouldPoll()) {
+        if (generation == _generation) {
+          _arm(generation, interval);
+        } else if (_started) {
+          // stop() then start() arrived while this read was outstanding.
+          // The in-flight script was the only one; arm the next now.
+          _arm(_generation, interval);
+        }
       }
     }
   }
