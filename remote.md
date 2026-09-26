@@ -306,6 +306,7 @@ diffs it if it wants a toast. Fewer moving parts, one less way to be wrong.
 - **Both clocks funnel through the same `_maybeFlush()`**, so a phone can never receive
   a partial picture.
 - **New socket = snapshot immediately**, before anything else.
+- **Link death is declared by transport-level keepalive and close events;** command-path delays (busy, `too_fast`, long scans) are not evidence of a dead link and must not be treated as such by either side.
 
 ### 7.3 Rate limiting
 
@@ -475,7 +476,7 @@ One consistent prefix, matching the repo's existing style:
 | `shuffle_toggle` | — | `PlayerService.toggleShuffle()` | — |
 | `repeat_cycle` | — | `PlayerService.cycleRepeat()` | — |
 | `take_control` | — | Marks this device as the controller (A2 — informational only) | — |
-| `ping` | `{"at": 1758326400123}` | Replies `{"type":"pong","at":<echo>,"serverAt":<now>}` for latency display | — |
+| `ping` | `{"at": 1758326400123}` | Replies `{"type":"pong","at":<echo>,"serverAt":<now>}` for latency display only; a late `pong` never means the link is dead (transport keepalive owns death); `ping` is answered inline on the socket path (Part E1), never queued behind the command isolate | — |
 | `state_get` | — | Forces an immediate snapshot (phones use it after resuming from sleep) | — |
 
 ### Reserved for v2 (do not implement now, but leave the door open)
@@ -1571,3 +1572,21 @@ this section is replacing — which is exactly why the flags exist.
 session). The phone's copy of `RemoteErrorCode` gets it in the same sitting as the PC's
 (§17.13, A6.2 — the header comment on `lib/protocol/remote_protocol.dart` is the rule: two
 copies, one meaning, changed together).
+
+---
+
+### 17.15 PC Power — sleep and shutdown (added 2026-09-24)
+
+The remote's ⋮ menu exposes authenticated PC sleep and shutdown.
+
+| Verb | Args | Reply | Errors | Does |
+|---|---|---|---|---|
+| `pc_sleep` | — | `ack` | `invalid_arguments`, `busy` | Windows suspend (`SetSuspendState` / `rundll32 powrprof.dll,SetSuspendState 0,1,0`) without forcing app termination |
+| `pc_shutdown` | — | `ack` | `invalid_arguments`, `busy` | Graceful Windows shutdown (`shutdown.exe /s /t 0`) without forcing app closure |
+
+**Rules:**
+- **No arguments.** Passing any arguments answers `invalid_arguments`.
+- **Pre-dispatch ack.** The command's `ack` is sent before dispatching the OS action after a short delay so the WebSocket receives the reply before the OS suspends or shuts down.
+- **Single in-flight guard.** A second power request while one is pending is rejected with `busy`.
+- **Feature flag.** `pc_power` is advertised in `hello.features` only when both verbs work on the host system.
+
