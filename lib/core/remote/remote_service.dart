@@ -22,6 +22,7 @@ import 'remote_firewall.dart';
 import 'remote_input_service.dart';
 import 'remote_network.dart';
 import 'remote_pairing.dart';
+import 'remote_power_service.dart';
 import 'remote_protocol.dart';
 import 'remote_web_focus_bridge.dart';
 import 'remote_web_media_bridge.dart';
@@ -364,6 +365,7 @@ class RemoteService {
       unawaited(_rejectRequest(request, RemoteCloseCode.unauthorized));
       return;
     }
+    _reapClosedConnections();
     if (_connections.length + _pendingConnections >= 4) {
       unawaited(_rejectRequest(request, RemoteCloseCode.tooManyConnections));
       return;
@@ -399,6 +401,10 @@ class RemoteService {
       request.response.statusCode = HttpStatus.forbidden;
       await request.response.close();
     } catch (_) {}
+  }
+
+  void _reapClosedConnections() {
+    _connections.removeWhere((c) => c._closed);
   }
 
   void _onServerError(Object error, StackTrace stack) {
@@ -480,12 +486,18 @@ class RemoteService {
   /// `web_mouse` is advertised only where the pointer can really be
   /// delivered (Win32 `SendInput` bound): a flag that answers `no_web_mouse`
   /// puts a sentence under the user's trackpad (pc_part.md C3.4).
+  /// `pc_power` is advertised only once both sleep and shutdown work on the
+  /// current system (pc_part.md Part D · remote.md §17.15).
   static List<String> _helloFeatures() => helloFeatures(
         mouse: RemoteInputService.instance.available,
+        power: RemotePowerService.instance.available,
       );
 
   @visibleForTesting
-  static List<String> helloFeatures({required bool mouse}) => <String>[
+  static List<String> helloFeatures({
+    required bool mouse,
+    bool power = false,
+  }) => <String>[
         'state',
         'queue',
         'files',
@@ -502,6 +514,8 @@ class RemoteService {
         'web_fullscreen',
         if (mouse) 'web_mouse',
         'web_bookmark_add',
+        // Part D (2026-09-24).
+        if (power) 'pc_power',
       ];
 
   /// Verbs that change nothing the snapshot shows. The trackpad sends ~25
@@ -864,9 +878,23 @@ class _RemoteConnection {
       return;
     }
     _commands.add(now);
+
+    // E1: ping must be answered inline on the WebSocket's own event loop,
+    // never enqueued behind the command isolate or the 3-second handler guard.
+    if (command.verb == 'ping') {
+      await send(<String, Object?>{
+        'id': command.id,
+        'proto': protocolVersion,
+        'type': 'pong',
+        'at': command.args['at'],
+        'serverAt': DateTime.now().millisecondsSinceEpoch,
+      });
+      return;
+    }
+
     // Control is informational rather than a permission lock: the phone
     // issuing a real command becomes the device shown in the snapshot.
-    if (command.verb != 'ping') service.takeControl(deviceId!);
+    service.takeControl(deviceId!);
     final RemoteCommandHandler? handler = _handler;
     if (handler == null) {
       await failAuth('auth_required', 'Authenticate before sending commands.');
@@ -916,6 +944,7 @@ class _RemoteConnection {
       webFocus: RemoteWebFocusBridge(
         executeScript: BrowserService.instance.remoteFocusScript,
       ),
+      power: RemotePowerService.instance,
     );
   }
 

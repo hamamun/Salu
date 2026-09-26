@@ -23,6 +23,7 @@ import '../web/web_favourites_service.dart';
 import '../window_state_service.dart';
 import 'remote_fs_service.dart';
 import 'remote_input_service.dart';
+import 'remote_power_service.dart';
 import 'remote_protocol.dart';
 import 'remote_web_focus_bridge.dart';
 import 'remote_web_media_bridge.dart';
@@ -51,12 +52,16 @@ class RemoteCommandHandler {
     RemoteWebFocusBridge? webFocus,
     RemoteWebFullscreen? webFullscreen,
     RemoteInputService? input,
+    RemotePowerService? power,
+    Future<void> Function(String action)? onPowerAction,
   })  : _ensurePlayerAndFocus = ensurePlayerAndFocus,
         _onControl = onControl,
         webMedia = webMedia ?? RemoteWebMediaBridge(),
         webFocus = webFocus ?? RemoteWebFocusBridge(),
         _injectedWebFullscreen = webFullscreen,
-        input = input ?? RemoteInputService.instance;
+        input = input ?? RemoteInputService.instance,
+        power = power ?? RemotePowerService.instance,
+        _onPowerAction = onPowerAction;
 
   final Future<void> Function()? _ensurePlayerAndFocus;
   final void Function()? _onControl;
@@ -65,6 +70,11 @@ class RemoteCommandHandler {
 
   /// The PC's own pointer (pc_part.md C3).
   final RemoteInputService input;
+
+  /// Power management (pc_part.md Part D · remote.md §17.15).
+  final RemotePowerService power;
+  final Future<void> Function(String action)? _onPowerAction;
+  bool _powerPending = false;
 
   final RemoteWebFullscreen? _injectedWebFullscreen;
 
@@ -349,6 +359,10 @@ class RemoteCommandHandler {
           return await _webKey(a);
         case 'web_focus_get':
           return await _webFocusGet();
+        case 'pc_sleep':
+          return await _handlePower('sleep', a);
+        case 'pc_shutdown':
+          return await _handlePower('shutdown', a);
         default:
           return const RemoteCommandResponse.error(
             RemoteErrorCode.unknownCommand,
@@ -1157,6 +1171,53 @@ class RemoteCommandHandler {
           'folder': f.folder.isEmpty ? '' : _truncate(f.folder, 80),
         },
       });
+
+  /// `pc_sleep` and `pc_shutdown` (pc_part.md Part D · remote.md §17.15).
+  /// Rejects arguments, duplicate pending requests, and unsupported systems.
+  Future<RemoteCommandResponse> _handlePower(
+    String action,
+    Map<String, Object?> args,
+  ) async {
+    if (args.isNotEmpty) return _invalid();
+    if (!power.available) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.invalidArguments,
+        'Power operations are not supported on this PC.',
+      );
+    }
+    if (_powerPending) {
+      return const RemoteCommandResponse.error(
+        RemoteErrorCode.busy,
+        'A power command is already pending.',
+      );
+    }
+    _powerPending = true;
+    try {
+      if (_onPowerAction != null) {
+        await _onPowerAction(action);
+      } else {
+        // Dispatched after a short delay so ack leaves the socket before Windows acts.
+        Future<void>.delayed(const Duration(milliseconds: 150), () async {
+          if (action == 'sleep') {
+            await power.sleep();
+          } else {
+            await power.shutdown();
+          }
+        });
+      }
+      return const RemoteCommandResponse.ok();
+    } catch (e) {
+      return RemoteCommandResponse.error(
+        RemoteErrorCode.busy,
+        'Failed to schedule power action: $e',
+      );
+    } finally {
+      // If no external delegation, keep pending flag for a moment to prevent double trigger
+      Future<void>.delayed(const Duration(seconds: 5), () {
+        _powerPending = false;
+      });
+    }
+  }
 
   Future<bool> _navigateBrowser(String action) async {
     if (!BrowserService.navActions.contains(action)) return false;

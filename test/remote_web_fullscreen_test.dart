@@ -268,16 +268,18 @@ void main() {
   });
 
   group('features and routing', () {
-    test('Part C flags are advertised; web_mouse only when deliverable', () {
-      final List<String> on = RemoteService.helloFeatures(mouse: true);
+    test('Part C and D flags are advertised; web_mouse and pc_power conditional', () {
+      final List<String> on = RemoteService.helloFeatures(mouse: true, power: true);
       expect(on, containsAll(<String>[
         'web_home',
         'web_fullscreen',
         'web_mouse',
         'web_bookmark_add',
+        'pc_power',
       ]));
-      final List<String> off = RemoteService.helloFeatures(mouse: false);
+      final List<String> off = RemoteService.helloFeatures(mouse: false, power: false);
       expect(off, isNot(contains('web_mouse')));
+      expect(off, isNot(contains('pc_power')));
       expect(off, contains('web_fullscreen'));
     });
 
