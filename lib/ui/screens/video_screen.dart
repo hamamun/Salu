@@ -104,37 +104,48 @@ class _EmptyState extends StatelessWidget {
     return Container(
       color: AppColors.background,
       alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: Image.asset(
-              'assets/images/salu_logo.png',
-              width: 120,
-              height: 120,
-              filterQuality: FilterQuality.high,
-              errorBuilder:
-                  (BuildContext context, Object error, StackTrace? stack) {
-                return const Icon(
-                  Icons.play_circle_outline,
-                  size: 96,
-                  color: AppColors.textSecondary,
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'SALU',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 6,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          // If the available height is too small (e.g. during a transition to
+          // the 32-px mini bar or in a very compact window), hide the 185-px mark
+          // to avoid a RenderFlex overflow.
+          if (constraints.maxHeight < 185) {
+            return const SizedBox.shrink();
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Image.asset(
+                  'assets/images/salu_logo.png',
+                  width: 120,
+                  height: 120,
+                  filterQuality: FilterQuality.high,
+                  errorBuilder:
+                      (BuildContext context, Object error, StackTrace? stack) {
+                    return const Icon(
+                      Icons.play_circle_outline,
+                      size: 96,
+                      color: AppColors.textSecondary,
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 28),
+              const Text(
+                'SALU',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 6,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
