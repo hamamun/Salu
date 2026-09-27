@@ -517,7 +517,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     final Map<ShortcutGroup, List<ShortcutEntry>> groups =
         <ShortcutGroup, List<ShortcutEntry>>{};
     for (final ShortcutEntry e in SaluShortcuts.rideless(mode)) {
-      groups.putIfAbsent(e.group, () => <ShortcutEntry>[])!.add(e);
+      groups.putIfAbsent(e.group, () => <ShortcutEntry>[]).add(e);
     }
     return groups.values.toList();
   }
@@ -623,7 +623,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
       case 'player.subLater':
         return const Icon(Icons.arrow_forward_rounded, size: 15);
       case 'player.subEarlierCoarse':
-        return const Icon(Icons.rewind_10_rounded, size: 15);
+        return const Icon(Icons.replay_10_rounded, size: 15);
       case 'player.subLaterCoarse':
         return const Icon(Icons.forward_10_rounded, size: 15);
       case 'player.subReset':

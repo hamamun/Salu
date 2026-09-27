@@ -236,7 +236,7 @@ class _AltPeekAnchorState extends State<AltPeekAnchor> {
         // arming would fire a phantom exit and the tooltip could never
         // appear.
         return MouseRegion(
-          behavior: HitTestBehavior.opaque,
+          opaque: true,
           onEnter: (_) => setState(() => _hovering = true),
           onExit: (_) => setState(() => _hovering = false),
           child: Stack(
