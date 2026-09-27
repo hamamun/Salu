@@ -1694,6 +1694,86 @@ class PlayerService {
     await player.setSubtitleTrack(SubtitleTrack.no());
   }
 
+  /// Cycles through available audio tracks (returns track title/lang for OSD).
+  Future<String?> cycleAudioTrack() async {
+    final List<MpvTrack> tracks = trackSurface.value.audio;
+    if (tracks.isEmpty) return null;
+    final int current = tracks.indexWhere((MpvTrack t) => t.selected);
+    final int next = (current + 1) % tracks.length;
+    final MpvTrack picked = tracks[next];
+    await selectAudioTrack(picked);
+    return picked.title ?? picked.lang ?? 'Audio #${next + 1}';
+  }
+
+  /// Cycles through available subtitle tracks: Off -> Sub 1 -> Sub 2 -> ... -> Off
+  Future<String?> cycleSubTrack() async {
+    final List<MpvTrack> tracks = <MpvTrack>[
+      ...trackSurface.value.embeddedSubs,
+      ...trackSurface.value.localSubs,
+    ];
+    if (tracks.isEmpty) return null;
+    if (trackSurface.value.offIsMarked) {
+      final MpvTrack first = tracks.first;
+      await selectSubTrack(first);
+      return first.title ?? first.lang ?? 'Subtitles #1';
+    }
+    final int current = tracks.indexWhere((MpvTrack t) => t.selected);
+    if (current < 0 || current >= tracks.length - 1) {
+      await selectSubOff();
+      return 'Subtitles: Off';
+    }
+    final MpvTrack next = tracks[current + 1];
+    await selectSubTrack(next);
+    return next.title ?? next.lang ?? 'Subtitles #${current + 2}';
+  }
+
+  // ── Playback speed (rate) ──────────────────────────────────────────
+
+  final ValueNotifier<double> playbackRate = ValueNotifier<double>(1.0);
+
+  Future<void> setPlaybackRate(double rate) async {
+    final double clamped = double.parse(rate.clamp(0.25, 4.0).toStringAsFixed(2));
+    playbackRate.value = clamped;
+    try {
+      await player.setRate(clamped);
+    } catch (_) {
+      final PlatformPlayer? platform = player.platform;
+      if (platform is NativePlayer) {
+        await platform.setProperty('speed', clamped.toStringAsFixed(2));
+      }
+    }
+  }
+
+  Future<double> stepPlaybackRate(double delta) async {
+    final double next = ((playbackRate.value + delta) * 10).round() / 10;
+    await setPlaybackRate(next);
+    return playbackRate.value;
+  }
+
+  Future<void> resetPlaybackRate() async {
+    await setPlaybackRate(1.0);
+  }
+
+  // ── Frame stepping ─────────────────────────────────────────────────
+
+  Future<void> stepFrameForward() async {
+    final PlatformPlayer? platform = player.platform;
+    if (platform is NativePlayer) {
+      try {
+        await platform.command(<String>['frame-step']);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> stepFrameBackward() async {
+    final PlatformPlayer? platform = player.platform;
+    if (platform is NativePlayer) {
+      try {
+        await platform.command(<String>['frame-back-step']);
+      } catch (_) {}
+    }
+  }
+
   // ── Subtitle sync — the one authority (owner 2026-09-13) ────────────
 
   /// Applies an absolute subtitle offset (seconds, clamped to

@@ -9,7 +9,9 @@ import '../../core/browser_service.dart';
 import '../../core/channel_load_service.dart';
 import '../../core/drop_handler.dart';
 import '../../core/folder_autoload_service.dart';
+import '../../core/info_controller.dart';
 import '../../core/lyric_service.dart';
+import '../../core/media_utils.dart';
 import '../../core/open_media_service.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
@@ -38,6 +40,7 @@ import '../widgets/download_badge.dart';
 import '../widgets/eq_curve_overlay.dart';
 import '../widgets/live_light.dart';
 import '../widgets/settings_dialog.dart';
+import '../widgets/subtitle_search_dialog.dart';
 import '../widgets/web_mode_toggle.dart';
 import 'browser_screen.dart';
 import 'video_screen.dart';
@@ -515,6 +518,20 @@ class _HomeScreenState extends State<HomeScreen> {
   /// global binding, arrows move the caret instead of seeking, and Space
   /// types a space instead of pausing. Ctrl combinations stay global —
   /// they never insert text.
+  static int? _digitFromKey(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) return 0;
+    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) return 1;
+    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) return 2;
+    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) return 3;
+    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) return 4;
+    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) return 5;
+    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) return 6;
+    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) return 7;
+    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) return 8;
+    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) return 9;
+    return null;
+  }
+
   bool get _isTyping {
     final BuildContext? context = FocusManager.instance.primaryFocus?.context;
     if (context == null) return false;
@@ -527,39 +544,66 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!down && !repeat) return KeyEventResult.ignored;
 
     final LogicalKeyboardKey key = event.logicalKey;
+    final bool ctrl = HardwareKeyboard.instance.isControlPressed;
+    final bool shift = HardwareKeyboard.instance.isShiftPressed;
+    final bool alt = HardwareKeyboard.instance.isAltPressed;
+    final bool typing = _isTyping;
 
     // Mini has its own, smaller keyboard: the transport set stays live
-    // (§5), `M` toggles the bar back to the full window, `Esc` restores it
-    // (§4), and every key that would summon a surface mini does not have is
-    // simply out of work — nothing below this line is reachable there.
+    // (§5), `Esc` / `Ctrl+M` restores the full window, bare `M` mutes.
     if (_windows.isMini) {
       return _onMiniKeyEvent(key, down: down, repeat: repeat);
+    }
+
+    // ── Global shortcuts (work in both Player & Web mode) ────────────
+    // Mode toggle: Ctrl+Shift+W or Alt+W
+    if ((ctrl && shift && key == LogicalKeyboardKey.keyW) ||
+        (alt && key == LogicalKeyboardKey.keyW)) {
+      if (down) _browser.toggleMode();
+      return KeyEventResult.handled;
+    }
+
+    // Fullscreen: F11
+    if (key == LogicalKeyboardKey.f11 && down) {
+      unawaited(WindowStateService.instance.toggleFullscreen());
+      return KeyEventResult.handled;
+    }
+
+    // Settings: F2 or Ctrl+,
+    if ((key == LogicalKeyboardKey.f2 || (ctrl && key == LogicalKeyboardKey.comma)) && down) {
+      if (_browser.isWeb) {
+        _openWebSettings();
+      } else {
+        _openSettings();
+      }
+      return KeyEventResult.handled;
     }
 
     if (_browser.isWeb) {
       // The browser owns every editable field in Web mode (URL bar,
       // suggestions search, and favourite editor). Let those fields receive
-      // all ordinary keystrokes before considering SALU's global shortcuts;
-      // otherwise the global M/mini binding swallows the letter "m" in the
-      // address bar.
+      // all ordinary keystrokes before considering SALU's global shortcuts.
       if (_isTyping) return KeyEventResult.ignored;
-      if (key == LogicalKeyboardKey.keyM) {
+      if (key == LogicalKeyboardKey.keyM && !ctrl) {
         // No room for a browser in a 32-px strip (mini.md §8) — while Web
         // holds the stage the mini toggle deliberately does nothing.
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.escape) {
+        if (WindowStateService.instance.isFullscreen.value) {
+          unawaited(WindowStateService.instance.setFullscreen(false));
+          return KeyEventResult.handled;
+        }
         _wakeChrome();
       }
-      // Everything else a player key could have done (space, arrows,
-      // Ctrl+E…) is out of work while the browser has the stage.
+      // Everything else a player key could have done is handled by
+      // BrowserScreen or ignored.
       return KeyEventResult.ignored;
     }
 
     // Esc — dismisses the topmost popup first (follow.md rule 3):
     // Info → menu → Open pill → existing resume / tune / track / playlist
-    // tiers. Dialog routes own their Esc above this handler. With
-    // nothing up it is just another key: activity → chrome wakes.
+    // tiers. If no popups open, exit fullscreen if currently fullscreen.
     if (key == LogicalKeyboardKey.escape) {
       if (PanelService.instance.infoOpen.value) {
         PanelService.instance.closeInfo();
@@ -589,6 +633,10 @@ class _HomeScreenState extends State<HomeScreen> {
         PanelService.instance.closePlaylist();
         return KeyEventResult.handled;
       }
+      if (WindowStateService.instance.isFullscreen.value) {
+        unawaited(WindowStateService.instance.setFullscreen(false));
+        return KeyEventResult.handled;
+      }
       _wakeChrome();
       return KeyEventResult.ignored;
     }
@@ -596,9 +644,14 @@ class _HomeScreenState extends State<HomeScreen> {
     // ── Transport keys: OSD only, no chrome wake ─────────────────────
     //
     // Each bare key below yields while typing ([_isTyping]) — the
-    // keystroke belongs to the field. Ctrl combinations (the Tune tier
-    // next, the open-media set at the bottom) stay global.
-    final bool typing = _isTyping;
+    // keystroke belongs to the field. Ctrl combinations stay global.
+
+    // Fullscreen: F (standard media player)
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.keyF && down) {
+      unawaited(WindowStateService.instance.toggleFullscreen());
+      return KeyEventResult.handled;
+    }
+
     if (!typing && key == LogicalKeyboardKey.space) {
       TransportActions.instance.playOrPause();
       return KeyEventResult.handled;
@@ -612,15 +665,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.handled;
     }
     // ── Tune: the silent keyboard tier (eq_imp.md §6) ──────────────────
-    //
-    // Ctrl/Cmd + E opens the panel; Ctrl/Cmd + ↑/↓ steps whichever line the
-    // pointer last rested on inside it ("one part at a time"), and
-    // Ctrl/Cmd + Alt + ↑/↓ walks that focus over the four lines. The deck
-    // names the stop, because a closed bar has nothing to show — the same
-    // answer the subtitle-sync keys give. The BARE arrows below stay the
-    // volume, and a greyed line answers nothing at all: the key falls
-    // through, exactly as if the tier were not there.
-    final bool tuneCtrl = HardwareKeyboard.instance.isControlPressed ||
+    final bool tuneCtrl = ctrl ||
         HardwareKeyboard.instance.isMetaPressed;
     if (tuneCtrl && !repeat && key == LogicalKeyboardKey.keyE) {
       PanelService.instance.toggleTunePanel();
@@ -632,10 +677,8 @@ class _HomeScreenState extends State<HomeScreen> {
             key == LogicalKeyboardKey.arrowDown)) {
       final int delta = key == LogicalKeyboardKey.arrowDown ? -1 : 1;
       final TuneService tune = TuneService.instance;
-      // The card is the answer for the keyboard alone: with the panel open
-      // the line already says the same words (the subtitle-sync rule).
       final bool sayIt = !PanelService.instance.tunePanelOpen.value;
-      if (HardwareKeyboard.instance.isAltPressed) {
+      if (alt) {
         final TunePart part = tune.moveFocus(delta);
         if (sayIt) {
           _osd.show(OsdTuneCard(part: 'Tune', value: tune.partName(part)));
@@ -662,25 +705,112 @@ class _HomeScreenState extends State<HomeScreen> {
       TransportActions.instance.volumeDown();
       return KeyEventResult.handled;
     }
-    // `M` means MINI (mini.md §4 — the preview spells the intent out:
-    // "M toggles mini ↔ full"). The old bare-key mute keeps a binding as
-    // Ctrl+M so the keyboard never loses it, and the speaker mark in the
-    // cluster is unchanged in both modes.
-    if (!typing &&
-        key == LogicalKeyboardKey.keyM &&
-        !HardwareKeyboard.instance.isControlPressed) {
-      unawaited(_windows.toggleMini());
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.keyM &&
-        HardwareKeyboard.instance.isControlPressed) {
+    // Bare `M` = MUTE (Universal standard media player: mpv, VLC, MPC, YouTube)
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.keyM) {
       TransportActions.instance.toggleMute();
       return KeyEventResult.handled;
     }
-    if (!typing && key == LogicalKeyboardKey.keyS) {
+    // `Ctrl+M` = Mini player toggle
+    if (ctrl && key == LogicalKeyboardKey.keyM && down) {
+      unawaited(_windows.toggleMini());
+      return KeyEventResult.handled;
+    }
+    if (!typing && !ctrl && !shift && !alt && key == LogicalKeyboardKey.keyS) {
       TransportActions.instance.stop();
       return KeyEventResult.handled;
     }
+    // Shuffle: Shift+S or Alt+S or Ctrl+Shift+S
+    if (!typing &&
+        ((shift && key == LogicalKeyboardKey.keyS) ||
+            (ctrl && shift && key == LogicalKeyboardKey.keyS) ||
+            (alt && key == LogicalKeyboardKey.keyS)) &&
+        down) {
+      unawaited(TransportActions.instance.toggleShuffle());
+      return KeyEventResult.handled;
+    }
+    // Repeat: R (bare key)
+    if (!typing && !ctrl && !shift && !alt && key == LogicalKeyboardKey.keyR && down) {
+      unawaited(TransportActions.instance.cycleRepeat());
+      return KeyEventResult.handled;
+    }
+    // Tracks / Subtitles / Lyrics: C or T (standard Captions / Tracks)
+    if (!typing && !ctrl && !alt && (key == LogicalKeyboardKey.keyC || key == LogicalKeyboardKey.keyT) && down) {
+      final String? path = PlayerService.instance.currentPath.value;
+      final bool local = path != null &&
+          !path.contains('://') &&
+          !QueueService.instance.isChannelList;
+      final bool audio = local && MediaUtils.isAudio(path);
+      final bool audioLyrics = audio && LyricService.instance.available.value;
+      if (audioLyrics) {
+        LyricService.instance.toggleShown();
+      } else {
+        PanelService.instance.toggleTrackPanel();
+      }
+      return KeyEventResult.handled;
+    }
+    // Cycle Audio Track: B (standard mpv / VLC)
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.keyB && down) {
+      unawaited(TransportActions.instance.cycleAudioTrack());
+      return KeyEventResult.handled;
+    }
+    // Cycle Subtitle Track: V (standard mpv / VLC)
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.keyV && down) {
+      unawaited(TransportActions.instance.cycleSubTrack());
+      return KeyEventResult.handled;
+    }
+
+    // Playback speed: [ slower, ] faster, \ or Backspace reset to 1.0x (mpv standard)
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.bracketLeft && down) {
+      unawaited(TransportActions.instance.stepPlaybackRate(-0.1));
+      return KeyEventResult.handled;
+    }
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.bracketRight && down) {
+      unawaited(TransportActions.instance.stepPlaybackRate(0.1));
+      return KeyEventResult.handled;
+    }
+    if (!typing && !ctrl && !alt && (key == LogicalKeyboardKey.backslash || key == LogicalKeyboardKey.backspace) && down) {
+      unawaited(TransportActions.instance.resetPlaybackRate());
+      return KeyEventResult.handled;
+    }
+
+    // Frame stepping: . (period) forward, , (comma) backward (mpv / VLC standard)
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.period && down) {
+      unawaited(TransportActions.instance.stepFrameForward());
+      return KeyEventResult.handled;
+    }
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.comma && down) {
+      unawaited(TransportActions.instance.stepFrameBackward());
+      return KeyEventResult.handled;
+    }
+
+    // Subtitle delay reset: Shift+Backspace or Ctrl+Shift+Z
+    if ((shift && key == LogicalKeyboardKey.backspace) ||
+        (ctrl && shift && key == LogicalKeyboardKey.keyZ)) {
+      unawaited(TransportActions.instance.resetSubDelay());
+      return KeyEventResult.handled;
+    }
+
+    // Percentage jump: 0..9 (mpv / YouTube standard)
+    final int? digit = _digitFromKey(key);
+    if (!typing && !ctrl && !alt && digit != null && down) {
+      final Duration dur = PlayerService.instance.duration.value;
+      if (dur > Duration.zero) {
+        final Duration target = dur * (digit * 0.1);
+        unawaited(TransportActions.instance.seekTo(target));
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Home / End: jump to beginning / next
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.home && down) {
+      unawaited(TransportActions.instance.seekTo(Duration.zero));
+      return KeyEventResult.handled;
+    }
+    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.end && down) {
+      TransportActions.instance.next();
+      return KeyEventResult.handled;
+    }
+
     if (!typing && key == LogicalKeyboardKey.pageUp) {
       TransportActions.instance.previous();
       return KeyEventResult.handled;
@@ -692,20 +822,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Subtitle sync (owner 2026-09-13) — mpv's own convention: Z shifts
     // the text 100 ms earlier, X 100 ms later. Shift is SALU's coarse
-    // second (mpv has no coarse step). Silent while no subtitle track is
-    // selected; the deck names the new offset (see `TransportActions
-    // .subtitleSync`). Same family as the transport keys above: OSD
-    // only, no chrome wake.
+    // second.
     if (!typing &&
         (key == LogicalKeyboardKey.keyZ || key == LogicalKeyboardKey.keyX)) {
-      // Bare keys only: Ctrl/Alt stay out of SALU's way (Ctrl+Z is the
-      // world's undo, and the Search window has text fields in it).
-      final bool bare = !HardwareKeyboard.instance.isControlPressed &&
-          !HardwareKeyboard.instance.isAltPressed;
+      final bool bare = !ctrl && !alt;
       if (bare) {
         TransportActions.instance.subtitleSync(
           later: key == LogicalKeyboardKey.keyX,
-          coarse: HardwareKeyboard.instance.isShiftPressed,
+          coarse: shift,
         );
         return KeyEventResult.handled;
       }
@@ -716,14 +840,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!down) return KeyEventResult.ignored; // repeats never re-open UI
 
+    // Info panel: Ctrl+I
+    if (ctrl && key == LogicalKeyboardKey.keyI) {
+      if (infoAvailable) {
+        if (PanelService.instance.infoOpen.value) {
+          PanelService.instance.closeInfo();
+        } else {
+          PanelService.instance.openInfo();
+        }
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Subtitle Search dialog: Ctrl+Shift+F
+    if (ctrl && shift && key == LogicalKeyboardKey.keyF) {
+      unawaited(showSubtitleSearchDialog(context));
+      return KeyEventResult.handled;
+    }
+
+    // Find in Playlist: Ctrl+F (standard search in player mode)
+    if (ctrl && !shift && key == LogicalKeyboardKey.keyF) {
+      PanelService.instance.requestPlaylistSearchFocus();
+      return KeyEventResult.handled;
+    }
+
+    // Remote QR pairing dialog: Ctrl+Shift+R
+    if (ctrl && shift && key == LogicalKeyboardKey.keyR) {
+      _openRemote();
+      return KeyEventResult.handled;
+    }
+
     // Silent open-media shortcuts (never printed anywhere in the UI —
     // follow.md hard rule 2).
-    final bool ctrl = HardwareKeyboard.instance.isControlPressed;
-    if (ctrl && key == LogicalKeyboardKey.keyO) {
+    if (ctrl && key == LogicalKeyboardKey.keyO && !shift) {
       OpenMediaService.openFiles();
       return KeyEventResult.handled;
     }
-    if (ctrl && key == LogicalKeyboardKey.keyF) {
+    // Open Folder: Ctrl+Shift+O (standard media player)
+    if (ctrl && shift && key == LogicalKeyboardKey.keyO) {
       OpenMediaService.openFolder();
       return KeyEventResult.handled;
     }
@@ -762,25 +916,17 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool repeat,
   }) {
     final bool typing = _isTyping;
+    final bool ctrl = HardwareKeyboard.instance.isControlPressed;
 
-    if (key == LogicalKeyboardKey.escape) {
+    if (key == LogicalKeyboardKey.escape || (ctrl && key == LogicalKeyboardKey.keyM)) {
       if (!repeat) unawaited(_windows.exitMini());
       return KeyEventResult.handled;
     }
+    // Bare M mutes in Mini mode matching full player mode
     if (!typing &&
         down &&
         key == LogicalKeyboardKey.keyM &&
-        !HardwareKeyboard.instance.isControlPressed) {
-      unawaited(_windows.toggleMini());
-      return KeyEventResult.handled;
-    }
-    // Mute keeps its key with the modifier, and the bar's speaker mark
-    // answers the same gesture it answers in full mode. `down` only, so a
-    // held key cannot flap the mute the way a repeat would.
-    if (!typing &&
-        down &&
-        key == LogicalKeyboardKey.keyM &&
-        HardwareKeyboard.instance.isControlPressed) {
+        !ctrl) {
       TransportActions.instance.toggleMute();
       return KeyEventResult.handled;
     }

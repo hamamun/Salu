@@ -56,6 +56,16 @@ class PanelService {
   /// re-asserts the overlay on every new tick.
   final ValueNotifier<int> focusGrabTick = ValueNotifier<int>(0);
 
+  /// Fired when a keyboard shortcut requests focus on the playlist search field.
+  final ValueNotifier<int> playlistSearchFocusTick = ValueNotifier<int>(0);
+
+  void requestPlaylistSearchFocus() {
+    if (!playlistOpen.value) {
+      togglePlaylist();
+    }
+    playlistSearchFocusTick.value++;
+  }
+
   List<ValueNotifier<bool>> get _popups => <ValueNotifier<bool>>[
         playlistOpen,
         trackPanelOpen,

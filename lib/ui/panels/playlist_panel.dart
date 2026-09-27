@@ -191,11 +191,21 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _observedMode = _view.groupMode.value;
     _view.groupMode.addListener(_onSharedViewChanged);
     _view.openGroup.addListener(_onSharedViewChanged);
+    _panel.playlistSearchFocusTick.addListener(_onSearchFocusRequested);
     if (_panel.playlistOpen.value) _onOpenChanged();
+  }
+
+  void _onSearchFocusRequested() {
+    if (mounted && _panel.playlistOpen.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _panel.playlistSearchFocusTick.removeListener(_onSearchFocusRequested);
     _panel.playlistOpen.removeListener(_onOpenChanged);
     _queue.index.removeListener(_onIndexChanged);
     _queue.items.removeListener(_onItemsChanged);
