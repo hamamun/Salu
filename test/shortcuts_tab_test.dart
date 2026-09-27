@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -127,7 +129,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Space'), findsNothing);
     AltPeek.instance.debugSetVisible(false);
-    await mouse.dispose();
+    await mouse.removePointer();
     await tester.pumpAndSettle();
   });
 }
