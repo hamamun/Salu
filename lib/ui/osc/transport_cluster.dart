@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/channel_view_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/transport_actions.dart';
+import '../widgets/alt_peek.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/transport_marks.dart';
 import 'volume_bar.dart';
@@ -75,63 +77,81 @@ class TransportCluster extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             // ── Group 1 · playback: play/pause + stop ─────────────────
-            PlayPauseButton(state: state),
+            AltPeekAnchor(
+              anchor: ShortcutAnchor.playPause,
+              child: PlayPauseButton(state: state),
+            ),
             const SizedBox(width: _inGroup),
-            SaluIconButton(
-              tooltip: 'Stop',
-              // Stop dims while stopped and while idle; it is never a
-              // "start over" (Prev's restart and the toast's Restart
-              // are the only restarts).
-              enabled: engineLive,
-              onTap: TransportActions.instance.stop,
-              child: const StopMark(),
+            AltPeekAnchor(
+              anchor: ShortcutAnchor.stop,
+              child: SaluIconButton(
+                tooltip: 'Stop',
+                // Stop dims while stopped and while idle; it is never a
+                // "start over" (Prev's restart and the toast's Restart
+                // are the only restarts).
+                enabled: engineLive,
+                onTap: TransportActions.instance.stop,
+                child: const StopMark(),
+              ),
             ),
 
             const SizedBox(width: _betweenGroups),
 
             // ── Group 2 · items: previous + next ───────────────────────
-            SaluIconButton(
-              tooltip: 'Previous',
-              // `|<<` never dims while a LOCAL queue exists — it can
-              // always restart the item. In channel mode there is no
-              // restart (§10.8b), so it dims at the head of the list (of
-              // the open group while grouped), exactly as Next dims at
-              // its tail.
-              enabled: player.hasPreviousItem,
-              onTap: TransportActions.instance.previous,
-              child: const PreviousMark(),
+            AltPeekAnchor(
+              anchor: ShortcutAnchor.previous,
+              child: SaluIconButton(
+                tooltip: 'Previous',
+                // `|<<` never dims while a LOCAL queue exists — it can
+                // always restart the item. In channel mode there is no
+                // restart (§10.8b), so it dims at the head of the list (of
+                // the open group while grouped), exactly as Next dims at
+                // its tail.
+                enabled: player.hasPreviousItem,
+                onTap: TransportActions.instance.previous,
+                child: const PreviousMark(),
+              ),
             ),
             const SizedBox(width: _inGroup),
-            SaluIconButton(
-              tooltip: 'Next',
-              // Dimmed when nothing can play next: single-file queue in
-              // list order. While shuffle drives the advance a pick
-              // always exists (an exhausted pass starts a fresh one), so
-              // Next stays live — one owner answers the question.
-              enabled: player.hasNextItem,
-              onTap: TransportActions.instance.next,
-              child: const NextMark(),
+            AltPeekAnchor(
+              anchor: ShortcutAnchor.next,
+              child: SaluIconButton(
+                tooltip: 'Next',
+                // Dimmed when nothing can play next: single-file queue in
+                // list order. While shuffle drives the advance a pick
+                // always exists (an exhausted pass starts a fresh one), so
+                // Next stays live — one owner answers the question.
+                enabled: player.hasNextItem,
+                onTap: TransportActions.instance.next,
+                child: const NextMark(),
+              ),
             ),
 
             const SizedBox(width: _betweenGroups),
 
             // ── Group 3 · time: seek backward + forward ────────────────
-            SaluIconButton(
-              tooltip: 'Seek backward',
-              // Seeks dim while stopped (nothing to seek into) and idle —
-              // and throughout channel mode, which has no position.
-              enabled: seeksLive,
-              onTap: () {}, // hold-repeat drives the ramp
-              onHoldRepeat: TransportActions.instance.seekBackward,
-              child: const SeekBackMark(),
+            AltPeekAnchor(
+              anchor: ShortcutAnchor.seekBack,
+              child: SaluIconButton(
+                tooltip: 'Seek backward',
+                // Seeks dim while stopped (nothing to seek into) and idle —
+                // and throughout channel mode, which has no position.
+                enabled: seeksLive,
+                onTap: () {}, // hold-repeat drives the ramp
+                onHoldRepeat: TransportActions.instance.seekBackward,
+                child: const SeekBackMark(),
+              ),
             ),
             const SizedBox(width: _inGroup),
-            SaluIconButton(
-              tooltip: 'Seek forward',
-              enabled: seeksLive,
-              onTap: () {}, // hold-repeat drives the ramp
-              onHoldRepeat: TransportActions.instance.seekForward,
-              child: const SeekForwardMark(),
+            AltPeekAnchor(
+              anchor: ShortcutAnchor.seekForward,
+              child: SaluIconButton(
+                tooltip: 'Seek forward',
+                enabled: seeksLive,
+                onTap: () {}, // hold-repeat drives the ramp
+                onHoldRepeat: TransportActions.instance.seekForward,
+                child: const SeekForwardMark(),
+              ),
             ),
 
             const SizedBox(width: _beforeSound),
@@ -143,12 +163,15 @@ class TransportCluster extends StatelessWidget {
                 player.volumeLevel,
               ]),
               builder: (BuildContext context, Widget? _) {
-                return SaluIconButton(
-                  tooltip: player.isMuted.value ? 'Unmute' : 'Mute',
-                  onTap: TransportActions.instance.toggleMute,
-                  child: SpeakerMark(
-                    level: player.volumeLevel.value,
-                    muted: player.isMuted.value,
+                return AltPeekAnchor(
+                  anchor: ShortcutAnchor.sound,
+                  child: SaluIconButton(
+                    tooltip: player.isMuted.value ? 'Unmute' : 'Mute',
+                    onTap: TransportActions.instance.toggleMute,
+                    child: SpeakerMark(
+                      level: player.volumeLevel.value,
+                      muted: player.isMuted.value,
+                    ),
                   ),
                 );
               },

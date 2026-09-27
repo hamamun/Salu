@@ -1,6 +1,6 @@
 # SALU Keyboard Shortcuts Reference & Implementation Manual
 
-> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**. §4 carries the **finalized** design of the discoverability layer (owner-approved 2026-09-27, pending implementation): the Settings **Shortcuts tab** (the Living Map) and **Alt-Peek**.  
+> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**. §4 carries the **finalized** design of the discoverability layer (owner-approved 2026-09-27, **implemented** — see §4.4): the Settings **Shortcuts tab** (the Living Map) and **Alt-Peek**.  
 > **Design Contract Note ([follow.md](follow.md) Rule 2):** In SALU, all shortcuts operate silently; shortcut labels are never printed on icons, menus, or tooltips. (The two §4 reference surfaces are an owner ruling, recorded in §4 — Rule 2 itself is untouched.)
 
 ---
@@ -224,7 +224,7 @@
 ## 4. Discoverability Layer — the Shortcuts Tab & Alt-Peek
 
 > **FINALIZED (owner 2026-09-27) — the Living Map (§4.1) and Alt-Peek (§4.2)
-> both approved in preview; ready to build in the §4.3 order.**
+> both approved in preview; built in the §4.3 order (status in §4.4).**
 > **Interactive design mock:** `design/shortcut_preview.html` (self-contained,
 > no dependencies — open in any browser; mock only, not app code).
 >
@@ -391,3 +391,13 @@ cluster floats just above the bottom hairline with the surface keys —
    + chips + hover detail).
 3. **Alt-Peek** (Player chrome first, then Web row, menus, dialogs).
 4. **Shortcuts tab, slice B** (the liveness engine).
+
+### 4.4 Implementation status (2026-09-27)
+
+| Step | Where | Status |
+|---|---|---|
+| 1 · Registry | `lib/core/shortcuts/shortcut_registry.dart` (+ `test/shortcut_registry_test.dart`) | Done — every §2 key, scope · combos · action id · group · guard · anchor. Display truth; handlers unchanged. |
+| 2 · Shortcuts tab, slice A | `lib/ui/widgets/shortcuts_tab.dart`, `SettingsTab.shortcuts` | Done — mode pill, miniature per mode (Player · Mini · Web · Dialogs), chips on every visible control, quiet clusters for rideless keys, hover detail strip with the cross-mode column. Tab strip scrolls horizontally when narrow. |
+| 3 · Alt-Peek | `lib/ui/widgets/alt_peek.dart` | Done for Player chrome, the chrome-hidden cluster and the Web row (tab strip + address row). Menus / open dialogs: **not yet** — chips stay hidden while a modal holds `ChromeLock`. Mini: out of scope v1 (as specified). |
+| 4 · Shortcuts tab, slice B | `ShortcutsTabState` liveness engine (+ `test/shortcuts_tab_test.dart`) | Done — registered keys drive the mock (timeline, volume, play mark, OSD card, playlist, fullscreen + hairline cluster, mini / web / URL modal flips, web tabs, panels, find, zoom); `Esc` walks panel → fullscreen → closes Settings. |
+

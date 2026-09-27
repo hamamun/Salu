@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/web/web_suggestions.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
 import '../screens/browser_screen.dart' show kWebRowHeight;
+import 'alt_peek.dart';
 import 'download_badge.dart';
 import 'salu_icon_button.dart';
 import 'salu_marks.dart';
@@ -142,38 +144,58 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           // on SALU's start page. Back/Forward read the engine's own truth;
           // Reload swaps into Stop while a page travels — the player's
           // Play⇄Pause logic wearing another suit.
-          SaluIconButton(
-            size: 27,
-            onTap: widget.onHome,
-            tooltip: 'Home',
-            child: const HomeMark(size: 17),
+          AltPeekAnchor(
+            scope: ShortcutScope.web, anchor: ShortcutAnchor.webHome,
+            child: SaluIconButton(
+              size: 27,
+              onTap: widget.onHome,
+              tooltip: 'Home',
+              child: const HomeMark(size: 17),
+            ),
           ),
           const SizedBox(width: 2),
-          _GoButton(
-            tab: tab,
-            forward: false,
-            onTap: widget.onBack,
+          AltPeekAnchor(
+            scope: ShortcutScope.web, anchor: ShortcutAnchor.webBack,
+            child: _GoButton(
+              tab: tab,
+              forward: false,
+              onTap: widget.onBack,
+            ),
           ),
-          _GoButton(
-            tab: tab,
-            forward: true,
-            onTap: widget.onForward,
+          AltPeekAnchor(
+            scope: ShortcutScope.web, anchor: ShortcutAnchor.webForward,
+            child: _GoButton(
+              tab: tab,
+              forward: true,
+              onTap: widget.onForward,
+            ),
           ),
           const SizedBox(width: 2),
-          _ReloadStopButton(
-            tab: tab,
-            onReload: widget.onReload,
-            onStop: widget.onStop,
+          AltPeekAnchor(
+            scope: ShortcutScope.web, anchor: ShortcutAnchor.webReload,
+            child: _ReloadStopButton(
+              tab: tab,
+              onReload: widget.onReload,
+              onStop: widget.onStop,
+            ),
           ),
           const SizedBox(width: 7),
-          Expanded(child: _buildField()),
+          Expanded(
+            child: AltPeekAnchor(
+              scope: ShortcutScope.web, anchor: ShortcutAnchor.webAddress,
+              child: _buildField(),
+            ),
+          ),
           const SizedBox(width: 7),
           // The download badge — Chrome's own slot, immediately left of
           // the ⋮. It stands only while it has something to say, and the
           // omnibox absorbs the width, so the ⋮ never moves.
-          DownloadBadge(
-            onTap: widget.onDownloadsTap,
-            active: widget.downloadsOpen,
+          AltPeekAnchor(
+            scope: ShortcutScope.web, anchor: ShortcutAnchor.webDownloads,
+            child: DownloadBadge(
+              onTap: widget.onDownloadsTap,
+              active: widget.downloadsOpen,
+            ),
           ),
           // ⋮ menu beside the omnibox (zoom, find, history, clear, settings).
           SaluIconButton(
@@ -210,12 +232,16 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
                 // The padlock names the site; the star saves it. The
                 // badge at the far end counts held-back pop-ups.
                 _SiteButton(tab: widget.tab, onTap: widget.onSiteInfo),
-                SaluIconButton(
-                  size: 26,
-                  active: focused,
-                  onTap: widget.onFavourite,
-                  tooltip: 'Favourite',
-                  child: _Star(saved: widget.saved),
+                AltPeekAnchor(
+                  scope: ShortcutScope.web, anchor: ShortcutAnchor.webFavourite,
+                  side: PeekSide.above,
+                  child: SaluIconButton(
+                    size: 26,
+                    active: focused,
+                    onTap: widget.onFavourite,
+                    tooltip: 'Favourite',
+                    child: _Star(saved: widget.saved),
+                  ),
                 ),
                 Expanded(
                   child: TextField(

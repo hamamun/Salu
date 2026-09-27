@@ -10,6 +10,7 @@ import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
 import '../../core/remote/remote_browser_bridge.dart';
 import '../../core/settings_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/web/web_address.dart';
 import '../../core/web/web_download_service.dart';
 import '../../core/web/web_favourites_service.dart';
@@ -21,6 +22,7 @@ import '../../core/web/web_tab.dart';
 import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
 import '../../ui/osd/osd_controller.dart';
+import '../widgets/alt_peek.dart';
 import '../widgets/browser_address_bar.dart';
 import '../widgets/browser_clear_dialog.dart';
 import '../widgets/browser_downloads_panel.dart';
@@ -1760,12 +1762,16 @@ class _HubButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SaluIconButton(
-      size: 27,
-      active: open,
-      onTap: onTap,
-      tooltip: 'Favourites',
-      child: HeartMark(size: 15, filled: open),
+    return AltPeekAnchor(
+      scope: ShortcutScope.web,
+      anchor: ShortcutAnchor.webHub,
+      child: SaluIconButton(
+        size: 27,
+        active: open,
+        onTap: onTap,
+        tooltip: 'Favourites',
+        child: HeartMark(size: 15, filled: open),
+      ),
     );
   }
 }
