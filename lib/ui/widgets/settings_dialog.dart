@@ -9,6 +9,8 @@ import '../../core/remote/remote_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
 import '../../core/tune_service.dart';
+import '../../core/updater/update_manifest.dart';
+import '../../core/updater/updater_service.dart';
 import '../../core/web/web_data_control.dart';
 import '../../core/web/web_download_service.dart';
 import '../../core/web/web_popup_service.dart';
@@ -17,13 +19,14 @@ import '../osd/osd_controller.dart';
 import 'dot_grid_icon.dart';
 import 'remote_firewall_dialog.dart';
 import 'salu_marks.dart';
+import 'update_dialog.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
 /// backdrop, opened by the 6-dot button in the title bar and by the
 /// browser's own ⋮ menu.
 ///
-/// Current tabs: General · Subtitles · Web. The tab strip is structured
-/// so later phases' Video / Audio tabs can slot right in.
+/// Current tabs: General · Subtitles · Web · Updates. The tab strip is
+/// structured so later phases' Video / Audio tabs can slot right in.
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key, this.initialTab = SettingsTab.general, this.onOpenRemote});
 
@@ -38,9 +41,9 @@ class SettingsDialog extends StatefulWidget {
   State<SettingsDialog> createState() => _SettingsDialogState();
 }
 
-/// The window's three tabs. Public because a caller picks the one to open
+/// The window's tabs. Public because a caller picks the one to open
 /// on ([SettingsDialog.initialTab]).
-enum SettingsTab { general, subtitles, web }
+enum SettingsTab { general, subtitles, web, updates }
 
 class _SettingsDialogState extends State<SettingsDialog> {
   /// Opens on the door the viewer came through, then moves only by their
@@ -139,6 +142,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
             selected: _tab == SettingsTab.web,
             onTap: () => setState(() => _tab = SettingsTab.web),
           ),
+          // updater.md — the Updates tab: the component feed cadence and
+          // the "Check now" door into the updater modal.
+          _TabButton(
+            label: 'Updates',
+            selected: _tab == SettingsTab.updates,
+            onTap: () => setState(() => _tab = SettingsTab.updates),
+          ),
         ],
       ),
     );
@@ -149,6 +159,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       SettingsTab.general => _GeneralTab(onOpenRemote: widget.onOpenRemote),
       SettingsTab.subtitles => const _SubtitlesTab(),
       SettingsTab.web => const _WebTab(),
+      SettingsTab.updates => const _UpdatesTab(),
     };
   }
 }
@@ -958,6 +969,259 @@ class _WebAutoClearTimingPicker extends StatelessWidget {
 }
 
 // ── General tab ─────────────────────────────────────────────────────────────
+
+// ── Updates tab (updater.md) ──────────────────────────────────────────────
+
+/// The component & engine updater's settings (updater.md §7): the check
+/// cadence (Off / Daily / Weekly / Monthly — Weekly is the factory
+/// default), the "Check now" button, and where the last round stands.
+class _UpdatesTab extends StatelessWidget {
+  const _UpdatesTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 22, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Automatic update check frequency',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'How often SALU checks its component feeds — WebView2Loader, '
+            'the MPV engine, yt-dlp.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 16),
+          _UpdateFrequencyPicker(),
+          SizedBox(height: 20),
+          _CheckNowRow(),
+          SizedBox(height: 10),
+          _LastCheckedRow(),
+        ],
+      ),
+    );
+  }
+}
+
+/// The cadence picker's four tiles (updater.md §7 · `_OptionTile`).
+class _UpdateFreqOption {
+  const _UpdateFreqOption({
+    required this.frequency,
+    required this.icon,
+    required this.label,
+    required this.helper,
+    this.isDefault = false,
+  });
+
+  final UpdateCheckFrequency frequency;
+  final IconData icon;
+  final String label;
+  final String helper;
+  final bool isDefault;
+}
+
+/// Automatic Update Check Frequency — radio-style tiles, Weekly default.
+class _UpdateFrequencyPicker extends StatelessWidget {
+  const _UpdateFrequencyPicker();
+
+  static const List<_UpdateFreqOption> _options = <_UpdateFreqOption>[
+    _UpdateFreqOption(
+      frequency: UpdateCheckFrequency.off,
+      icon: Icons.timer_off_outlined,
+      label: 'Off',
+      helper: 'Only checks when clicking "Check now".',
+    ),
+    _UpdateFreqOption(
+      frequency: UpdateCheckFrequency.daily,
+      icon: Icons.today_outlined,
+      label: 'Daily',
+      helper: 'Checks once every 24 hours.',
+    ),
+    _UpdateFreqOption(
+      frequency: UpdateCheckFrequency.weekly,
+      icon: Icons.date_range_outlined,
+      label: 'Weekly',
+      helper: 'Checks once every 7 days.',
+      isDefault: true,
+    ),
+    _UpdateFreqOption(
+      frequency: UpdateCheckFrequency.monthly,
+      icon: Icons.calendar_month_outlined,
+      label: 'Monthly',
+      helper: 'Checks once every 30 days.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<UpdateCheckFrequency>(
+      valueListenable: SettingsService.instance.updateCheckFrequency,
+      builder: (BuildContext context, UpdateCheckFrequency mode, Widget? _) {
+        return Column(
+          children: <Widget>[
+            for (final _UpdateFreqOption option in _options)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionTile(
+                  icon: option.icon,
+                  label: option.label,
+                  helper: option.helper,
+                  isDefault: option.isDefault,
+                  selected: mode == option.frequency,
+                  onTap: () => SettingsService.instance
+                      .setUpdateCheckFrequency(option.frequency),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The `[ Check now ]` button (updater.md §7) — the modal door. Beside it,
+/// where the component set stands right now.
+class _CheckNowRow extends StatelessWidget {
+  const _CheckNowRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        UpdaterService.instance.updateAvailable,
+        SettingsService.instance.lastUpdateCheckTime,
+      ]),
+      builder: (BuildContext context, Widget? _) {
+        final UpdaterService updater = UpdaterService.instance;
+        final String status = updater.stagedReady
+            ? 'Update ready'
+            : (updater.updateAvailable.value
+                ? 'Update available'
+                : (SettingsService.instance.lastUpdateCheckTime.value > 0
+                    ? 'Up to date'
+                    : ''));
+        return Row(
+          children: <Widget>[
+            _UpdateCheckButton(
+              onTap: () => showUpdateDialog(context),
+            ),
+            const SizedBox(width: 14),
+            Text(
+              status,
+              style: TextStyle(
+                fontSize: 12.5,
+                letterSpacing: 0.2,
+                color: status == 'Update ready' || status == 'Update available'
+                    ? AppColors.accent
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The one labelled button of the updater settings — the family's quiet
+/// outlined pill (same recipe as the updater modal's actions).
+class _UpdateCheckButton extends StatefulWidget {
+  const _UpdateCheckButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_UpdateCheckButton> createState() => _UpdateCheckButtonState();
+}
+
+class _UpdateCheckButtonState extends State<_UpdateCheckButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : 1.0,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            height: 32,
+            constraints: const BoxConstraints(minWidth: 84),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: _hovered ? AppColors.surfaceHighlight : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: _hovered ? AppColors.divider : AppColors.surfaceOutline,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 120),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+                color: _hovered ? Colors.white : AppColors.textPrimary,
+              ),
+              child: const Text('Check now'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Last checked: …" (updater.md §7's timestamp, stored in
+/// `shared_preferences`) — lives under the button and moves only when a
+/// check round actually succeeds.
+class _LastCheckedRow extends StatelessWidget {
+  const _LastCheckedRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: SettingsService.instance.lastUpdateCheckTime,
+      builder: (BuildContext context, int stamp, Widget? _) {
+        final String when = stamp > 0
+            ? formatLastChecked(
+                DateTime.now(), DateTime.fromMillisecondsSinceEpoch(stamp))
+            : 'Never';
+        return Text(
+          'Last checked: $when',
+          style: const TextStyle(
+            fontSize: 12.5,
+            color: AppColors.textSecondary,
+          ),
+        );
+      },
+    );
+  }
+}
 
 class _GeneralTab extends StatelessWidget {
   const _GeneralTab({this.onOpenRemote});

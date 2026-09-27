@@ -95,6 +95,29 @@ enum WebPopupDefault {
   allow,
 }
 
+/// How often SALU checks its component & engine feeds (Settings → Updates
+/// → Automatic Update Check Frequency; updater.md §7). **Weekly is the
+/// factory default**; Off means the only check is the one behind the
+/// "Check now" button.
+enum UpdateCheckFrequency {
+  off,
+  daily,
+  weekly,
+  monthly,
+}
+
+/// The cadence each choice stands for. `null` for [UpdateCheckFrequency.off]
+/// — "only checks when clicking 'Check now'". 24 h / 7 d / 30 d exactly as
+/// updater.md §7 names them.
+extension UpdateCheckFrequencyInterval on UpdateCheckFrequency {
+  Duration? get interval => switch (this) {
+        UpdateCheckFrequency.off => null,
+        UpdateCheckFrequency.daily => const Duration(hours: 24),
+        UpdateCheckFrequency.weekly => const Duration(days: 7),
+        UpdateCheckFrequency.monthly => const Duration(days: 30),
+      };
+}
+
 /// What web pages are told about the viewer's colour preference
 /// (`prefers-color-scheme`) — Settings → Web → Page colours.
 ///
@@ -146,6 +169,10 @@ class SettingsService {
   static const String _keyRemoteEnabled = 'remote_enabled';
   static const String _keyRemoteFileAccess = 'remote_file_access';
   static const String _keyRemotePort = 'remote_port';
+
+  // ── Component & engine updater (updater.md §7) ─────────────────────────
+  static const String _keyUpdateCheckFrequency = 'update_check_frequency';
+  static const String _keyLastUpdateCheckTime = 'last_update_check_time';
 
   // ── Subtitles (cc.md §2 · D2 · D3 · D5 · D13 amended 2026-09-13) ─────
   static const String _keySubtitleApiKey = 'subtitle_api_key';
@@ -286,6 +313,16 @@ class SettingsService {
   final ValueNotifier<bool> subtitleAutoDownload =
       ValueNotifier<bool>(true);
 
+  /// How often the component feeds are checked (see
+  /// [UpdateCheckFrequency]). **Weekly by default** (updater.md §7).
+  final ValueNotifier<UpdateCheckFrequency> updateCheckFrequency =
+      ValueNotifier<UpdateCheckFrequency>(UpdateCheckFrequency.weekly);
+
+  /// When the last successful check ran — milliseconds since epoch,
+  /// `0` = never. Stored in `shared_preferences` (updater.md §7) and
+  /// rendered as the updater's "Last checked: …".
+  final ValueNotifier<int> lastUpdateCheckTime = ValueNotifier<int>(0);
+
   /// Reads persisted settings (called once, before the first frame).
   Future<void> load() async {
     try {
@@ -366,6 +403,15 @@ class SettingsService {
       }
       subtitleAutoDownload.value =
           prefs.getBool(_keySubtitleAutoDownload) ?? true;
+      // Component updater (updater.md §7): cadence + the last successful
+      // check's stamp. Unknown names fall back to the factory default.
+      final String? rawUpdateFreq = prefs.getString(_keyUpdateCheckFrequency);
+      if (rawUpdateFreq != null) {
+        updateCheckFrequency.value =
+            UpdateCheckFrequency.values.asNameMap()[rawUpdateFreq] ??
+                UpdateCheckFrequency.weekly;
+      }
+      lastUpdateCheckTime.value = prefs.getInt(_keyLastUpdateCheckTime) ?? 0;
     } catch (_) {
       // Corrupt/missing prefs — fall back to the defaults, silently.
       titleBarMode.value = TitleBarMode.borderless;
@@ -388,6 +434,8 @@ class SettingsService {
       subtitlePassword.value = '';
       subtitleLanguage.value = defaultSubtitleLanguage;
       subtitleAutoDownload.value = true;
+      updateCheckFrequency.value = UpdateCheckFrequency.weekly;
+      lastUpdateCheckTime.value = 0;
     }
   }
 
@@ -657,6 +705,32 @@ class SettingsService {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_keySubtitleAutoDownload, on);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Component updater — the cadence picker (updater.md §7). Applies
+  /// instantly and persists; switching to [UpdateCheckFrequency.off]
+  /// stops future scheduled checks only, it never forgets the stamp.
+  Future<void> setUpdateCheckFrequency(UpdateCheckFrequency frequency) async {
+    updateCheckFrequency.value = frequency;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyUpdateCheckFrequency, frequency.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
+    }
+  }
+
+  /// Component updater — the "Last checked" stamp (updater.md §7): stored
+  /// as milliseconds epoch, written whenever a check round succeeds.
+  Future<void> setLastUpdateCheckTime(DateTime when) async {
+    lastUpdateCheckTime.value = when.millisecondsSinceEpoch;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(
+          _keyLastUpdateCheckTime, lastUpdateCheckTime.value);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }
