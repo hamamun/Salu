@@ -383,7 +383,9 @@ class UpdaterService {
     final List<int>? dll = NugetClient.extractLoaderDll(await tmp.readAsBytes());
     if (tmp.existsSync()) await tmp.delete();
     if (dll == null || dll.isEmpty) {
-      throw const UpdateVerifyException('WebView2Loader.dll missing from package');
+      throw const UpdateVerifyException(
+        'Could not read or verify WebView2Loader.dll from the package.',
+      );
     }
     if (!isX64PeImage(dll)) {
       throw const UpdateVerifyException('WebView2Loader.dll is not a 64-bit build');
@@ -410,7 +412,18 @@ class UpdaterService {
       isCancelled,
     );
     if (isCancelled()) throw const UpdateCancelledException();
-    await extractArchive(tmp, unpack);
+    try {
+      await extractArchive(tmp, unpack);
+    } on UpdateVerifyException {
+      rethrow;
+    } on UpdateCancelledException {
+      rethrow;
+    } catch (error) {
+      // An unpacker failure occurs after the download; it is not a lost
+      // connection, even if the unpacker reports it as a fetch error.
+      debugPrint('[SALU] updater: MPV extraction failed: $error');
+      throw const UpdateVerifyException('Could not unpack the MPV archive.');
+    }
     // The archive root holds `libmpv-2.dll` beside the headers — but walk
     // the tree anyway; packaging moves, the file name does not.
     File? dll;
@@ -682,6 +695,9 @@ Future<void> _downloadToFile(
     rethrow;
   } on UpdateFetchException {
     rethrow;
+  } on FileSystemException catch (error) {
+    debugPrint('[SALU] updater: could not save download: $error');
+    throw const UpdateVerifyException('Could not save the update to disk.');
   } catch (error) {
     throw UpdateFetchException('download failed ($error)');
   } finally {
@@ -693,15 +709,15 @@ Future<void> _extractArchive(File archive, Directory dest) async {
   if (!dest.existsSync()) {
     await dest.create(recursive: true);
   }
-  // Windows 10+ ships bsdtar as `tar`, and it reads 7z — the same
-  // fallback `media_kit_libs_windows_video`'s own CMake uses when 7-Zip
-  // is not installed. No new dependency, and the exact archives media_kit
-  // builds against unpack the same way here.
+  // Windows ships bsdtar as `tar`, but 7z support can vary across OS
+  // builds. A missing codec or a corrupt archive is a preparation error,
+  // never evidence that the update server is unreachable.
   final ProcessResult result = await Process.run(
     'tar',
     <String>['-xf', archive.path, '-C', dest.path],
   );
   if (result.exitCode != 0) {
-    throw UpdateFetchException('extract failed (${result.exitCode})');
+    debugPrint('[SALU] updater: tar exited ${result.exitCode}: ${result.stderr}');
+    throw const UpdateVerifyException('Could not unpack the MPV archive.');
   }
 }

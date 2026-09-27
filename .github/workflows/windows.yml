@@ -38,6 +38,11 @@ jobs:
       - name: Test right-click layer
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: ./.github/scripts/flutter-check.ps1 test --reporter expanded test/right_menu_test.dart
+      # Keep the updater's check → stage → dialog tests visible even when
+      # unrelated tests make the full suite red.
+      - name: Test updater
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: ./.github/scripts/flutter-check.ps1 test --reporter expanded test/nuget_client_test.dart test/github_updater_client_test.dart test/update_manifest_test.dart test/updater_service_test.dart test/update_installer_windows_test.dart test/update_dialog_test.dart
       - name: Test full suite
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: ./.github/scripts/flutter-check.ps1 test --reporter expanded

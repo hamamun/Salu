@@ -405,6 +405,24 @@ void main() {
       );
     });
 
+    test('an unpacker error is a preparation error, not a network error',
+        () async {
+      svc.extractArchive = (File archive, Directory dest) async {
+        throw const UpdateFetchException('tar failed on a downloaded 7z');
+      };
+      final UpdateCheckResult result = await svc.check();
+      await expectLater(
+        svc.download(result.pendingUpdates, isCancelled: () => false),
+        throwsA(isA<UpdateVerifyException>().having(
+          (UpdateVerifyException e) => e.message,
+          'message',
+          'Could not unpack the MPV archive.',
+        )),
+      );
+      expect(staging.existsSync(), isFalse,
+          reason: 'a failed extraction cannot leave a partial swap behind');
+    });
+
     test('purgeStaging clears a complete staging', () async {
       await stageAll();
       expect(svc.stagedReady, isTrue);

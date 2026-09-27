@@ -28,8 +28,10 @@ void _put32(List<int> out, int v) {
 /// Builds a ZIP archive of [entries] (inner path → bytes). Entries compress
 /// with raw DEFLATE unless [deflate] is false (STORED) or the payload is
 /// empty. The central directory carries real CRC-32s, so the reader's
-/// integrity check has something honest to check.
-List<int> buildZipArchive(Map<String, List<int>> entries, {bool deflate = true}) {
+/// integrity check has something honest to check. [comment] lets tests
+/// exercise the optional ZIP end-record comment (ASCII only).
+List<int> buildZipArchive(Map<String, List<int>> entries,
+    {bool deflate = true, String comment = ''}) {
   final List<int> bytes = <int>[];
   final List<int> central = <int>[];
   int count = 0;
@@ -90,7 +92,11 @@ List<int> buildZipArchive(Map<String, List<int>> entries, {bool deflate = true})
   _put16(bytes, count);
   _put32(bytes, central.length);
   _put32(bytes, cdOffset);
-  _put16(bytes, 0); // comment length
+  final List<int> commentBytes = comment.codeUnits;
+  assert(commentBytes.every((int c) => c <= 0x7F));
+  assert(commentBytes.length <= 0xFFFF);
+  _put16(bytes, commentBytes.length);
+  bytes.addAll(commentBytes);
   return bytes;
 }
 
