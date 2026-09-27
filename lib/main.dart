@@ -17,6 +17,7 @@ import 'core/resume_service.dart';
 import 'core/settings_service.dart';
 import 'core/sub_delay_service.dart';
 import 'core/tune_service.dart';
+import 'core/updater/updater_service.dart';
 import 'core/url_library_service.dart';
 import 'core/window_state_service.dart';
 import 'theme/app_theme.dart';
@@ -135,6 +136,10 @@ Future<void> main(List<String> args) async {
   // the first page is ready to start instantly.
   BrowserService.instance.scheduleStartupWarmUp();
   RemoteService.instance.scheduleStartup();
+  // updater.md §7: a silent component-feed check when the cadence has
+  // elapsed — background only, it just raises the "Update Available"
+  // flag the Settings → Updates tab shows.
+  UpdaterService.instance.scheduleStartupCheck();
 }
 
 /// Intercepts the window close: flush the resume store so the last
@@ -208,6 +213,16 @@ class _CloseGuard with WindowListener {
       // Where the window lives — the bar's point or the full rect, and the
       // mode itself — so the next launch reopens exactly here (§5).
       await WindowStateService.instance.saveOnClose().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
+    try {
+      // updater.md §8 · "Restart Later": staged component updates are
+      // applied on the next normal close. The same detached swap script,
+      // spawned here with relaunch off — it waits for this PID to die,
+      // swaps the files, and leaves the next launch to the user.
+      await UpdaterService.instance.applyAtClose().timeout(
         const Duration(seconds: 2),
         onTimeout: () {},
       );

@@ -1,6 +1,14 @@
 # SALU — Component & Engine Updater (`updater.md`)
 
-**Status:** 📋 Architecture & Implementation Plan  
+**Status:** ✅ Implemented (2026-09-26) — `lib/core/updater/` + Settings →
+Updates tab + the updater modal (`lib/ui/widgets/update_dialog.dart`).
+Architecture below stands as the design record; two deliberate tightenings
+of the §6 sketch, both documented in `update_installer_windows.dart`:
+step 3 copies the three component files instead of `staging\*.*` (the
+script and `manifest.json` never leak into the install root, and rollback
+covers exactly the backed-up set), and a 4th `RELAUNCH` argument (default
+`1`) turns the same script into §8's "Restart Later" close-time applier
+(`0` = swap only, no relaunch).  
 **Target Platform:** Windows 10/11  
 **Key Goal:** Allow SALU to automatically check, download, and update its core external runtime binaries (`WebView2Loader.dll` from NuGet, `libmpv-2.dll`, and `yt-dlp.exe`) safely without requiring a manual reinstall of the entire application.
 
