@@ -90,6 +90,24 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   }
 
+  Future<void> finishDownload(WidgetTester tester) async {
+    // download() creates and writes real temp files. testWidgets' fake async
+    // clock does not drive those OS completions: briefly yield to real I/O,
+    // then pump the dialog until it leaves the progress screen.
+    await tester.pump();
+    for (int attempt = 0;
+        attempt < 100 &&
+            find.text('Downloading components...').evaluate().isNotEmpty;
+        attempt++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Downloading components...'), findsNothing,
+        reason: 'Dialog still shows: '
+            '${tester.widgetList<Text>(find.byType(Text)).map((Text t) => t.data).toList()}');
+  }
+
   testWidgets('a failed check reports a connection issue', (tester) async {
     svc.fetchText = (Uri url) async {
       throw const UpdateFetchException('offline');
@@ -109,7 +127,7 @@ void main() {
     };
     await openDialog(tester);
     await tester.tap(find.text('Update'));
-    await tester.pumpAndSettle();
+    await finishDownload(tester);
 
     expect(find.textContaining('could not be prepared or verified'),
         findsOneWidget);
@@ -131,7 +149,7 @@ void main() {
     };
     await openDialog(tester);
     await tester.tap(find.text('Update'));
-    await tester.pumpAndSettle();
+    await finishDownload(tester);
 
     expect(find.textContaining('Could not finish downloading'), findsOneWidget);
     expect(find.textContaining('Unable to connect'), findsNothing);
@@ -148,7 +166,7 @@ void main() {
     };
     await openDialog(tester);
     await tester.tap(find.text('Update'));
-    await tester.pumpAndSettle();
+    await finishDownload(tester);
 
     expect(find.textContaining('could not be prepared or verified'),
         findsOneWidget);
@@ -168,7 +186,7 @@ void main() {
     );
     await openDialog(tester);
     await tester.tap(find.text('Update'));
-    await tester.pumpAndSettle();
+    await finishDownload(tester);
 
     expect(find.text('✓ Downloads Complete!'), findsOneWidget);
     expect(svc.stagedReady, isTrue);
