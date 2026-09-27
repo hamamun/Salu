@@ -38,7 +38,7 @@ List<int> buildZipArchive(Map<String, List<int>> entries, {bool deflate = true})
     final int crc = crc32Of(data);
     final bool compress = deflate && data.isNotEmpty;
     final List<int> payload =
-        compress ? const ZLibEncoder(raw: true).convert(data) : data;
+        compress ? ZLibEncoder(raw: true).convert(data) : data;
     final int method = compress ? 8 : 0;
     final int localOffset = bytes.length;
 

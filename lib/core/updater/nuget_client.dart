@@ -193,7 +193,7 @@ List<int>? _zipExtract({
   } else if (method == 8) {
     // Deflate — raw DEFLATE stream, no zlib wrapper.
     try {
-      out = const ZLibDecoder(raw: true).convert(raw);
+      out = ZLibDecoder(raw: true).convert(raw);
     } catch (_) {
       return null;
     }
