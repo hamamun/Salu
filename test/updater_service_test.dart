@@ -549,6 +549,11 @@ void main() {
     });
 
     test('a refusal is shown, not swallowed, and SALU stays up', () async {
+      // Payloads first: the point of the test is what a refusal does NOT do
+      // to work already downloaded and verified.
+      final UpdateCheckResult result = await svc.check();
+      await svc.download(result.pendingUpdates, isCancelled: () => false);
+      expect(svc.stagedReady, isTrue);
       installFakeInstaller();
       svc.installer = UpdateInstallerWindows(
         scriptWriter: (String scriptPath) async {},
