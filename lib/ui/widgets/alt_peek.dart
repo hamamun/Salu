@@ -160,7 +160,7 @@ enum PeekSide { below, above, overStart }
 /// in beside it. The chip never moves the control (it floats in an
 /// unclipped overlay of the control's own box — follow.md rule 5).
 ///
-/// The legend comes from the registry ([ShortcutRegistry.chipLegend]) —
+/// The legend comes from the registry ([SaluShortcuts.chipLegend]) —
 /// a control with no registered key shows nothing.
 class AltPeekAnchor extends StatelessWidget {
   const AltPeekAnchor({
@@ -178,7 +178,7 @@ class AltPeekAnchor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String? legend = ShortcutRegistry.chipLegend(scope, anchor);
+    final String? legend = SaluShortcuts.chipLegend(scope, anchor);
     if (legend == null) return child;
     return Stack(
       clipBehavior: Clip.none,
@@ -264,7 +264,7 @@ class AltPeekHiddenCluster extends StatelessWidget {
               return _PeekFade(
                 show: show,
                 child: const Center(
-                  child: PeekChip(ShortcutRegistry.hiddenChromeCluster),
+                  child: PeekChip(SaluShortcuts.hiddenChromeCluster),
                 ),
               );
             },

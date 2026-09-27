@@ -293,8 +293,8 @@ const List<ShortcutCombo> _ctrlDigits1to8 = <ShortcutCombo>[
 ];
 
 /// The registry itself.
-class ShortcutRegistry {
-  ShortcutRegistry._();
+class SaluShortcuts {
+  SaluShortcuts._();
 
   static const List<ShortcutEntry> entries = <ShortcutEntry>[
     // ── Group A · Player mode ────────────────────────────────────────

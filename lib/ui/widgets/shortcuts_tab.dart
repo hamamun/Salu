@@ -18,7 +18,7 @@ import 'web_marks.dart';
 /// here), and answering when they are pressed. Pure reference — nothing on
 /// it is configurable, and there is no rebind affordance anywhere (§4.0).
 ///
-/// Everything it prints comes from [ShortcutRegistry]; a chip without a
+/// Everything it prints comes from [SaluShortcuts]; a chip without a
 /// registry entry cannot exist. The mock never plays real media and keeps
 /// no state beyond the open tab — it is a mirror, not a player.
 class ShortcutsTab extends StatefulWidget {
@@ -133,7 +133,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     final bool alt = hw.isAltPressed;
 
     final ShortcutEntry? entry =
-        ShortcutRegistry.match(mode, key, ctrl: ctrl, shift: shift, alt: alt);
+        SaluShortcuts.match(mode, key, ctrl: ctrl, shift: shift, alt: alt);
     if (entry == null) return KeyEventResult.handled;
     ShortcutCombo? combo;
     for (final ShortcutCombo c in entry.combos) {
@@ -458,7 +458,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     );
   }
 
-  ShortcutEntry _defaultEntry() => ShortcutRegistry.forScope(mode).first;
+  ShortcutEntry _defaultEntry() => SaluShortcuts.forScope(mode).first;
 
   Widget _buildMiniature() {
     final Widget body = switch (mode) {
@@ -485,8 +485,8 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   /// A control of the miniature wearing its chip. Hover names it on the
   /// detail strip; the chip and the mark light while it is the one shown.
   Widget _control(ShortcutAnchor anchor, Widget mark, {bool chipAbove = false}) {
-    final List<ShortcutEntry> riding = ShortcutRegistry.forAnchor(mode, anchor);
-    final String? legend = ShortcutRegistry.chipLegend(mode, anchor);
+    final List<ShortcutEntry> riding = SaluShortcuts.forAnchor(mode, anchor);
+    final String? legend = SaluShortcuts.chipLegend(mode, anchor);
     final bool lit = riding.any(_isLit);
     final Widget icon = IconTheme(
       data: IconThemeData(
@@ -578,7 +578,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     const double chromeH = titleH + timelineH + rowH + 8;
 
     final List<ShortcutEntry> rideless =
-        ShortcutRegistry.rideless(ShortcutScope.player);
+        SaluShortcuts.rideless(ShortcutScope.player);
     final List<ShortcutEntry> quiet = <ShortcutEntry>[
       for (final ShortcutEntry e in rideless)
         if (e.group == ShortcutGroup.transport ||
@@ -660,7 +660,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
             bottom: 60,
             child: IgnorePointer(
               child: Center(
-                child: PeekChip(ShortcutRegistry.hiddenChromeCluster),
+                child: PeekChip(SaluShortcuts.hiddenChromeCluster),
               ),
             ),
           ),
@@ -736,10 +736,10 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
   Widget _timeline() {
     final List<ShortcutEntry> riding =
-        ShortcutRegistry.forAnchor(mode, ShortcutAnchor.timeline);
+        SaluShortcuts.forAnchor(mode, ShortcutAnchor.timeline);
     final bool lit = riding.any(_isLit);
     final String legend =
-        ShortcutRegistry.chipLegend(mode, ShortcutAnchor.timeline) ?? '';
+        SaluShortcuts.chipLegend(mode, ShortcutAnchor.timeline) ?? '';
     return MouseRegion(
       onEnter: (_) => _select(riding.first),
       child: Padding(
@@ -921,7 +921,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
   Widget _buildMini() {
     final List<ShortcutEntry> quiet =
-        ShortcutRegistry.rideless(ShortcutScope.mini);
+        SaluShortcuts.rideless(ShortcutScope.mini);
     final String title = osd ?? _items[item];
     return Stack(
       children: <Widget>[
@@ -1010,7 +1010,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
   Widget _buildWeb() {
     final List<ShortcutEntry> quiet =
-        ShortcutRegistry.rideless(ShortcutScope.web);
+        SaluShortcuts.rideless(ShortcutScope.web);
     const double stripH = 28;
     const double rowH = 30;
     return Stack(
@@ -1192,7 +1192,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
   Widget _webRow() {
     final List<ShortcutEntry> address =
-        ShortcutRegistry.forAnchor(mode, ShortcutAnchor.webAddress);
+        SaluShortcuts.forAnchor(mode, ShortcutAnchor.webAddress);
     final bool addressLit = address.any(_isLit) || addressFocused;
     return Container(
       color: const Color(0xF0121212),
@@ -1239,7 +1239,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
                       child: Transform.scale(
                         scale: 0.82,
                         child: PeekChip(
-                          ShortcutRegistry.chipLegend(mode, ShortcutAnchor.webAddress) ?? '',
+                          SaluShortcuts.chipLegend(mode, ShortcutAnchor.webAddress) ?? '',
                           bright: addressLit,
                         ),
                       ),
@@ -1266,7 +1266,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   Widget _buildDialogs() {
     Widget card(ShortcutGroup group, Widget mock) {
       final List<ShortcutEntry> entries = <ShortcutEntry>[
-        for (final ShortcutEntry e in ShortcutRegistry.forScope(ShortcutScope.dialog))
+        for (final ShortcutEntry e in SaluShortcuts.forScope(ShortcutScope.dialog))
           if (e.group == group) e,
       ];
       return Container(
@@ -1398,7 +1398,7 @@ class _DetailStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final ShortcutCombo key = combo ?? entry.combos.first;
     final Map<ShortcutScope, ShortcutEntry?> across =
-        ShortcutRegistry.across(key, except: mode);
+        SaluShortcuts.across(key, except: mode);
     final List<ShortcutCombo> caps = entry.legend != null
         ? const <ShortcutCombo>[]
         : entry.combos.take(3).toList();

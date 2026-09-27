@@ -3,10 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/shortcuts/shortcut_registry.dart';
 
 void main() {
-  group('ShortcutRegistry (shortcut.md §4.0)', () {
+  group('SaluShortcuts (shortcut.md §4.0)', () {
     test('every entry has a combo and a unique id', () {
       final Set<String> ids = <String>{};
-      for (final ShortcutEntry e in ShortcutRegistry.entries) {
+      for (final ShortcutEntry e in SaluShortcuts.entries) {
         expect(e.combos, isNotEmpty, reason: e.id);
         expect(ids.add(e.id), isTrue, reason: 'duplicate id ${e.id}');
         expect(e.id.startsWith(switch (e.scope) {
@@ -25,7 +25,7 @@ void main() {
         ShortcutScope.web,
       ]) {
         final Map<ShortcutCombo, String> seen = <ShortcutCombo, String>{};
-        for (final ShortcutEntry e in ShortcutRegistry.forScope(scope)) {
+        for (final ShortcutEntry e in SaluShortcuts.forScope(scope)) {
           for (final ShortcutCombo c in e.combos) {
             final String? other = seen[c];
             expect(other, isNull, reason: '$c in ${e.id} and $other');
@@ -38,7 +38,7 @@ void main() {
     test('match is exact about modifiers', () {
       ShortcutEntry? m(LogicalKeyboardKey k,
               {bool ctrl = false, bool shift = false, bool alt = false}) =>
-          ShortcutRegistry.match(ShortcutScope.player, k,
+          SaluShortcuts.match(ShortcutScope.player, k,
               ctrl: ctrl, shift: shift, alt: alt);
       expect(m(LogicalKeyboardKey.space)?.id, 'player.playPause');
       expect(m(LogicalKeyboardKey.keyS)?.id, 'player.stop');
@@ -53,7 +53,7 @@ void main() {
       const ShortcutCombo ctrlL =
           ShortcutCombo(LogicalKeyboardKey.keyL, ctrl: true);
       final Map<ShortcutScope, ShortcutEntry?> across =
-          ShortcutRegistry.across(ctrlL, except: ShortcutScope.player);
+          SaluShortcuts.across(ctrlL, except: ShortcutScope.player);
       expect(across.keys, isNot(contains(ShortcutScope.player)));
       expect(across[ShortcutScope.web]?.id, 'web.address');
       expect(across[ShortcutScope.mini], isNull);
@@ -61,7 +61,7 @@ void main() {
 
     test('Alt-Peek chips match the §4.2 anchor table', () {
       String? p(ShortcutAnchor a) =>
-          ShortcutRegistry.chipLegend(ShortcutScope.player, a);
+          SaluShortcuts.chipLegend(ShortcutScope.player, a);
       expect(p(ShortcutAnchor.openMedia), 'Ctrl+O');
       expect(p(ShortcutAnchor.playlist), 'Ctrl+L');
       expect(p(ShortcutAnchor.playPause), 'Space');
@@ -77,7 +77,7 @@ void main() {
       expect(p(ShortcutAnchor.fullscreen), 'F · F11');
 
       String? w(ShortcutAnchor a) =>
-          ShortcutRegistry.chipLegend(ShortcutScope.web, a);
+          SaluShortcuts.chipLegend(ShortcutScope.web, a);
       expect(w(ShortcutAnchor.webNewTab), 'Ctrl+T');
       expect(w(ShortcutAnchor.webCloseTab), 'Ctrl+W');
       expect(w(ShortcutAnchor.webAddress), 'Ctrl+L');
