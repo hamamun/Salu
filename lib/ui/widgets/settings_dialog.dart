@@ -19,13 +19,14 @@ import '../osd/osd_controller.dart';
 import 'dot_grid_icon.dart';
 import 'remote_firewall_dialog.dart';
 import 'salu_marks.dart';
+import 'shortcuts_tab.dart';
 import 'update_dialog.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
 /// backdrop, opened by the 6-dot button in the title bar and by the
 /// browser's own ⋮ menu.
 ///
-/// Current tabs: General · Subtitles · Web · Updates. The tab strip is
+/// Current tabs: General · Subtitles · Web · Updates · Shortcuts. The tab strip is
 /// structured so later phases' Video / Audio tabs can slot right in.
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key, this.initialTab = SettingsTab.general, this.onOpenRemote});
@@ -43,7 +44,7 @@ class SettingsDialog extends StatefulWidget {
 
 /// The window's tabs. Public because a caller picks the one to open
 /// on ([SettingsDialog.initialTab]).
-enum SettingsTab { general, subtitles, web, updates }
+enum SettingsTab { general, subtitles, web, updates, shortcuts }
 
 class _SettingsDialogState extends State<SettingsDialog> {
   /// Opens on the door the viewer came through, then moves only by their
@@ -120,7 +121,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 
   Widget _buildTabStrip() {
-    return Padding(
+    // Five labels overflow very narrow dialogs — below that width the
+    // strip slides horizontally instead (shortcut.md §4.1 ·
+    // accommodation).
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: <Widget>[
@@ -149,6 +154,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
             selected: _tab == SettingsTab.updates,
             onTap: () => setState(() => _tab = SettingsTab.updates),
           ),
+          // shortcut.md §4.1 — the Shortcuts tab (the Living Map): the
+          // rightmost tab, a reference page rather than a setting.
+          _TabButton(
+            label: 'Shortcuts',
+            selected: _tab == SettingsTab.shortcuts,
+            onTap: () => setState(() => _tab = SettingsTab.shortcuts),
+          ),
         ],
       ),
     );
@@ -160,6 +172,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       SettingsTab.subtitles => const _SubtitlesTab(),
       SettingsTab.web => const _WebTab(),
       SettingsTab.updates => const _UpdatesTab(),
+      SettingsTab.shortcuts => const ShortcutsTab(),
     };
   }
 }

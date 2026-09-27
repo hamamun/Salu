@@ -35,6 +35,7 @@ import '../panels/info_panel.dart';
 import '../panels/playlist_panel.dart';
 import '../panels/track_panel.dart';
 import '../panels/tune_panel.dart';
+import '../widgets/alt_peek.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/download_badge.dart';
 import '../widgets/eq_curve_overlay.dart';
@@ -170,6 +171,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // place the first media is opened, so a landed file re-lays its four
     // continua (and answers Auto EQ) before the panel can ever paint.
     TuneService.instance.startWatching();
+    // Alt-Peek (shortcut.md §4.2) — a passive watcher on the global
+    // keyboard; it never swallows a key.
+    AltPeek.instance.install();
     // Start the audio canvas listener so lyric visibility updates the
     // metadata/cover surface immediately.
     LyricService.instance.startWatching();
@@ -835,6 +839,14 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
+    // A bare Alt is Alt-Peek's (shortcut.md §4.2): holding it must NOT
+    // wake the chrome — the peek shows the hidden-chrome cluster instead.
+    if (key == LogicalKeyboardKey.altLeft ||
+        key == LogicalKeyboardKey.altRight ||
+        key == LogicalKeyboardKey.alt) {
+      return KeyEventResult.ignored;
+    }
+
     // ── Everything else: activity → reveal the chrome ────────────────
     _wakeChrome();
 
@@ -1152,6 +1164,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 7 · The OSD deck — top center, anchored below the
                 //     chrome block, never waking the chrome.
                 const OsdDeck(),
+
+                // 8 · Alt-Peek's chrome-hidden cluster (shortcut.md §4.2)
+                //     — just above the bottom hairline, only while Alt is
+                //     held with the chrome tucked away.
+                AltPeekHiddenCluster(chromeVisible: chromeVisible),
               ],
             ),
           ),

@@ -1,10 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/web/web_address.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
 import '../screens/browser_screen.dart' show kWebStripHeight;
+import 'alt_peek.dart';
 import 'salu_icon_button.dart';
 import 'salu_marks.dart';
 
@@ -158,11 +160,23 @@ class _TabChip extends StatelessWidget {
                       ),
                     ),
                     // The close × sits on the RIGHT side of the tab (web.md).
-                    SaluIconButton(
-                      size: 22,
-                      onTap: onClose,
-                      child: const CloseMark(size: 10),
-                    ),
+                    // Alt-Peek chips only the active tab's × — Ctrl+W
+                    // closes the tab in front, never another one.
+                    if (active)
+                      AltPeekAnchor(
+                        scope: ShortcutScope.web, anchor: ShortcutAnchor.webCloseTab,
+                        child: SaluIconButton(
+                          size: 22,
+                          onTap: onClose,
+                          child: const CloseMark(size: 10),
+                        ),
+                      )
+                    else
+                      SaluIconButton(
+                        size: 22,
+                        onTap: onClose,
+                        child: const CloseMark(size: 10),
+                      ),
                   ],
                 ),
               );
@@ -266,12 +280,15 @@ class _PlusTab extends StatelessWidget {
       child: Center(
         // The family's thin plus, reading the ambient IconTheme so the
         // SALU hover recipe lights it up (never a fixed-ink painter).
-        child: SaluIconButton(
-          size: 26,
-          enabled: enabled,
-          onTap: onTap,
-          tooltip: 'New tab',
-          child: const PlusMark(size: 14),
+        child: AltPeekAnchor(
+          scope: ShortcutScope.web, anchor: ShortcutAnchor.webNewTab,
+          child: SaluIconButton(
+            size: 26,
+            enabled: enabled,
+            onTap: onTap,
+            tooltip: 'New tab',
+            child: const PlusMark(size: 14),
+          ),
         ),
       ),
     );

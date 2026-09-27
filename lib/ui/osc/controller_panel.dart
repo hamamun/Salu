@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/shortcuts/shortcut_registry.dart';
+import '../widgets/alt_peek.dart';
 import '../widgets/custom_title_bar.dart';
 import 'fetch_control.dart';
 import 'fullscreen_control.dart';
@@ -53,7 +55,12 @@ class ControllerPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           // Row 1 · the timeline (bar + floating hover chip in its box).
-          MediaTimeline(),
+          // Alt-Peek (shortcut.md §4.2) — the timeline's left end.
+          AltPeekAnchor(
+            anchor: ShortcutAnchor.timeline,
+            side: PeekSide.overStart,
+            child: MediaTimeline(),
+          ),
           // Row 2 · the control row (fixed height, never pushed). A Row,
           // not a Stack: the end zones keep their natural widths and the
           // center zone takes exactly what is left between them.
@@ -65,9 +72,9 @@ class ControllerPanel extends StatelessWidget {
                 // Left zone · the Open Media control (+ → pill) then the
                 // Playlist control, 6 px apart — the sibling pair of the
                 // row's left edge (playlist_imp.md §1.1).
-                OpenMediaControl(),
+                AltPeekAnchor(anchor: ShortcutAnchor.openMedia, child: OpenMediaControl()),
                 SizedBox(width: 6), // §1.1 — set 2 to fuse them
-                PlaylistControl(),
+                AltPeekAnchor(anchor: ShortcutAnchor.playlist, child: PlaylistControl()),
                 // Center zone · the transport cluster + sound group,
                 // centered in the space left between the end zones. When
                 // that space is narrower than the cluster (snap-mode
@@ -87,11 +94,11 @@ class ControllerPanel extends StatelessWidget {
                 // hidden) immediately left of the Fetch button (cc.md
                 // §6/D14 — a caption-family mark, same rule), then
                 // fullscreen at the outermost edge.
-                TuneControl(),
+                AltPeekAnchor(anchor: ShortcutAnchor.tune, child: TuneControl()),
                 SizedBox(width: 6),
-                FetchControl(),
+                AltPeekAnchor(anchor: ShortcutAnchor.fetch, child: FetchControl()),
                 SizedBox(width: 6),
-                FullscreenControl(),
+                AltPeekAnchor(anchor: ShortcutAnchor.fullscreen, child: FullscreenControl()),
               ],
             ),
           ),
