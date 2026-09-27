@@ -250,11 +250,92 @@ class TransportActions {
   Future<void> toggleShuffle({bool fromRemote = false}) async {
     resetSeekRamps();
     await player.toggleShuffle();
+    if (!fromRemote) {
+      _show(OsdTransportCard(
+        mark: OsdMark.play,
+        text: player.shuffleOn.value ? 'Shuffle: On' : 'Shuffle: Off',
+      ));
+    }
   }
 
   Future<void> cycleRepeat({bool fromRemote = false}) async {
     resetSeekRamps();
     await player.cycleRepeat();
+    if (!fromRemote) {
+      final String modeName = switch (player.repeatMode.value) {
+        RepeatMode.off => 'Off',
+        RepeatMode.all => 'All',
+        RepeatMode.one => 'One',
+      };
+      _show(OsdTransportCard(
+        mark: OsdMark.play,
+        text: 'Repeat: $modeName',
+      ));
+    }
+  }
+
+  /// Cycles through available audio tracks (B key) with OSD card.
+  Future<void> cycleAudioTrack({bool fromRemote = false}) async {
+    final String? name = await player.cycleAudioTrack();
+    if (name != null && !fromRemote) {
+      _show(OsdTransportCard(mark: OsdMark.play, text: name));
+    }
+  }
+
+  /// Cycles through available subtitle tracks (V key) with OSD card.
+  Future<void> cycleSubTrack({bool fromRemote = false}) async {
+    final String? name = await player.cycleSubTrack();
+    if (name != null && !fromRemote) {
+      _show(OsdTransportCard(mark: OsdMark.play, text: name));
+    }
+  }
+
+  /// Steps playback speed by [delta] (e.g. ±0.1x) with OSD card.
+  Future<void> stepPlaybackRate(double delta, {bool fromRemote = false}) async {
+    final double rate = await player.stepPlaybackRate(delta);
+    if (!fromRemote) {
+      _show(OsdTransportCard(
+        mark: OsdMark.play,
+        text: 'Speed: ${rate.toStringAsFixed(1)}x',
+      ));
+    }
+  }
+
+  /// Resets playback speed to 1.0x with OSD card.
+  Future<void> resetPlaybackRate({bool fromRemote = false}) async {
+    await player.resetPlaybackRate();
+    if (!fromRemote) {
+      _show(const OsdTransportCard(
+        mark: OsdMark.play,
+        text: 'Speed: 1.0x',
+      ));
+    }
+  }
+
+  /// Steps one frame forward (period key).
+  Future<void> stepFrameForward() async {
+    if (player.transportState.value == TransportState.playing) {
+      await player.pause();
+    }
+    await player.stepFrameForward();
+    _show(const OsdTransportCard(mark: OsdMark.seekForward, text: 'Next Frame'));
+  }
+
+  /// Steps one frame backward (comma key).
+  Future<void> stepFrameBackward() async {
+    if (player.transportState.value == TransportState.playing) {
+      await player.pause();
+    }
+    await player.stepFrameBackward();
+    _show(const OsdTransportCard(mark: OsdMark.seekBack, text: 'Prev Frame'));
+  }
+
+  /// Resets subtitle delay to 0.0s with OSD card.
+  Future<void> resetSubDelay({bool fromRemote = false}) async {
+    await player.setSubDelay(0.0);
+    if (!fromRemote) {
+      _show(const OsdSubDelayCard(delay: 0.0));
+    }
   }
 
   /// The absolute Clear — the playlist panel's bin and the remote's

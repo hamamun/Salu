@@ -124,6 +124,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
   /// address bar never has to chase tab switches itself.
   final ValueNotifier<int> _blockedCount = ValueNotifier<int>(0);
 
+  /// Closed tab URLs kept for Ctrl+Shift+T reopen.
+  final List<String> _closedTabUrls = <String>[];
+
   WebTab? get _tab =>
       _active >= 0 && _active < _tabs.length ? _tabs[_active] : null;
 
@@ -326,6 +329,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
   void _closeTab(int index) {
     if (index < 0 || index >= _tabs.length) return;
     final WebTab tab = _tabs.removeAt(index);
+    final String? closedUrl = tab.url.value;
+    if (closedUrl != null && closedUrl.isNotEmpty) {
+      _closedTabUrls.add(closedUrl);
+      if (_closedTabUrls.length > 20) _closedTabUrls.removeAt(0);
+    }
     final bool wasActive = index == _active;
     if (wasActive) _unbindActive();
     if (index < _active) _active -= 1;
@@ -660,7 +668,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
           _siteOpen ||
           _blockedOpen ||
           _menuOpen ||
-          _historyOpen) {
+          _historyOpen ||
+          _downloadsOpen) {
         setState(() {
           _hideSuggestions();
           _hubOpen = false;
@@ -670,6 +679,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
           _blockedOpen = false;
           _menuOpen = false;
           _historyOpen = false;
+          _downloadsOpen = false;
         });
         return KeyEventResult.handled;
       }
@@ -846,6 +856,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _siteOpen = false;
       _blockedOpen = false;
       _menuOpen = false;
+      _downloadsOpen = false;
       _dropFind();
       _historyOpen = true;
     });
@@ -1082,17 +1093,183 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }());
   }
 
-  /// Browser keyboard (Chrome's shelf): new / close / reload tab, jump to
-  /// the bar, find, zoom. It answers while Flutter holds the focus — a
-  /// page with native focus eats keystrokes before Flutter ever sees
-  /// them (the plugin exposes no accelerator hook), so these are the
-  /// chrome's keys, not the page's.
+  void _toggleHub() {
+    setState(() {
+      _sheetOpen = false;
+      _sheetIndex = null;
+      _hideSuggestions();
+      _siteOpen = false;
+      _blockedOpen = false;
+      _menuOpen = false;
+      _historyOpen = false;
+      _downloadsOpen = false;
+      _dropFind();
+      _hubOpen = !_hubOpen;
+    });
+  }
+
+  void _openWebSettings() {
+    _closePopups();
+    widget.onOpenSettings?.call();
+  }
+
+  static int? _digitFromKey(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) return 1;
+    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) return 2;
+    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) return 3;
+    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) return 4;
+    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) return 5;
+    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) return 6;
+    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) return 7;
+    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) return 8;
+    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) return 9;
+    return null;
+  }
+
+  /// Browser keyboard (Microsoft Edge / Chrome standard):
+  ///   - Tab management: Ctrl+T, Ctrl+W, Ctrl+Tab / Ctrl+PgDn, Ctrl+Shift+Tab / Ctrl+PgUp,
+  ///     Ctrl+1..8, Ctrl+9, Ctrl+Shift+T (reopen closed)
+  ///   - Navigation: Alt+Left (Back), Alt+Right (Forward), Alt+Home (Home), F5 / Ctrl+R / Ctrl+F5 (Reload)
+  ///   - Address bar: Ctrl+L, Alt+D, F6
+  ///   - Find: Ctrl+F, F3 (next/prev)
+  ///   - Panels: Ctrl+H (History), Ctrl+J (Downloads), Ctrl+D (Favourite), Ctrl+Shift+O (Hub),
+  ///     Ctrl+Shift+Delete (Clear browsing data)
+  ///   - Window: F11 (Fullscreen), Ctrl+Shift+W / Alt+W (Toggle back to Player)
+  ///   - Zoom: Ctrl+=, Ctrl+-, Ctrl+0
   KeyEventResult _onBrowserKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (!HardwareKeyboard.instance.isControlPressed) {
-      return KeyEventResult.ignored;
-    }
     final LogicalKeyboardKey key = event.logicalKey;
+    final bool ctrl = HardwareKeyboard.instance.isControlPressed;
+    final bool alt = HardwareKeyboard.instance.isAltPressed;
+    final bool shift = HardwareKeyboard.instance.isShiftPressed;
+
+    // ── Function keys & Alt navigation (Edge standard) ───────────────
+    // Fullscreen: F11
+    if (key == LogicalKeyboardKey.f11) {
+      unawaited(WindowStateService.instance.toggleFullscreen());
+      return KeyEventResult.handled;
+    }
+
+    // Reload: F5, Ctrl+F5, Ctrl+Shift+R
+    if (key == LogicalKeyboardKey.f5 ||
+        (ctrl && shift && key == LogicalKeyboardKey.keyR) ||
+        (ctrl && key == LogicalKeyboardKey.f5)) {
+      unawaited(_tab?.reload() ?? Future<void>.value());
+      return KeyEventResult.handled;
+    }
+
+    // Focus Address Bar: F6 or Alt+D
+    if (key == LogicalKeyboardKey.f6 || (alt && key == LogicalKeyboardKey.keyD)) {
+      _addressFocus.requestFocus();
+      _address.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _address.text.length,
+      );
+      return KeyEventResult.handled;
+    }
+
+    // Find in page next/previous: F3
+    if (key == LogicalKeyboardKey.f3) {
+      if (_findOpen) {
+        if (shift) {
+          _findPrev();
+        } else {
+          _findNext();
+        }
+      } else {
+        _openFind();
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Settings: F2 or Ctrl+,
+    if (key == LogicalKeyboardKey.f2 || (ctrl && key == LogicalKeyboardKey.comma)) {
+      _openWebSettings();
+      return KeyEventResult.handled;
+    }
+
+    // Navigation: Back (Alt+Left), Forward (Alt+Right), Home (Alt+Home)
+    if (alt && key == LogicalKeyboardKey.arrowLeft) {
+      _tab?.goBack();
+      return KeyEventResult.handled;
+    }
+    if (alt && key == LogicalKeyboardKey.arrowRight) {
+      _tab?.goForward();
+      return KeyEventResult.handled;
+    }
+    if (alt && key == LogicalKeyboardKey.home) {
+      _goHome();
+      return KeyEventResult.handled;
+    }
+
+    // Mode toggle back to Player: Ctrl+Shift+W or Alt+W
+    if ((ctrl && shift && key == LogicalKeyboardKey.keyW) ||
+        (alt && key == LogicalKeyboardKey.keyW)) {
+      _service.setMode(SaluMode.player);
+      return KeyEventResult.handled;
+    }
+
+    // ── Ctrl combinations ───────────────────────────────────────────
+    if (!ctrl) return KeyEventResult.ignored;
+
+    // Reopen closed tab: Ctrl+Shift+T
+    if (shift && key == LogicalKeyboardKey.keyT) {
+      if (_closedTabUrls.isNotEmpty && _tabs.length < kWebMaxTabs) {
+        _closePopups();
+        final String restored = _closedTabUrls.removeLast();
+        _newTab(url: restored);
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Clear browsing data: Ctrl+Shift+Delete
+    if (shift && (key == LogicalKeyboardKey.delete || key == LogicalKeyboardKey.backspace)) {
+      _closePopups();
+      showWebClearDialog(context);
+      return KeyEventResult.handled;
+    }
+
+    // Favourites Hub: Ctrl+Shift+O
+    if (shift && key == LogicalKeyboardKey.keyO) {
+      _toggleHub();
+      return KeyEventResult.handled;
+    }
+
+    // Tab cycling: Ctrl+Tab / Ctrl+Shift+Tab or Ctrl+PageDown / Ctrl+PageUp
+    if (key == LogicalKeyboardKey.tab ||
+        key == LogicalKeyboardKey.pageDown ||
+        key == LogicalKeyboardKey.pageUp) {
+      if (_tabs.length > 1) {
+        _closePopups();
+        final bool backwards = shift || key == LogicalKeyboardKey.pageUp;
+        final int next = backwards
+            ? (_active - 1 + _tabs.length) % _tabs.length
+            : (_active + 1) % _tabs.length;
+        _select(_tabs[next]);
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Direct tab switching: Ctrl+1 through Ctrl+8
+    final int? digit = _digitFromKey(key);
+    if (digit != null && digit >= 1 && digit <= 8) {
+      final int target = digit - 1;
+      if (target < _tabs.length && target != _active) {
+        _closePopups();
+        _select(_tabs[target]);
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Ctrl+9: Jump to last tab
+    if (digit == 9 || key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
+      if (_tabs.isNotEmpty && _active != _tabs.length - 1) {
+        _closePopups();
+        _select(_tabs[_tabs.length - 1]);
+        return KeyEventResult.handled;
+      }
+    }
+
     if (key == LogicalKeyboardKey.keyT) {
       if (_tabs.length < kWebMaxTabs) {
         _closePopups();
@@ -1121,6 +1298,23 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
     if (key == LogicalKeyboardKey.keyF) {
       _openFind();
+      return KeyEventResult.handled;
+    }
+    // History: Ctrl+H (Edge standard)
+    if (key == LogicalKeyboardKey.keyH) {
+      _closePopups();
+      _openHistory();
+      return KeyEventResult.handled;
+    }
+    // Downloads: Ctrl+J (Edge standard)
+    if (key == LogicalKeyboardKey.keyJ) {
+      _closePopups();
+      _toggleDownloads();
+      return KeyEventResult.handled;
+    }
+    // Favourite / Bookmark: Ctrl+D (Edge standard)
+    if (key == LogicalKeyboardKey.keyD) {
+      _toggleFavouritePanel();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.equal ||
@@ -1229,13 +1423,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
           );
 
     return Focus(
-      // While the page owns the screen, this focus owns its Esc:
-      // the first Esc RELEASES the hand-off (browser convention) —
-      // the window only goes back to SALU's strip on the second, and only
-      // because the page itself let go. While the chrome shows, the same
-      // root answers the browser keyboard (Ctrl+T/W/R/L/F, zoom).
-      autofocus: !_chrome,
-      canRequestFocus: !_chrome,
+      autofocus: true,
+      canRequestFocus: true,
       onKeyEvent: _chrome
           ? _onBrowserKey
           : (FocusNode n, KeyEvent e) {
@@ -1267,17 +1456,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       onNewTab: () => _newTab(focusAddress: true),
                       hub: _HubButton(
                         open: _hubOpen,
-                        onTap: () => setState(() {
-                          _sheetOpen = false;
-                          _sheetIndex = null;
-                          _hideSuggestions();
-                          _siteOpen = false;
-                          _blockedOpen = false;
-                          _menuOpen = false;
-                          _historyOpen = false;
-                          _dropFind();
-                          _hubOpen = !_hubOpen;
-                        }),
+                        onTap: _toggleHub,
                       ),
                     ),
                     BrowserAddressBar(
