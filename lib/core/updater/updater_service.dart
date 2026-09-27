@@ -691,7 +691,8 @@ String _appDir() => p.dirname(Platform.resolvedExecutable);
 
 /// `%TEMP%\salu_update` (updater.md §5) — and the folder one level up is
 /// where the swap script and its log live, outside what the script cleans.
-String _stagingDir() => p.join(Directory.systemTemp.path, stagingFolderName);
+String _stagingDir() =>
+    p.join(Directory.systemTemp.path, UpdaterService.stagingFolderName);
 
 /// A debug build is a dev build: `flutter run` / VS Code's F5, where SALU
 /// is a child of the tool that owns its lifecycle (updater.md §10).

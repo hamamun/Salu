@@ -324,10 +324,11 @@ class UpdateInstallerWindows {
     this.writability = _installRootWritable,
     this.lockReader = _lockStampedAt,
     this.clock = DateTime.now,
-    this.isWindowsHost = Platform.isWindows,
-  });
+    bool? isWindowsHost,
+  }) : isWindowsHost = isWindowsHost ?? Platform.isWindows;
 
-  /// The swap is a `cmd.exe` affair. A seam, so the guards below can be
+  /// The swap is a `cmd.exe` affair. A seam (not a default value —
+  /// `Platform.isWindows` is not a constant), so the guards below can be
   /// tested wherever the suite runs.
   final bool isWindowsHost;
 
