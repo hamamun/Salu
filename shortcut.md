@@ -275,19 +275,23 @@ configurable.
    four-option pill recipe. The board below lights up for the chosen mode;
    this is not decoration: the same key means different things per mode (§1.1)
    and the board must never lie by showing one meaning as the truth.
-2. **The drawn keyboard** — a compact ANSI board (function row, number row,
+2. **The capture pill** — right of the mode pill on the same top row: a quiet
+   key glyph + `press a key`. Pressing a combo renders it inside as keycaps,
+   with a `×` to clear — the press-a-key lookup's anchor (see Interaction).
+3. **The drawn keyboard** — a compact ANSI board (function row, number row,
    three letter rows, modifier row) plus the navigation cluster
    (`Home / End / PgUp / PgDn` and the arrow cross — SALU uses them all).
    Scales down as one piece in narrow windows (the TransportCluster
    `FittedBox` recipe — marks shrink, nothing clips).
-3. **The detail strip** — below the board, not beside it: the box is 640 px
+4. **The detail strip** — below the board, not beside it: the box is 640 px
    wide, and a side column would starve the keyboard. Two quiet columns —
    left: keycap + group + action (+ guard); right: the cross-mode rows.
 
 **Accommodation in the Settings box (the real numbers):** the dialog is
 `min(640 × 540, window − insets)`; header + tab strip + divider leave a body
 of ≈ 640 × 450, and every existing tab body scrolls vertically. The
-Shortcuts tab **stacks**: pill → board → detail strip. At the full 640 the
+Shortcuts tab **stacks**: top row (mode pill + capture pill) → board → detail
+strip. At the full 640 the
 keycap unit lands at ≈ 28 px (board ≈ 600 × 186) and the whole stack fits in
 ≈ 390 px — no scroll at full size. When the window narrows, the dialog
 narrows with it and the board rides the TransportCluster `FittedBox`
@@ -319,10 +323,13 @@ keys, no ripple (Rule 4's spirit); hover lights the outline and nothing else.
   the `Ctrl+` layer; click again to unlatch. Chords (`Ctrl+Shift+O`) latch
   both. This is how a flat keyboard shows a three-dimensional key map — and
   it is the tab's signature move.
-* **Press-a-key lookup** — while the tab is open, physically pressing a key
-  lights that keycap on the board and shows its detail panel, as if hovered
-  (the tab swallows the press; the player never reacts). One carve-out:
-  `Esc` still closes the Settings dialog, exactly as always.
+* **Press-a-key lookup** — the capture pill (§4.1 · 2) is the visible cue:
+  press any combo while the tab is open and it renders inside the pill as
+  keycaps, the keycap lights on the board, and the detail strip answers for
+  **every mode at once** — the current mode's action on the left, the other
+  three on the right (the tab swallows the press; the player never reacts).
+  One carve-out: while a combo is captured, the **first `Esc` clears the
+  capture** — only then does `Esc` close the Settings dialog.
 
 **The Mini and Dialogs boards are honestly sparse** — a handful of lit keys.
 That is the truth of those modes and the board shows it; no padding, no

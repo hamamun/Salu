@@ -52,6 +52,22 @@
   .modepill button{padding:5px 14px; border-radius:6px; color:var(--dim); font-size:12.5px; letter-spacing:.3px}
   .modepill button.on{background:var(--surface-hi); color:var(--text)}
 
+  /* top row: mode pill + press-a-key capture pill */
+  .toprow{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px}
+  .toprow .modepill{margin-bottom:0}
+  .capturebox{display:inline-flex; align-items:center; gap:8px; height:30px; padding:0 10px 0 12px;
+    margin-left:auto; border:1px solid var(--outline); border-radius:15px; color:var(--dim);
+    font-size:12px; letter-spacing:.3px; cursor:pointer; user-select:none; white-space:nowrap;
+    transition:border-color .12s, color .12s}
+  .capturebox:hover{border-color:#6E6E72}
+  .capturebox.armed{border-color:#6E6E72; color:var(--text)}
+  .capturebox .capkeys{display:inline-flex; align-items:center; gap:5px}
+  .capturebox .capkeys .kcap{font-size:11px; padding:2px 7px}
+  .capturebox .plus{color:var(--dim); font-size:10px}
+  .capturebox .waiting{color:var(--dim)}
+  .capturebox .capx{color:var(--dim); padding:2px 5px; font-size:11px}
+  .capturebox .capx:hover{color:var(--text)}
+
   .tabcontent{display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap}
 
   /* ── the drawn keyboard ──────────────────────────────────────────────── */
@@ -194,7 +210,7 @@
         <button data-w="460">Narrow window · box 460</button>
         <button data-w="380">Snapped window · box 380</button>
       </div>
-      <span class="peekstate">the real dialog: 640 × 540, or smaller — it never grows past the window</span>
+      <span class="peekstate">the real dialog: 640 × 540, or smaller — it never grows past the window · press a combo — try Ctrl+L, then Esc to clear</span>
     </div>
 
     <div class="settingsbox" id="settingsbox">
@@ -212,11 +228,18 @@
       </div>
 
       <div class="dlg-body" id="dlgbody">
-        <div class="modepill" id="modepill">
-          <button data-mode="player" class="on">Player</button>
-          <button data-mode="mini">Mini</button>
-          <button data-mode="web">Web</button>
-          <button data-mode="dialog">Dialogs</button>
+        <div class="toprow">
+          <div class="modepill" id="modepill">
+            <button data-mode="player" class="on">Player</button>
+            <button data-mode="mini">Mini</button>
+            <button data-mode="web">Web</button>
+            <button data-mode="dialog">Dialogs</button>
+          </div>
+          <div class="capturebox" id="capturebox">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="3.5" width="12" height="7.5" rx="2"/><line x1="4.5" y1="8.8" x2="9.5" y2="8.8"/></svg>
+            <span id="captext">press a key</span>
+            <span class="capx" id="capx" hidden>✕</span>
+          </div>
         </div>
 
         <div class="kb">
@@ -232,10 +255,12 @@
           <span class="key latched">Ctrl</span> modifier latched (click)
         </div>
         <div class="livecount" id="livecount"></div>
-        <p class="note">Hover a lit key — or physically press one — for its detail strip. Click the drawn
-          Ctrl / Shift / Alt keycaps to latch a modifier layer; the whole board re-lights. The board
-          scales down as one piece when the box narrows (the TransportCluster FittedBox recipe —
-          keys shrink, nothing clips). Esc keeps its app behavior (closes Settings).</p>
+        <p class="note">Hover a lit key — or physically press one — for its detail strip. The capture pill
+          (top right) records the pressed combo and the detail strip answers for <b>every mode at
+          once</b>; its ✕ clears it. Click the drawn Ctrl / Shift / Alt keycaps to latch a modifier
+          layer; the whole board re-lights. The board scales down as one piece when the box narrows
+          (the TransportCluster FittedBox recipe — keys shrink, nothing clips). Esc clears the
+          captured combo first — only then does it close Settings (§4.1 carve-out).</p>
       </div>
     </div>
   </section>
@@ -720,16 +745,61 @@ document.getElementById('modepill').addEventListener('click', e => {
   showDetail('KeyL', 'ctrl'); /* refresh the example with the new mode's truth */
 });
 
+/* ── the press-a-key capture pill ─────────────────────────────────────── */
+let captureArmed = false;
+let captured = null; /* {prefix, id} — the last pressed combo */
+const capbox = document.getElementById('capturebox');
+const captext = document.getElementById('captext');
+const capx = document.getElementById('capx');
+
+capbox.addEventListener('click', e => {
+  if (e.target.closest('.capx')){ captured = null; renderCapture(); return; }
+  captureArmed = !captureArmed;
+  renderCapture();
+});
+
+function renderCapture(){
+  capbox.classList.toggle('armed', captureArmed);
+  let html;
+  if (captured){
+    const mods = captured.prefix ? captured.prefix.split('+') : [];
+    html = '<span class="capkeys">' +
+      mods.map(m => `<span class="kcap">${m[0].toUpperCase() + m.slice(1)}</span>`)
+          .join('<span class="plus">+</span>') +
+      (mods.length ? '<span class="plus">+</span>' : '') +
+      `<span class="kcap">${labelOf.get(captured.id) || ''}</span></span>`;
+  } else if (captureArmed && (state.held.ctrl || state.held.shift || state.held.alt)){
+    const mods = [];
+    if (state.held.ctrl) mods.push('Ctrl');
+    if (state.held.shift) mods.push('Shift');
+    if (state.held.alt) mods.push('Alt');
+    html = '<span class="capkeys">' +
+      mods.map(m => `<span class="kcap">${m}</span>`).join('<span class="plus">+</span>') +
+      '<span class="plus">+</span><span class="waiting">…</span></span>';
+  } else {
+    html = captureArmed ? '…' : 'press a key';
+  }
+  captext.innerHTML = html;
+  capx.hidden = !captured;
+}
+
 /* physical keys: press-a-key lookup (view 1) · Alt hold (view 2) */
 const PHYS = { Control:'ctrl', Shift:'shift', Alt:'alt' };
 window.addEventListener('keydown', e => {
   if (view === 'tab'){
+    /* the §4.1 carve-out: a captured combo eats the first Esc — only the
+       second closes the dialog (in the app; here it just clears) */
+    if (e.key === 'Escape' && captured){
+      captured = null; renderCapture(); e.preventDefault(); return;
+    }
     const m = PHYS[e.key];
-    if (m){ state.held[m] = true; render(); e.preventDefault(); return; }
+    if (m){ state.held[m] = true; render(); renderCapture(); e.preventDefault(); return; }
     if (keyEls.has(e.code)){
       const el = keyEls.get(e.code);
       el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 350);
       showDetail(e.code, prefixOf(effective()));
+      captured = { prefix: prefixOf(effective()), id: e.code };
+      renderCapture();
       e.preventDefault();
     }
   } else {
@@ -738,7 +808,10 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   const m = PHYS[e.key];
-  if (m){ state.held[m] = false; if (view === 'tab') render(); }
+  if (m){
+    state.held[m] = false;
+    if (view === 'tab'){ render(); renderCapture(); }
+  }
   if (view === 'peek' && e.key === 'Alt'){ altHeld = false; syncPeek(); }
 });
 window.addEventListener('blur', () => {
@@ -795,6 +868,7 @@ document.getElementById('scenariopill').addEventListener('click', e => {
 buildBoard();
 render();
 fit();
+renderCapture();
 window.addEventListener('resize', fit);
 /* the opening example — the cross-mode story itself */
 showDetail('KeyL', 'ctrl');
