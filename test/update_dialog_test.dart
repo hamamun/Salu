@@ -27,10 +27,16 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await SettingsService.instance.load();
     appDir = await Directory.systemTemp.createTemp('salu_dialog_app');
-    stagingDir = await Directory.systemTemp.createTemp('salu_dialog_stage');
+    // Staging INSIDE the sandbox: the swap script, its lock and its log are
+    // derived from staging's parent, and a test that lets them land in the
+    // machine's real %TEMP% leaves a lock behind for whoever runs next.
+    stagingDir = Directory(p.join(appDir.path, 'salu_update'))..createSync();
     svc.debugResetForTest();
     svc.appDirOf = () => appDir.path;
     svc.stagingDirOf = () => stagingDir.path;
+    // Widget tests run in a debug build, where the modal's promise is
+    // different (updater.md §10) — the installed flow first, dev after.
+    svc.devBuildProbe = () => false;
 
     svc.fetchText = (Uri url) async {
       if (url == NugetClient.indexUrl()) {
@@ -64,7 +70,6 @@ void main() {
   tearDown(() async {
     svc.debugResetForTest();
     if (appDir.existsSync()) await appDir.delete(recursive: true);
-    if (stagingDir.existsSync()) await stagingDir.delete(recursive: true);
   });
 
   Future<void> openDialog(WidgetTester tester) async {
@@ -178,11 +183,11 @@ void main() {
   testWidgets('valid ZIP goes through staging; a refused installer is not a network error',
       (tester) async {
     svc.installer = UpdateInstallerWindows(
-      scriptWriter: (String staging) async => p.join(staging, updaterScriptName),
-      spawner: (String script, int pid, String app, String staging,
-              bool relaunch) async =>
-          false,
+      scriptWriter: (String scriptPath) async {},
+      spawner: (String scriptPath, Map<String, String> env) async => false,
       exitApp: () {},
+      writability: (String targetDir) => true,
+      lockReader: (String lockPath) => null,
     );
     await openDialog(tester);
     await tester.tap(find.text('Update'));
@@ -192,8 +197,16 @@ void main() {
     expect(svc.stagedReady, isTrue);
     expect(File(p.join(stagingDir.path, 'WebView2Loader.dll')).readAsBytesSync(),
         fakePeImage());
-    expect(appDir.listSync(), isEmpty,
-        reason: 'staging must not overwrite the running installation');
+    // The install root gained the staging folder and NOTHING else: no
+    // component file, no versions.json, no swap leftovers.
+    expect(
+      appDir
+          .listSync()
+          .map((FileSystemEntity e) => p.basename(e.path))
+          .toList(),
+      <String>['salu_update'],
+      reason: 'staging must not overwrite the running installation',
+    );
 
     await tester.tap(find.text('Restart Now'));
     await tester.pumpAndSettle();
@@ -203,4 +216,70 @@ void main() {
         reason: 'a refused installer cannot discard verified payloads');
     await closeDialog(tester);
   });
+
+  testWidgets('a dev build swaps without reopening itself, and says so',
+      (tester) async {
+    // updater.md §10: under `flutter run` / F5, a SALU that restarts itself
+    // comes back OUTSIDE the debugger, and the next build copies the pinned
+    // files over the swapped ones anyway. The modal says what will happen.
+    svc.devBuildProbe = () => true;
+    final List<String> relaunchFlags = <String>[];
+    svc.installer = UpdateInstallerWindows(
+      scriptWriter: (String scriptPath) async {},
+      spawner: (String scriptPath, Map<String, String> env) async {
+        relaunchFlags.add(env[swapEnvRelaunch] ?? '');
+        return true;
+      },
+      exitApp: () {},
+      writability: (String targetDir) => true,
+      lockReader: (String lockPath) => null,
+    );
+    await openDialog(tester);
+    await tester.tap(find.text('Update'));
+    await finishDownload(tester);
+
+    expect(find.textContaining('start it again from VS Code'), findsOneWidget);
+    expect(find.textContaining('SALU will close, install the new files, and '
+        'reopen by itself'), findsNothing);
+    expect(find.text('Apply & Close'), findsOneWidget);
+    expect(find.text('Restart Now'), findsNothing);
+
+    await tester.tap(find.text('Apply & Close'));
+    await tester.pumpAndSettle();
+    expect(relaunchFlags, <String>['0'],
+        reason: 'a debug build that reopens itself leaves the debugger behind '
+            'for nothing');
+    // The fake exitApp is a no-op, so the dialog is still up: close it the
+    // honest way, or the ChromeLock stays held for the next test.
+    await tester.tap(find.text('Restart Later'));
+    await tester.pumpAndSettle();
+    expect(ChromeLock.instance.isLocked, isFalse);
+  });
+
+  testWidgets('a swap that cannot land where SALU is installed is explained',
+      (tester) async {
+    // Not a network error, not a raw OS error, and SALU keeps running: the
+    // message names the thing the user can actually do about it.
+    svc.installer = UpdateInstallerWindows(
+      scriptWriter: (String scriptPath) async {},
+      spawner: (String scriptPath, Map<String, String> env) async => true,
+      exitApp: () {},
+      writability: (String targetDir) => false,
+      lockReader: (String lockPath) => null,
+    );
+    await openDialog(tester);
+    await tester.tap(find.text('Update'));
+    await finishDownload(tester);
+    await tester.tap(find.text('Restart Now'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not start the updater'), findsOneWidget);
+    expect(find.textContaining('Program Files'), findsOneWidget);
+    expect(find.textContaining('Unable to connect'), findsNothing);
+    expect(find.textContaining('UpdateSwapRefusedException'), findsNothing);
+    expect(svc.stagedReady, isTrue,
+        reason: 'a swap that was refused cannot discard verified payloads');
+    await closeDialog(tester);
+  });
+
 }
