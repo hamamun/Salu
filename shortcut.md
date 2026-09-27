@@ -224,6 +224,8 @@
 ## 4. Discoverability Layer — the Shortcuts Tab & Alt-Peek
 
 > **Spec stage (owner 2026-09-27) — designed, not yet implemented.**
+> **Interactive design mock:** `design/shortcut_preview.html` (self-contained,
+> no dependencies — open in any browser; mock only, not app code).
 >
 > **Owner ruling on [follow.md](follow.md) Rule 2 (rules remain intact):** Rule 2
 > governs SALU's **at-rest** chrome — menus, icons and tooltips stay silent, and
