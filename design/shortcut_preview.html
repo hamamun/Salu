@@ -31,15 +31,20 @@
   .viewtabs button.on{background:var(--surface-hi); color:var(--text)}
   .note{color:var(--dim); font-size:11.5px; line-height:1.6; letter-spacing:.2px; margin:10px 0 0}
 
-  /* ── settings dialog mock ────────────────────────────────────────────── */
-  .dialog{border:1px solid var(--outline); border-radius:12px; background:var(--glass);
-    backdrop-filter:blur(18px); overflow:hidden}
-  .tabstrip{display:flex; align-items:center; gap:4px; padding:10px 14px 0;
+  /* ── settings box mock (true to the real dialog: 640 × 540, radius 16) ── */
+  .settingsbox{width:640px; max-width:100%; margin:0 auto; border:1px solid var(--outline);
+    border-radius:16px; background:var(--panel); overflow:hidden;
+    box-shadow:0 16px 48px rgba(0,0,0,.5)}
+  .dlg-head{display:flex; align-items:center; padding:16px 12px 10px 20px}
+  .dlg-head .dots{display:grid; grid-template-columns:repeat(3,5px); gap:3px; margin-right:12px}
+  .dlg-head .dots i{width:5px; height:5px; border-radius:50%; background:var(--text)}
+  .dlg-head .title{font-size:16px; font-weight:600; letter-spacing:.2px}
+  .dlg-head .x{margin-left:auto; color:var(--dim); padding:4px 8px; font-size:13px}
+  .tabstrip{display:flex; align-items:center; gap:4px; padding:0 20px;
     border-bottom:1px solid var(--outline)}
-  .tabstrip .t{padding:8px 13px 10px; color:var(--dim); font-size:13px; letter-spacing:.3px;
-    border-bottom:2px solid transparent; margin-bottom:-1px}
+  .tabstrip .t{padding:9px 12px 11px; color:var(--dim); font-size:13px; letter-spacing:.3px;
+    border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap}
   .tabstrip .t.on{color:var(--text); border-bottom-color:var(--text)}
-  .tabstrip .x{margin-left:auto; color:var(--dim); padding:4px 8px 10px; font-size:13px}
   .dlg-body{padding:16px 18px 18px}
 
   .modepill{display:inline-flex; border:1px solid var(--outline); border-radius:9px;
@@ -48,7 +53,6 @@
   .modepill button.on{background:var(--surface-hi); color:var(--text)}
 
   .tabcontent{display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap}
-  .boardwrap{flex:1 1 620px; min-width:0}
 
   /* ── the drawn keyboard ──────────────────────────────────────────────── */
   .kb{display:flex; gap:14px; align-items:flex-start}
@@ -78,7 +82,7 @@
   .kcap{border:1px solid #6E6E72; border-radius:6px; padding:3px 9px; font-size:12.5px;
     letter-spacing:.4px; font-variant-numeric:tabular-nums}
   .kcap.quiet{border-color:var(--outline); color:var(--dim)}
-  .detail .group{color:var(--dim); font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; margin:10px 0 4px}
+  .detail .group{color:var(--dim); font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; margin:6px 0 3px}
   .detail .action{font-size:13.5px; line-height:1.45; letter-spacing:.2px}
   .detail .guard{color:var(--dim); font-size:11.5px; margin-top:6px; letter-spacing:.2px}
   .detail .none{color:var(--dim); font-size:13px; font-style:italic}
@@ -182,18 +186,32 @@
     <button data-view="peek">② Alt-Peek (hold Alt)</button>
   </div>
 
-  <!-- ═══ VIEW 1 · SETTINGS → SHORTCUTS TAB ═════════════════════════════ -->
+  <!-- ═══ VIEW 1 · SETTINGS → SHORTCUTS TAB (inside the real 640×540 box) ═ -->
   <section id="view-tab">
-    <div class="dialog">
+    <div class="peekbar" style="margin:0 0 14px">
+      <div class="scenariopill" id="sizepill">
+        <button data-w="640" class="on">Full window · box 640</button>
+        <button data-w="460">Narrow window · box 460</button>
+        <button data-w="380">Snapped window · box 380</button>
+      </div>
+      <span class="peekstate">the real dialog: 640 × 540, or smaller — it never grows past the window</span>
+    </div>
+
+    <div class="settingsbox" id="settingsbox">
+      <div class="dlg-head">
+        <span class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="title">Settings</span>
+        <span class="x">✕</span>
+      </div>
       <div class="tabstrip">
         <button class="t">General</button>
         <button class="t">Subtitles</button>
         <button class="t">Web</button>
         <button class="t">Updates</button>
         <button class="t on">Shortcuts</button>
-        <span class="x">✕</span>
       </div>
-      <div class="dlg-body">
+
+      <div class="dlg-body" id="dlgbody">
         <div class="modepill" id="modepill">
           <button data-mode="player" class="on">Player</button>
           <button data-mode="mini">Mini</button>
@@ -201,25 +219,23 @@
           <button data-mode="dialog">Dialogs</button>
         </div>
 
-        <div class="tabcontent">
-          <div class="boardwrap">
-            <div class="kb">
-              <div class="kb-main" id="kbmain"></div>
-              <div class="cluster" id="kbcluster"></div>
-            </div>
-            <div class="klegend">
-              <span class="key">a</span> quiet — does nothing
-              <span class="key lit">a</span> live
-              <span class="key lit guarded">a</span> live · needs media state
-              <span class="key latched">Ctrl</span> modifier latched (click)
-            </div>
-            <div class="livecount" id="livecount"></div>
-            <p class="note">Hover a lit key — or physically press one — for its detail. Click the drawn
-              Ctrl / Shift / Alt keycaps to latch a modifier layer; the whole board re-lights.
-              Esc keeps its app behavior (closes Settings) — shown here for reference only.</p>
-          </div>
-          <aside class="detail" id="detail"></aside>
+        <div class="kb">
+          <div class="kb-main" id="kbmain"></div>
+          <div class="cluster" id="kbcluster"></div>
         </div>
+        <aside class="detail" id="detail"></aside>
+
+        <div class="klegend">
+          <span class="key">a</span> quiet
+          <span class="key lit">a</span> live
+          <span class="key lit guarded">a</span> live · needs media state
+          <span class="key latched">Ctrl</span> modifier latched (click)
+        </div>
+        <div class="livecount" id="livecount"></div>
+        <p class="note">Hover a lit key — or physically press one — for its detail strip. Click the drawn
+          Ctrl / Shift / Alt keycaps to latch a modifier layer; the whole board re-lights. The board
+          scales down as one piece when the box narrows (the TransportCluster FittedBox recipe —
+          keys shrink, nothing clips). Esc keeps its app behavior (closes Settings).</p>
       </div>
     </div>
   </section>
@@ -642,41 +658,45 @@ function render(){
     `${modeName} · ${live} key${live === 1 ? '' : 's'} live${p ? ' · layer: ' + prefixLabel(p).replace(/ \+ $/,'') : ' · no modifier'}`;
 }
 
-/* ── the detail panel ──────────────────────────────────────────────────── */
+/* ── detail strip ─────────────────────────────────────────────────────── */
 function showDetail(id, prefix){
   const label = labelOf.get(id) || id;
   const d = document.getElementById('detail');
   const here = (DATA[state.mode][prefix] || {})[id];
-  let html = `<div class="kname"><span class="kcap ${here ? '' : 'quiet'}">${prefixLabel(prefix)}${label}</span></div>`;
+  const modeName = MODES.find(m => m[0] === state.mode)[1];
 
+  let left = `<div class="dcol"><div class="kname">
+      <span class="kcap ${here ? '' : 'quiet'}">${prefixLabel(prefix)}${label}</span></div>`;
   if (here){
-    html += `<div class="group">${here[1]}</div>
+    left += `<div class="group">${here[1]}</div>
              <div class="action">${here[0]}</div>`;
-    if (here[2]) html += `<div class="guard">needs: ${here[2]}</div>`;
+    if (here[2]) left += `<div class="guard">needs: ${here[2]}</div>`;
   } else {
-    html += `<div class="none">nothing in ${MODES.find(m => m[0] === state.mode)[1]} with these modifiers</div>`;
+    left += `<div class="none">nothing in ${modeName} with these modifiers</div>`;
   }
+  left += `</div>`;
 
+  let right = '';
   const rows = MODES.map(([m, name]) => {
     const e = (DATA[m][prefix] || {})[id];
     if (m === state.mode) return '';
     return `<div class="row"><span class="m">${name}</span>
       <span class="a ${e ? '' : 'dim'}">${e ? e[0] : '—'}</span></div>`;
   }).join('');
-  if (rows) html += `<div class="crossmode">${rows}</div>`;
-  if (id === 'Escape') html += `<div class="carveout">In the app, Esc closes the Settings dialog
+  if (rows) right = `<div class="dcol crossmode">${rows}`;
+  if (id === 'Escape') right += `<div class="carveout">In the app, Esc closes the Settings dialog
     first — the tab never traps it (§4.1 carve-out).</div>`;
-  d.innerHTML = html;
+  if (right) right += `</div>`;
+  d.innerHTML = left + right;
 }
 
-/* ── keyboard unit sizing ──────────────────────────────────────────────── */
+/* ── keyboard unit sizing — measured inside the real box body ─────────── */
 function fit(){
-  const wrap = document.querySelector('.boardwrap');
-  if (!wrap) return;
-  const w = wrap.clientWidth - 14 - 3.6 * 24; /* cluster gap + cluster width guess */
-  const u = Math.max(20, Math.min(32, (w - 12) / 15.5));
+  const body = document.getElementById('dlgbody');
+  if (!body || body.clientWidth === 0) return;
+  /* total = 15u (main) + 14·5px gaps + 14px kb gap + 3u (cluster) + 2·5px ≤ w */
+  const u = Math.max(13, Math.min(30, (body.clientWidth - 94) / 18));
   document.documentElement.style.setProperty('--u', u.toFixed(1) + 'px');
-  /* cluster keys share --u; their group width is 3u + 2 gaps */
   document.getElementById('kbcluster').style.width = (3 * u + 10) + 'px';
 }
 
@@ -713,12 +733,13 @@ window.addEventListener('keydown', e => {
       e.preventDefault();
     }
   } else {
-    if (e.key === 'Alt'){ e.preventDefault(); }
+    if (e.key === 'Alt'){ e.preventDefault(); altHeld = true; syncPeek(); }
   }
 });
 window.addEventListener('keyup', e => {
   const m = PHYS[e.key];
   if (m){ state.held[m] = false; if (view === 'tab') render(); }
+  if (view === 'peek' && e.key === 'Alt'){ altHeld = false; syncPeek(); }
 });
 window.addEventListener('blur', () => {
   state.held = { ctrl:false, shift:false, alt:false };
@@ -776,6 +797,14 @@ render();
 fit();
 window.addEventListener('resize', fit);
 /* the opening example — the cross-mode story itself */
+showDetail('KeyL', 'ctrl');
+syncPeek();
+</script>
+</body>
+</html>
+</script>
+</body>
+</html>
 showDetail('KeyL', 'ctrl');
 syncPeek();
 </script>

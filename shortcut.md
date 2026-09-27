@@ -280,8 +280,21 @@ configurable.
    (`Home / End / PgUp / PgDn` and the arrow cross — SALU uses them all).
    Scales down as one piece in narrow windows (the TransportCluster
    `FittedBox` recipe — marks shrink, nothing clips).
-3. **The detail panel** — a quiet column beside the board (below it on narrow
-   widths).
+3. **The detail strip** — below the board, not beside it: the box is 640 px
+   wide, and a side column would starve the keyboard. Two quiet columns —
+   left: keycap + group + action (+ guard); right: the cross-mode rows.
+
+**Accommodation in the Settings box (the real numbers):** the dialog is
+`min(640 × 540, window − insets)`; header + tab strip + divider leave a body
+of ≈ 640 × 450, and every existing tab body scrolls vertically. The
+Shortcuts tab **stacks**: pill → board → detail strip. At the full 640 the
+keycap unit lands at ≈ 28 px (board ≈ 600 × 186) and the whole stack fits in
+≈ 390 px — no scroll at full size. When the window narrows, the dialog
+narrows with it and the board rides the TransportCluster `FittedBox`
+scale-down recipe — the keys shrink as one piece, nothing ever clips or
+reflows; the box never grows. One collateral the fifth tab brings: the tab
+strip is a plain `Row` that would overflow on very narrow dialogs — below
+that width the strip slides horizontally (a few lines, part of this work).
 
 **Keycap states (two, ever):**
 
