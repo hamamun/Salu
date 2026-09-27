@@ -1,7 +1,7 @@
 # SALU Keyboard Shortcuts Reference & Implementation Manual
 
-> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**.  
-> **Design Contract Note ([follow.md](follow.md) Rule 2):** In SALU, all shortcuts operate silently; shortcut labels are never printed on icons, menus, or tooltips.
+> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**. §4 adds the spec (not yet implemented) for the discoverability layer: the Settings **Shortcuts tab** and **Alt-Peek**.  
+> **Design Contract Note ([follow.md](follow.md) Rule 2):** In SALU, all shortcuts operate silently; shortcut labels are never printed on icons, menus, or tooltips. (The two §4 reference surfaces are an owner ruling, recorded in §4 — Rule 2 itself is untouched.)
 
 ---
 
@@ -218,3 +218,163 @@
 | **`Shift + S` / `R`** | Mouse-only in Right-Click menu. | `Shift+S` toggles Shuffle; `R` cycles Repeat. | Standard media playback toggles with live OSD feedback. |
 | **Web Tabs** | No tab switching shortcuts. | Added `Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+1..8`, `Ctrl+9`, `Ctrl+Shift+T`. | Complete Microsoft Edge standard tab control. |
 | **Web Panels** | Mouse-only menus. | Added `Ctrl+H` (History), `Ctrl+J` (Downloads), `Ctrl+D` (Favourite), `Ctrl+Shift+O` (Hub), `Ctrl+Shift+Delete` (Clear data). | Complete Microsoft Edge standard shelf doors. |
+
+---
+
+## 4. Discoverability Layer — the Shortcuts Tab & Alt-Peek
+
+> **Spec stage (owner 2026-09-27) — designed, not yet implemented.**
+>
+> **Owner ruling on [follow.md](follow.md) Rule 2 (rules remain intact):** Rule 2
+> governs SALU's **at-rest** chrome — menus, icons and tooltips stay silent, and
+> that does not change. The two surfaces below are deliberate **reference
+> surfaces** the viewer summons on purpose:
+>
+> * the **Shortcuts tab** is a page opened by an explicit click (a dictionary,
+>   not a menu);
+> * **Alt-Peek** is an on-demand reveal that exists only while Alt is held and
+>   vanishes on release.
+>
+> Neither is a tooltip, neither prints anything at rest. Recorded here so no
+> future session mistakes either surface for permission to print shortcut
+> labels on menus, icons or tooltips.
+
+### 4.0 The Shortcut Registry — one list, both surfaces read it
+
+Before either surface is built, all shortcuts in §2 move into **one registry**
+(a single data list). The Settings tab and Alt-Peek both *render* from it;
+neither keeps its own copy. If a shortcut ships without a registry entry, that
+is a bug.
+
+* **Entry shape:** mode scope (`player` / `mini` / `web` / `dialog`) · key
+  combination (logical key + Ctrl/Shift/Alt flags) · action id · group (the §2
+  groups) · availability guard, where one applies (e.g. *seekable*,
+  *subtitle selected*) · optional **anchor** — the visible control Alt-Peek
+  chips (§4.2).
+* **Consumers:** the Shortcuts tab (§4.1), Alt-Peek (§4.2). The existing key
+  handlers keep working as they are; a later phase may have them consult the
+  registry too, so drift becomes impossible. Until then the registry is the
+  **display truth** and must be updated in the same commit as any handler
+  change.
+* **No custom key mapping — ever.** SALU's shortcuts are *standards*
+  (§1.2: mpv / VLC / MPC-HC / Edge alignment); the standard IS the feature.
+  The registry is a mirror, never an editor. The Shortcuts tab therefore has
+  no "rebind" affordance anywhere.
+
+### 4.1 Settings → Shortcuts tab (the drawn keyboard)
+
+A fifth tab in the Settings dialog (`SettingsTab.shortcuts`, rightmost — after
+Updates; a reference page, not a setting). Pure reference: nothing on it is
+configurable.
+
+**Layout, top to bottom:**
+
+1. **The mode pill** — `Player · Mini · Web · Dialogs`, the playlist's
+   four-option pill recipe. The board below lights up for the chosen mode;
+   this is not decoration: the same key means different things per mode (§1.1)
+   and the board must never lie by showing one meaning as the truth.
+2. **The drawn keyboard** — a compact ANSI board (function row, number row,
+   three letter rows, modifier row) plus the navigation cluster
+   (`Home / End / PgUp / PgDn` and the arrow cross — SALU uses them all).
+   Scales down as one piece in narrow windows (the TransportCluster
+   `FittedBox` recipe — marks shrink, nothing clips).
+3. **The detail panel** — a quiet column beside the board (below it on narrow
+   widths).
+
+**Keycap states (two, ever):**
+
+* **Quiet** — hairline outline (`AppColors.surfaceOutline`), dim legend. The
+  key does nothing in the selected mode.
+* **Lit** — brighter outline + brighter legend: the key is live in the
+  selected mode (with the current modifier latch, below). Availability guards
+  dim a lit key to half-ink (e.g. seek keys while a live stream plays).
+
+Keycaps carry **key names only** (letters, digits, `Esc`, `PgUp`…) — never
+action names. Actions live only in the detail panel. No filled boxes behind
+keys, no ripple (Rule 4's spirit); hover lights the outline and nothing else.
+
+**Interaction:**
+
+* **Hover a lit key** → the detail panel shows the entry: key name, group,
+  action, and — the point of the whole tab — **what that same key does in the
+  other modes** (`Ctrl + L` → Player: toggle playlist · Web: focus address
+  bar). The §3 conflict matrix, made visible.
+* **Modifier latch** — the drawn `Ctrl`, `Shift` and `Alt` keycaps are toggle
+  switches. Click `Ctrl`: it stays latched and the whole board re-lights to
+  the `Ctrl+` layer; click again to unlatch. Chords (`Ctrl+Shift+O`) latch
+  both. This is how a flat keyboard shows a three-dimensional key map — and
+  it is the tab's signature move.
+* **Press-a-key lookup** — while the tab is open, physically pressing a key
+  lights that keycap on the board and shows its detail panel, as if hovered
+  (the tab swallows the press; the player never reacts). One carve-out:
+  `Esc` still closes the Settings dialog, exactly as always.
+
+**The Mini and Dialogs boards are honestly sparse** — a handful of lit keys.
+That is the truth of those modes and the board shows it; no padding, no
+invented keys.
+
+**Two build slices:** *(A)* board + mode pill + hover detail · *(B)* modifier
+latch + press-a-key lookup. A is useful alone; B is the dessert.
+
+### 4.2 Alt-Peek — hold Alt, see the keys (Excel-style, passive)
+
+**Version B (owner 2026-09-27): a peek, never a ladder.** Holding Alt reveals
+small key chips next to the controls **currently visible** — exactly what
+Excel does with its ribbon. Pressing a chip's letter does NOT fire anything
+from the peek; the real shortcuts (§2) are unchanged. The peek only watches;
+it never swallows a key (`Alt+Tab`, `Alt+F4` belong to Windows).
+
+**The chip recipe:** one small glass capsule (the OSD deck's `GlassCapsule`
+material, radius 6, height 20), the key legend in tabular figures, hairline
+outline — `IgnorePointer`, never focusable, never wakes the chrome. A chip
+shows the **key only**; the control it rides is its own label — the mark is
+the *what*, the chip is the *how*.
+
+**Anchors — Player mode (chrome visible):**
+
+| Visible control | Chip |
+|---|---|
+| Open media mark (`+`) | `Ctrl+O` |
+| Playlist control | `Ctrl+L` |
+| Play / Pause mark | `Space` |
+| Stop mark | `S` |
+| Previous / Next marks | `PgUp` / `PgDn` |
+| Seek back / forward marks | `←` / `→` |
+| Speaker (sound group) | `↑ ↓ · M` (one chip, three keys) |
+| Timeline, left end | `0–9 · Home · End` |
+| Tune mark | `Ctrl+E` |
+| Fetch mark | `Ctrl+Shift+F` |
+| Fullscreen mark | `F · F11` |
+
+The title bar gets **no chips** — Min/Max/Close have no shortcuts, and the
+peek stays honest by staying silent there. The right-click menu, the Open
+menu's rows and open dialogs chip their Group D keys the same way while they
+are on screen — the peek follows **visibility**, not a fixed map.
+
+**Anchors — Web mode:** the browser row's visible marks chip their Group C
+keys (new tab `+` → `Ctrl+T`, close `×` → `Ctrl+W`, address bar → `Ctrl+L`,
+history → `Ctrl+H`, downloads → `Ctrl+J`, favourite → `Ctrl+D`, hub →
+`Ctrl+Shift+O`, back / forward → `Alt+←` / `Alt+→`).
+
+**Chrome hidden:** holding Alt does NOT wake the chrome. Instead one quiet
+cluster floats just above the bottom hairline with the surface keys —
+`Space · F · ← → · ↑ ↓ · M · 0–9` — and leaves when Alt does.
+
+**Timing & safety:**
+
+* Chips appear only after Alt has been held **~200 ms alone** (no other key in
+  between) — so `Alt+Tab` and `Alt+F4` never flash a peek. Fade in 120 ms,
+  fade out 100 ms.
+* Hide on: Alt release · focus loss / window blur (Windows may never deliver
+  the Alt-up after an `Alt+Tab` — the peek must never freeze on screen).
+* Mode switch while Alt is held (`Alt+W`): the action fires, and the chips
+  re-render for the new surface.
+* **Mini mode: out of scope v1** — the 32-px strip has no room and few keys;
+  the Shortcuts tab's Mini board covers it.
+
+### 4.3 Build order
+
+1. **The registry** (§4.0) — the foundation both surfaces read.
+2. **Shortcuts tab, slice A** (board + mode pill + hover detail).
+3. **Alt-Peek** (Player chrome first, then Web row, menus, dialogs).
+4. **Shortcuts tab, slice B** (modifier latch + press-a-key lookup).
