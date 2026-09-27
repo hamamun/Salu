@@ -9,8 +9,10 @@ import '../../core/info_controller.dart';
 import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
+import '../widgets/alt_peek.dart';
 import '../widgets/dot_grid_icon.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/salu_icon_button.dart';
@@ -204,6 +206,7 @@ class _RightMenuState extends State<RightMenu>
                                     ShuffleMark(size: 18, quiet: !shuffle),
                                     () => unawaited(TransportActions.instance.toggleShuffle()),
                                     active: shuffle,
+                                    keys: _keys('player.shuffle'),
                                   ),
                                   const SizedBox(width: 6),
                                   _button(
@@ -215,6 +218,7 @@ class _RightMenuState extends State<RightMenu>
                                     ),
                                     () => unawaited(TransportActions.instance.cycleRepeat()),
                                     active: ready && repeat != RepeatMode.off,
+                                    keys: _keys('player.repeat'),
                                   ),
                                   const SizedBox(width: 14),
                                 ],
@@ -224,18 +228,21 @@ class _RightMenuState extends State<RightMenu>
                                   () => _door(_panels.openInfo),
                                   enabled: ready,
                                   active: _panels.infoOpen.value,
+                                  keys: _keys('player.info'),
                                 ),
                                 const SizedBox(width: 6),
                                 _button(
                                   'Settings',
                                   const DotGridIcon(size: 18),
                                   () => _door(widget.onSettings),
+                                  keys: _keys('player.settings'),
                                 ),
                                 const SizedBox(width: 6),
                                 _button(
                                   'Remote',
                                   const QrMark(size: 18),
                                   () => _door(widget.onRemote ?? () {}),
+                                  keys: _keys('player.remote'),
                                 ),
                               ],
                             ),
@@ -253,12 +260,20 @@ class _RightMenuState extends State<RightMenu>
     );
   }
 
+  /// The row's registered keys — the Alt-Peek's tooltip names them while
+  /// the peek is armed and the mouse is on the row.
+  static List<ShortcutEntry>? _keys(String id) {
+    final ShortcutEntry? e = SaluShortcuts.byId(id);
+    return e == null ? null : <ShortcutEntry>[e];
+  }
+
   Widget _button(
     String label,
     Widget mark,
     VoidCallback action, {
     bool active = false,
     bool enabled = true,
+    List<ShortcutEntry>? keys,
   }) {
     // Tooltip handles delay, screen-edge placement and overlay lifetime. Its
     // visible surface is the SAME HoverChip the bars already use, fitted to text.
@@ -291,12 +306,19 @@ class _RightMenuState extends State<RightMenu>
         label: label,
         button: true,
         enabled: enabled,
-        child: SaluIconButton(
-          size: 30,
-          active: active,
-          enabled: enabled,
-          onTap: action,
-          child: mark,
+        // The menu IS the modal (it holds the ChromeLock), so its rows
+        // answer the peek through the lock.
+        child: AltPeekAnchor(
+          entries: keys,
+          ignoreLock: true,
+          side: PeekSide.below,
+          child: SaluIconButton(
+            size: 30,
+            active: active,
+            enabled: enabled,
+            onTap: action,
+            child: mark,
+          ),
         ),
       ),
     );

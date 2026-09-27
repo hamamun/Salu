@@ -1765,6 +1765,7 @@ class _HubButton extends StatelessWidget {
     return AltPeekAnchor(
       scope: ShortcutScope.web,
       anchor: ShortcutAnchor.webHub,
+      side: PeekSide.below,
       child: SaluIconButton(
         size: 27,
         active: open,

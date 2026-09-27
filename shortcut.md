@@ -223,10 +223,12 @@
 
 ## 4. Discoverability Layer — the Shortcuts Tab & Alt-Peek
 
-> **FINALIZED (owner 2026-09-27) — the Living Map (§4.1) and Alt-Peek (§4.2)
-> both approved in preview; built in the §4.3 order (status in §4.4).**
+> **FINALIZED (owner 2026-09-27) — the Living Map (§4.1) and Alt-Peek
+> (§4.2 · Version C) both approved; built in the §4.3 order (status in
+> §4.4).**
 > **Interactive design mock:** `design/shortcut_preview.html` (self-contained,
-> no dependencies — open in any browser; mock only, not app code).
+> no dependencies — open in any browser; mock only, not app code; shows the
+> superseded Version B — the §4.2 text is the truth).
 >
 > **Owner ruling on [follow.md](follow.md) Rule 2 (rules remain intact):** Rule 2
 > governs SALU's **at-rest** chrome — menus, icons and tooltips stay silent, and
@@ -235,8 +237,10 @@
 >
 > * the **Shortcuts tab** is a page opened by an explicit click (a dictionary,
 >   not a menu);
-> * **Alt-Peek** is an on-demand reveal that exists only while Alt is held and
->   vanishes on release.
+> * **Alt-Peek** is an on-demand reveal: while Alt is held, hovering a
+>   control shows its key as a tooltip — it exists only while Alt is held
+>   **and** the mouse is on the control, and vanishes on release or on
+>   leaving the control.
 >
 > Neither is a tooltip, neither prints anything at rest. Recorded here so no
 > future session mistakes either surface for permission to print shortcut
@@ -252,8 +256,9 @@ is a bug.
 * **Entry shape:** mode scope (`player` / `mini` / `web` / `dialog`) · key
   combination (logical key + Ctrl/Shift/Alt flags) · action id · group (the §2
   groups) · availability guard, where one applies (e.g. *seekable*,
-  *subtitle selected*) · optional **anchor** — the visible control Alt-Peek
-  chips (§4.2).
+  *subtitle selected*) · optional **anchor** — the always-visible control
+  the Alt-Peek tooltip (§4.2) rides; keys without an anchor are the
+  Living Map's rideless shelves.
 * **Consumers:** the Shortcuts tab (§4.1), Alt-Peek (§4.2). The existing key
   handlers keep working as they are; a later phase may have them consult the
   registry too, so drift becomes impossible. Until then the registry is the
@@ -278,8 +283,11 @@ it is configurable.
 
 **The idea:** a keyboard is a grid of keys; SALU is a map of *places*. So
 the tab shows **a miniature SALU that is alive** — the app itself, shrunken,
-every visible control wearing its keys, and answering when they are pressed.
-The cheat sheet is not a document about SALU; it is SALU.
+every always-visible control as a clean icon (no key text on it or under
+it), every key without an always-visible control on a quiet glass shelf at
+the left of the video, and the whole thing answering when it is pressed —
+naming what is hovered in the detail strip below. The cheat sheet is not a
+document about SALU; it is SALU.
 
 **Layout (stacked in the real box):**
 
@@ -288,16 +296,22 @@ The cheat sheet is not a document about SALU; it is SALU.
    means different things per mode (§1.1) and the map never lies about which
    surface it is describing.
 2. **The miniature** (~280 px) — the mock player: title bar, timeline,
-   control row, video surface — with the Alt-Peek chip recipe pinned to
-   every visible control, always visible here (this is the reference map;
-   the peek is the same chips' on-surface, hold-Alt version). The title bar
-   stays silent (no shortcuts live there). Keys with no control to ride
-   (`Z/X`, `B/V`, `[ ]`, `R`, `Shift+S`, `. ,`) sit in one quiet cluster
-   pinned to the video surface.
-3. **The detail strip** — below the miniature: left column keycap + group +
-   action (+ guard); right column the same key in the other three modes
-   (the §3 conflict matrix — the one part of the rejected concept worth
-   keeping).
+   control row, video surface. Every always-visible control is its clean
+   icon — **no key text printed on or under it** (the Version B chips are
+   gone). Every key with no always-visible control lives on a **quiet
+   glass shelf at the left of the video — one shelf per group, icons only**
+   (the action's own mark where SALU has one — shuffle, repeat, open
+   folder, URL, find, info, remote, settings, mode switch, sync arrows —
+   and its keycap where the key is the whole action — `[ ] \`, `. ,`,
+   `F3`, `Enter`, …). A group taller than five keys runs in two lines so
+   a shelf always fits the box. The title bar stays silent (no shortcuts
+   live there).
+3. **The detail strip** — below the miniature, **the only place key text
+   appears on the tab**: left column keycap + group + action (+ guard);
+   right column the same key in the other three modes (the §3 conflict
+   matrix — the one part of the rejected concept worth keeping). Mousing
+   over **any** icon — a chrome mark or a shelf icon — writes it here;
+   the hovered mark lights while it is the one shown.
 
 **Accommodation (the real numbers):** the dialog is `min(640 × 540, window −
 insets)`; header + tab strip + divider leave ≈ 640 × 450. Top row (30) +
@@ -311,40 +325,51 @@ lines, part of this work).
 keyboard, and every registered key fires its real mock feedback: transport
 keys move the mock timeline and volume, `Space` swaps the play mark, the
 mock OSD deck flashes its card, `Ctrl+L` slides the mock playlist panel,
-`F`/`F11` really hides the mock chrome (and brings the bottom hairline
-cluster), and the mode keys really flip the miniature: `Ctrl+M` drops it to
-the mini bar, `Ctrl+U` raises the Open URL modal, `Alt+W` / `Ctrl+Shift+W`
-flip Player ⇄ Web. `Esc` follows the app's own order — panel → fullscreen →
-(in the app) close Settings — the rule taught by the mirror itself.
+`F`/`F11` really hides the mock chrome (and brings the bottom hairline),
+and the mode keys really flip the miniature: `Ctrl+M` drops it to the mini
+bar, `Ctrl+U` raises the Open URL modal, `Alt+W` / `Ctrl+Shift+W` flip
+Player ⇄ Web. `Esc` follows the app's own order — panel → fullscreen → (in
+the app) close Settings — the rule taught by the mirror itself.
 Unregistered keys do nothing.
 
-**Fidelity rules:** the mock reuses the real recipes (glass capsule, chip,
-marks) so the map can never drift from the surface it describes; every chip
-maps to a registry entry (§4.0) or it does not ship; the mock never plays
-real media and keeps no state — it is a mirror, not a player.
+**Fidelity rules:** the mock reuses the real recipes (glass capsule,
+keycap, marks) so the map can never drift from the surface it describes;
+every icon or keycap maps to a registry entry (§4.0) or it does not ship —
+the shelves are *generated from* `rideless(scope)`, so a shortcut can
+never be listed twice or missed; the mock never plays real media and
+keeps no state — it is a mirror, not a player.
 
-**Two build slices:** *(A)* the static map — mode pill + miniature + chips +
-hover detail; *(B)* the liveness engine. A is the reference; B is what makes
-it SALU.
+**Two build slices:** *(A)* the static map — mode pill + miniature +
+rideless shelves + hover detail; *(B)* the liveness engine. A is the
+reference; B is what makes it SALU.
 
-### 4.2 Alt-Peek — hold Alt, see the keys (Excel-style, passive)
+### 4.2 Alt-Peek — hold Alt, hover, and the key shows as a tooltip (Version C)
 
-**Version B (owner 2026-09-27; approved unchanged in preview): a peek,
-never a ladder.** Holding Alt reveals
-small key chips next to the controls **currently visible** — exactly what
-Excel does with its ribbon. Pressing a chip's letter does NOT fire anything
-from the peek; the real shortcuts (§2) are unchanged. The peek only watches;
-it never swallows a key (`Alt+Tab`, `Alt+F4` belong to Windows).
+**Version C (owner 2026-09-27; supersedes Version B's "all chips at once"):
+a peek, never a ladder.** Hold Alt alone for **~200 ms** to **arm** the
+peek. While armed, **hovering a control shows that control's key as a
+tooltip in SALU's own tooltip look** — the app's `TooltipTheme` (same
+surface, border and font as the name tooltips), the key in tabular figures,
+**sized to the text: the key is never cut off**. Move the mouse and the
+tooltip follows the hovered control; leave the control and it leaves.
+While armed, the control's own name tooltip **stands down** (the pointer is
+absorbed while armed, so the inner `Tooltip` never wakes) — the key tooltip
+takes its place; release Alt and the normal tooltips are back. The peek only
+watches; it never swallows a key (`Alt+Tab`, `Alt+F4` belong to Windows) and
+never fires anything — the real shortcuts (§2) are unchanged.
 
-**The chip recipe:** one small glass capsule (the OSD deck's `GlassCapsule`
-material, radius 6, height 20), the key legend in tabular figures, hairline
-outline — `IgnorePointer`, never focusable, never wakes the chrome. A chip
-shows the **key only**; the control it rides is its own label — the mark is
-the *what*, the chip is the *how*.
+**The tooltip recipe:** the app's `TooltipTheme` decoration + font, the
+key legend in tabular figures, no clipping or ellipsis, fade in 120 ms /
+fade out 100 ms — `IgnorePointer`, never focusable, never wakes the chrome.
+It floats in a 200-px zone centred on the control: **above** the control by
+default (the player's bottom row), **below** for the browser's top rows
+(tab strip + address row — there is no room above), and hugging the
+timeline's left end for the timeline.
 
-**Anchors — Player mode (chrome visible):**
+**Anchors — Player mode (chrome visible):** the Version B table, now
+tooltips:
 
-| Visible control | Chip |
+| Visible control | Key tooltip |
 |---|---|
 | Open media mark (`+`) | `Ctrl+O` |
 | Playlist control | `Ctrl+L` |
@@ -352,52 +377,63 @@ the *what*, the chip is the *how*.
 | Stop mark | `S` |
 | Previous / Next marks | `PgUp` / `PgDn` |
 | Seek back / forward marks | `←` / `→` |
-| Speaker (sound group) | `↑ ↓ · M` (one chip, three keys) |
+| Speaker (sound group) | `↑ ↓ · M` (one tooltip, three keys) |
 | Timeline, left end | `0–9 · Home · End` |
 | Tune mark | `Ctrl+E` |
 | Fetch mark | `Ctrl+Shift+F` |
 | Fullscreen mark | `F · F11` |
 
-The title bar gets **no chips** — Min/Max/Close have no shortcuts, and the
-peek stays honest by staying silent there. The right-click menu, the Open
-menu's rows and open dialogs chip their Group D keys the same way while they
-are on screen — the peek follows **visibility**, not a fixed map.
+The title bar stays **silent** — Min/Max/Close have no shortcuts, and the
+peek stays honest by staying silent there.
 
-**Anchors — Web mode:** the browser row's visible marks chip their Group C
-keys (new tab `+` → `Ctrl+T`, close `×` → `Ctrl+W`, address bar → `Ctrl+L`,
-history → `Ctrl+H`, downloads → `Ctrl+J`, favourite → `Ctrl+D`, hub →
+**Transient surfaces answer too, while they are on screen** — the peek
+follows **visibility**, not a fixed map:
+
+* the **Open pill's marks** (while the pill is up): film frame `Ctrl+O`,
+  stacked frames `Ctrl+Shift+O`, link `Ctrl+U`;
+* the **right-click menu's rows**: Shuffle `Shift+S`, Repeat `R`, Info
+  `Ctrl+I`, Settings `F2`, Remote `Ctrl+Shift+R`.
+
+Both hold the `ChromeLock` while open (they ARE the modal), so they are
+the surfaces that answer the peek *through* the lock.
+
+**Anchors — Web mode:** the browser row's visible marks (new tab `+` →
+`Ctrl+T`, close `×` → `Ctrl+W`, address bar → `Ctrl+L`, history →
+`Ctrl+H`, downloads → `Ctrl+J`, favourite → `Ctrl+D`, hub →
 `Ctrl+Shift+O`, back / forward → `Alt+←` / `Alt+→`).
 
-**Chrome hidden:** holding Alt does NOT wake the chrome. Instead one quiet
-cluster floats just above the bottom hairline with the surface keys —
-`Space · F · ← → · ↑ ↓ · M · 0–9` — and leaves when Alt does.
+**Chrome hidden:** holding Alt does NOT wake the chrome — and with the
+chrome away there is no control to hover, so nothing appears. (Version B's
+hairline cluster is gone; the surface stays silent.)
 
 **Timing & safety:**
 
-* Chips appear only after Alt has been held **~200 ms alone** (no other key in
-  between) — so `Alt+Tab` and `Alt+F4` never flash a peek. Fade in 120 ms,
-  fade out 100 ms.
-* Hide on: Alt release · focus loss / window blur (Windows may never deliver
-  the Alt-up after an `Alt+Tab` — the peek must never freeze on screen).
-* Mode switch while Alt is held (`Alt+W`): the action fires, and the chips
-  re-render for the new surface.
-* **Mini mode: out of scope v1** — the 32-px strip has no room and few keys;
-  the Shortcuts tab's Mini board covers it.
+* The peek arms only after Alt has been held **~200 ms alone** (no other
+  key in between) — so `Alt+Tab` and `Alt+F4` never flash a peek.
+* Hide on: Alt release · mouse leaving the control · focus loss / window
+  blur (Windows may never deliver the Alt-up after an `Alt+Tab` — the peek
+  must never freeze on screen) · a modal holding the `ChromeLock` (except
+  the right-click menu's own rows).
+* Mode switch while Alt is held (`Alt+W`): the action fires, and the
+  tooltip follows the new surface.
+* **Mini mode: out of scope v1** — the 32-px strip has no room and few
+  keys; the Shortcuts tab's Mini miniature covers it.
 
 ### 4.3 Build order
 
 1. **The registry** (§4.0) — the foundation both surfaces read.
 2. **Shortcuts tab, slice A** (the static Living Map: mode pill + miniature
-   + chips + hover detail).
-3. **Alt-Peek** (Player chrome first, then Web row, menus, dialogs).
+   + rideless shelves + hover detail).
+3. **Alt-Peek** (Player chrome first, then Web row, then the right-click
+   menu's rows).
 4. **Shortcuts tab, slice B** (the liveness engine).
 
 ### 4.4 Implementation status (2026-09-27)
 
 | Step | Where | Status |
 |---|---|---|
-| 1 · Registry | `lib/core/shortcuts/shortcut_registry.dart` (+ `test/shortcut_registry_test.dart`) | Done — every §2 key, scope · combos · action id · group · guard · anchor. Display truth; handlers unchanged. |
-| 2 · Shortcuts tab, slice A | `lib/ui/widgets/shortcuts_tab.dart`, `SettingsTab.shortcuts` | Done — mode pill, miniature per mode (Player · Mini · Web · Dialogs), chips on every visible control, quiet clusters for rideless keys, hover detail strip with the cross-mode column. Tab strip scrolls horizontally when narrow. |
-| 3 · Alt-Peek | `lib/ui/widgets/alt_peek.dart` | Done for Player chrome, the chrome-hidden cluster and the Web row (tab strip + address row). Menus / open dialogs: **not yet** — chips stay hidden while a modal holds `ChromeLock`. Mini: out of scope v1 (as specified). |
-| 4 · Shortcuts tab, slice B | `ShortcutsTabState` liveness engine (+ `test/shortcuts_tab_test.dart`) | Done — registered keys drive the mock (timeline, volume, play mark, OSD card, playlist, fullscreen + hairline cluster, mini / web / URL modal flips, web tabs, panels, find, zoom); `Esc` walks panel → fullscreen → closes Settings. |
+| 1 · Registry | `lib/core/shortcuts/shortcut_registry.dart` (+ `test/shortcut_registry_test.dart`) | Done — every §2 key, scope · combos · action id · group · guard · anchor · legend (compact legends for the shelf keycaps: `Ctrl+Tab`, `Ctrl+Shift+Tab`, `↑ ↓`, `↓ ↑`). Display truth; handlers unchanged. |
+| 2 · Shortcuts tab, slice A | `lib/ui/widgets/shortcuts_tab.dart`, `SettingsTab.shortcuts` | Done (Version C) — mode pill, miniature per mode (Player · Mini · Web · Dialogs), **clean icons on every always-visible control (no key text on or under them)**, the **rideless glass shelves at the left of the video — generated from `rideless(scope)`, one shelf per group, icons only** (the action's own mark or its keycap; two lines past five keys), hover/tap detail strip with the cross-mode column. Tab strip scrolls horizontally when narrow. |
+| 3 · Alt-Peek | `lib/ui/widgets/alt_peek.dart` | Done (Version C) — hold-Alt **arming** (200 ms alone) + hover → the key as a **tooltip in the app's `TooltipTheme`** (never cut off), the name tooltip stands down while armed. Player chrome, the Web row (tab strip + address row), the **Open pill's marks** and the **right-click menu's rows** (`entries` + `ignoreLock` — those surfaces are their own modals). Chrome hidden: silent (no cluster). Mini: out of scope v1 (as specified). |
+| 4 · Shortcuts tab, slice B | `ShortcutsTabState` liveness engine (+ `test/shortcuts_tab_test.dart`) | Done — registered keys drive the mock (timeline, volume, play mark, OSD card, playlist, fullscreen + hairline, mini / web / URL modal flips, web tabs, panels, find, zoom); `Esc` walks panel → fullscreen → closes Settings. |
 

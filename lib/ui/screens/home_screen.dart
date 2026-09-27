@@ -1164,11 +1164,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 7 · The OSD deck — top center, anchored below the
                 //     chrome block, never waking the chrome.
                 const OsdDeck(),
-
-                // 8 · Alt-Peek's chrome-hidden cluster (shortcut.md §4.2)
-                //     — just above the bottom hairline, only while Alt is
-                //     held with the chrome tucked away.
-                AltPeekHiddenCluster(chromeVisible: chromeVisible),
               ],
             ),
           ),

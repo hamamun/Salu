@@ -85,7 +85,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Alt-Peek chips show only while the peek is up',
+  testWidgets('the key tooltip shows only while armed AND hovered',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -101,11 +101,33 @@ void main() {
       ),
     );
     expect(find.text('Space'), findsNothing);
+
+    // Hover, but the peek is not armed — nothing shows.
+    final TestGesture mouse =
+        await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byType(AltPeekAnchor)));
+    await tester.pump();
+    expect(find.text('Space'), findsNothing);
+
+    // Arm the peek — the key appears as a tooltip over the hovered mark.
     AltPeek.instance.debugSetVisible(true);
     await tester.pumpAndSettle();
     expect(find.text('Space'), findsOneWidget);
+
+    // Disarm — the tooltip leaves.
     AltPeek.instance.debugSetVisible(false);
     await tester.pumpAndSettle();
     expect(find.text('Space'), findsNothing);
+
+    // Armed again, but the mouse is gone — still nothing.
+    await mouse.moveTo(const Offset(-500, -500));
+    await tester.pump();
+    AltPeek.instance.debugSetVisible(true);
+    await tester.pumpAndSettle();
+    expect(find.text('Space'), findsNothing);
+    AltPeek.instance.debugSetVisible(false);
+    await mouse.dispose();
+    await tester.pumpAndSettle();
   });
 }

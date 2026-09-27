@@ -146,6 +146,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           // Play⇄Pause logic wearing another suit.
           AltPeekAnchor(
             scope: ShortcutScope.web, anchor: ShortcutAnchor.webHome,
+            side: PeekSide.below,
             child: SaluIconButton(
               size: 27,
               onTap: widget.onHome,
@@ -156,6 +157,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           const SizedBox(width: 2),
           AltPeekAnchor(
             scope: ShortcutScope.web, anchor: ShortcutAnchor.webBack,
+            side: PeekSide.below,
             child: _GoButton(
               tab: tab,
               forward: false,
@@ -164,6 +166,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           ),
           AltPeekAnchor(
             scope: ShortcutScope.web, anchor: ShortcutAnchor.webForward,
+            side: PeekSide.below,
             child: _GoButton(
               tab: tab,
               forward: true,
@@ -173,6 +176,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           const SizedBox(width: 2),
           AltPeekAnchor(
             scope: ShortcutScope.web, anchor: ShortcutAnchor.webReload,
+            side: PeekSide.below,
             child: _ReloadStopButton(
               tab: tab,
               onReload: widget.onReload,
@@ -183,6 +187,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           Expanded(
             child: AltPeekAnchor(
               scope: ShortcutScope.web, anchor: ShortcutAnchor.webAddress,
+              side: PeekSide.below,
               child: _buildField(),
             ),
           ),
@@ -192,6 +197,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           // omnibox absorbs the width, so the ⋮ never moves.
           AltPeekAnchor(
             scope: ShortcutScope.web, anchor: ShortcutAnchor.webDownloads,
+            side: PeekSide.below,
             child: DownloadBadge(
               onTap: widget.onDownloadsTap,
               active: widget.downloadsOpen,
@@ -234,7 +240,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
                 _SiteButton(tab: widget.tab, onTap: widget.onSiteInfo),
                 AltPeekAnchor(
                   scope: ShortcutScope.web, anchor: ShortcutAnchor.webFavourite,
-                  side: PeekSide.above,
+                  side: PeekSide.below,
                   child: SaluIconButton(
                     size: 26,
                     active: focused,
