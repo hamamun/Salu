@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALU · shortcut.md §4 — design preview</title>
+<style>
+  /* ── SALU palette (lib/theme/app_theme.dart) ─────────────────────────── */
+  :root{
+    --bg:#121212; --panel:#1E1E1E; --surface:#252526; --surface-hi:#2D2D30;
+    --glass:rgba(30,30,30,.82);
+    --text:#EDEDED; --idle:#A6A6A6; --dim:#9A9A9A;
+    --outline:#333336; --divider:#3A3A3C;
+    --track:#35353C; --barfill:rgba(255,255,255,.5); --thumb:#F2F2F2;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{background:var(--bg); color:var(--text);
+    font-family:'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;
+    font-size:14px; -webkit-font-smoothing:antialiased}
+  button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+
+  /* ── page chrome ─────────────────────────────────────────────────────── */
+  .page{max-width:1100px; margin:0 auto; padding:26px 18px 60px}
+  .pagehead{display:flex; flex-wrap:wrap; align-items:baseline; gap:14px; margin-bottom:6px}
+  .pagehead h1{font-size:15px; font-weight:600; letter-spacing:.4px}
+  .pagehead .sub{color:var(--dim); font-size:12px; letter-spacing:.3px}
+  .viewtabs{display:inline-flex; border:1px solid var(--outline); border-radius:9px;
+    padding:3px; gap:3px; margin:14px 0 22px}
+  .viewtabs button{padding:6px 16px; border-radius:6px; color:var(--dim); font-size:13px; letter-spacing:.3px}
+  .viewtabs button.on{background:var(--surface-hi); color:var(--text)}
+  .note{color:var(--dim); font-size:11.5px; line-height:1.6; letter-spacing:.2px; margin:10px 0 0}
+
+  /* ── settings box mock (true to the real dialog: 640 × 540, radius 16) ── */
+  .settingsbox{width:640px; max-width:100%; margin:0 auto; border:1px solid var(--outline);
+    border-radius:16px; background:var(--panel); overflow:hidden;
+    box-shadow:0 16px 48px rgba(0,0,0,.5)}
+  .dlg-head{display:flex; align-items:center; padding:16px 12px 10px 20px}
+  .dlg-head .dots{display:grid; grid-template-columns:repeat(3,5px); gap:3px; margin-right:12px}
+  .dlg-head .dots i{width:5px; height:5px; border-radius:50%; background:var(--text)}
+  .dlg-head .title{font-size:16px; font-weight:600; letter-spacing:.2px}
+  .dlg-head .x{margin-left:auto; color:var(--dim); padding:4px 8px; font-size:13px}
+  .tabstrip{display:flex; align-items:center; gap:4px; padding:0 20px;
+    border-bottom:1px solid var(--outline)}
+  .tabstrip .t{padding:9px 12px 11px; color:var(--dim); font-size:13px; letter-spacing:.3px;
+    border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap}
+  .tabstrip .t.on{color:var(--text); border-bottom-color:var(--text)}
+  .dlg-body{padding:16px 18px 18px}
+
+  .modepill{display:inline-flex; border:1px solid var(--outline); border-radius:9px;
+    padding:3px; gap:3px}
+  .modepill button{padding:5px 14px; border-radius:6px; color:var(--dim); font-size:12.5px; letter-spacing:.3px}
+  .modepill button.on{background:var(--surface-hi); color:var(--text)}
+  .toprow{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px}
+  .toprow .hint{margin-left:auto; color:var(--dim); font-size:11px; letter-spacing:.3px}
+
+  /* ── the Living Map stage ────────────────────────────────────────────── */
+  .livestage{position:relative; border:1px solid var(--outline); border-radius:10px;
+    overflow:hidden; background:#161616; height:270px}
+  .livestage .video{position:absolute; inset:0;
+    background:radial-gradient(120% 90% at 50% 30%, #1B1B1B 0%, #141414 55%, #101010 100%)}
+  .livestage .chrome{position:absolute; top:0; left:0; right:0; background:var(--glass);
+    backdrop-filter:blur(18px); border-bottom:1px solid var(--outline);
+    transition:transform .3s ease, opacity .3s ease}
+  .livestage.nochrome .chrome{transform:translateY(-110%); opacity:0}
+
+  .titlebar{display:flex; align-items:center; height:32px; padding:0 12px}
+  .titlebar .app{margin:0 auto; color:var(--dim); font-size:11px; letter-spacing:1.6px}
+  .capmarks{display:flex; gap:16px; margin-left:auto}
+  .capmarks svg{stroke:var(--idle)}
+
+  .timeline{position:relative; height:24px; display:flex; align-items:center; padding:0 16px; margin-top:2px}
+  .tl-track{position:relative; flex:1; height:4px; border-radius:2px; background:var(--track)}
+  .tl-fill{position:absolute; left:0; top:0; bottom:0; width:38%; border-radius:2px; background:var(--barfill)}
+  .tl-thumb{position:absolute; left:38%; top:50%; width:9px; height:9px; border-radius:50%;
+    background:var(--thumb); transform:translate(-50%,-50%)}
+  .tl-time{margin-left:10px; color:var(--dim); font-size:10.5px; letter-spacing:.4px;
+    font-variant-numeric:tabular-nums; white-space:nowrap}
+
+  .controls{display:flex; align-items:flex-end; justify-content:space-between; gap:8px;
+    padding:2px 12px 10px}
+  .ctlgroup{display:flex; align-items:flex-end; gap:14px}
+  .ctl{display:flex; flex-direction:column; align-items:center; gap:5px; min-width:24px}
+  .ctl svg{stroke:var(--text); display:block}
+  .ctl.dim svg{stroke:var(--idle)}
+  .volbar{width:96px; height:4px; border-radius:2px; background:var(--track); position:relative; align-self:center}
+  .volbar .f{position:absolute; left:0; top:0; bottom:0; width:64%; border-radius:2px; background:var(--barfill)}
+  .volbar .t{position:absolute; left:64%; top:50%; width:8px; height:8px; border-radius:50%;
+    background:var(--thumb); transform:translate(-50%,-50%)}
+  .muteline{display:none}
+  .muted .muteline{display:block}
+
+  /* chips — always visible on the map, hoverable */
+  .chip{display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px;
+    border:1px solid var(--outline); border-radius:6px; background:var(--glass);
+    backdrop-filter:blur(8px); color:var(--text); font-size:10.5px; letter-spacing:.4px;
+    font-variant-numeric:tabular-nums; white-space:nowrap; position:relative; cursor:default}
+  .chip .plus{color:var(--dim); font-size:10px}
+  .chip::after{content:''; position:absolute; left:50%; top:100%; width:1px; height:5px; background:var(--outline)}
+  .ctl .chip{margin-bottom:1px}
+  .tl-chip{position:absolute; left:16px; top:-32px}
+  .chip.flat::after{display:none}
+  .chip:hover{border-color:#6E6E72}
+
+  /* the video-surface key cluster (keys with no control to ride) */
+  .surface{position:absolute; left:14px; top:130px; display:flex; flex-direction:column;
+    gap:5px; align-items:flex-start; transition:opacity .2s}
+  .livestage.fs .surface{display:none}
+
+  /* the mock OSD deck */
+  .mockosd{position:absolute; left:50%; top:126px; transform:translateX(-50%) translateY(4px);
+    height:28px; padding:0 12px; border:1px solid var(--outline); border-radius:8px;
+    background:var(--glass); backdrop-filter:blur(10px); display:flex; align-items:center;
+    color:var(--text); font-size:11px; letter-spacing:.4px; font-variant-numeric:tabular-nums;
+    opacity:0; transition:opacity .15s ease, transform .15s ease; pointer-events:none}
+  .mockosd.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  /* the mock playlist panel (Ctrl+L) */
+  .mockpanel{position:absolute; top:0; right:0; bottom:0; width:168px;
+    background:var(--glass); backdrop-filter:blur(18px); border-left:1px solid var(--outline);
+    transform:translateX(100%); transition:transform .25s ease; padding:14px 12px}
+  .mockpanel.open{transform:translateX(0)}
+  .mockpanel .mp-head{color:var(--dim); font-size:10px; letter-spacing:1.4px; margin-bottom:10px}
+  .mockpanel .mp-row{display:flex; align-items:center; gap:8px; padding:7px 4px;
+    color:var(--dim); font-size:11.5px; letter-spacing:.2px; border-radius:6px}
+  .mockpanel .mp-row.on{color:var(--text); background:rgba(255,255,255,.04)}
+  .mockpanel .mp-row svg{flex:none}
+
+  /* chrome-hidden state (mock fullscreen) */
+  .hairline{position:absolute; left:0; right:0; bottom:10px; height:1px; background:var(--divider);
+    display:none}
+  .hairline .prog{position:absolute; left:0; top:0; bottom:0; width:38%; background:rgba(255,255,255,.35)}
+  .livestage.fs .hairline{display:block}
+  .bottomcluster{position:absolute; left:50%; bottom:22px; transform:translateX(-50%);
+    display:flex; gap:6px; opacity:0; transition:opacity .15s ease}
+  .livestage.fs .bottomcluster{opacity:1}
+  .bottomcluster .chip::after{display:none}
+
+  /* web mock */
+  .webtabs{display:flex; align-items:flex-end; gap:4px; padding:8px 12px 0}
+  .webtab{display:flex; align-items:center; gap:7px; padding:6px 9px; border:1px solid var(--outline);
+    border-bottom:none; border-radius:8px 8px 0 0; background:var(--surface); color:var(--dim); font-size:11.5px;
+    cursor:pointer; max-width:120px; overflow:hidden; white-space:nowrap}
+  .webtab.on{background:var(--surface-hi); color:var(--text)}
+  .webtab svg{flex:none}
+  .webnav{display:flex; align-items:flex-end; gap:12px; padding:8px 12px 10px}
+  .address{flex:1; display:flex; align-items:center; height:28px; padding:0 12px;
+    border:1px solid var(--outline); border-radius:14px; color:var(--dim); font-size:11.5px;
+    letter-spacing:.3px; background:rgba(0,0,0,.25); transition:border-color .2s, box-shadow .2s}
+  .address.glow{border-color:#6E6E72; box-shadow:0 0 0 2px rgba(110,110,114,.25)}
+  .address .lock{margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spin{animation:spin .7s ease}
+
+  /* mini mock */
+  .minicenter{position:absolute; inset:0; display:flex; flex-direction:column; gap:12px;
+    align-items:center; justify-content:center}
+  .minibar{width:340px; height:32px; border:1px solid var(--outline); border-radius:8px;
+    background:var(--glass); backdrop-filter:blur(18px); display:flex; align-items:center;
+    gap:12px; padding:0 12px}
+  .minibar svg{stroke:var(--text); flex:none}
+  .minibar .mtitle{flex:1; min-width:0; color:var(--text); font-size:11.5px; letter-spacing:.2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .minichips{display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:420px}
+
+  /* dialog mock */
+  .dialogdim{position:absolute; inset:0; background:rgba(0,0,0,.45)}
+  .urlmodal{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:330px; border:1px solid var(--outline); border-radius:12px; background:var(--panel);
+    padding:16px}
+  .urlmodal .um-head{display:flex; align-items:center; margin-bottom:12px}
+  .urlmodal .um-head .l{width:12px; height:12px; border:1px solid var(--idle); border-radius:4px; margin-right:9px}
+  .urlmodal .um-head .t{font-size:13px; font-weight:600; letter-spacing:.2px}
+  .urlmodal .um-input{height:30px; border:1px solid var(--outline); border-radius:8px;
+    display:flex; align-items:center; padding:0 12px; color:var(--dim); font-size:12px; margin-bottom:12px}
+  .um-row{display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:6px;
+    color:var(--dim); font-size:12px; letter-spacing:.2px}
+  .um-row .dot{width:5px; height:5px; border-radius:50%; border:1px solid var(--dim); flex:none}
+  .um-row.sel{color:var(--text); background:rgba(255,255,255,.05)}
+  .um-row.sel .dot{background:var(--text); border-color:var(--text)}
+  .um-row.flash{background:rgba(87,199,119,.15)}
+  .urlmodal .um-chips{display:flex; gap:6px; margin-top:12px; flex-wrap:wrap}
+  .urlmodal .um-chips .chip::after{display:none}
+
+  /* ── detail strip ────────────────────────────────────────────────────── */
+  .detail{display:flex; gap:18px; flex-wrap:wrap; border-top:1px solid var(--outline);
+    margin-top:12px; padding-top:10px; min-height:64px}
+  .detail .dcol{flex:1 1 230px; min-width:0}
+  .detail .kname{display:inline-flex; align-items:center; gap:6px; font-size:15px; font-weight:600;
+    letter-spacing:.4px; margin-bottom:2px}
+  .kcap{border:1px solid #6E6E72; border-radius:6px; padding:3px 9px; font-size:12.5px;
+    letter-spacing:.4px; font-variant-numeric:tabular-nums}
+  .kcap.quiet{border-color:var(--outline); color:var(--dim)}
+  .detail .group{color:var(--dim); font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; margin:6px 0 3px}
+  .detail .action{font-size:13.5px; line-height:1.45; letter-spacing:.2px}
+  .detail .guard{color:var(--dim); font-size:11.5px; margin-top:6px; letter-spacing:.2px}
+  .detail .none{color:var(--dim); font-size:13px; font-style:italic}
+  .crossmode{margin-top:2px}
+  .crossmode .row{display:flex; gap:10px; padding:3px 0; font-size:12.5px; align-items:baseline}
+  .crossmode .m{flex:0 0 58px; color:var(--dim); letter-spacing:.4px}
+  .crossmode .a{color:var(--text)}
+  .crossmode .a.dim{color:var(--dim); font-style:italic}
+
+  /* ── Alt-Peek stage (view 2 — unchanged) ─────────────────────────────── */
+  .scenariopill{display:inline-flex; border:1px solid var(--outline); border-radius:9px;
+    padding:3px; gap:3px; margin-bottom:14px}
+  .scenariopill button{padding:5px 13px; border-radius:6px; color:var(--dim); font-size:12.5px}
+  .scenariopill button.on{background:var(--surface-hi); color:var(--text)}
+  .peekbar{display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap}
+  .alttoggle{display:inline-flex; align-items:center; gap:8px; border:1px solid var(--outline);
+    border-radius:8px; padding:6px 12px; color:var(--dim); font-size:12.5px; letter-spacing:.3px}
+  .alttoggle.on{color:var(--text); border-color:#6E6E72; background:rgba(255,255,255,.04)}
+  .alttoggle .dot{width:7px; height:7px; border-radius:50%; border:1px solid var(--dim)}
+  .alttoggle.on .dot{background:var(--text); border-color:var(--text)}
+  .peekstate{color:var(--dim); font-size:11.5px; letter-spacing:.3px}
+
+  .stage{position:relative; border:1px solid var(--outline); border-radius:10px; overflow:hidden;
+    background:#161616; aspect-ratio:16/9.4; min-height:380px}
+  .stage .video{position:absolute; inset:0;
+    background:radial-gradient(120% 90% at 50% 30%, #1B1B1B 0%, #141414 55%, #101010 100%)}
+  .stage .chrome{position:absolute; top:0; left:0; right:0; background:var(--glass);
+    backdrop-filter:blur(18px); border-bottom:1px solid var(--outline);
+    transition:transform .3s ease, opacity .3s ease}
+  .stage.nochrome .chrome{transform:translateY(-110%); opacity:0}
+  .stage .timeline{height:26px; margin-top:4px}
+  .stage .controls{gap:10px; padding:2px 12px 12px}
+  .stage .ctlgroup{gap:18px}
+  .stage .ctl{gap:6px; min-width:26px}
+  .stage .volbar{width:110px}
+  .chips .chip{opacity:0; transform:translateY(3px); transition:opacity .12s ease, transform .12s ease;
+    pointer-events:none; cursor:default}
+  .chips .chip:hover{border-color:var(--outline)}
+  .stage.peek .chip{opacity:1; transform:translateY(0)}
+  .stage.peek .bottomcluster{display:flex; opacity:0}
+  .stage.peek .hairline{display:none}
+  .stage.nochrome.peek .hairline{display:block}
+  .stage.nochrome.peek .bottomcluster{opacity:1}
+  .stage.nochrome.peek .bottomcluster{display:flex}
+
+  .scenarionote{margin-top:12px}
+
+  footer{margin-top:34px; color:#6E6E72; font-size:11px; letter-spacing:.3px; line-height:1.7}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="pagehead">
+    <h1>SALU — shortcut.md §4 · design preview</h1>
+    <span class="sub">Shortcuts tab (the Living Map) &amp; Alt-Peek · spec stage 2026-09-27 · interactive mock — not app code</span>
+  </div>
+
+  <div class="viewtabs" id="viewtabs">
+    <button data-view="tab" class="on">① Settings → Shortcuts · the Living Map</button>
+    <button data-view="peek">② Alt-Peek (hold Alt)</button>
+  </div>
+
+  <!-- ═══ VIEW 1 · THE LIVING MAP — SALU itself as the shortcut map ══════ -->
+  <section id="view-tab">
+    <p class="note" style="margin:0 0 12px">The map is <b>alive</b> — press your real keys and the miniature answers:
+      <b>Space</b> · <b>← →</b> · <b>↑ ↓</b> · <b>M</b> · <b>0–9</b> · <b>F</b> (fullscreen really hides its chrome) ·
+      <b>Ctrl+L</b> (its panel slides) · <b>Ctrl+M</b> (drops to Mini) · <b>Alt+W</b> (flips to Web — the browser
+      reserves Ctrl+T / Ctrl+W / Ctrl+Shift+W, so click the mock's + / × and tabs instead) · hover any chip for the
+      cross-mode answer below.</p>
+
+    <div class="settingsbox">
+      <div class="dlg-head">
+        <span class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="title">Settings</span>
+        <span class="x">✕</span>
+      </div>
+      <div class="tabstrip">
+        <button class="t">General</button>
+        <button class="t">Subtitles</button>
+        <button class="t">Web</button>
+        <button class="t">Updates</button>
+        <button class="t on">Shortcuts</button>
+      </div>
+
+      <div class="dlg-body" id="dlgbody">
+        <div class="toprow">
+          <div class="modepill" id="modepill">
+            <button data-mode="player" class="on">Player</button>
+            <button data-mode="mini">Mini</button>
+            <button data-mode="web">Web</button>
+            <button data-mode="dialog">Dialogs</button>
+          </div>
+          <span class="hint" id="modehint">SALU, shrunken — every visible control wearing its keys</span>
+        </div>
+
+        <!-- the miniature -->
+        <div class="livestage" id="vm-stage">
+          <div class="video"></div>
+
+          <!-- PLAYER mock -->
+          <div class="chrome" id="mm-player">
+            <div class="titlebar">
+              <span class="app">S A L U</span>
+              <div class="capmarks">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.2"><line x1="1" y1="5" x2="9" y2="5"/></svg>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.2"><rect x="1.5" y="1.5" width="7" height="7"/></svg>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.2"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>
+              </div>
+            </div>
+
+            <div class="timeline">
+              <span class="chip tl-chip" data-k="Digit5">0–9 · Home · End</span>
+              <div class="tl-track"><div class="tl-fill" id="vm-fill"></div><div class="tl-thumb" id="vm-thumb"></div></div>
+              <span class="tl-time" id="vm-time">03:48 / 10:00</span>
+            </div>
+
+            <div class="controls">
+              <div class="ctlgroup">
+                <div class="ctl"><span class="chip" data-k="KeyO" data-p="ctrl">Ctrl+O</span>
+                  <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke-width="1.4"><line x1="9" y1="3" x2="9" y2="15"/><line x1="3" y1="9" x2="15" y2="9"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="KeyL" data-p="ctrl">Ctrl+L</span>
+                  <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke-width="1.4">
+                    <line x1="3" y1="5" x2="13" y2="5"/><line x1="3" y1="9" x2="11" y2="9"/><line x1="3" y1="13" x2="13" y2="13"/>
+                    <polyline points="14,7 17,9 14,11" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+              </div>
+
+              <div class="ctlgroup">
+                <div class="ctl"><span class="chip" data-k="Space">Space</span>
+                  <svg id="vm-play" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><polyline points="5,3.5 11,8 5,12.5" stroke-linejoin="round" stroke-linecap="round"/></svg>
+                  <svg id="vm-pause" style="display:none" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><line x1="5.5" y1="4" x2="5.5" y2="12"/><line x1="10.5" y1="4" x2="10.5" y2="12"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="KeyS">S</span>
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke-width="1.4"><rect x="4" y="4" width="8" height="8"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="PageUp">PgUp</span>
+                  <svg width="18" height="16" viewBox="0 0 20 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="3" x2="4" y2="13"/><polyline points="16,4 11,8 16,12"/><polyline points="11,4 6,8 11,12"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="PageDown">PgDn</span>
+                  <svg width="18" height="16" viewBox="0 0 20 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="16" y1="3" x2="16" y2="13"/><polyline points="4,4 9,8 4,12"/><polyline points="9,4 14,8 9,12"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="ArrowLeft">←</span>
+                  <svg width="16" height="16" viewBox="0 0 18 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="14,4 8,8 14,12"/><polyline points="9,4 3,8 9,12"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="ArrowRight">→</span>
+                  <svg width="16" height="16" viewBox="0 0 18 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4,4 10,8 4,12"/><polyline points="9,4 15,8 9,12"/></svg></div>
+                <div class="ctl" id="vm-spk"><span class="chip" data-k="ArrowUp">↑ ↓ · M</span>
+                  <svg width="18" height="16" viewBox="0 0 20 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 6.5h3l4-3v9l-4-3H4z"/><path d="M13.5 6a3.4 3.4 0 010 4"/><path d="M15.5 4.2a6 6 0 010 7.6"/>
+                    <line class="muteline" x1="2" y1="14" x2="18" y2="2" stroke-width="1.3"/></svg></div>
+                <div class="volbar"><div class="f" id="vm-volf"></div><div class="t" id="vm-volt"></div></div>
+              </div>
+
+              <div class="ctlgroup">
+                <div class="ctl"><span class="chip" data-k="KeyE" data-p="ctrl">Ctrl+E</span>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-width="1.4" stroke-linecap="round">
+                    <line x1="4" y1="6" x2="4" y2="10"/><line x1="8" y1="3.5" x2="8" y2="12.5"/><line x1="12" y1="7.5" x2="12" y2="11"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="KeyF" data-p="ctrl+shift">Ctrl+Shift+F</span>
+                  <svg width="17" height="15" viewBox="0 0 18 16" fill="none" stroke-width="1.3">
+                    <rect x="1.5" y="3" width="15" height="10" rx="2.5"/>
+                    <path d="M7 7.6a2.2 2.2 0 100 2" /><path d="M12.2 7.6a2.2 2.2 0 100 2"/></svg></div>
+                <div class="ctl"><span class="chip" data-k="KeyF">F · F11</span>
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke-width="1.4" stroke-linecap="round">
+                    <polyline points="2,6 2,2 6,2"/><polyline points="10,2 14,2 14,6"/><polyline points="14,10 14,14 10,14"/><polyline points="6,14 2,14 2,10"/></svg></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- keys with no control to ride — the video-surface cluster -->
+          <div class="surface" id="vm-surface">
+            <span class="chip flat" data-k="KeyZ">Z X · sub sync ±0.1 s</span>
+            <span class="chip flat" data-k="KeyB">B V · audio · sub track</span>
+            <span class="chip flat" data-k="BracketLeft">[ ] · speed ∓0.1×</span>
+            <span class="chip flat" data-k="KeyR">R · repeat</span>
+            <span class="chip flat" data-k="KeyS" data-p="shift">Shift+S · shuffle</span>
+            <span class="chip flat" data-k="Period">. , · frame step</span>
+          </div>
+
+          <!-- the mock OSD deck -->
+          <div class="mockosd" id="vm-osd"></div>
+
+          <!-- the mock playlist panel (Ctrl+L) -->
+          <div class="mockpanel" id="vm-panel">
+            <div class="mp-head">QUEUE</div>
+            <div class="mp-row on"><svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#EDEDED" stroke-width="1.3"><polyline points="2,2 8,5 2,8" stroke-linejoin="round"/></svg>season 1 · 04</div>
+            <div class="mp-row"><svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#A6A6A6" stroke-width="1.3"><polyline points="2,2 8,5 2,8" stroke-linejoin="round"/></svg>news live</div>
+            <div class="mp-row"><svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#A6A6A6" stroke-width="1.3"><polyline points="2,2 8,5 2,8" stroke-linejoin="round"/></svg>lofi radio</div>
+          </div>
+
+          <!-- chrome-hidden state -->
+          <div class="hairline"><div class="prog" id="vm-prog"></div></div>
+          <div class="bottomcluster">
+            <span class="chip" data-k="Space">Space</span><span class="chip" data-k="KeyF">F</span>
+            <span class="chip" data-k="ArrowLeft">← →</span><span class="chip" data-k="ArrowUp">↑ ↓</span>
+            <span class="chip" data-k="KeyM">M</span><span class="chip" data-k="Digit5">0–9</span>
+          </div>
+
+          <!-- WEB mock -->
+          <div class="chrome" id="mm-web" style="display:none">
+            <div class="webtabs" id="vm-tabs"></div>
+            <div class="webnav">
+              <div class="ctl"><span class="chip" data-k="ArrowLeft" data-p="alt">Alt+←</span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#EDEDED" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="10,4 5,8 10,12"/><line x1="13" y1="4" x2="13" y2="12" stroke="#A6A6A6"/></svg></div>
+              <div class="ctl"><span class="chip" data-k="ArrowRight" data-p="alt">Alt+→</span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,4 11,8 6,12"/><line x1="3" y1="4" x2="3" y2="12"/></svg></div>
+              <div class="ctl"><span class="chip" data-k="KeyR" data-p="ctrl">Ctrl+R</span>
+                <svg id="vm-reload" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linecap="round"><path d="M13 8a5 5 0 11-1.5-3.5"/><polyline points="12.5,1.5 12.5,4.8 9.2,4.8"/></svg></div>
+              <div class="ctl"><span class="chip" data-k="Home" data-p="alt">Alt+Home</span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linejoin="round"><path d="M3 7.5L8 3.5l5 4v5.5h-10z"/></svg></div>
+              <div class="ctl" style="flex:1; align-self:stretch">
+                <span class="chip" data-k="KeyL" data-p="ctrl">Ctrl+L</span>
+                <div class="address" id="vm-address"><span class="lock">🔒</span> example.com</div>
+              </div>
+              <div class="ctl"><span class="chip" data-k="KeyD" data-p="ctrl">Ctrl+D</span>
+                <svg width="14" height="15" viewBox="0 0 14 16" fill="none" stroke="#A6A6A6" stroke-width="1.3" stroke-linejoin="round"><path d="M3.5 2h7v12l-3.5-2.6L3.5 14z"/></svg></div>
+              <div class="ctl"><span class="chip" data-k="KeyO" data-p="ctrl+shift">Ctrl+Shift+O</span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.3"><rect x="4.5" y="2.5" width="9" height="8"/><rect x="2.5" y="5.5" width="9" height="8" fill="#1E1E1E"/></svg></div>
+              <div class="ctl"><span class="chip" data-k="KeyJ" data-p="ctrl">Ctrl+J</span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="2.5" x2="8" y2="9.5"/><polyline points="5,7.5 8,10.5 11,7.5"/><path d="M3 12.5h10"/></svg></div>
+              <div class="ctl"><span class="chip" data-k="KeyH" data-p="ctrl">Ctrl+H</span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><polyline points="8,5 8,8 10.5,9.5"/></svg></div>
+            </div>
+          </div>
+
+          <!-- MINI mock -->
+          <div class="minicenter" id="mm-mini" style="display:none">
+            <div class="minibar">
+              <svg id="mm-play" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke-width="1.6"><polyline points="5,3.5 11,8 5,12.5" stroke-linejoin="round" stroke-linecap="round"/></svg>
+              <svg id="mm-pause" style="display:none" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke-width="1.6"><line x1="5.5" y1="4" x2="5.5" y2="12"/><line x1="10.5" y1="4" x2="10.5" y2="12"/></svg>
+              <svg width="14" height="12" viewBox="0 0 20 16" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="3" x2="4" y2="13"/><polyline points="16,4 11,8 16,12"/><polyline points="11,4 6,8 11,12"/></svg>
+              <svg width="14" height="12" viewBox="0 0 20 16" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="16" y1="3" x2="16" y2="13"/><polyline points="4,4 9,8 4,12"/><polyline points="9,4 14,8 9,12"/></svg>
+              <span class="mtitle" id="mm-title">lofi radio — side A</span>
+              <svg width="15" height="13" viewBox="0 0 20 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6.5h3l4-3v9l-4-3H4z"/><path d="M13.5 6a3.4 3.4 0 010 4"/></svg>
+            </div>
+            <div class="minichips">
+              <span class="chip flat" data-k="Space">Space</span>
+              <span class="chip flat" data-k="ArrowLeft">← →</span>
+              <span class="chip flat" data-k="ArrowUp">↑ ↓</span>
+              <span class="chip flat" data-k="KeyM">M</span>
+              <span class="chip flat" data-k="KeyS">S</span>
+              <span class="chip flat" data-k="PageUp">PgUp PgDn</span>
+              <span class="chip flat" data-k="KeyZ">Z X</span>
+              <span class="chip flat" data-k="Escape">Esc · Ctrl+M — exit</span>
+            </div>
+          </div>
+
+          <!-- DIALOG mock (the Open URL modal over a dimmed player) -->
+          <div id="mm-dialog" style="display:none">
+            <div class="dialogdim"></div>
+            <div class="urlmodal">
+              <div class="um-head"><span class="l"></span><span class="t">Open URL</span></div>
+              <div class="um-input">https://…</div>
+              <div id="um-rows">
+                <div class="um-row sel"><span class="dot"></span>radio.stream/example</div>
+                <div class="um-row"><span class="dot"></span>news.example/live</div>
+                <div class="um-row"><span class="dot"></span>lofi.example/radio</div>
+              </div>
+              <div class="um-chips">
+                <span class="chip" data-k="Enter">Enter — play</span>
+                <span class="chip" data-k="Enter" data-p="ctrl">Ctrl+Enter — play &amp; save</span>
+                <span class="chip" data-k="ArrowDown">↑ ↓ — walk</span>
+                <span class="chip" data-k="Escape">Esc</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="detail" id="detail"></aside>
+
+        <p class="note">Hover any chip — or press its key — for the detail strip: the action, and what the
+          same key does in every other mode. The miniature mirrors the real rules: <b>Esc</b> closes the
+          mock's panel first, then its fullscreen, and only then would it close Settings; <b>F</b> really
+          hides the mock chrome; <b>Ctrl+M</b> really drops it to the mini bar. It never plays media —
+          it is a mirror, not a player.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ VIEW 2 · ALT-PEEK ═════════════════════════════════════════════ -->
+  <section id="view-peek" hidden>
+    <div class="scenariopill" id="scenariopill">
+      <button data-sc="chrome" class="on">Player · chrome up</button>
+      <button data-sc="hidden">Player · chrome hidden</button>
+      <button data-sc="web">Web mode</button>
+    </div>
+
+    <div class="peekbar">
+      <button class="alttoggle on" id="alttoggle"><span class="dot"></span>Alt held</button>
+      <span class="peekstate" id="peekstate">chips shown — hold the real Alt key, or toggle</span>
+    </div>
+
+    <!-- scenario A + B: the player -->
+    <div class="stage peek" id="stage">
+      <div class="video"></div>
+
+      <div class="chrome chips" id="playerchrome">
+        <div class="titlebar">
+          <span class="app">S A L U</span>
+          <div class="capmarks">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.2"><line x1="1" y1="5" x2="9" y2="5"/></svg>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.2"><rect x="1.5" y="1.5" width="7" height="7"/></svg>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.2"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>
+          </div>
+        </div>
+
+        <div class="timeline">
+          <span class="chip tl-chip">0–9 · Home · End</span>
+          <div class="tl-track"><div class="tl-fill"></div><div class="tl-thumb"></div></div>
+        </div>
+
+        <div class="controls">
+          <div class="ctlgroup">
+            <div class="ctl"><span class="chip">Ctrl+O</span>
+              <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke-width="1.4"><line x1="9" y1="3" x2="9" y2="15"/><line x1="3" y1="9" x2="15" y2="9"/></svg></div>
+            <div class="ctl"><span class="chip">Ctrl+L</span>
+              <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke-width="1.4">
+                <line x1="3" y1="5" x2="13" y2="5"/><line x1="3" y1="9" x2="11" y2="9"/><line x1="3" y1="13" x2="13" y2="13"/>
+                <polyline points="14,7 17,9 14,11" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+          </div>
+
+          <div class="ctlgroup">
+            <div class="ctl"><span class="chip">Space</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><polyline points="5,3.5 11,8 5,12.5" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+            <div class="ctl"><span class="chip">S</span>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke-width="1.4"><rect x="4" y="4" width="8" height="8"/></svg></div>
+            <div class="ctl"><span class="chip">PgUp</span>
+              <svg width="18" height="16" viewBox="0 0 20 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="3" x2="4" y2="13"/><polyline points="16,4 11,8 16,12"/><polyline points="11,4 6,8 11,12"/></svg></div>
+            <div class="ctl"><span class="chip">PgDn</span>
+              <svg width="18" height="16" viewBox="0 0 20 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="16" y1="3" x2="16" y2="13"/><polyline points="4,4 9,8 4,12"/><polyline points="9,4 14,8 9,12"/></svg></div>
+            <div class="ctl"><span class="chip">←</span>
+              <svg width="16" height="16" viewBox="0 0 18 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="14,4 8,8 14,12"/><polyline points="9,4 3,8 9,12"/></svg></div>
+            <div class="ctl"><span class="chip">→</span>
+              <svg width="16" height="16" viewBox="0 0 18 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="4,4 10,8 4,12"/><polyline points="9,4 15,8 9,12"/></svg></div>
+            <div class="ctl"><span class="chip">↑ ↓ <span class="plus">·</span> M</span>
+              <svg width="18" height="16" viewBox="0 0 20 16" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6.5h3l4-3v9l-4-3H4z"/><path d="M13.5 6a3.4 3.4 0 010 4"/><path d="M15.5 4.2a6 6 0 010 7.6"/></svg></div>
+            <div class="volbar"><div class="f"></div><div class="t"></div></div>
+          </div>
+
+          <div class="ctlgroup">
+            <div class="ctl"><span class="chip">Ctrl+E</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke-width="1.4" stroke-linecap="round">
+                <line x1="4" y1="6" x2="4" y2="10"/><line x1="8" y1="3.5" x2="8" y2="12.5"/><line x1="12" y1="7.5" x2="12" y2="11"/></svg></div>
+            <div class="ctl"><span class="chip">Ctrl+Shift+F</span>
+              <svg width="17" height="15" viewBox="0 0 18 16" fill="none" stroke-width="1.3">
+                <rect x="1.5" y="3" width="15" height="10" rx="2.5"/>
+                <path d="M7 7.6a2.2 2.2 0 100 2" /><path d="M12.2 7.6a2.2 2.2 0 100 2"/></svg></div>
+            <div class="ctl"><span class="chip">F <span class="plus">·</span> F11</span>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke-width="1.4" stroke-linecap="round">
+                <polyline points="2,6 2,2 6,2"/><polyline points="10,2 14,2 14,6"/><polyline points="14,10 14,14 10,14"/><polyline points="6,14 2,14 2,10"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- chrome-hidden cluster -->
+      <div class="hairline" id="hairline"><div class="prog"></div></div>
+      <div class="bottomcluster" id="bottomcluster">
+        <span class="chip">Space</span><span class="chip">F</span><span class="chip">← →</span>
+        <span class="chip">↑ ↓</span><span class="chip">M</span><span class="chip">0–9</span>
+      </div>
+
+      <!-- web chrome (scenario C) -->
+      <div class="chrome chips" id="webchrome" style="display:none">
+        <div class="webtabs">
+          <div class="webtab on"><svg width="9" height="9" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" fill="none" stroke="#A6A6A6" stroke-width="1.2"/></svg>
+            Example <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#A6A6A6" stroke-width="1.2"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg></div>
+          <div class="ctl"><span class="chip">Ctrl+T</span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg></div>
+        </div>
+        <div class="webnav">
+          <div class="ctl"><span class="chip">Alt+←</span>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#EDEDED" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="10,4 5,8 10,12"/><line x1="13" y1="4" x2="13" y2="12" stroke="#A6A6A6"/></svg></div>
+          <div class="ctl"><span class="chip">Alt+→</span>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,4 11,8 6,12"/><line x1="3" y1="4" x2="3" y2="12"/></svg></div>
+          <div class="ctl"><span class="chip">Ctrl+R</span>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linecap="round"><path d="M13 8a5 5 0 11-1.5-3.5"/><polyline points="12.5,1.5 12.5,4.8 9.2,4.8"/></svg></div>
+          <div class="ctl"><span class="chip">Alt+Home</span>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linejoin="round"><path d="M3 7.5L8 3.5l5 4v5.5h-10z"/></svg></div>
+          <div class="ctl" style="flex:1; align-self:stretch">
+            <span class="chip">Ctrl+L</span>
+            <div class="address"><span class="lock">🔒</span> example.com</div>
+          </div>
+          <div class="ctl"><span class="chip">Ctrl+D</span>
+            <svg width="14" height="15" viewBox="0 0 14 16" fill="none" stroke="#A6A6A6" stroke-width="1.3" stroke-linejoin="round"><path d="M3.5 2h7v12l-3.5-2.6L3.5 14z"/></svg></div>
+          <div class="ctl"><span class="chip">Ctrl+Shift+O</span>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.3"><rect x="4.5" y="2.5" width="9" height="8"/><rect x="2.5" y="5.5" width="9" height="8" fill="#1E1E1E"/></svg></div>
+          <div class="ctl"><span class="chip">Ctrl+J</span>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="2.5" x2="8" y2="9.5"/><polyline points="5,7.5 8,10.5 11,7.5"/><path d="M3 12.5h10"/></svg></div>
+          <div class="ctl"><span class="chip">Ctrl+H</span>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><polyline points="8,5 8,8 10.5,9.5"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="note scenarionote" id="scenarionote"></p>
+  </section>
+
+  <footer>
+    shortcut.md §4 · spec stage 2026-09-27 — this page is a design mock for finalization: colors from
+    lib/theme/app_theme.dart, marks approximated from the SALU stroke language. View ① is the Living Map
+    concept (revision — the drawn-keyboard concept was rejected by the owner): the Shortcuts tab shows a
+    miniature SALU, every visible control wearing its keys, answering real keypresses. View ② is Alt-Peek,
+    unchanged. Not app code.
+  </footer>
+</div>
+
+<script>
+'use strict';
+
+/* ── the shortcut registry (mock of §4.0 — display truth) ──────────────── */
+/* entry: action · group · guard (optional) */
+const DATA = {
+  player: {
+    '': {
+      Space:['Play / Pause','Playback & Transport'],
+      ArrowLeft:['Seek backward — 5 s step, hold ramps 10 s, 15 s…','Playback & Transport','seekable media'],
+      ArrowRight:['Seek forward — 5 s step, hold ramps','Playback & Transport','seekable media'],
+      ArrowUp:['Volume up +5 %','Playback & Transport'],
+      ArrowDown:['Volume down −5 %','Playback & Transport'],
+      KeyM:['Mute / Unmute','Playback & Transport'],
+      KeyS:['Stop — parks the queue','Playback & Transport'],
+      KeyR:['Cycle Repeat — Off → All → One','Playback & Transport'],
+      PageUp:['Previous item','Playback & Transport'],
+      PageDown:['Next item','Playback & Transport'],
+      BracketLeft:['Speed −0.1×','Speed & Frames'],
+      BracketRight:['Speed +0.1×','Speed & Frames'],
+      Backslash:['Reset speed 1.0×','Speed & Frames'],
+      Backspace:['Reset speed 1.0×','Speed & Frames'],
+      Period:['Frame step forward','Speed & Frames','paused video'],
+      Comma:['Frame step backward','Speed & Frames','paused video'],
+      Digit0:['Jump to 0 % of duration','Seeking & Position','seekable media'],
+      Digit1:['Jump to 10 % of duration','Seeking & Position','seekable media'],
+      Digit2:['Jump to 20 % of duration','Seeking & Position','seekable media'],
+      Digit3:['Jump to 30 % of duration','Seeking & Position','seekable media'],
+      Digit4:['Jump to 40 % of duration','Seeking & Position','seekable media'],
+      Digit5:['Jump to 50 % of duration','Seeking & Position','seekable media'],
+      Digit6:['Jump to 60 % of duration','Seeking & Position','seekable media'],
+      Digit7:['Jump to 70 % of duration','Seeking & Position','seekable media'],
+      Digit8:['Jump to 80 % of duration','Seeking & Position','seekable media'],
+      Digit9:['Jump to 90 % of duration','Seeking & Position','seekable media'],
+      Home:['Jump to beginning (0:00)','Seeking & Position'],
+      End:['Jump to end / next item','Seeking & Position'],
+      KeyF:['Toggle fullscreen','Fullscreen & Window'],
+      F11:['Toggle fullscreen','Fullscreen & Window'],
+      Escape:['Close popup · exit fullscreen','Fullscreen & Window'],
+      KeyZ:['Subtitle sync −0.1 s','Subtitles & Tracks'],
+      KeyX:['Subtitle sync +0.1 s','Subtitles & Tracks'],
+      KeyC:['Tracks panel (video) · Lyrics (audio)','Subtitles & Tracks'],
+      KeyT:['Tracks panel (video) · Lyrics (audio)','Subtitles & Tracks'],
+      KeyB:['Cycle audio track','Subtitles & Tracks'],
+      KeyV:['Cycle subtitle track','Subtitles & Tracks'],
+      F2:['Open Settings','Opening, Search & Surfaces'],
+    },
+    ctrl: {
+      KeyM:['Toggle Mini Mode','Fullscreen & Window'],
+      KeyO:['Open file(s)','Opening, Search & Surfaces'],
+      KeyU:['Open URL modal','Opening, Search & Surfaces'],
+      KeyL:['Toggle Playlist panel','Opening, Search & Surfaces'],
+      KeyF:['Find in playlist','Opening, Search & Surfaces'],
+      KeyI:['Toggle Info panel','Opening, Search & Surfaces'],
+      KeyE:['Toggle Tune panel','Opening, Search & Surfaces'],
+      Comma:['Open Settings','Opening, Search & Surfaces'],
+      ArrowUp:['Nudge the focused Tune parameter up','Tune / Equalizer tier','a parameter focused'],
+      ArrowDown:['Nudge the focused Tune parameter down','Tune / Equalizer tier','a parameter focused'],
+    },
+    shift: {
+      KeyS:['Toggle Shuffle','Playback & Transport'],
+      KeyZ:['Subtitle sync −1.0 s (coarse)','Subtitles & Tracks'],
+      KeyX:['Subtitle sync +1.0 s (coarse)','Subtitles & Tracks'],
+      Backspace:['Reset subtitle sync to 0.0 s','Subtitles & Tracks'],
+    },
+    alt: {
+      KeyS:['Toggle Shuffle','Playback & Transport'],
+      KeyW:['Switch to Web mode','Fullscreen & Window'],
+    },
+    'ctrl+shift': {
+      KeyO:['Open folder','Opening, Search & Surfaces'],
+      KeyF:['Search subtitles online','Opening, Search & Surfaces'],
+      KeyR:['Remote QR pairing','Opening, Search & Surfaces'],
+      KeyW:['Switch to Web mode','Fullscreen & Window'],
+      KeyZ:['Reset subtitle sync to 0.0 s','Subtitles & Tracks'],
+    },
+    'ctrl+alt': {
+      ArrowUp:['Move Tune focus up a section','Tune / Equalizer tier'],
+      ArrowDown:['Move Tune focus down a section','Tune / Equalizer tier'],
+    },
+  },
+
+  mini: {
+    '': {
+      Escape:['Exit Mini Mode','Mini Mode'],
+      KeyM:['Mute / Unmute','Mini Mode'],
+      Space:['Play / Pause','Mini Mode'],
+      ArrowLeft:['Seek backward — 5 s step','Mini Mode'],
+      ArrowRight:['Seek forward — 5 s step','Mini Mode'],
+      ArrowUp:['Volume up +5 %','Mini Mode'],
+      ArrowDown:['Volume down −5 %','Mini Mode'],
+      KeyS:['Stop — parks the queue','Mini Mode'],
+      PageUp:['Previous item','Mini Mode'],
+      PageDown:['Next item','Mini Mode'],
+      KeyZ:['Subtitle sync −0.1 s','Mini Mode'],
+      KeyX:['Subtitle sync +0.1 s','Mini Mode'],
+    },
+    ctrl: { KeyM:['Exit Mini Mode','Mini Mode'] },
+    shift: {
+      KeyZ:['Subtitle sync −1.0 s (coarse)','Mini Mode'],
+      KeyX:['Subtitle sync +1.0 s (coarse)','Mini Mode'],
+    },
+  },
+
+  web: {
+    '': {
+      F5:['Reload page','Navigation & Address Bar'],
+      F6:['Focus address bar','Navigation & Address Bar'],
+      F11:['Browser fullscreen','Zoom & Window'],
+      Escape:['Release page fullscreen','Zoom & Window'],
+      F3:['Find next match','Page Search'],
+      F2:['Browser Settings — opens on the Web tab','Panels & Shelves'],
+    },
+    ctrl: {
+      KeyT:['New tab (max 8)','Tab Management'],
+      KeyW:['Close tab','Tab Management'],
+      Tab:['Next tab','Tab Management'],
+      Digit1:['Jump to tab 1','Tab Management'],
+      Digit2:['Jump to tab 2','Tab Management'],
+      Digit3:['Jump to tab 3','Tab Management'],
+      Digit4:['Jump to tab 4','Tab Management'],
+      Digit5:['Jump to tab 5','Tab Management'],
+      Digit6:['Jump to tab 6','Tab Management'],
+      Digit7:['Jump to tab 7','Tab Management'],
+      Digit8:['Jump to tab 8','Tab Management'],
+      Digit9:['Jump to last tab','Tab Management'],
+      KeyL:['Focus address bar','Navigation & Address Bar'],
+      KeyR:['Reload page','Navigation & Address Bar'],
+      KeyF:['Find in page','Page Search'],
+      KeyH:['History panel','Panels & Shelves'],
+      KeyJ:['Downloads shelf','Panels & Shelves'],
+      KeyD:['Add / edit favourite','Panels & Shelves'],
+      Equal:['Zoom in','Zoom & Window'],
+      Minus:['Zoom out','Zoom & Window'],
+      Digit0:['Reset zoom to 100 %','Zoom & Window'],
+    },
+    shift: { F3:['Find previous match','Page Search'] },
+    alt: {
+      ArrowLeft:['Back','Navigation & Address Bar'],
+      ArrowRight:['Forward','Navigation & Address Bar'],
+      Home:['Site home / root','Navigation & Address Bar'],
+      KeyD:['Focus address bar','Navigation & Address Bar'],
+      KeyW:['Switch to Player mode','Zoom & Window'],
+    },
+    'ctrl+shift': {
+      Tab:['Previous tab','Tab Management'],
+      KeyT:['Reopen closed tab','Tab Management'],
+      KeyO:['Favourites hub','Panels & Shelves'],
+      KeyR:['Hard reload','Navigation & Address Bar'],
+      Delete:['Clear browsing data','Panels & Shelves'],
+      KeyW:['Switch to Player mode','Zoom & Window'],
+    },
+  },
+
+  dialog: {
+    '': {
+      Enter:['Confirm — play URL / pick the selected suggestion','Dialogs & Lists'],
+      Escape:['Close modal / hide suggestions','Dialogs & Lists'],
+      ArrowUp:['Walk the list up','Dialogs & Lists'],
+      ArrowDown:['Walk the list down','Dialogs & Lists'],
+    },
+    ctrl: { Enter:['Play & Save to the saved URLs list','Dialogs & Lists'] },
+    shift: { Enter:['Previous match (find bar)','Dialogs & Lists'] },
+  },
+};
+
+const MODES = [
+  ['player','Player'], ['mini','Mini'], ['web','Web'], ['dialog','Dialogs'],
+];
+
+const LABELS = {
+  Space:'Space', ArrowLeft:'←', ArrowRight:'→', ArrowUp:'↑', ArrowDown:'↓',
+  KeyM:'M', KeyS:'S', KeyR:'R', KeyF:'F', KeyZ:'Z', KeyX:'X', KeyC:'C', KeyT:'T',
+  KeyB:'B', KeyV:'V', KeyO:'O', KeyU:'U', KeyL:'L', KeyI:'I', KeyE:'E', KeyW:'W',
+  KeyD:'D', KeyH:'H', KeyJ:'J', PageUp:'PgUp', PageDown:'PgDn',
+  Home:'Home', End:'End', Escape:'Esc', Enter:'Enter', Tab:'Tab', Delete:'Del',
+  F2:'F2', F3:'F3', F5:'F5', F6:'F6', F11:'F11',
+  Digit0:'0', Digit1:'1', Digit2:'2', Digit3:'3', Digit4:'4',
+  Digit5:'5', Digit6:'6', Digit7:'7', Digit8:'8', Digit9:'9',
+  Period:'.', Comma:',', BracketLeft:'[', BracketRight:']', Backslash:'\\',
+  Backspace:'Backspace', Equal:'=', Minus:'−',
+};
+
+function prefixOf(mods){
+  const p = [];
+  if (mods.ctrl) p.push('ctrl');
+  if (mods.shift) p.push('shift');
+  if (mods.alt) p.push('alt');
+  return p.join('+');
+}
+function prefixLabel(p){
+  return p ? p.split('+').map(s => s[0].toUpperCase()+s.slice(1)).join(' + ') + ' + ' : '';
+}
+const el = id => document.getElementById(id);
+
+/* ── detail strip ─────────────────────────────────────────────────────── */
+function showDetail(id, prefix){
+  const label = LABELS[id] || id;
+  const d = el('detail');
+  const here = (DATA[mapMode][prefix] || {})[id];
+  const modeName = MODES.find(m => m[0] === mapMode)[1];
+
+  let left = '<div class="dcol"><div class="kname">' +
+      '<span class="kcap ' + (here ? '' : 'quiet') + '">' + prefixLabel(prefix) + label + '</span></div>';
+  if (here){
+    left += '<div class="group">' + here[1] + '</div>' +
+            '<div class="action">' + here[0] + '</div>';
+    if (here[2]) left += '<div class="guard">needs: ' + here[2] + '</div>';
+  } else {
+    left += '<div class="none">nothing in ' + modeName + ' with these modifiers</div>';
+  }
+  left += '</div>';
+
+  let right = '';
+  const rows = MODES.map(([m, name]) => {
+    const e = (DATA[m][prefix] || {})[id];
+    if (m === mapMode) return '';
+    return '<div class="row"><span class="m">' + name + '</span>' +
+      '<span class="a ' + (e ? '' : 'dim') + '">' + (e ? e[0] : '—') + '</span></div>';
+  }).join('');
+  if (rows) right = '<div class="dcol crossmode">' + rows + '</div>';
+  d.innerHTML = left + right;
+}
+
+/* ── the Living Map ───────────────────────────────────────────────────── */
+let mapMode = 'player';
+const sim = {
+  playing:true, pos:0.38, vol:64, muted:false, fs:false, panel:false,
+  tabs:['Example','Docs','Video'], active:0, sel:0,
+};
+const DUR = 600; /* the mock item runs 10:00 */
+
+function fmt(s){
+  s = Math.max(0, Math.round(s));
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+
+function paintPlayer(){
+  const pct = (sim.pos*100).toFixed(2) + '%';
+  el('vm-fill').style.width = pct;
+  el('vm-thumb').style.left = pct;
+  el('vm-prog').style.width = pct;
+  el('vm-time').textContent = fmt(sim.pos*DUR) + ' / ' + fmt(DUR);
+  el('vm-play').style.display = sim.playing ? '' : 'none';
+  el('vm-pause').style.display = sim.playing ? 'none' : '';
+  const v = sim.muted ? 0 : sim.vol;
+  el('vm-volf').style.width = v + '%';
+  el('vm-volt').style.left = v + '%';
+  el('vm-spk').classList.toggle('muted', sim.muted);
+}
+
+let osdTimer = null;
+function osd(text){
+  const o = el('vm-osd');
+  o.textContent = text;
+  o.classList.add('show');
+  clearTimeout(osdTimer);
+  osdTimer = setTimeout(() => o.classList.remove('show'), 1200);
+}
+
+function paintWeb(){
+  const box = el('vm-tabs');
+  box.innerHTML = '';
+  sim.tabs.forEach((t, i) => {
+    const d = document.createElement('div');
+    d.className = 'webtab' + (i === sim.active ? ' on' : '');
+    d.innerHTML = '<svg width="9" height="9" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" fill="none" stroke="' +
+      (i === sim.active ? '#EDEDED' : '#A6A6A6') + '" stroke-width="1.2"/></svg><span>' + t +
+      '</span><svg class="tabx" width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#A6A6A6" stroke-width="1.2"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>';
+    d.addEventListener('click', e => {
+      if (e.target.closest('.tabx')){
+        if (sim.tabs.length > 1){ sim.tabs.splice(i,1); sim.active = 0; }
+        paintWeb(); return;
+      }
+      sim.active = i; paintWeb();
+    });
+    box.appendChild(d);
+  });
+  const plus = document.createElement('div');
+  plus.className = 'webtab';
+  plus.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A6A6A6" stroke-width="1.4"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>';
+  plus.addEventListener('click', addTab);
+  box.appendChild(plus);
+}
+function addTab(){
+  if (sim.tabs.length >= 8){ osd('max 8 tabs'); return; }
+  const names = ['News','Docs','Video','Radio','Mail','Shop','Dev','TV'];
+  sim.tabs.push(names[sim.tabs.length % names.length]);
+  sim.active = sim.tabs.length - 1;
+  paintWeb(); osd('new tab');
+}
+
+function paintDialog(){
+  document.querySelectorAll('#um-rows .um-row').forEach((r, i) =>
+    r.classList.toggle('sel', i === sim.sel));
+}
+
+function titleSwap(text){
+  const t = el('mm-title');
+  t.textContent = text;
+  clearTimeout(titleSwap.t);
+  titleSwap.t = setTimeout(() => { t.textContent = 'lofi radio — side A'; }, 1400);
+}
+
+function setMapMode(m){
+  mapMode = m;
+  document.querySelectorAll('#modepill button').forEach(x =>
+    x.classList.toggle('on', x.dataset.mode === m));
+  el('mm-player').style.display = m === 'player' ? '' : 'none';
+  el('vm-surface').style.display = m === 'player' ? '' : 'none';
+  el('mm-web').style.display = m === 'web' ? '' : 'none';
+  el('mm-mini').style.display = m === 'mini' ? '' : 'none';
+  el('mm-dialog').style.display = m === 'dialog' ? '' : 'none';
+  if (m === 'player') paintPlayer();
+  if (m === 'web') paintWeb();
+  if (m === 'dialog') paintDialog();
+  const hints = {
+    player:'SALU, shrunken — every visible control wearing its keys',
+    mini:'the 32-px strip — few keys, honestly sparse',
+    web:'the browser row — Edge-standard keys',
+    dialog:'the Open URL modal — Group D lives here',
+  };
+  el('modehint').textContent = hints[m];
+}
+
+/* the mock's Esc chain mirrors the app: panel → fullscreen → nothing */
+function escapeChain(){
+  if (sim.panel){ sim.panel = false; el('vm-panel').classList.remove('open'); osd('panel closed'); return; }
+  if (sim.fs){ sim.fs = false; el('vm-stage').classList.remove('nochrome','fs'); osd('fullscreen off'); return; }
+  osd('nothing to close');
+}
+
+/* the liveness engine — one switch per mode */
+function simulate(mode, p, code){
+  const mods = p.split('+').filter(Boolean);
+  const has = m => mods.includes(m);
+  const action = (DATA[mode][p] || {})[code];
+
+  if (mode === 'player'){
+    if (!p) switch (code){
+      case 'Space': sim.playing = !sim.playing; osd(sim.playing ? 'play' : 'pause'); paintPlayer(); return;
+      case 'ArrowLeft': sim.pos = Math.max(0, sim.pos - 5/DUR); osd('−5 s'); paintPlayer(); return;
+      case 'ArrowRight': sim.pos = Math.min(1, sim.pos + 5/DUR); osd('+5 s'); paintPlayer(); return;
+      case 'ArrowUp': sim.vol = Math.min(100, sim.vol + 5); osd('vol ' + sim.vol + ' %'); paintPlayer(); return;
+      case 'ArrowDown': sim.vol = Math.max(0, sim.vol - 5); osd('vol ' + sim.vol + ' %'); paintPlayer(); return;
+      case 'KeyM': sim.muted = !sim.muted; osd(sim.muted ? 'muted' : 'vol ' + sim.vol + ' %'); paintPlayer(); return;
+      case 'KeyS': sim.playing = false; sim.pos = 0; osd('stop'); paintPlayer(); return;
+      case 'KeyF': case 'F11':
+        sim.fs = !sim.fs;
+        el('vm-stage').classList.toggle('nochrome', sim.fs);
+        el('vm-stage').classList.toggle('fs', sim.fs);
+        osd(sim.fs ? 'fullscreen' : 'fullscreen off'); return;
+      case 'Escape': escapeChain(); return;
+      case 'Home': sim.pos = 0; osd('0:00'); paintPlayer(); return;
+      case 'End': sim.pos = 1; osd('end'); paintPlayer(); return;
+      case 'PageUp': osd('previous item'); return;
+      case 'PageDown': osd('next item'); return;
+      case 'KeyZ': osd('sub −0.1 s'); return;
+      case 'KeyX': osd('sub +0.1 s'); return;
+    }
+    if (code.startsWith('Digit') && !p){
+      const n = Number(code.slice(5));
+      sim.pos = n/10; osd('→ ' + fmt(sim.pos*DUR)); paintPlayer(); return;
+    }
+    if (p === 'ctrl') switch (code){
+      case 'KeyL': sim.panel = !sim.panel; el('vm-panel').classList.toggle('open', sim.panel); return;
+      case 'KeyM': setMapMode('mini'); osd('mini mode'); return;
+      case 'KeyU': setMapMode('dialog'); return;
+    }
+    if ((p === 'ctrl+shift' || p === 'alt') && code === 'KeyW'){
+      setMapMode('web'); osd('web mode'); return;
+    }
+  }
+
+  if (mode === 'web'){
+    if (p === 'ctrl') switch (code){
+      case 'KeyT': addTab(); return;
+      case 'KeyW':
+        if (sim.tabs.length > 1){ sim.tabs.splice(sim.active,1); sim.active = 0; paintWeb(); osd('tab closed'); }
+        else osd('last tab'); return;
+      case 'KeyL': el('vm-address').classList.add('glow');
+        setTimeout(() => el('vm-address').classList.remove('glow'), 900); osd('address bar'); return;
+      case 'KeyR':
+        el('vm-reload').classList.remove('spin'); void el('vm-reload').offsetWidth;
+        el('vm-reload').classList.add('spin'); osd('reload'); return;
+    }
+    if (p === 'ctrl' && code.startsWith('Digit')){
+      const n = Number(code.slice(5));
+      const i = (n === 9) ? sim.tabs.length-1 : n-1;
+      if (i >= 0 && i < sim.tabs.length){ sim.active = i; paintWeb(); osd('tab ' + (i+1)); }
+      return;
+    }
+    if (!p && code === 'F5'){ simulate('web','ctrl','KeyR'); return; }
+    if (p === 'alt' && code === 'KeyW'){ setMapMode('player'); osd('player mode'); return; }
+    if (p === 'alt' && code === 'ArrowLeft'){ osd('back'); return; }
+    if (p === 'alt' && code === 'ArrowRight'){ osd('forward'); return; }
+  }
+
+  if (mode === 'mini'){
+    if (!p) switch (code){
+      case 'Space': {
+        sim.playing = !sim.playing;
+        el('mm-play').style.display = sim.playing ? '' : 'none';
+        el('mm-pause').style.display = sim.playing ? 'none' : '';
+        titleSwap(sim.playing ? 'play' : 'pause'); return; }
+      case 'ArrowLeft': titleSwap('−5 s'); return;
+      case 'ArrowRight': titleSwap('+5 s'); return;
+      case 'ArrowUp': titleSwap('vol +5 %'); return;
+      case 'ArrowDown': titleSwap('vol −5 %'); return;
+      case 'KeyM': titleSwap('muted'); return;
+      case 'KeyS': titleSwap('stop'); return;
+      case 'KeyZ': titleSwap('sub −0.1 s'); return;
+      case 'KeyX': titleSwap('sub +0.1 s'); return;
+      case 'Escape': setMapMode('player'); return;
+    }
+    if (p === 'ctrl' && code === 'KeyM'){ setMapMode('player'); return; }
+  }
+
+  if (mode === 'dialog'){
+    if (!p) switch (code){
+      case 'ArrowUp': sim.sel = Math.max(0, sim.sel-1); paintDialog(); return;
+      case 'ArrowDown': sim.sel = Math.min(2, sim.sel+1); paintDialog(); return;
+      case 'Enter': {
+        const r = document.querySelectorAll('#um-rows .um-row')[sim.sel];
+        r.classList.add('flash'); setTimeout(() => r.classList.remove('flash'), 600);
+        osd('playing…'); return; }
+      case 'Escape': setMapMode('player'); return;
+    }
+    if (p === 'ctrl' && code === 'Enter'){ osd('saved + playing'); return; }
+  }
+
+  /* every other registered key: its action name on the mock OSD */
+  if (action) osd(action[0]);
+}
+
+/* hover any chip → the detail strip */
+el('dlgbody').addEventListener('mouseover', e => {
+  const c = e.target.closest('[data-k]');
+  if (c) showDetail(c.dataset.k, c.dataset.p || '');
+});
+
+/* mode pill */
+el('modepill').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  setMapMode(b.dataset.mode);
+  showDetail('Space','');
+});
+
+/* the item plays while you watch — the map is alive */
+setInterval(() => {
+  if (mapMode === 'player' && sim.playing && !document.hidden){
+    sim.pos = Math.min(1, sim.pos + 0.0022);
+    paintPlayer();
+  }
+}, 400);
+
+/* ── view switching ────────────────────────────────────────────────────── */
+let view = 'tab';
+el('viewtabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  view = b.dataset.view;
+  document.querySelectorAll('#viewtabs button').forEach(x => x.classList.toggle('on', x === b));
+  el('view-tab').hidden = view !== 'tab';
+  el('view-peek').hidden = view !== 'peek';
+});
+
+/* physical keys drive the map (view 1) · Alt hold (view 2) */
+window.addEventListener('keydown', e => {
+  if (view === 'tab'){
+    const p = prefixOf({ctrl:e.ctrlKey, shift:e.shiftKey, alt:e.altKey});
+    const entry = (DATA[mapMode][p] || {})[e.code];
+    if (entry){
+      simulate(mapMode, p, e.code);
+      showDetail(e.code, p);
+    }
+    e.preventDefault();
+  } else {
+    if (e.key === 'Alt'){ e.preventDefault(); altHeld = true; syncPeek(); }
+  }
+});
+window.addEventListener('keyup', e => {
+  if (view === 'peek' && e.key === 'Alt'){ altHeld = false; syncPeek(); }
+});
+window.addEventListener('blur', () => {
+  altHeld = false; syncPeek();
+});
+
+/* ── Alt-Peek (view 2 — unchanged) ─────────────────────────────────────── */
+let scenario = 'chrome';
+let altHeld = false;
+let toggleOn = true;
+
+const stage = el('stage');
+const NOTES = {
+  chrome: 'Player, chrome visible — every chip rides a visible control; the title bar stays silent ' +
+    '(Min / Max / Close have no shortcuts). Holding Alt never fires anything: the peek only watches. ' +
+    'Chips fade in after ~200 ms of Alt held alone, so Alt+Tab and Alt+F4 never flash them.',
+  hidden: 'Chrome hidden — holding Alt does NOT wake the chrome (transport keys never wake it). ' +
+    'One quiet cluster floats just above the bottom hairline and leaves when Alt does.',
+  web: 'Web mode — the browser row chips its Edge-standard keys. Esc releases page fullscreen; ' +
+    'Alt+W fires the mode switch and the chips re-render for the Player surface.',
+};
+
+function syncPeek(){
+  const on = altHeld || toggleOn;
+  stage.classList.toggle('peek', on);
+  stage.classList.toggle('nochrome', scenario === 'hidden');
+  el('playerchrome').style.display = (scenario === 'web') ? 'none' : '';
+  el('webchrome').style.display = (scenario === 'web') ? '' : 'none';
+  el('hairline').style.display = (scenario === 'hidden') ? '' : 'none';
+  el('bottomcluster').style.display = (scenario === 'hidden') ? '' : 'none';
+  const t = el('alttoggle');
+  t.classList.toggle('on', on);
+  el('peekstate').textContent = on
+    ? 'chips shown — release / untoggle to hide'
+    : 'chips hidden — hold the real Alt key, or toggle';
+  el('scenarionote').textContent = NOTES[scenario];
+}
+
+el('alttoggle').addEventListener('click', () => { toggleOn = !toggleOn; syncPeek(); });
+el('scenariopill').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  scenario = b.dataset.sc;
+  document.querySelectorAll('#scenariopill button').forEach(x => x.classList.toggle('on', x === b));
+  syncPeek();
+});
+
+/* ── boot ──────────────────────────────────────────────────────────────── */
+paintPlayer();
+paintWeb();
+paintDialog();
+setMapMode('player');
+showDetail('Space','');
+syncPeek();
+</script>
+</body>
+</html>

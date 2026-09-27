@@ -89,15 +89,6 @@ class _OsdDeckState extends State<OsdDeck>
     final OsdCard? card = _card;
     if (card == null && _slot.isDismissed) return const SizedBox.shrink();
 
-    // The card rests at y = 8 inside the layer (= 156 px absolute).
-    // Enter: translateY −10 → 0 (the first 2 px clip at the layer's top
-    // edge, so the card never paints over the chrome block). Exit:
-    // 0 → −6.
-    final bool reversing = _slot.status == AnimationStatus.reverse;
-    final double lift = reversing
-        ? -6.0 * (1 - _slide.value)
-        : -10.0 + 10.0 * _slide.value;
-
     return Positioned(
       top: kChromeBlockHeight, // the chrome block's bottom edge (= 148)
       left: 0,
@@ -108,10 +99,33 @@ class _OsdDeckState extends State<OsdDeck>
           alignment: Alignment.topCenter,
           child: FadeTransition(
             opacity: _fade,
-            child: Transform.translate(
-              offset: Offset(0, 8 + lift),
+            // The slide must tick with the slot. [FadeTransition] listens
+            // to the animation itself, but a bare Transform.translate only
+            // ever sees the offset the last build baked in — so before
+            // this builder the enter slide never ran: a fresh show froze
+            // at the pre-tick value (−10 px, too high), and a replacing
+            // show — built with the slot already at 1.0 — jumped the card
+            // down those 10 px on the second hit.
+            child: AnimatedBuilder(
+              animation: _slot,
+              builder: (BuildContext context, Widget? child) {
+                // The card rests at y = 8 inside the layer (= 156 px
+                // absolute). Enter: translateY −10 → 0 (the first 2 px
+                // clip at the layer's top edge, so the card never paints
+                // over the chrome block). Exit: 0 → −6.
+                final bool reversing =
+                    _slot.status == AnimationStatus.reverse;
+                final double lift = reversing
+                    ? -6.0 * (1 - _slide.value)
+                    : -10.0 + 10.0 * _slide.value;
+                return Transform.translate(
+                  offset: Offset(0, 8 + lift),
+                  child: child,
+                );
+              },
               // A card replacing a live card cross-fades in place
-              // (100 ms, no re-slide).
+              // (100 ms, no re-slide). Passed as `child` so animation
+              // ticks repaint the offset without rebuilding the card.
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 100),
                 transitionBuilder:

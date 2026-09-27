@@ -1,7 +1,7 @@
 # SALU Keyboard Shortcuts Reference & Implementation Manual
 
-> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**.  
-> **Design Contract Note ([follow.md](follow.md) Rule 2):** In SALU, all shortcuts operate silently; shortcut labels are never printed on icons, menus, or tooltips.
+> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**. §4 carries the **finalized** design of the discoverability layer (owner-approved 2026-09-27, pending implementation): the Settings **Shortcuts tab** (the Living Map) and **Alt-Peek**.  
+> **Design Contract Note ([follow.md](follow.md) Rule 2):** In SALU, all shortcuts operate silently; shortcut labels are never printed on icons, menus, or tooltips. (The two §4 reference surfaces are an owner ruling, recorded in §4 — Rule 2 itself is untouched.)
 
 ---
 
@@ -218,3 +218,176 @@
 | **`Shift + S` / `R`** | Mouse-only in Right-Click menu. | `Shift+S` toggles Shuffle; `R` cycles Repeat. | Standard media playback toggles with live OSD feedback. |
 | **Web Tabs** | No tab switching shortcuts. | Added `Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+1..8`, `Ctrl+9`, `Ctrl+Shift+T`. | Complete Microsoft Edge standard tab control. |
 | **Web Panels** | Mouse-only menus. | Added `Ctrl+H` (History), `Ctrl+J` (Downloads), `Ctrl+D` (Favourite), `Ctrl+Shift+O` (Hub), `Ctrl+Shift+Delete` (Clear data). | Complete Microsoft Edge standard shelf doors. |
+
+---
+
+## 4. Discoverability Layer — the Shortcuts Tab & Alt-Peek
+
+> **FINALIZED (owner 2026-09-27) — the Living Map (§4.1) and Alt-Peek (§4.2)
+> both approved in preview; ready to build in the §4.3 order.**
+> **Interactive design mock:** `design/shortcut_preview.html` (self-contained,
+> no dependencies — open in any browser; mock only, not app code).
+>
+> **Owner ruling on [follow.md](follow.md) Rule 2 (rules remain intact):** Rule 2
+> governs SALU's **at-rest** chrome — menus, icons and tooltips stay silent, and
+> that does not change. The two surfaces below are deliberate **reference
+> surfaces** the viewer summons on purpose:
+>
+> * the **Shortcuts tab** is a page opened by an explicit click (a dictionary,
+>   not a menu);
+> * **Alt-Peek** is an on-demand reveal that exists only while Alt is held and
+>   vanishes on release.
+>
+> Neither is a tooltip, neither prints anything at rest. Recorded here so no
+> future session mistakes either surface for permission to print shortcut
+> labels on menus, icons or tooltips.
+
+### 4.0 The Shortcut Registry — one list, both surfaces read it
+
+Before either surface is built, all shortcuts in §2 move into **one registry**
+(a single data list). The Settings tab and Alt-Peek both *render* from it;
+neither keeps its own copy. If a shortcut ships without a registry entry, that
+is a bug.
+
+* **Entry shape:** mode scope (`player` / `mini` / `web` / `dialog`) · key
+  combination (logical key + Ctrl/Shift/Alt flags) · action id · group (the §2
+  groups) · availability guard, where one applies (e.g. *seekable*,
+  *subtitle selected*) · optional **anchor** — the visible control Alt-Peek
+  chips (§4.2).
+* **Consumers:** the Shortcuts tab (§4.1), Alt-Peek (§4.2). The existing key
+  handlers keep working as they are; a later phase may have them consult the
+  registry too, so drift becomes impossible. Until then the registry is the
+  **display truth** and must be updated in the same commit as any handler
+  change.
+* **No custom key mapping — ever.** SALU's shortcuts are *standards*
+  (§1.2: mpv / VLC / MPC-HC / Edge alignment); the standard IS the feature.
+  The registry is a mirror, never an editor. The Shortcuts tab therefore has
+  no "rebind" affordance anywhere.
+
+### 4.1 Settings → Shortcuts tab — the Living Map
+
+> **Revision (owner 2026-09-27):** the drawn-keyboard concept (board + mode
+> pill + modifier latch, later + capture pill) was rejected in preview —
+> "did not like anyone." The Living Map below replaces it — and was
+> approved in preview the same day. The Alt-Peek design (§4.2) is
+> untouched.
+
+A fifth tab in the Settings dialog (`SettingsTab.shortcuts`, rightmost —
+after Updates; a reference page, not a setting). Pure reference: nothing on
+it is configurable.
+
+**The idea:** a keyboard is a grid of keys; SALU is a map of *places*. So
+the tab shows **a miniature SALU that is alive** — the app itself, shrunken,
+every visible control wearing its keys, and answering when they are pressed.
+The cheat sheet is not a document about SALU; it is SALU.
+
+**Layout (stacked in the real box):**
+
+1. **The mode pill** — `Player · Mini · Web · Dialogs` (the four-option pill
+   recipe). The miniature below becomes the chosen surface; the same key
+   means different things per mode (§1.1) and the map never lies about which
+   surface it is describing.
+2. **The miniature** (~280 px) — the mock player: title bar, timeline,
+   control row, video surface — with the Alt-Peek chip recipe pinned to
+   every visible control, always visible here (this is the reference map;
+   the peek is the same chips' on-surface, hold-Alt version). The title bar
+   stays silent (no shortcuts live there). Keys with no control to ride
+   (`Z/X`, `B/V`, `[ ]`, `R`, `Shift+S`, `. ,`) sit in one quiet cluster
+   pinned to the video surface.
+3. **The detail strip** — below the miniature: left column keycap + group +
+   action (+ guard); right column the same key in the other three modes
+   (the §3 conflict matrix — the one part of the rejected concept worth
+   keeping).
+
+**Accommodation (the real numbers):** the dialog is `min(640 × 540, window −
+insets)`; header + tab strip + divider leave ≈ 640 × 450. Top row (30) +
+miniature (280) + detail strip (~80) + note ≈ 430 — no scroll at full size;
+narrower windows scale the miniature as one piece (the `FittedBox` recipe)
+and the box never grows. The fifth tab label makes the tab strip overflow on
+very narrow dialogs — below that width the strip slides horizontally (a few
+lines, part of this work).
+
+**It answers — the liveness engine:** while the tab is open it swallows the
+keyboard, and every registered key fires its real mock feedback: transport
+keys move the mock timeline and volume, `Space` swaps the play mark, the
+mock OSD deck flashes its card, `Ctrl+L` slides the mock playlist panel,
+`F`/`F11` really hides the mock chrome (and brings the bottom hairline
+cluster), and the mode keys really flip the miniature: `Ctrl+M` drops it to
+the mini bar, `Ctrl+U` raises the Open URL modal, `Alt+W` / `Ctrl+Shift+W`
+flip Player ⇄ Web. `Esc` follows the app's own order — panel → fullscreen →
+(in the app) close Settings — the rule taught by the mirror itself.
+Unregistered keys do nothing.
+
+**Fidelity rules:** the mock reuses the real recipes (glass capsule, chip,
+marks) so the map can never drift from the surface it describes; every chip
+maps to a registry entry (§4.0) or it does not ship; the mock never plays
+real media and keeps no state — it is a mirror, not a player.
+
+**Two build slices:** *(A)* the static map — mode pill + miniature + chips +
+hover detail; *(B)* the liveness engine. A is the reference; B is what makes
+it SALU.
+
+### 4.2 Alt-Peek — hold Alt, see the keys (Excel-style, passive)
+
+**Version B (owner 2026-09-27; approved unchanged in preview): a peek,
+never a ladder.** Holding Alt reveals
+small key chips next to the controls **currently visible** — exactly what
+Excel does with its ribbon. Pressing a chip's letter does NOT fire anything
+from the peek; the real shortcuts (§2) are unchanged. The peek only watches;
+it never swallows a key (`Alt+Tab`, `Alt+F4` belong to Windows).
+
+**The chip recipe:** one small glass capsule (the OSD deck's `GlassCapsule`
+material, radius 6, height 20), the key legend in tabular figures, hairline
+outline — `IgnorePointer`, never focusable, never wakes the chrome. A chip
+shows the **key only**; the control it rides is its own label — the mark is
+the *what*, the chip is the *how*.
+
+**Anchors — Player mode (chrome visible):**
+
+| Visible control | Chip |
+|---|---|
+| Open media mark (`+`) | `Ctrl+O` |
+| Playlist control | `Ctrl+L` |
+| Play / Pause mark | `Space` |
+| Stop mark | `S` |
+| Previous / Next marks | `PgUp` / `PgDn` |
+| Seek back / forward marks | `←` / `→` |
+| Speaker (sound group) | `↑ ↓ · M` (one chip, three keys) |
+| Timeline, left end | `0–9 · Home · End` |
+| Tune mark | `Ctrl+E` |
+| Fetch mark | `Ctrl+Shift+F` |
+| Fullscreen mark | `F · F11` |
+
+The title bar gets **no chips** — Min/Max/Close have no shortcuts, and the
+peek stays honest by staying silent there. The right-click menu, the Open
+menu's rows and open dialogs chip their Group D keys the same way while they
+are on screen — the peek follows **visibility**, not a fixed map.
+
+**Anchors — Web mode:** the browser row's visible marks chip their Group C
+keys (new tab `+` → `Ctrl+T`, close `×` → `Ctrl+W`, address bar → `Ctrl+L`,
+history → `Ctrl+H`, downloads → `Ctrl+J`, favourite → `Ctrl+D`, hub →
+`Ctrl+Shift+O`, back / forward → `Alt+←` / `Alt+→`).
+
+**Chrome hidden:** holding Alt does NOT wake the chrome. Instead one quiet
+cluster floats just above the bottom hairline with the surface keys —
+`Space · F · ← → · ↑ ↓ · M · 0–9` — and leaves when Alt does.
+
+**Timing & safety:**
+
+* Chips appear only after Alt has been held **~200 ms alone** (no other key in
+  between) — so `Alt+Tab` and `Alt+F4` never flash a peek. Fade in 120 ms,
+  fade out 100 ms.
+* Hide on: Alt release · focus loss / window blur (Windows may never deliver
+  the Alt-up after an `Alt+Tab` — the peek must never freeze on screen).
+* Mode switch while Alt is held (`Alt+W`): the action fires, and the chips
+  re-render for the new surface.
+* **Mini mode: out of scope v1** — the 32-px strip has no room and few keys;
+  the Shortcuts tab's Mini board covers it.
+
+### 4.3 Build order
+
+1. **The registry** (§4.0) — the foundation both surfaces read.
+2. **Shortcuts tab, slice A** (the static Living Map: mode pill + miniature
+   + chips + hover detail).
+3. **Alt-Peek** (Player chrome first, then Web row, menus, dialogs).
+4. **Shortcuts tab, slice B** (the liveness engine).

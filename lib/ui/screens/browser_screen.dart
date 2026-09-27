@@ -18,6 +18,7 @@ import '../../core/web/web_history_service.dart';
 import '../../core/web/web_popup_service.dart';
 import '../../core/web/web_suggestions.dart';
 import '../../core/web/web_tab.dart';
+import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
 import '../../ui/osd/osd_controller.dart';
 import '../widgets/browser_address_bar.dart';
