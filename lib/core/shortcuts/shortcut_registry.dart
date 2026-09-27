@@ -809,6 +809,7 @@ class SaluShortcuts {
       id: 'web.nextTab',
       action: 'Next tab',
       group: ShortcutGroup.webTabs,
+      legend: 'Ctrl+Tab',
     ),
     ShortcutEntry(
       scope: ShortcutScope.web,
@@ -819,6 +820,7 @@ class SaluShortcuts {
       id: 'web.previousTab',
       action: 'Previous tab',
       group: ShortcutGroup.webTabs,
+      legend: 'Ctrl+Shift+Tab',
     ),
     ShortcutEntry(
       scope: ShortcutScope.web,
@@ -1062,6 +1064,7 @@ class SaluShortcuts {
       id: 'dialog.url.walk',
       action: 'Walk saved URLs',
       group: ShortcutGroup.urlModal,
+      legend: '↑ ↓',
     ),
     ShortcutEntry(
       scope: ShortcutScope.dialog,
@@ -1079,6 +1082,7 @@ class SaluShortcuts {
       id: 'dialog.address.walk',
       action: 'Walk suggestions',
       group: ShortcutGroup.addressDropdown,
+      legend: '↓ ↑',
     ),
     ShortcutEntry(
       scope: ShortcutScope.dialog,
@@ -1217,7 +1221,4 @@ class SaluShortcuts {
     ShortcutAnchor.webAddress: 'Ctrl+L',
     ShortcutAnchor.webReload: 'Ctrl+R · F5',
   };
-
-  /// The chrome-hidden cluster's legend (§4.2 · Chrome hidden).
-  static const String hiddenChromeCluster = 'Space · F · ← → · ↑ ↓ · M · 0–9';
 }

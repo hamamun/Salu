@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 
 import '../../core/open_media_service.dart';
 import '../../core/panel_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/ui_lock.dart';
+import '../widgets/alt_peek.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
@@ -254,6 +256,33 @@ class _PillBody extends StatelessWidget {
 
   final ValueChanged<_OpenAction> onAction;
 
+  /// The mark's registered key — the Alt-Peek's tooltip names it.
+  static List<ShortcutEntry>? _keys(String id) {
+    final ShortcutEntry? e = SaluShortcuts.byId(id);
+    return e == null ? null : <ShortcutEntry>[e];
+  }
+
+  /// The pill holds the ChromeLock while it is up, so its marks answer
+  /// the peek through the lock.
+  Widget _mark(
+    String tooltip,
+    Widget mark,
+    _OpenAction action,
+    String keyId,
+  ) {
+    return AltPeekAnchor(
+      entries: _keys(keyId),
+      ignoreLock: true,
+      side: PeekSide.below,
+      child: SaluIconButton(
+        tooltip: tooltip,
+        size: 36,
+        onTap: () => onAction(action),
+        child: mark,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // The shared glass material (the OSD deck renders the same surface —
@@ -265,26 +294,11 @@ class _PillBody extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          SaluIconButton(
-            tooltip: 'Open file',
-            size: 36,
-            onTap: () => onAction(_OpenAction.file),
-            child: const FilmFrameMark(size: 20),
-          ),
+          _mark('Open file', const FilmFrameMark(size: 20), _OpenAction.file, 'player.openFiles'),
           const SizedBox(width: 2),
-          SaluIconButton(
-            tooltip: 'Open folder',
-            size: 36,
-            onTap: () => onAction(_OpenAction.folder),
-            child: const StackedFramesMark(size: 20),
-          ),
+          _mark('Open folder', const StackedFramesMark(size: 20), _OpenAction.folder, 'player.openFolder'),
           const SizedBox(width: 2),
-          SaluIconButton(
-            tooltip: 'Open URL',
-            size: 36,
-            onTap: () => onAction(_OpenAction.url),
-            child: const LinkMark(size: 20),
-          ),
+          _mark('Open URL', const LinkMark(size: 20), _OpenAction.url, 'player.openUrl'),
         ],
       ),
     );

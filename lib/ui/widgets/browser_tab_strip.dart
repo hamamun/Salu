@@ -165,6 +165,7 @@ class _TabChip extends StatelessWidget {
                     if (active)
                       AltPeekAnchor(
                         scope: ShortcutScope.web, anchor: ShortcutAnchor.webCloseTab,
+                        side: PeekSide.below,
                         child: SaluIconButton(
                           size: 22,
                           onTap: onClose,
@@ -282,6 +283,7 @@ class _PlusTab extends StatelessWidget {
         // SALU hover recipe lights it up (never a fixed-ink painter).
         child: AltPeekAnchor(
           scope: ShortcutScope.web, anchor: ShortcutAnchor.webNewTab,
+          side: PeekSide.below,
           child: SaluIconButton(
             size: 26,
             enabled: enabled,

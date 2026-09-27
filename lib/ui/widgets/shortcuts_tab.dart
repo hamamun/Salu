@@ -13,14 +13,18 @@ import 'web_marks.dart';
 
 /// Settings → Shortcuts — the Living Map (shortcut.md §4.1).
 ///
-/// A miniature SALU that is alive: the app itself, shrunken, every visible
-/// control wearing its keys (the Alt-Peek chip recipe, always visible
-/// here), and answering when they are pressed. Pure reference — nothing on
-/// it is configurable, and there is no rebind affordance anywhere (§4.0).
+/// A miniature SALU that is alive: the app itself, shrunken, every
+/// always-visible control as a clean icon (no key text on it) and every
+/// key without an always-visible control on a quiet glass shelf to the
+/// left of the video (one shelf per group), answering when it is
+/// pressed — and, always, naming what is hovered in the detail strip
+/// below. Pure reference — nothing on it is configurable, and there is
+/// no rebind affordance anywhere (§4.0).
 ///
-/// Everything it prints comes from [SaluShortcuts]; a chip without a
-/// registry entry cannot exist. The mock never plays real media and keeps
-/// no state beyond the open tab — it is a mirror, not a player.
+/// Everything it prints comes from [SaluShortcuts]; an icon or keycap
+/// without a registry entry cannot exist. The mock never plays real
+/// media and keeps no state beyond the open tab — it is a mirror, not a
+/// player.
 class ShortcutsTab extends StatefulWidget {
   const ShortcutsTab({super.key});
 
@@ -482,11 +486,11 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
   bool _isLit(ShortcutEntry e) => selected?.id == e.id;
 
-  /// A control of the miniature wearing its chip. Hover names it on the
-  /// detail strip; the chip and the mark light while it is the one shown.
-  Widget _control(ShortcutAnchor anchor, Widget mark, {bool chipAbove = false}) {
+  /// A control of the miniature — the mark alone, no key text on or
+  /// under it. Hover names it on the detail strip; the mark lights
+  /// while it is the one shown.
+  Widget _control(ShortcutAnchor anchor, Widget mark) {
     final List<ShortcutEntry> riding = SaluShortcuts.forAnchor(mode, anchor);
-    final String? legend = SaluShortcuts.chipLegend(mode, anchor);
     final bool lit = riding.any(_isLit);
     final Widget icon = IconTheme(
       data: IconThemeData(
@@ -495,57 +499,185 @@ class ShortcutsTabState extends State<ShortcutsTab> {
       ),
       child: SizedBox(width: 24, height: 24, child: Center(child: mark)),
     );
-    if (legend == null || riding.isEmpty) return icon;
-    final Widget chip = Transform.scale(
-      scale: 0.82,
-      child: PeekChip(legend, bright: lit),
-    );
+    if (riding.isEmpty) return icon;
     return MouseRegion(
       onEnter: (_) => _select(riding.first),
       child: GestureDetector(
         onTap: () => _select(riding.first),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: <Widget>[
-            icon,
-            Positioned(
-              left: -50,
-              right: -50,
-              top: chipAbove ? -20 : 24,
-              height: 20,
-              child: Center(child: chip),
-            ),
-          ],
-        ),
+        child: icon,
       ),
     );
   }
 
-  /// A cluster chip for a key with no control to ride.
-  Widget _keyChip(ShortcutEntry e) {
-    final String legend =
-        e.legend ?? e.combos.map((ShortcutCombo c) => c.label).join(' · ');
+  // ── The rideless shelves ─────────────────────────────────────────────
+
+  /// The keys with no always-visible control, in group order (the
+  /// registry order) — one vertical glass shelf per group.
+  List<List<ShortcutEntry>> _ridelessShelves() {
+    final Map<ShortcutGroup, List<ShortcutEntry>> groups =
+        <ShortcutGroup, List<ShortcutEntry>>{};
+    for (final ShortcutEntry e in SaluShortcuts.rideless(mode)) {
+      groups.putIfAbsent(e.group, () => <ShortcutEntry>[])!.add(e);
+    }
+    return groups.values.toList();
+  }
+
+  /// One shelf — a quiet glass column of icons, left of the video. A
+  /// group taller than five keys runs in two lines so the shelf always
+  /// fits the miniature (600 × 280 design box).
+  static const int _shelfLine = 5;
+
+  Widget _shelf(List<ShortcutEntry> entries) {
+    final List<List<ShortcutEntry>> lines = <List<ShortcutEntry>>[];
+    for (int i = 0; i < entries.length; i += _shelfLine) {
+      lines.add(entries.sublist(
+        i,
+        (i + _shelfLine) > entries.length ? entries.length : i + _shelfLine,
+      ));
+    }
+    return GlassCapsule(
+      radius: 10,
+      blur: 12,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (int i = 0; i < lines.length; i++) ...<Widget>[
+            if (i > 0) const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                for (final ShortcutEntry e in lines[i]) ...<Widget>[
+                  if (e != lines[i].first) const SizedBox(height: 8),
+                  _ridelessIcon(e),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _shelfRow(List<List<ShortcutEntry>> shelves) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        for (final List<ShortcutEntry> s in shelves) ...<Widget>[
+          _shelf(s),
+          const SizedBox(width: 8),
+        ],
+      ],
+    );
+  }
+
+  /// One rideless key in a shelf: the action's own mark where SALU has
+  /// one, otherwise its keycap. Hover names it on the detail strip.
+  Widget _ridelessIcon(ShortcutEntry e) {
+    final bool lit = _isLit(e);
     return MouseRegion(
       onEnter: (_) => _select(e),
       child: GestureDetector(
         onTap: () => _select(e),
-        child: Transform.scale(
-          scale: 0.86,
-          child: PeekChip(legend, bright: _isLit(e)),
+        child: IconTheme(
+          data: IconThemeData(
+            color: lit ? AppColors.accent : AppColors.iconIdle,
+            size: 15,
+          ),
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: Center(child: _ridelessMark(e, lit)),
+          ),
         ),
       ),
     );
   }
 
-  Widget _cluster(List<ShortcutEntry> entries, {double width = 280}) {
-    return SizedBox(
-      width: width,
-      child: Wrap(
-        spacing: 0,
-        runSpacing: 0,
-        children: <Widget>[for (final ShortcutEntry e in entries) _keyChip(e)],
-      ),
-    );
+  Widget _ridelessMark(ShortcutEntry e, bool lit) {
+    final Widget? icon = _ridelessIconFor(e.id);
+    if (icon != null) return icon;
+    final String legend = e.legend ?? e.combos.first.label;
+    return Transform.scale(scale: 0.8, child: PeekChip(legend, bright: lit));
+  }
+
+  /// The action's own mark for a rideless key — null means "print its
+  /// keycap instead".
+  static Widget? _ridelessIconFor(String id) {
+    switch (id) {
+      // Player · transport
+      case 'player.mini':
+        return const MinimizeMark(size: 13);
+      case 'player.shuffle':
+        return const ShuffleMark(size: 15);
+      case 'player.repeat':
+        return const RepeatMark(size: 15);
+      // Player · window
+      case 'player.escape':
+        return const CloseMark(size: 12);
+      // Player · subtitles & tracks
+      case 'player.subEarlier':
+        return const Icon(Icons.arrow_back_rounded, size: 15);
+      case 'player.subLater':
+        return const Icon(Icons.arrow_forward_rounded, size: 15);
+      case 'player.subEarlierCoarse':
+        return const Icon(Icons.rewind_10_rounded, size: 15);
+      case 'player.subLaterCoarse':
+        return const Icon(Icons.forward_10_rounded, size: 15);
+      case 'player.subReset':
+        return const Icon(Icons.refresh_rounded, size: 14);
+      case 'player.tracks':
+        return const Icon(Icons.subtitles_rounded, size: 15);
+      case 'player.cycleAudio':
+        return const Icon(Icons.translate_rounded, size: 15);
+      case 'player.cycleSubtitle':
+        return const CcMark(size: 14);
+      // Player · opening & surfaces
+      case 'player.openFolder':
+        return const Icon(Icons.folder_open_rounded, size: 16);
+      case 'player.openUrl':
+        return const LinkMark(size: 14);
+      case 'player.findInPlaylist':
+        return const MagnifierMark(size: 13);
+      case 'player.info':
+        return const InfoMark(size: 15);
+      case 'player.remote':
+        return const QrMark(size: 15);
+      case 'player.settings':
+        return const Icon(Icons.settings_rounded, size: 16);
+      case 'player.webMode':
+        return const Icon(Icons.public_rounded, size: 15);
+      // Player · tune tier
+      case 'player.tuneNudge':
+        return const Icon(Icons.tune_rounded, size: 15);
+      case 'player.tuneFocus':
+        return const Icon(Icons.swap_vert_rounded, size: 15);
+      // Web · tabs
+      case 'web.reopenTab':
+        return const Icon(Icons.restore_rounded, size: 15);
+      // Web · panels & shelves
+      case 'web.clearData':
+        return const TrashMark(size: 15);
+      case 'web.settings':
+        return const Icon(Icons.settings_rounded, size: 16);
+      case 'web.find':
+        return const MagnifierMark(size: 13);
+      // Web · zoom & window
+      case 'web.zoomIn':
+        return const Icon(Icons.zoom_in_rounded, size: 16);
+      case 'web.zoomOut':
+        return const Icon(Icons.zoom_out_rounded, size: 16);
+      case 'web.fullscreen':
+        return const Icon(Icons.fullscreen_rounded, size: 16);
+      case 'web.escape':
+        return const CloseMark(size: 12);
+      case 'web.playerMode':
+        return const Icon(Icons.play_arrow_rounded, size: 16);
+      default:
+        return null;
+    }
   }
 
   Widget _osdCard() {
@@ -577,20 +709,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     const double rowH = 28;
     const double chromeH = titleH + timelineH + rowH + 8;
 
-    final List<ShortcutEntry> rideless =
-        SaluShortcuts.rideless(ShortcutScope.player);
-    final List<ShortcutEntry> quiet = <ShortcutEntry>[
-      for (final ShortcutEntry e in rideless)
-        if (e.group == ShortcutGroup.transport ||
-            e.group == ShortcutGroup.speed ||
-            e.group == ShortcutGroup.subtitles)
-          if (e.id != 'player.mini') e,
-    ];
-    final List<ShortcutEntry> doors = <ShortcutEntry>[
-      for (final ShortcutEntry e in rideless)
-        if (!quiet.contains(e)) e,
-    ];
-
     return Stack(
       children: <Widget>[
         // The video surface.
@@ -607,18 +725,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
               ),
             ),
           ),
-        ),
-        // Quiet cluster · keys with no control to ride.
-        Positioned(
-          left: 10,
-          bottom: 10,
-          child: _cluster(quiet, width: 300),
-        ),
-        // The doors · surfaces opened by keys alone.
-        Positioned(
-          right: 10,
-          bottom: 10,
-          child: _cluster(doors, width: 260),
         ),
         // The top chrome — hidden by F / F11.
         AnimatedPositioned(
@@ -640,7 +746,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
             ),
           ),
         ),
-        // Fullscreen · the bottom hairline cluster (§4.2 · chrome hidden).
+        // Fullscreen · the bottom hairline (chrome hidden).
         if (fullscreen)
           Positioned(
             left: 0,
@@ -653,23 +759,19 @@ class ShortcutsTabState extends State<ShortcutsTab> {
               child: Container(color: AppColors.threadFill),
             ),
           ),
-        if (fullscreen)
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 60,
-            child: IgnorePointer(
-              child: Center(
-                child: PeekChip(SaluShortcuts.hiddenChromeCluster),
-              ),
-            ),
-          ),
         // The OSD deck — below the chrome.
         Positioned(
           left: 0,
           right: 0,
           top: fullscreen ? 14 : chromeH + 30,
           child: Center(child: _osdCard()),
+        ),
+        // The rideless shelves — every key with no always-visible
+        // control, one shelf per group, left of the video (§4.1).
+        Positioned(
+          left: 10,
+          top: fullscreen ? 12 : chromeH + 12,
+          child: _shelfRow(_ridelessShelves()),
         ),
         // The playlist panel (Ctrl+L).
         AnimatedPositioned(
@@ -738,38 +840,25 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     final List<ShortcutEntry> riding =
         SaluShortcuts.forAnchor(mode, ShortcutAnchor.timeline);
     final bool lit = riding.any(_isLit);
-    final String legend =
-        SaluShortcuts.chipLegend(mode, ShortcutAnchor.timeline) ?? '';
     return MouseRegion(
       onEnter: (_) => _select(riding.first),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
-          children: <Widget>[
-            Transform.scale(
-              scale: 0.8,
-              child: PeekChip(legend, bright: lit),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints c) {
-                  return Stack(
-                    alignment: Alignment.centerLeft,
-                    children: <Widget>[
-                      Container(height: 3, color: AppColors.barTrack),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 160),
-                        height: 3,
-                        width: c.maxWidth * position,
-                        color: lit ? AppColors.textPrimary : AppColors.barFill,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints c) {
+            return Stack(
+              alignment: Alignment.centerLeft,
+              children: <Widget>[
+                Container(height: 3, color: AppColors.barTrack),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  height: 3,
+                  width: c.maxWidth * position,
+                  color: lit ? AppColors.textPrimary : AppColors.barFill,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -920,8 +1009,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   // ── Mini miniature ───────────────────────────────────────────────────
 
   Widget _buildMini() {
-    final List<ShortcutEntry> quiet =
-        SaluShortcuts.rideless(ShortcutScope.mini);
     final String title = osd ?? _items[item];
     return Stack(
       children: <Widget>[
@@ -997,10 +1084,12 @@ class ShortcutsTabState extends State<ShortcutsTab> {
             child: Container(color: AppColors.threadFill),
           ),
         ),
+        // The rideless shelf (subtitle sync keys) — under the strip,
+        // where the strip's own width leaves room.
         Positioned(
           left: 10,
           bottom: 10,
-          child: _cluster(quiet, width: 400),
+          child: _shelfRow(_ridelessShelves()),
         ),
       ],
     );
@@ -1009,8 +1098,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   // ── Web miniature ────────────────────────────────────────────────────
 
   Widget _buildWeb() {
-    final List<ShortcutEntry> quiet =
-        SaluShortcuts.rideless(ShortcutScope.web);
     const double stripH = 28;
     const double rowH = 30;
     return Stack(
@@ -1038,11 +1125,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
               ),
             ),
           ),
-        ),
-        Positioned(
-          left: 10,
-          bottom: 10,
-          child: _cluster(quiet, width: 580),
         ),
         if (!fullscreen) ...<Widget>[
           Positioned(
@@ -1111,6 +1193,12 @@ class ShortcutsTabState extends State<ShortcutsTab> {
           top: fullscreen ? 14 : stripH + rowH + 40,
           child: Center(child: _osdCard()),
         ),
+        // The rideless shelves — one per group, left of the page (§4.1).
+        Positioned(
+          left: 10,
+          top: fullscreen ? 12 : stripH + rowH + 12,
+          child: _shelfRow(_ridelessShelves()),
+        ),
       ],
     );
   }
@@ -1176,7 +1264,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
                         child: _control(
                           ShortcutAnchor.webCloseTab,
                           const CloseMark(size: 9),
-                          chipAbove: false,
                         ),
                       ),
                   ],
@@ -1207,45 +1294,25 @@ class ShortcutsTabState extends State<ShortcutsTab> {
           Expanded(
             child: MouseRegion(
               onEnter: (_) => _select(address.first),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: <Widget>[
-                  Container(
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: addressLit ? AppColors.accent : AppColors.surfaceOutline,
-                      ),
-                    ),
-                    padding: const EdgeInsets.only(left: 2),
-                    child: Row(
-                      children: <Widget>[
-                        _control(ShortcutAnchor.webFavourite, const StarMark(size: 11)),
-                        const Text(
-                          'example.com',
-                          style: TextStyle(fontSize: 9.5, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
+              child: Container(
+                height: 20,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: addressLit ? AppColors.accent : AppColors.surfaceOutline,
                   ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 22,
-                    height: 20,
-                    child: Center(
-                      child: Transform.scale(
-                        scale: 0.82,
-                        child: PeekChip(
-                          SaluShortcuts.chipLegend(mode, ShortcutAnchor.webAddress) ?? '',
-                          bright: addressLit,
-                        ),
-                      ),
+                ),
+                padding: const EdgeInsets.only(left: 2),
+                child: Row(
+                  children: <Widget>[
+                    _control(ShortcutAnchor.webFavourite, const StarMark(size: 11)),
+                    const Text(
+                      'example.com',
+                      style: TextStyle(fontSize: 9.5, color: AppColors.textSecondary),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1264,18 +1331,35 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   // ── Dialogs miniature ────────────────────────────────────────────────
 
   Widget _buildDialogs() {
+    // The dialog key-shelves, two per row — every dialog key lives here,
+    // icons/keycaps only; hover names it on the detail strip.
+    final List<List<ShortcutEntry>> shelves = _ridelessShelves();
+    final List<List<ShortcutEntry>> topShelves = shelves.take(2).toList();
+    final List<List<ShortcutEntry>> bottomShelves = shelves.skip(2).toList();
+    Widget shelfRow(List<List<ShortcutEntry>> row) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final List<ShortcutEntry> s in row) ...<Widget>[
+            _shelf(s),
+            const SizedBox(width: 8),
+          ],
+        ],
+      );
+    }
+
     Widget card(ShortcutGroup group, Widget mock) {
-      final List<ShortcutEntry> entries = <ShortcutEntry>[
+      final bool lit = <bool>[
         for (final ShortcutEntry e in SaluShortcuts.forScope(ShortcutScope.dialog))
-          if (e.group == group) e,
-      ];
+          if (e.group == group) _isLit(e),
+      ].any((bool b) => b);
       return Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: AppColors.background,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: entries.any(_isLit) ? const Color(0x604C9EEB) : AppColors.surfaceOutline,
+            color: lit ? const Color(0x604C9EEB) : AppColors.surfaceOutline,
           ),
         ),
         child: Column(
@@ -1285,12 +1369,9 @@ class ShortcutsTabState extends State<ShortcutsTab> {
               group.label,
               style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 6),
+            const Spacer(),
             mock,
             const Spacer(),
-            Wrap(
-              children: <Widget>[for (final ShortcutEntry e in entries) _keyChip(e)],
-            ),
           ],
         ),
       );
@@ -1309,24 +1390,40 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
     return Padding(
       padding: const EdgeInsets.all(10),
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Expanded(
-            child: Row(
-              children: <Widget>[
-                Expanded(child: card(ShortcutGroup.urlModal, field(focused: true))),
-                const SizedBox(width: 10),
-                Expanded(child: card(ShortcutGroup.addressDropdown, field())),
-              ],
-            ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              shelfRow(topShelves),
+              const SizedBox(height: 8),
+              shelfRow(bottomShelves),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(width: 10),
           Expanded(
-            child: Row(
+            child: Column(
               children: <Widget>[
-                Expanded(child: card(ShortcutGroup.findBar, field())),
-                const SizedBox(width: 10),
-                Expanded(child: card(ShortcutGroup.playlistSearch, field())),
+                Expanded(
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(child: card(ShortcutGroup.urlModal, field(focused: true))),
+                      const SizedBox(width: 10),
+                      Expanded(child: card(ShortcutGroup.addressDropdown, field())),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(child: card(ShortcutGroup.findBar, field())),
+                      const SizedBox(width: 10),
+                      Expanded(child: card(ShortcutGroup.playlistSearch, field())),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
