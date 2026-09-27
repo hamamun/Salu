@@ -1411,7 +1411,7 @@ class _DetailStrip extends StatelessWidget {
         border: Border.all(color: AppColors.surfaceOutline),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Expanded(
             flex: 3,
@@ -1436,25 +1436,30 @@ class _DetailStrip extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  entry.action,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                const SizedBox(height: 4),
+                // Flexible lines: the strip never grows and never
+                // overflows — a line that cannot fit is clipped instead.
+                Flexible(
+                  child: Text(
+                    entry.action,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.guard == null
-                      ? entry.group.label
-                      : '${entry.group.label} · ${entry.guard!.label}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                Flexible(
+                  child: Text(
+                    entry.guard == null
+                        ? entry.group.label
+                        : '${entry.group.label} · ${entry.guard!.label}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
                 ),
               ],
             ),
@@ -1466,11 +1471,9 @@ class _DetailStrip extends StatelessWidget {
             flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 for (final MapEntry<ShortcutScope, ShortcutEntry?> m in across.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
+                  Expanded(
                     child: Row(
                       children: <Widget>[
                         SizedBox(
