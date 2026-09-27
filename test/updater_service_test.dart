@@ -103,11 +103,17 @@ void main() {
         UpdateCheckFrequency.weekly;
     SettingsService.instance.lastUpdateCheckTime.value = 0;
     root = await Directory.systemTemp.createTemp('salu_upd_app');
-    staging = await Directory.systemTemp.createTemp('salu_upd_stg');
+    // Staging lives INSIDE the sandbox on purpose: the swap script, its lock
+    // and its log are derived from staging's parent, and a test that lets
+    // them land in the real %TEMP% leaks a lock the next test then trips on.
+    staging = Directory(p.join(root.path, 'salu_update'))..createSync();
     svc.debugResetForTest();
     svc.appDirOf = () => root.path;
     svc.stagingDirOf = () => staging.path;
-    svc.pidOf = () => 4242;
+    svc.executableOf = () => p.join(root.path, 'salu.exe');
+    // The installed behaviour: SALU reopens itself. The dev-build flip is a
+    // separate test below.
+    svc.devBuildProbe = () => false;
 
     payloads = <String, List<int>>{
       'https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/'
@@ -123,7 +129,6 @@ void main() {
   tearDown(() async {
     svc.debugResetForTest();
     if (root.existsSync()) await root.delete(recursive: true);
-    if (staging.existsSync()) await staging.delete(recursive: true);
   });
 
   File versionsFile() => File(p.join(root.path, 'versions.json'));
@@ -439,31 +444,50 @@ void main() {
   group('the swap handoff', () {
     late List<String> calls;
     late bool exited;
+    late Map<String, String> lastEnv;
 
     void installFakeInstaller({bool spawnOk = true}) {
       calls = <String>[];
       exited = false;
+      lastEnv = <String, String>{};
       svc.installer = UpdateInstallerWindows(
-        scriptWriter: (String stagingDir) async {
-          calls.add('write');
-          return p.join(stagingDir, updaterScriptName);
+        scriptWriter: (String scriptPath) async {
+          calls.add('write:$scriptPath');
         },
-        spawner: (String scriptPath, int saluPid, String targetDir,
-            String stagingDir, bool relaunch) async {
-          calls.add('spawn:$saluPid:$targetDir:$relaunch');
+        spawner: (String scriptPath, Map<String, String> env) async {
+          lastEnv = env;
+          calls.add('spawn:$scriptPath:${env[swapEnvRelaunch]}');
           return spawnOk;
         },
         exitApp: () => exited = true,
+        // The guards are the installer's own business and are covered by
+        // update_installer_windows_test.dart; here they would only write real
+        // files in the sandbox.
+        writability: (String targetDir) => true,
+        lockReader: (String lockPath) => null,
       );
     }
 
-    test('Restart Now spawns the script with the real paths, then exits',
-        () async {
+    test('Restart Now hands the swap the real paths, then exits', () async {
       installFakeInstaller();
       final bool started = await svc.restartNow();
       expect(started, isTrue);
-      expect(calls, <String>['write', 'spawn:4242:${root.path}:true']);
+      expect(
+        calls,
+        <String>[
+          'write:${swapScriptPathFor(staging.path)}',
+          'spawn:${swapScriptPathFor(staging.path)}:1',
+        ],
+      );
+      expect(lastEnv[swapEnvTarget], root.path);
+      expect(lastEnv[swapEnvStaging], staging.path);
+      // SALU's own executable path, not a hardcoded `salu.exe` in a folder:
+      // a renamed or relocated install still reopens itself.
+      expect(lastEnv[swapEnvExe], p.join(root.path, 'salu.exe'));
       expect(exited, isTrue);
+      expect(Directory(staging.path).existsSync(), isTrue,
+          reason: 'staging must SURVIVE this close — the script reads it after '
+              'SALU is gone');
     });
 
     test('Restart Later applies on close — relaunch off', () async {
@@ -473,7 +497,13 @@ void main() {
       await svc.download(result.pendingUpdates, isCancelled: () => false);
 
       await svc.applyAtClose();
-      expect(calls, <String>['write', 'spawn:4242:${root.path}:false']);
+      expect(
+        calls,
+        <String>[
+          'write:${swapScriptPathFor(staging.path)}',
+          'spawn:${swapScriptPathFor(staging.path)}:0',
+        ],
+      );
       expect(exited, isFalse, reason: 'a close-time swap never relaunches');
     });
 
@@ -483,11 +513,95 @@ void main() {
       expect(calls, isEmpty);
     });
 
+    test('a close-time swap never throws at the door', () async {
+      // The close hook has one job: get out. A refusal is a log line.
+      final UpdateCheckResult result = await svc.check();
+      await svc.download(result.pendingUpdates, isCancelled: () => false);
+      svc.installer = UpdateInstallerWindows(
+        scriptWriter: (String scriptPath) async {},
+        spawner: (String s, Map<String, String> e) async => true,
+        writability: (String targetDir) => false,
+        lockReader: (String lockPath) => null,
+      );
+      await svc.applyAtClose();
+      expect(svc.stagedReady, isTrue, reason: 'still staged, still pending');
+    });
+
     test('a refused spawn keeps SALU alive (Restart Now)', () async {
       installFakeInstaller(spawnOk: false);
       final bool started = await svc.restartNow();
       expect(started, isFalse);
       expect(exited, isFalse);
+    });
+
+    test('a dev build applies without reopening itself (updater.md §10)',
+        () async {
+      installFakeInstaller();
+      svc.devBuildProbe = () => true;
+      expect(svc.isDevBuild, isTrue);
+      final bool started = await svc.restartNow();
+      expect(started, isTrue);
+      expect(exited, isTrue, reason: 'the files still need swapping, and '
+          'exiting is what releases them');
+      expect(lastEnv[swapEnvRelaunch], '0',
+          reason: 'a dev build that reopens itself leaves the debugger behind '
+              'for nothing');
+    });
+
+    test('a refusal is shown, not swallowed, and SALU stays up', () async {
+      // Payloads first: the point of the test is what a refusal does NOT do
+      // to work already downloaded and verified.
+      final UpdateCheckResult result = await svc.check();
+      await svc.download(result.pendingUpdates, isCancelled: () => false);
+      expect(svc.stagedReady, isTrue);
+      installFakeInstaller();
+      svc.installer = UpdateInstallerWindows(
+        scriptWriter: (String scriptPath) async {},
+        spawner: (String s, Map<String, String> e) async => true,
+        writability: (String targetDir) => false,
+        lockReader: (String lockPath) => null,
+      );
+      await expectLater(svc.restartNow(),
+          throwsA(isA<UpdateSwapRefusedException>()));
+      expect(exited, isFalse);
+      expect(svc.stagedReady, isTrue,
+          reason: 'a swap that cannot run must not discard verified payloads');
+    });
+
+    test('the startup sweep drops staging whose versions are installed',
+        () async {
+      final UpdateCheckResult result = await svc.check();
+      await svc.download(result.pendingUpdates, isCancelled: () => false);
+      expect(svc.stagedReady, isTrue);
+      // Half-applied (no versions.json yet): the sweep must leave it alone.
+      svc.postLaunchSweep();
+      expect(svc.stagedReady, isTrue,
+          reason: 'dropping an unapplied update is how files get lost');
+
+      // The swap having run: manifest.json promoted to versions.json.
+      File(p.join(staging.path, 'manifest.json')).copySync(
+        p.join(root.path, 'versions.json'),
+      );
+      expect(svc.isStagingAlreadyInstalled(), isTrue);
+      svc.postLaunchSweep();
+      expect(svc.stagedReady, isFalse,
+          reason: 'an applied update is not a pending one');
+      expect(staging.existsSync(), isFalse);
+    });
+
+    test('the startup sweep removes a stale lock and script', () async {
+      final File lock = File(swapLockPathFor(staging.path))
+        ..writeAsStringSync('9 9');
+      final File script = File(swapScriptPathFor(staging.path))
+        ..writeAsStringSync('rem');
+      lock.setLastModifiedSync(DateTime.now().subtract(const Duration(days: 1)));
+      script.setLastModifiedSync(DateTime.now().subtract(const Duration(days: 1)));
+      svc.installer = UpdateInstallerWindows(
+        clock: () => DateTime.now(),
+      );
+      svc.postLaunchSweep();
+      expect(lock.existsSync(), isFalse);
+      expect(script.existsSync(), isFalse);
     });
   });
 }

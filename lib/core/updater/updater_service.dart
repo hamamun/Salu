@@ -87,7 +87,7 @@ class UpdateProgress {
 /// The full pipeline: **check** the three feeds → **compare** against
 /// `versions.json` (+ shipped baselines) → **download & stage** into
 /// `%TEMP%\salu_update\` with verification → hand the **swap** to the
-/// detached `salu_updater.bat` on restart (updater.md §3).
+/// detached `salu_swap.bat` on restart (updater.md §3, §6.1).
 ///
 /// Nothing here touches playback or the browser: checks and downloads are
 /// pure file work in the background (updater.md §9 · "No Interruption of
@@ -142,14 +142,21 @@ class UpdaterService {
   UpdateArchiveExtractor extractArchive = _extractArchive;
 
   /// The installation root — where `salu.exe` and `versions.json` live.
-  String Function() appDirOf = () => p.dirname(Platform.resolvedExecutable);
+  String Function() appDirOf = _appDir;
 
   /// The staging directory (`%TEMP%\salu_update`).
-  String Function() stagingDirOf = () =>
-      p.join(Directory.systemTemp.path, stagingFolderName);
+  String Function() stagingDirOf = _stagingDir;
 
-  /// This process's PID — what the swap script waits on (updater.md §6).
-  int Function() pidOf = () => pid;
+  /// The running executable — what the swap script reopens once it has
+  /// swapped (updater.md §6). SALU's own path rather than a hardcoded
+  /// `salu.exe`: a dev build lives in `build\windows\…\Debug`, and a release
+  /// built by hand may be renamed or run from anywhere.
+  String Function() executableOf = () => Platform.resolvedExecutable;
+
+  /// A dev build (`flutter run`, VS Code's F5): `exit(0)` ends the debug
+  /// session, so an app that reopens ITSELF would come back detached from the
+  /// debugger — useless, and confusing. updater.md §10. Seam for tests.
+  bool Function() devBuildProbe = _isDebugBuild;
 
   /// The clock. Seams so "Last checked: Just now" tests do not sleep.
   DateTime Function() now = DateTime.now;
@@ -537,29 +544,95 @@ class UpdaterService {
   }
 
   /// updater.md §8 · `[ Restart Now ]`: spawn the detached swap script and
-  /// `exit(0)`. The script waits for this PID to die, backs up, swaps,
-  /// and relaunches `salu.exe`. Returns false when the script could not be
-  /// spawned (SALU stays up; the staged files remain for the close-time
-  /// applier).
+  /// `exit(0)`. The script renames each old file out of the way, copies the
+  /// staged one in, and reopens SALU — no process to wait for, because a
+  /// file still in use simply makes the attempt retry (updater.md §6.1).
+  ///
+  /// Returns false when Windows refused the spawn: SALU stays up and the
+  /// staged files remain for the close-time applier. Throws
+  /// [UpdateSwapRefusedException] when the swap cannot possibly work where
+  /// SALU is installed (a protected folder) or one is already running — the
+  /// dialog shows its message and SALU keeps running either way.
   Future<bool> restartNow() {
     return installer.applyAndExit(
       stagingDir: stagingDirOf(),
       targetDir: appDirOf(),
-      saluPid: pidOf(),
+      saluExe: executableOf(),
+      // A dev build gets no relaunch: reopening itself would drop the debug
+      // session's other half, and the next F5 rebuilds the very files the
+      // swap just wrote (updater.md §10).
+      relaunch: !isDevBuild,
     );
   }
+
+  /// True in a development build — the flag that turns "Restart Now" into
+  /// "Apply & Close" and silences any promise that SALU will reopen.
+  bool get isDevBuild => devBuildProbe();
+
+  /// `salu_swap.log`, beside the script in `%TEMP%`: the one place a swap
+  /// that ran after SALU died can still be read from (updater.md §6.1).
+  String get swapLogPath => swapLogPathFor(stagingDirOf());
 
   /// updater.md §8 · `[ Restart Later ]`'s second half: the staged files
   /// are applied on the next normal close. The same script, spawned just
   /// before `exit(0)` — with `relaunch: 0` so closing SALU stays closing.
+  ///
+  /// Silent by design: this is the close path, where a dialog, a throw or a
+  /// blocked shutdown is worse than an update that waits for the next try.
   Future<void> applyAtClose() async {
     if (!stagedReady) return;
-    await installer.startSwap(
-      stagingDir: stagingDirOf(),
-      targetDir: appDirOf(),
-      saluPid: pidOf(),
-      relaunch: false,
-    );
+    try {
+      await installer.startSwap(
+        stagingDir: stagingDirOf(),
+        targetDir: appDirOf(),
+        saluExe: executableOf(),
+        relaunch: false,
+      );
+    } catch (error) {
+      debugPrint('[SALU] updater: close-time swap not started: $error');
+    }
+  }
+
+  /// The swap's own leftovers, swept at every startup (updater.md §10): a
+  /// stale lock or script from a swap that was killed instead of finishing,
+  /// a `.old` a half-finished rename left behind, and — the honest one — a
+  /// staging folder whose versions are ALREADY installed, which means the
+  /// swap ran but could not clean up after itself. Left alone otherwise: an
+  /// unapplied update must stay staged.
+  void postLaunchSweep() {
+    try {
+      installer.sweepSwapLeftovers(
+        targetDir: appDirOf(),
+        stagingDir: stagingDirOf(),
+      );
+    } catch (error) {
+      debugPrint('[SALU] updater: sweep skipped: $error');
+    }
+    try {
+      if (stagedReady && isStagingAlreadyInstalled()) purgeStaging();
+    } catch (error) {
+      debugPrint('[SALU] updater: staging reconcile skipped: $error');
+    }
+  }
+
+  /// True when every version the staged manifest records is what the
+  /// installation root reports right now — i.e. a swap already happened.
+  bool isStagingAlreadyInstalled() {
+    final UpdateManifest staged;
+    try {
+      final File manifest = File(p.join(stagingDirOf(), manifestFileName));
+      if (!manifest.existsSync()) return false;
+      staged = UpdateManifest.tryParse(manifest.readAsStringSync());
+    } catch (_) {
+      return false;
+    }
+    if (staged.components.isEmpty) return false;
+    final UpdateManifest installed = readLocalVersions();
+    for (final MapEntry<UpdateComponent, String> entry
+        in staged.components.entries) {
+      if (installed.components[entry.key] != entry.value) return false;
+    }
+    return true;
   }
 
   // ── Scheduled checks (updater.md §7 · persistence) ─────────────────────
@@ -599,15 +672,31 @@ class UpdaterService {
     fetchText = _fetchText;
     downloadToFile = _downloadToFile;
     extractArchive = _extractArchive;
-    appDirOf = () => p.dirname(Platform.resolvedExecutable);
-    stagingDirOf = () =>
-        p.join(Directory.systemTemp.path, stagingFolderName);
-    pidOf = () => pid;
+    appDirOf = _appDir;
+    stagingDirOf = _stagingDir;
+    executableOf = () => Platform.resolvedExecutable;
+    devBuildProbe = _isDebugBuild;
     now = DateTime.now;
     installer = UpdateInstallerWindows();
     updateAvailable.value = false;
   }
 }
+
+// ── Production paths & mode (the seams' defaults) ──────────────────────────
+
+/// The installation root: the folder holding the running `salu.exe`.
+/// `versions.json` lives beside it, which is what makes a swapped DLL and
+/// the version record agree (updater.md §5).
+String _appDir() => p.dirname(Platform.resolvedExecutable);
+
+/// `%TEMP%\salu_update` (updater.md §5) — and the folder one level up is
+/// where the swap script and its log live, outside what the script cleans.
+String _stagingDir() =>
+    p.join(Directory.systemTemp.path, UpdaterService.stagingFolderName);
+
+/// A debug build is a dev build: `flutter run` / VS Code's F5, where SALU
+/// is a child of the tool that owns its lifecycle (updater.md §10).
+bool _isDebugBuild() => kDebugMode;
 
 // ── Production HTTP & extraction (the seams' defaults) ─────────────────────
 

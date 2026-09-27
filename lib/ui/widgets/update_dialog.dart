@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/settings_service.dart';
 import '../../core/ui_lock.dart';
+import '../../core/updater/update_installer_windows.dart';
 import '../../core/updater/update_manifest.dart';
 import '../../core/updater/updater_service.dart';
 import '../../theme/app_theme.dart';
@@ -185,7 +186,15 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       final bool started = await _updater.restartNow();
       // exit(0) lands inside restartNow on Windows; a refused spawn stays
       // visible instead of pretending the swap is happening.
-      if (!started) _showFailure(_UpdateFailureKind.installation);
+      if (!started) {
+        _showFailure(_UpdateFailureKind.installation,
+            detail: 'The updater script could not be started. The staged '
+                'files are untouched - closing SALU will try again.');
+      }
+    } on UpdateSwapRefusedException catch (error) {
+      // A swap that cannot work where SALU is installed (a protected folder,
+      // or one already running). Said plainly, and SALU keeps running.
+      _showFailure(_UpdateFailureKind.installation, detail: error.message);
     } catch (error) {
       debugPrint('[SALU] updater: could not start installer: $error');
       _showFailure(_UpdateFailureKind.installation);
@@ -305,15 +314,31 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       case _UpdateStage.downloading:
         return _buildDownloadingBody();
       case _UpdateStage.readyToRestart:
-        return const Column(
+        // updater.md §10: a dev build gets the truth instead of a promise
+        // SALU cannot keep there — reopening itself would drop out of the
+        // debugger, and the next build copies the pinned files back anyway.
+        final bool dev = _updater.isDevBuild;
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _TitleLine('✓ Downloads Complete!'),
-            SizedBox(height: 10),
-            _DetailLine('All updates are staged and ready to be applied.'),
-            SizedBox(height: 4),
+            const _TitleLine('✓ Downloads Complete!'),
+            const SizedBox(height: 10),
+            const _DetailLine(
+              'All updates are staged and ready to be applied.',
+            ),
+            const SizedBox(height: 4),
+            _DetailLine(dev
+                ? 'SALU will close, install the new files, and stay closed - '
+                    'start it again from VS Code. A rebuild replaces these '
+                    'files with the ones the build pins, so this only affects '
+                    'the build you are running.'
+                : 'SALU will close, install the new files, and reopen by '
+                    'itself in a moment.'),
+            const SizedBox(height: 6),
             _DetailLine(
-              'SALU will restart, install the new files, and reopen.',
+              'Staged in ${_updater.stagingDirOf()} · swap log: '
+              '${_updater.swapLogPath}',
+              quieter: true,
             ),
           ],
         );
@@ -422,12 +447,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           ],
         );
       case _UpdateStage.readyToRestart:
+        // Same handoff, different promise: a dev build is not reopened.
+        final bool dev = _updater.isDevBuild;
         return _ActionRow(
           children: <Widget>[
             _UpdateAction(label: 'Restart Later', onTap: _restartLater),
             const SizedBox(width: 8),
             _UpdateAction(
-              label: 'Restart Now',
+              label: dev ? 'Apply & Close' : 'Restart Now',
               primary: true,
               onTap: _restartNow,
             ),

@@ -140,6 +140,12 @@ Future<void> main(List<String> args) async {
   // elapsed — background only, it just raises the "Update Available"
   // flag the Settings → Updates tab shows.
   UpdaterService.instance.scheduleStartupCheck();
+  // updater.md §10: whatever the last swap could not clean up behind itself
+  // (a lock or script left by a run that was killed, a `.old` that survived
+  // its rename, staging whose versions are already installed). Runs here,
+  // at startup, because that is the first moment SALU is certain the files
+  // it swapped are no longer in use.
+  UpdaterService.instance.postLaunchSweep();
 }
 
 /// Intercepts the window close: flush the resume store so the last
