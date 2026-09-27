@@ -263,80 +263,67 @@ is a bug.
   The registry is a mirror, never an editor. The Shortcuts tab therefore has
   no "rebind" affordance anywhere.
 
-### 4.1 Settings → Shortcuts tab (the drawn keyboard)
+### 4.1 Settings → Shortcuts tab — the Living Map
 
-A fifth tab in the Settings dialog (`SettingsTab.shortcuts`, rightmost — after
-Updates; a reference page, not a setting). Pure reference: nothing on it is
-configurable.
+> **Revision (owner 2026-09-27):** the drawn-keyboard concept (board + mode
+> pill + modifier latch, later + capture pill) was rejected in preview —
+> "did not like anyone." The Living Map below replaces it. The Alt-Peek
+> design (§4.2) is untouched.
 
-**Layout, top to bottom:**
+A fifth tab in the Settings dialog (`SettingsTab.shortcuts`, rightmost —
+after Updates; a reference page, not a setting). Pure reference: nothing on
+it is configurable.
 
-1. **The mode pill** — `Player · Mini · Web · Dialogs`, the playlist's
-   four-option pill recipe. The board below lights up for the chosen mode;
-   this is not decoration: the same key means different things per mode (§1.1)
-   and the board must never lie by showing one meaning as the truth.
-2. **The capture pill** — right of the mode pill on the same top row: a quiet
-   key glyph + `press a key`. Pressing a combo renders it inside as keycaps,
-   with a `×` to clear — the press-a-key lookup's anchor (see Interaction).
-3. **The drawn keyboard** — a compact ANSI board (function row, number row,
-   three letter rows, modifier row) plus the navigation cluster
-   (`Home / End / PgUp / PgDn` and the arrow cross — SALU uses them all).
-   Scales down as one piece in narrow windows (the TransportCluster
-   `FittedBox` recipe — marks shrink, nothing clips).
-4. **The detail strip** — below the board, not beside it: the box is 640 px
-   wide, and a side column would starve the keyboard. Two quiet columns —
-   left: keycap + group + action (+ guard); right: the cross-mode rows.
+**The idea:** a keyboard is a grid of keys; SALU is a map of *places*. So
+the tab shows **a miniature SALU that is alive** — the app itself, shrunken,
+every visible control wearing its keys, and answering when they are pressed.
+The cheat sheet is not a document about SALU; it is SALU.
 
-**Accommodation in the Settings box (the real numbers):** the dialog is
-`min(640 × 540, window − insets)`; header + tab strip + divider leave a body
-of ≈ 640 × 450, and every existing tab body scrolls vertically. The
-Shortcuts tab **stacks**: top row (mode pill + capture pill) → board → detail
-strip. At the full 640 the
-keycap unit lands at ≈ 28 px (board ≈ 600 × 186) and the whole stack fits in
-≈ 390 px — no scroll at full size. When the window narrows, the dialog
-narrows with it and the board rides the TransportCluster `FittedBox`
-scale-down recipe — the keys shrink as one piece, nothing ever clips or
-reflows; the box never grows. One collateral the fifth tab brings: the tab
-strip is a plain `Row` that would overflow on very narrow dialogs — below
-that width the strip slides horizontally (a few lines, part of this work).
+**Layout (stacked in the real box):**
 
-**Keycap states (two, ever):**
+1. **The mode pill** — `Player · Mini · Web · Dialogs` (the four-option pill
+   recipe). The miniature below becomes the chosen surface; the same key
+   means different things per mode (§1.1) and the map never lies about which
+   surface it is describing.
+2. **The miniature** (~280 px) — the mock player: title bar, timeline,
+   control row, video surface — with the Alt-Peek chip recipe pinned to
+   every visible control, always visible here (this is the reference map;
+   the peek is the same chips' on-surface, hold-Alt version). The title bar
+   stays silent (no shortcuts live there). Keys with no control to ride
+   (`Z/X`, `B/V`, `[ ]`, `R`, `Shift+S`, `. ,`) sit in one quiet cluster
+   pinned to the video surface.
+3. **The detail strip** — below the miniature: left column keycap + group +
+   action (+ guard); right column the same key in the other three modes
+   (the §3 conflict matrix — the one part of the rejected concept worth
+   keeping).
 
-* **Quiet** — hairline outline (`AppColors.surfaceOutline`), dim legend. The
-  key does nothing in the selected mode.
-* **Lit** — brighter outline + brighter legend: the key is live in the
-  selected mode (with the current modifier latch, below). Availability guards
-  dim a lit key to half-ink (e.g. seek keys while a live stream plays).
+**Accommodation (the real numbers):** the dialog is `min(640 × 540, window −
+insets)`; header + tab strip + divider leave ≈ 640 × 450. Top row (30) +
+miniature (280) + detail strip (~80) + note ≈ 430 — no scroll at full size;
+narrower windows scale the miniature as one piece (the `FittedBox` recipe)
+and the box never grows. The fifth tab label makes the tab strip overflow on
+very narrow dialogs — below that width the strip slides horizontally (a few
+lines, part of this work).
 
-Keycaps carry **key names only** (letters, digits, `Esc`, `PgUp`…) — never
-action names. Actions live only in the detail panel. No filled boxes behind
-keys, no ripple (Rule 4's spirit); hover lights the outline and nothing else.
+**It answers — the liveness engine:** while the tab is open it swallows the
+keyboard, and every registered key fires its real mock feedback: transport
+keys move the mock timeline and volume, `Space` swaps the play mark, the
+mock OSD deck flashes its card, `Ctrl+L` slides the mock playlist panel,
+`F`/`F11` really hides the mock chrome (and brings the bottom hairline
+cluster), and the mode keys really flip the miniature: `Ctrl+M` drops it to
+the mini bar, `Ctrl+U` raises the Open URL modal, `Alt+W` / `Ctrl+Shift+W`
+flip Player ⇄ Web. `Esc` follows the app's own order — panel → fullscreen →
+(in the app) close Settings — the rule taught by the mirror itself.
+Unregistered keys do nothing.
 
-**Interaction:**
+**Fidelity rules:** the mock reuses the real recipes (glass capsule, chip,
+marks) so the map can never drift from the surface it describes; every chip
+maps to a registry entry (§4.0) or it does not ship; the mock never plays
+real media and keeps no state — it is a mirror, not a player.
 
-* **Hover a lit key** → the detail panel shows the entry: key name, group,
-  action, and — the point of the whole tab — **what that same key does in the
-  other modes** (`Ctrl + L` → Player: toggle playlist · Web: focus address
-  bar). The §3 conflict matrix, made visible.
-* **Modifier latch** — the drawn `Ctrl`, `Shift` and `Alt` keycaps are toggle
-  switches. Click `Ctrl`: it stays latched and the whole board re-lights to
-  the `Ctrl+` layer; click again to unlatch. Chords (`Ctrl+Shift+O`) latch
-  both. This is how a flat keyboard shows a three-dimensional key map — and
-  it is the tab's signature move.
-* **Press-a-key lookup** — the capture pill (§4.1 · 2) is the visible cue:
-  press any combo while the tab is open and it renders inside the pill as
-  keycaps, the keycap lights on the board, and the detail strip answers for
-  **every mode at once** — the current mode's action on the left, the other
-  three on the right (the tab swallows the press; the player never reacts).
-  One carve-out: while a combo is captured, the **first `Esc` clears the
-  capture** — only then does `Esc` close the Settings dialog.
-
-**The Mini and Dialogs boards are honestly sparse** — a handful of lit keys.
-That is the truth of those modes and the board shows it; no padding, no
-invented keys.
-
-**Two build slices:** *(A)* board + mode pill + hover detail · *(B)* modifier
-latch + press-a-key lookup. A is useful alone; B is the dessert.
+**Two build slices:** *(A)* the static map — mode pill + miniature + chips +
+hover detail; *(B)* the liveness engine. A is the reference; B is what makes
+it SALU.
 
 ### 4.2 Alt-Peek — hold Alt, see the keys (Excel-style, passive)
 
@@ -397,6 +384,7 @@ cluster floats just above the bottom hairline with the surface keys —
 ### 4.3 Build order
 
 1. **The registry** (§4.0) — the foundation both surfaces read.
-2. **Shortcuts tab, slice A** (board + mode pill + hover detail).
+2. **Shortcuts tab, slice A** (the static Living Map: mode pill + miniature
+   + chips + hover detail).
 3. **Alt-Peek** (Player chrome first, then Web row, menus, dialogs).
-4. **Shortcuts tab, slice B** (modifier latch + press-a-key lookup).
+4. **Shortcuts tab, slice B** (the liveness engine).
