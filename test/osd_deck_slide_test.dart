@@ -54,19 +54,19 @@ void main() {
       expect(slideY(tester), closeTo(kChromeBlockHeight + 8.0, 0.001));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // TTL — the card is mid-exit here: the 1000 ms TTL fired 100 ms
-      // into the 120 ms reverse, so the card has left its rest
-      // (block + 8) and is near the exit lift's end (block + 2), but
-      // not gone. (Measuring any later is too late — once the reverse
-      // completes, the deck builds nothing at all.)
+      // TTL — the card leaves its rest. The exit's clock starts on the
+      // FIRST FRAME after the TTL timer fires (a ticker's first tick is
+      // its start), so one pump brings the dismissal, and the next is
+      // 60 ms into the 120 ms reverse: past the rest (block + 8), short
+      // of the exit's end (block + 2).
       await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pump(const Duration(milliseconds: 60));
       final double exitingY = slideY(tester);
       expect(exitingY, lessThan(kChromeBlockHeight + 8.0));
       expect(exitingY, greaterThan(kChromeBlockHeight + 2.0));
 
-      // …and is gone once the 120 ms exit completes.
-      await tester.pump(const Duration(milliseconds: 60));
-      await tester.pump(const Duration(milliseconds: 20));
+      // …and is gone once the exit completes and the slot clears.
+      await tester.pumpAndSettle();
       expect(find.byType(GlassCapsule), findsNothing);
     },
   );
