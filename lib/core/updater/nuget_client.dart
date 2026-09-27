@@ -107,6 +107,7 @@ List<int>? zipReadEntry(List<int> archive, String entryPath) {
         ? archive.buffer
         : Uint8List.fromList(archive).buffer,
     archive is Uint8List ? archive.offsetInBytes : 0,
+    archive.length,
   );
 
   // ── End Of Central Directory: scan back over the 64 KB comment window.
@@ -120,7 +121,10 @@ List<int>? zipReadEntry(List<int> archive, String entryPath) {
   }
   if (eocd < 0) return null;
   final int entryCount = _u16(data, eocd + 10);
-  int cursor = _u32(data, eocd + 20);
+  // EOCD +16 is the central-directory offset. +20 is the two-byte ZIP
+  // comment length; reading a four-byte offset there fails on every normal
+  // no-comment nupkg (and points at garbage when a comment is present).
+  int cursor = _u32(data, eocd + 16);
   if (cursor < 0 || cursor + 46 > archive.length) return null;
 
   final String want = entryPath.replaceAll('\\', '/').toLowerCase();

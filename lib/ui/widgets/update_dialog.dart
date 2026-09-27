@@ -18,8 +18,8 @@ import 'web_marks.dart';
 /// The state machine is updater.md §8's layout flow exactly:
 /// **checking** → **updatesFound** (Cancel / Update) → **downloading**
 /// (live progress + Cancel) → **readyToRestart** (Restart Later / Restart
-/// Now); or **upToDate** (Close) / **failed** (the quiet network line)
-/// straight from the check.
+/// Now); or **upToDate** (Close) / **failed** (a message matched to the
+/// check, download, preparation or installation failure).
 Future<void> showUpdateDialog(BuildContext context) {
   ChromeLock.instance.acquire();
   return showGeneralDialog<void>(
@@ -71,9 +71,13 @@ enum _UpdateStage {
   /// State 2D — staged and verified; the swap needs a restart.
   readyToRestart,
 
-  /// State 4 — a feed could not be reached. Existing files untouched.
+  /// A check, download, preparation or installer failure.
   failed,
 }
+
+/// A failed download is different from a downloaded file that could not be
+/// verified or unpacked. Only network failures should mention connectivity.
+enum _UpdateFailureKind { check, download, preparation, installation }
 
 class _UpdateDialog extends StatefulWidget {
   const _UpdateDialog();
@@ -93,7 +97,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   /// did it.
   bool _cancelRequested = false;
 
-  /// A little error context for the quiet failed state.
+  /// A little safe, user-readable error context for the failed state.
+  _UpdateFailureKind _failureKind = _UpdateFailureKind.check;
   String? _failureDetail;
 
   UpdaterService get _updater => UpdaterService.instance;
@@ -116,6 +121,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     setState(() {
       _result = result;
       if (!result.ok) {
+        _failureKind = _UpdateFailureKind.check;
         _failureDetail = null;
         _stage = _UpdateStage.failed;
       } else if (result.hasUpdates) {
@@ -144,13 +150,25 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       setState(() => _stage = _UpdateStage.readyToRestart);
     } on UpdateCancelledException {
       // Already closed (or closing) — staging is already purged.
+    } on UpdateFetchException {
+      _showFailure(_UpdateFailureKind.download);
+    } on UpdateVerifyException catch (error) {
+      // Only known verification messages are safe to display. Never show
+      // an exception class, URL or a raw OS error to the user.
+      _showFailure(_UpdateFailureKind.preparation, detail: error.message);
     } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _failureDetail = '$error';
-        _stage = _UpdateStage.failed;
-      });
+      debugPrint('[SALU] updater: preparation failed: $error');
+      _showFailure(_UpdateFailureKind.preparation);
     }
+  }
+
+  void _showFailure(_UpdateFailureKind kind, {String? detail}) {
+    if (!mounted) return;
+    setState(() {
+      _failureKind = kind;
+      _failureDetail = detail;
+      _stage = _UpdateStage.failed;
+    });
   }
 
   /// Cancel / ✕ / barrier: close at once. Mid-download the dispose flag
@@ -163,14 +181,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
 
   Future<void> _restartNow() async {
     _cancelRequested = false; // the staging must SURVIVE this close
-    final bool started = await _updater.restartNow();
-    // exit(0) lands inside restartNow on Windows; a refused spawn stays
-    // visible instead of pretending the swap is happening.
-    if (!started && mounted) {
-      setState(() {
-        _failureDetail = 'Could not start the updater script.';
-        _stage = _UpdateStage.failed;
-      });
+    try {
+      final bool started = await _updater.restartNow();
+      // exit(0) lands inside restartNow on Windows; a refused spawn stays
+      // visible instead of pretending the swap is happening.
+      if (!started) _showFailure(_UpdateFailureKind.installation);
+    } catch (error) {
+      debugPrint('[SALU] updater: could not start installer: $error');
+      _showFailure(_UpdateFailureKind.installation);
     }
   }
 
@@ -300,13 +318,22 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           ],
         );
       case _UpdateStage.failed:
+        final String message = switch (_failureKind) {
+          _UpdateFailureKind.check =>
+            'Unable to connect to update servers. Check your internet connection.',
+          _UpdateFailureKind.download =>
+            'Could not finish downloading the update. The update server may '
+                'be unavailable. Your current files were not changed.',
+          _UpdateFailureKind.preparation =>
+            'The update could not be prepared or verified. '
+                'Your current files were not changed.',
+          _UpdateFailureKind.installation =>
+            'Could not start the updater. Your current files were not changed.',
+        };
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const _DetailLine(
-              'Unable to connect to update servers. '
-              'Check your internet connection.',
-            ),
+            _DetailLine(message),
             if (_failureDetail != null) ...<Widget>[
               const SizedBox(height: 6),
               _DetailLine(_failureDetail!, quieter: true),

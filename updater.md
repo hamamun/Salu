@@ -316,8 +316,13 @@ When the user clicks `[ Check now ]` in Settings → Updates, a SALU-styled comp
 * Action button transforms into `[Download & Install]` or `[Restart to Apply]` once downloaded in the background.
 
 ### State 4: Network Error / Offline
-* Muted, non-blocking warning: *"Unable to connect to update servers. Check your internet connection."*
+* A failed feed check shows: *"Unable to connect to update servers. Check your internet connection."*
+* A failed payload download says the download could not be completed, without exposing an internal exception or claiming the earlier version check failed.
 * Existing files remain untouched and fully functional.
+
+### Preparation or Installer Error
+* An unreadable NuGet package, failed verification, local disk error or failed MPV extraction is a **preparation** failure, not a network failure. The dialog explains that the update could not be prepared and the installed files have not changed.
+* A failed installer handoff reports that the updater could not start. It does not blame the internet or show a raw exception name.
 
 ---
 

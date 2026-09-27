@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/updater/nuget_client.dart';
 
@@ -76,6 +78,23 @@ void main() {
       final List<int> dll = fakePeImage();
       final List<int> nupkg = buildFakeNupkg(loaderDll: dll, deflate: false);
       expect(NugetClient.extractLoaderDll(nupkg), dll);
+    });
+
+    test('uses the central-directory offset, not the ZIP comment length', () {
+      final List<int> dll = fakePeImage();
+      final List<int> nupkg = buildZipArchive(<String, List<int>>{
+        '[Content_Types].xml': '<Types/>'.codeUnits,
+        NugetClient.dllEntryPath: dll,
+      }, comment: 'NuGet ZIP comment');
+      expect(NugetClient.extractLoaderDll(nupkg), dll);
+    });
+
+    test('only reads bytes inside a Uint8List view of the package', () {
+      final List<int> dll = fakePeImage();
+      final List<int> nupkg = buildFakeNupkg(loaderDll: dll);
+      final Uint8List buffer = Uint8List.fromList(<int>[1, 2, ...nupkg, 3, 4]);
+      final Uint8List view = Uint8List.sublistView(buffer, 2, 2 + nupkg.length);
+      expect(NugetClient.extractLoaderDll(view), dll);
     });
 
     test('never answers the x86 decoy\'s bytes', () {
