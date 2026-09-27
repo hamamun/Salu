@@ -47,10 +47,12 @@ void main() {
       expect(slideY(tester), closeTo(8.0, 0.001));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // TTL — the card exits, rising somewhere between its rest and
-      // the 6 px exit lift…
+      // TTL — the card is mid-exit here: the 1000 ms TTL fired 100 ms
+      // into the 120 ms reverse, so the card has left its rest (8) and
+      // is near the exit lift's end (2), but not gone. (Measuring any
+      // later is too late — once the reverse completes, the deck builds
+      // nothing at all.)
       await tester.pump(const Duration(milliseconds: 1000));
-      await tester.pump(const Duration(milliseconds: 60));
       final double exitingY = slideY(tester);
       expect(exitingY, lessThan(8.0));
       expect(exitingY, greaterThan(2.0));
@@ -67,8 +69,13 @@ void main() {
 /// (`Transform.translate` bakes it into the matrix translation — which
 /// only changes now that the transform ticks with the animation).
 double slideY(WidgetTester tester) {
-  // The deck's own Transform is the only one in this test tree.
-  final RenderTransform render =
-      tester.renderObject<RenderTransform>(find.byType(Transform));
+  // Scoped to the deck: the MaterialApp around it may carry its own
+  // transforms (page transitions), and only the deck's matters here.
+  final RenderTransform render = tester.renderObject<RenderTransform>(
+    find.descendant(
+      of: find.byType(OsdDeck),
+      matching: find.byType(Transform),
+    ),
+  );
   return render.transform.getTranslation().y;
 }

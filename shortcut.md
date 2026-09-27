@@ -1,6 +1,6 @@
 # SALU Keyboard Shortcuts Reference & Implementation Manual
 
-> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**. §4 adds the spec (not yet implemented) for the discoverability layer: the Settings **Shortcuts tab** and **Alt-Peek**.  
+> **Document Status:** Comprehensive reference and specification of all standardized keyboard shortcuts implemented in SALU across **Player Mode**, **Mini Mode**, **Web Mode**, and **Popups/Dialogs**. §4 carries the **finalized** design of the discoverability layer (owner-approved 2026-09-27, pending implementation): the Settings **Shortcuts tab** (the Living Map) and **Alt-Peek**.  
 > **Design Contract Note ([follow.md](follow.md) Rule 2):** In SALU, all shortcuts operate silently; shortcut labels are never printed on icons, menus, or tooltips. (The two §4 reference surfaces are an owner ruling, recorded in §4 — Rule 2 itself is untouched.)
 
 ---
@@ -223,7 +223,8 @@
 
 ## 4. Discoverability Layer — the Shortcuts Tab & Alt-Peek
 
-> **Spec stage (owner 2026-09-27) — designed, not yet implemented.**
+> **FINALIZED (owner 2026-09-27) — the Living Map (§4.1) and Alt-Peek (§4.2)
+> both approved in preview; ready to build in the §4.3 order.**
 > **Interactive design mock:** `design/shortcut_preview.html` (self-contained,
 > no dependencies — open in any browser; mock only, not app code).
 >
@@ -267,8 +268,9 @@ is a bug.
 
 > **Revision (owner 2026-09-27):** the drawn-keyboard concept (board + mode
 > pill + modifier latch, later + capture pill) was rejected in preview —
-> "did not like anyone." The Living Map below replaces it. The Alt-Peek
-> design (§4.2) is untouched.
+> "did not like anyone." The Living Map below replaces it — and was
+> approved in preview the same day. The Alt-Peek design (§4.2) is
+> untouched.
 
 A fifth tab in the Settings dialog (`SettingsTab.shortcuts`, rightmost —
 after Updates; a reference page, not a setting). Pure reference: nothing on
@@ -327,7 +329,8 @@ it SALU.
 
 ### 4.2 Alt-Peek — hold Alt, see the keys (Excel-style, passive)
 
-**Version B (owner 2026-09-27): a peek, never a ladder.** Holding Alt reveals
+**Version B (owner 2026-09-27; approved unchanged in preview): a peek,
+never a ladder.** Holding Alt reveals
 small key chips next to the controls **currently visible** — exactly what
 Excel does with its ribbon. Pressing a chip's letter does NOT fire anything
 from the peek; the real shortcuts (§2) are unchanged. The peek only watches;
