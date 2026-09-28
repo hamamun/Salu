@@ -365,6 +365,11 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   /// nothing left to close — that one belongs to the Settings window.
   bool _apply(ShortcutEntry entry, LogicalKeyboardKey key,
       {required bool repeat}) {
+    // Group D answers on its own stage — the focused dialog component
+    // acts on its own mock (§2).
+    if (entry.scope == ShortcutScope.dialog) {
+      return _applyDialog(entry, key);
+    }
     String vol() => muted ? 'Muted' : 'Volume $volume %';
     String delay() =>
         'Subtitle delay ${subDelayMs >= 0 ? '+' : '−'}${(subDelayMs.abs() / 1000).toStringAsFixed(1)} s';
@@ -997,7 +1002,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     for (int r = 0; r < rows.length; r++) {
       if (r > 0) height += _ShelfMetrics.rowGap;
       double tallest = 0;
-      for (final List<(List<ShortcutEntry>, double)> shelf in rows[r]) {
+      for (final (List<ShortcutEntry>, double) shelf in rows[r]) {
         final double h = metrics.heightOf(shelf.$1.length);
         if (h > tallest) tallest = h;
       }
