@@ -18,6 +18,7 @@ import 'package:salu/ui/panels/playlist_panel.dart';
 import 'package:salu/ui/panels/track_panel.dart';
 import 'package:salu/ui/panels/tune_panel.dart';
 import 'package:salu/ui/screens/home_screen.dart';
+import 'package:salu/ui/widgets/alt_peek.dart';
 import 'package:salu/ui/widgets/glass_capsule.dart';
 import 'package:salu/ui/widgets/salu_icon_button.dart';
 import 'package:salu/ui/widgets/salu_marks.dart';
@@ -170,6 +171,67 @@ void main() {
       anchor.dispose();
     },
   );
+
+  testWidgets('open-media control exposes its registered peek key', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: const Scaffold(body: Center(child: OpenMediaControl())),
+      ),
+    );
+    final TestGesture mouse =
+        await tester.createGesture(kind: PointerDeviceKind.mouse);
+    final Offset controlCenter =
+        tester.getCenter(find.byType(OpenMediaControl));
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(controlCenter);
+    await tester.pump();
+
+    AltPeek.instance.debugSetVisible(true);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.text('Ctrl+O'), findsOneWidget);
+    expect(find.text('Open media'), findsNothing);
+
+    AltPeek.instance.debugSetVisible(false);
+    await tester.pumpAndSettle();
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('right-menu key tooltip replaces the row name tooltip', (
+    tester,
+  ) async {
+    final ValueNotifier<Offset> anchor = ValueNotifier<Offset>(Offset.zero);
+    await tester.pumpWidget(
+      Harness(anchor: anchor, onPicture: () {}, onSettings: () {}),
+    );
+    await secondary(tester, const Offset(400, 300));
+
+    final Finder shuffle = find.byKey(const ValueKey<String>('Shuffle'));
+    final TestGesture mouse =
+        await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(shuffle));
+    await tester.pump();
+
+    AltPeek.instance.debugSetVisible(true);
+    await tester.pumpAndSettle();
+    // The menu holds ChromeLock, but its own row must still answer. Waiting
+    // longer than Tooltip's delay verifies the name chip stays suppressed.
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.text('Shift+S'), findsOneWidget);
+    expect(find.text('Shuffle'), findsNothing);
+
+    AltPeek.instance.debugSetVisible(false);
+    await tester.pumpAndSettle();
+    await mouse.removePointer();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    anchor.dispose();
+  });
 
   testWidgets(
     'toggles stay open, repeat-one keeps shuffle but quiets its mark',

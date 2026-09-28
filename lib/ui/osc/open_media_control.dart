@@ -146,17 +146,20 @@ class _OpenMediaControlState extends State<OpenMediaControl>
           ),
         );
       },
-      child: SaluIconButton(
-        tooltip: _open ? null : 'Open media',
-        size: 36,
-        active: _open,
-        onTap: _toggle,
-        child: RotationTransition(
-          // 45° — the plus becomes an × while the pill is showing.
-          turns: Tween<double>(begin: 0, end: 0.125).animate(
-            CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic),
+      child: AltPeekAnchor(
+        anchor: ShortcutAnchor.openMedia,
+        child: SaluIconButton(
+          tooltip: _open ? null : 'Open media',
+          size: 36,
+          active: _open,
+          onTap: _toggle,
+          child: RotationTransition(
+            // 45° — the plus becomes an × while the pill is showing.
+            turns: Tween<double>(begin: 0, end: 0.125).animate(
+              CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic),
+            ),
+            child: const PlusMark(size: 19),
           ),
-          child: const PlusMark(size: 19),
         ),
       ),
     );

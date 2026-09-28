@@ -292,26 +292,29 @@ class _RightMenuState extends State<RightMenu>
     )..layout();
     final double width = measure.width + 16;
     measure.dispose();
-    return Tooltip(
-      key: ValueKey<String>(label.split(' · ').first),
-      waitDuration: const Duration(milliseconds: 600),
-      padding: EdgeInsets.zero,
-      margin: EdgeInsets.zero,
-      decoration: const BoxDecoration(),
-      excludeFromSemantics: true,
-      richMessage: WidgetSpan(
-        child: HoverChip(label: label, width: width),
-      ),
-      child: Semantics(
-        label: label,
-        button: true,
-        enabled: enabled,
-        // The menu IS the modal (it holds the ChromeLock), so its rows
-        // answer the peek through the lock.
-        child: AltPeekAnchor(
-          entries: keys,
-          ignoreLock: true,
-          side: PeekSide.below,
+    return Semantics(
+      label: label,
+      button: true,
+      enabled: enabled,
+      // Keep the name Tooltip INSIDE the peek anchor. When Alt is held,
+      // AltPeekAnchor absorbs pointer events before they reach Tooltip,
+      // so the menu's name chip cannot overlap the shortcut tooltip.
+      // The menu IS the modal (it holds the ChromeLock), so its rows
+      // answer the peek through the lock.
+      child: AltPeekAnchor(
+        entries: keys,
+        ignoreLock: true,
+        side: PeekSide.below,
+        child: Tooltip(
+          key: ValueKey<String>(label.split(' · ').first),
+          waitDuration: const Duration(milliseconds: 600),
+          padding: EdgeInsets.zero,
+          margin: EdgeInsets.zero,
+          decoration: const BoxDecoration(),
+          excludeFromSemantics: true,
+          richMessage: WidgetSpan(
+            child: HoverChip(label: label, width: width),
+          ),
           child: SaluIconButton(
             size: 30,
             active: active,

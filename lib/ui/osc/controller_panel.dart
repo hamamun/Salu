@@ -72,7 +72,7 @@ class ControllerPanel extends StatelessWidget {
                 // Left zone · the Open Media control (+ → pill) then the
                 // Playlist control, 6 px apart — the sibling pair of the
                 // row's left edge (playlist_imp.md §1.1).
-                AltPeekAnchor(anchor: ShortcutAnchor.openMedia, child: OpenMediaControl()),
+                OpenMediaControl(),
                 SizedBox(width: 6), // §1.1 — set 2 to fuse them
                 AltPeekAnchor(anchor: ShortcutAnchor.playlist, child: PlaylistControl()),
                 // Center zone · the transport cluster + sound group,
