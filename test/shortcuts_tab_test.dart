@@ -57,24 +57,29 @@ void main() {
     expect(find.byType(MagnifierMark), findsOneWidget);
     expect(find.byType(TrashMark), findsNWidgets(2));
 
-    await tester.sendMouseMoveTo(tester.getCenter(find.byType(RepeatMark)));
+    // The marks select themselves from MouseRegion.onEnter, which only a
+    // real mouse-kind pointer feeds — so hover with one shared gesture.
+    final TestGesture mouse =
+        await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+
+    await mouse.moveTo(tester.getCenter(find.byType(RepeatMark)));
     await tester.pump();
     expect(map.selected?.id, 'player.repeat');
-    await tester.sendMouseMoveTo(tester.getCenter(find.byType(ShuffleMark)));
+    await mouse.moveTo(tester.getCenter(find.byType(ShuffleMark)));
     await tester.pump();
     expect(map.selected?.id, 'player.shuffle');
-    await tester.sendMouseMoveTo(tester.getCenter(find.byType(GroupByMark)));
+    await mouse.moveTo(tester.getCenter(find.byType(GroupByMark)));
     await tester.pump();
     expect(map.selected?.id, 'player.groupBy');
-    await tester.sendMouseMoveTo(tester.getCenter(find.byType(BookmarkMark)));
+    await mouse.moveTo(tester.getCenter(find.byType(BookmarkMark)));
     await tester.pump();
     expect(map.selected?.id, 'player.playlistFavourites');
-    await tester.sendMouseMoveTo(tester.getCenter(find.byType(MagnifierMark)));
+    await mouse.moveTo(tester.getCenter(find.byType(MagnifierMark)));
     await tester.pump();
     expect(map.selected?.id, 'player.findInPlaylist');
-    await tester.sendMouseMoveTo(
-      tester.getCenter(find.byType(TrashMark).first),
-    );
+    await mouse.moveTo(tester.getCenter(find.byType(TrashMark).first));
     await tester.pump();
     expect(map.selected?.id, 'player.clearPlaylist');
     expect(tester.takeException(), isNull);
