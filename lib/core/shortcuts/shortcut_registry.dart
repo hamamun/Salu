@@ -58,7 +58,6 @@ enum ShortcutGroup {
 enum ShortcutGuard {
   seekable('While the media is seekable'),
   subtitleSelected('While a subtitle is selected'),
-  tunePanelOpen('While the Tune panel is open'),
   pageFullscreen('While a page owns the screen'),
   findBarOpen('While the find bar is open'),
   groupByPillOpen('While the playlist Group by choices are open');
@@ -700,7 +699,6 @@ class SaluShortcuts {
       id: 'player.tuneNudge',
       action: 'Nudge the focused Tune parameter',
       group: ShortcutGroup.tune,
-      guard: ShortcutGuard.tunePanelOpen,
     ),
     ShortcutEntry(
       scope: ShortcutScope.player,
@@ -713,7 +711,6 @@ class SaluShortcuts {
       id: 'player.tuneFocus',
       action: 'Move focus across the Tune sections',
       group: ShortcutGroup.tune,
-      guard: ShortcutGuard.tunePanelOpen,
     ),
 
     // ── Group B · Mini mode ───────────────────────────────────────────

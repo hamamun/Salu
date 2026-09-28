@@ -11,6 +11,87 @@ import 'salu_marks.dart';
 import 'transport_marks.dart';
 import 'web_marks.dart';
 
+/// How many keys ride one line of a shelf before it starts a new
+/// column. Three is the number that keeps the whole block of shelves
+/// inside the map's left gutter: the Player map's twenty-three rideless
+/// keys want ~770 px on one line, and the map is 600 px wide — so the
+/// block flows onto a second line instead of running off the edge,
+/// where a shelf that no longer fits is a shortcut nobody can find.
+const int _shelfLine = 3;
+
+/// The Player / Mini / Web shelves: 22-px cells on the map's own scale.
+const _ShelfMetrics _regular =
+    _ShelfMetrics(cell: 22, itemGap: 8, pad: 6, padV: 8);
+
+/// The Dialogs shelves — smaller cells, so the five shelves and the
+/// four component cards share one fixed 600 × 280 map.
+const _ShelfMetrics _compact =
+    _ShelfMetrics(cell: 20, itemGap: 5, pad: 5, padV: 6);
+
+/// A shelf's metrics — the arithmetic [_shelf] draws with, kept in one
+/// place so the packer measures exactly what is painted. Every measure
+/// here is a promise the map has to keep: a shelf it cannot place
+/// inside the box is a shortcut it cannot show.
+class _ShelfMetrics {
+  const _ShelfMetrics({
+    required this.cell,
+    required this.itemGap,
+    required this.pad,
+    required this.padV,
+  });
+
+  /// One key's tile.
+  final double cell;
+
+  /// Between two keys of the same line.
+  final double itemGap;
+
+  /// [GlassCapsule]'s inner padding — its hairline adds to this.
+  final double pad;
+  final double padV;
+
+  /// The capsule's own 1-px hairline.
+  static const double border = 1;
+
+  /// Between two lines of one shelf · two shelves · two lines of
+  /// shelves.
+  static const double columnGap = 8;
+  static const double shelfGap = 8;
+  static const double rowGap = 8;
+
+  /// The quiet margin the block keeps from the map's own edge.
+  static const double gutter = 10;
+
+  /// The lines one shelf of [keys] keys breaks into.
+  List<int> _lines(int keys) {
+    final List<int> lines = <int>[];
+    for (int i = 0; i < keys; i += _shelfLine) {
+      lines.add((i + _shelfLine) > keys ? keys - i : _shelfLine);
+    }
+    return lines;
+  }
+
+  /// The width a shelf of [keys] keys takes.
+  double widthOf(int keys) {
+    double width = 0;
+    final List<int> lines = _lines(keys);
+    for (int i = 0; i < lines.length; i++) {
+      if (i > 0) width += columnGap;
+      width += lines[i] * cell + (lines[i] - 1) * itemGap;
+    }
+    return width + 2 * (pad + border);
+  }
+
+  /// The height a shelf of [keys] keys takes — every line but the last
+  /// is full, so the first is the tallest.
+  double heightOf(int keys) {
+    if (keys <= 0) return 0;
+    final List<int> lines = _lines(keys);
+    final int tallest = lines.first;
+    return tallest * cell + (tallest - 1) * itemGap + 2 * (padV + border);
+  }
+}
+
 /// Settings → Shortcuts — the Living Map (shortcut.md §4.1).
 ///
 /// A miniature SALU that is alive: the app itself, shrunken, every
@@ -71,6 +152,41 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   String? webPanel; // history · downloads · favourite · hub · clear
   int zoom = 100;
 
+  // ── Dialogs miniature (Group D · the focused component) ────────────
+  // Several components share Enter / Esc / ↑ ↓, so the map keeps the
+  // app's own rule: the focused card owns them, and Esc walks the open
+  // surfaces from the top down before it lets Settings close.
+  ShortcutGroup dialogFocus = ShortcutGroup.urlModal;
+  bool dialogUrlOpen = true;
+  int urlCursor = 0;
+  bool suggestionsOpen = true;
+  int suggestionCursor = 0;
+  bool findDialogOpen = true;
+  int findDialogMatch = 1;
+  String query = 'nature';
+  bool queryFocused = true;
+  int groupChoice = -1;
+
+  /// The four Group-by choices, in pill order.
+  static const List<String> _groupIds = <String>[
+    'dialog.groupFlat',
+    'dialog.groupCategory',
+    'dialog.groupCountry',
+    'dialog.groupLanguage',
+  ];
+
+  static const List<String> _savedUrls = <String>[
+    'salu.app/trail',
+    'salu.app/ocean',
+    'salu.app/city',
+  ];
+
+  static const List<String> _suggestions = <String>[
+    'example.com',
+    'salu.app',
+    'flutter.dev',
+  ];
+
   /// The mock OSD deck's card (and the mini bar's title swap).
   String? osd;
   Timer? _osdTimer;
@@ -114,6 +230,22 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     });
   }
 
+  /// Pointing at a card makes it the focused component — the surface
+  /// that owns `Enter`, `Esc` and the arrows (§2 · Group D). It also
+  /// names itself on the detail strip, like every other mark here.
+  void _focusDialog(ShortcutGroup group) {
+    final List<ShortcutEntry> owned = <ShortcutEntry>[
+      for (final ShortcutEntry e in SaluShortcuts.forScope(ShortcutScope.dialog))
+        if (e.group == group) e,
+    ];
+    if (owned.isEmpty) return;
+    setState(() {
+      dialogFocus = group;
+      selected = owned.first;
+      _selectedCombo = owned.first.combos.first;
+    });
+  }
+
   static bool _isModifier(LogicalKeyboardKey k) =>
       k == LogicalKeyboardKey.controlLeft ||
       k == LogicalKeyboardKey.controlRight ||
@@ -138,7 +270,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     final bool alt = hw.isAltPressed;
     final bool meta = hw.isMetaPressed;
 
-    final ShortcutEntry? entry = SaluShortcuts.match(mode, key,
+    final ShortcutEntry? entry = _resolve(key,
         ctrl: ctrl, shift: shift, alt: alt, meta: meta);
     if (entry == null) return KeyEventResult.handled;
     ShortcutCombo? combo;
@@ -153,6 +285,80 @@ class ShortcutsTabState extends State<ShortcutsTab> {
       handled = _apply(entry, key, repeat: repeat);
     });
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  /// The entry a key press answers to. Everywhere but the Dialogs
+  /// miniature this is simply the registry's answer.
+  ShortcutEntry? _resolve(
+    LogicalKeyboardKey key, {
+    required bool ctrl,
+    required bool shift,
+    required bool alt,
+    required bool meta,
+  }) {
+    if (mode == ShortcutScope.dialog) {
+      return _resolveDialog(key, ctrl: ctrl, shift: shift, alt: alt, meta: meta);
+    }
+    return SaluShortcuts.match(mode, key,
+        ctrl: ctrl, shift: shift, alt: alt, meta: meta);
+  }
+
+  /// Dialogs scope: several components share the same keys (`Enter`,
+  /// `Esc`, `↑ ↓`), so the focused card owns them — exactly as the real
+  /// surfaces do. `Esc` walks the *open* surfaces top down, the order
+  /// the app itself uses (find bar → suggestions → group-by pill → URL
+  /// modal → the Settings window). A key the focused card does not
+  /// answer stays unanswered: the map never borrows another card's
+  /// shortcut just because the registry has one.
+  ShortcutEntry? _resolveDialog(
+    LogicalKeyboardKey key, {
+    required bool ctrl,
+    required bool shift,
+    required bool alt,
+    required bool meta,
+  }) {
+    final bool plain = !ctrl && !shift && !alt && !meta;
+    if (plain && key == LogicalKeyboardKey.escape) {
+      // A focused field owns its own Esc (§1.3 · the typing guard).
+      if (dialogFocus == ShortcutGroup.playlistSearch &&
+          (query.isNotEmpty || queryFocused)) {
+        return SaluShortcuts.byId('dialog.playlistSearch.escape');
+      }
+      if (findDialogOpen) return SaluShortcuts.byId('dialog.find.close');
+      if (suggestionsOpen) return SaluShortcuts.byId('dialog.address.hide');
+      if (groupChoice >= 0) return SaluShortcuts.byId('dialog.groupBy.escape');
+      return SaluShortcuts.byId('dialog.url.close');
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (ctrl && !shift && !alt && !meta) {
+        return dialogFocus == ShortcutGroup.urlModal
+            ? SaluShortcuts.byId('dialog.url.playSave')
+            : null;
+      }
+      if (alt || meta) return null;
+      return switch (dialogFocus) {
+        ShortcutGroup.findBar => SaluShortcuts.byId(
+            shift ? 'dialog.find.previous' : 'dialog.find.next'),
+        ShortcutGroup.addressDropdown =>
+          SaluShortcuts.byId('dialog.address.submit'),
+        ShortcutGroup.urlModal =>
+          shift ? null : SaluShortcuts.byId('dialog.url.play'),
+        _ => null,
+      };
+    }
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      if (ctrl || shift || alt || meta) return null;
+      return switch (dialogFocus) {
+        ShortcutGroup.urlModal => SaluShortcuts.byId('dialog.url.walk'),
+        ShortcutGroup.addressDropdown =>
+          SaluShortcuts.byId('dialog.address.walk'),
+        _ => null,
+      };
+    }
+    return SaluShortcuts.match(ShortcutScope.dialog, key,
+        ctrl: ctrl, shift: shift, alt: alt, meta: meta);
   }
 
   /// Plays [entry]'s mock feedback. Returns false only for an `Esc` with
@@ -387,15 +593,88 @@ class ShortcutsTabState extends State<ShortcutsTab> {
           return false;
         }
 
-      // ── Dialogs ─────────────────────────────────────────────────────
-      case 'dialog.url.close':
-        return false;
-
       default:
         // Doors that open real app surfaces (Ctrl+O, Ctrl+I, F2 …) flash
         // their name on the mock deck — the mirror never opens them.
         _flash(entry.action);
     }
+    return true;
+  }
+
+  /// Group D — the focused component acts on its own mock. Returns
+  /// false only when there is nothing left on screen for the key to
+  /// close: that `Esc` belongs to the Settings window.
+  bool _applyDialog(ShortcutEntry entry, LogicalKeyboardKey key) {
+    final bool down = key == LogicalKeyboardKey.arrowDown;
+    switch (entry.id) {
+      case 'dialog.url.walk':
+        if (!dialogUrlOpen) dialogUrlOpen = true;
+        urlCursor =
+            (urlCursor + (down ? 1 : -1)).clamp(0, _savedUrls.length - 1);
+        _flash(_savedUrls[urlCursor]);
+        return true;
+      case 'dialog.address.walk':
+        suggestionsOpen = true;
+        suggestionCursor = (suggestionCursor + (down ? 1 : -1))
+            .clamp(0, _suggestions.length - 1);
+        _flash(_suggestions[suggestionCursor]);
+        return true;
+      case 'dialog.url.play':
+        if (!dialogUrlOpen) return false;
+        _flash('Playing ${_savedUrls[urlCursor]}');
+        return true;
+      case 'dialog.url.playSave':
+        if (!dialogUrlOpen) return false;
+        _flash('Played & saved ${_savedUrls[urlCursor]}');
+        return true;
+      case 'dialog.address.submit':
+        if (!suggestionsOpen) return false;
+        _flash('Went to ${_suggestions[suggestionCursor]}');
+        return true;
+      case 'dialog.find.next':
+        if (!findDialogOpen) return false;
+        findDialogMatch = findDialogMatch % 4 + 1;
+        return true;
+      case 'dialog.find.previous':
+        if (!findDialogOpen) return false;
+        findDialogMatch = (findDialogMatch + 2) % 4 + 1;
+        return true;
+      case 'dialog.find.close':
+        if (!findDialogOpen) return false;
+        findDialogOpen = false;
+        return true;
+      case 'dialog.address.hide':
+        if (!suggestionsOpen) return false;
+        suggestionsOpen = false;
+        return true;
+      case 'dialog.groupBy.escape':
+        if (groupChoice < 0) return false;
+        groupChoice = -1;
+        return true;
+      case 'dialog.url.close':
+        if (!dialogUrlOpen) return false;
+        dialogUrlOpen = false;
+        return true;
+      case 'dialog.playlistSearch.escape':
+        // The field's own two-step rule: clear the query, then leave it.
+        if (query.isNotEmpty) {
+          query = '';
+          return true;
+        }
+        if (queryFocused) {
+          queryFocused = false;
+          return true;
+        }
+        return false;
+    }
+    for (int i = 0; i < _groupIds.length; i++) {
+      if (_groupIds[i] == entry.id) {
+        groupChoice = i;
+        _flash('Group by · ${entry.action.replaceFirst('Choose ', '')}');
+        return true;
+      }
+    }
+    _flash(entry.action);
     return true;
   }
 
@@ -485,6 +764,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
       ShortcutScope.dialog => _buildDialogs(),
     };
     return Container(
+      key: const ValueKey<String>('livingMap'),
       decoration: BoxDecoration(
         color: AppColors.videoBackdrop,
         borderRadius: BorderRadius.circular(10),
@@ -499,10 +779,18 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
   bool _isLit(ShortcutEntry e) => selected?.id == e.id;
 
+  /// The Group-by choice the digits last took. It stays lit, so the
+  /// map shows which grouping the pill is on rather than only that a
+  /// key was pressed.
+  bool _isChosen(ShortcutEntry e) {
+    if (groupChoice < 0 || e.group != ShortcutGroup.playlist) return false;
+    return e.id == _groupIds[groupChoice];
+  }
+
   /// A control of the miniature — the mark alone, no key text on or
   /// under it. Hover names it on the detail strip; the mark lights
   /// while it is the one shown.
-  Widget _control(ShortcutAnchor anchor, Widget mark) {
+  Widget _control(ShortcutAnchor anchor, Widget mark, {VoidCallback? onHover}) {
     final List<ShortcutEntry> riding = SaluShortcuts.forAnchor(mode, anchor);
     final bool lit = riding.any(_isLit);
     return _controlSurface(
@@ -514,22 +802,44 @@ class ShortcutsTabState extends State<ShortcutsTab> {
         ),
         child: SizedBox(width: 24, height: 24, child: Center(child: mark)),
       ),
+      onHover: onHover,
     );
   }
 
   /// An anchored miniature surface that is not a standard 24-px icon —
   /// e.g. the playlist search field. Hovering still selects its registry
   /// entry, just as it does for [_control].
-  Widget _controlSurface(ShortcutAnchor anchor, Widget child) {
+  Widget _controlSurface(
+    ShortcutAnchor anchor,
+    Widget child, {
+    VoidCallback? onHover,
+  }) {
     final List<ShortcutEntry> riding = SaluShortcuts.forAnchor(mode, anchor);
     if (riding.isEmpty) return child;
     return MouseRegion(
-      onEnter: (_) => _select(riding.first),
+      onEnter: (_) {
+        _select(riding.first);
+        onHover?.call();
+      },
       child: GestureDetector(
-        onTap: () => _select(riding.first),
+        onTap: () {
+          _select(riding.first);
+          onHover?.call();
+        },
         child: child,
       ),
     );
+  }
+
+  /// The playlist-only keys (`R`, `Shift+S`, `Ctrl+G`, `Ctrl+D`,
+  /// `Ctrl+Shift+Delete`, `Ctrl+F`) ride real marks — inside the panel,
+  /// which the app keeps closed at rest. On the map the panel slides
+  /// open while the pointer is on the Playlist mark, so those six keys
+  /// are reachable by mouse as well as by key; the map never lists a
+  /// shortcut twice.
+  void _revealPlaylist() {
+    if (playlistOpen) return;
+    setState(() => playlistOpen = true);
   }
 
   // ── The rideless shelves ─────────────────────────────────────────────
@@ -545,45 +855,41 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     return groups.values.toList();
   }
 
-  /// One shelf — a quiet glass column of icons, left of the video. Regular
-  /// shelves wrap after five keys; the denser Dialogs variant wraps after
-  /// four so its two-row grid stays inside the miniature.
-  static const int _shelfLine = 5;
-
-  Widget _shelf(List<ShortcutEntry> entries, {bool compact = false}) {
-    // The Dialogs miniature has five independent shelves, arranged in two
-    // rows. Use a denser four-key column there so the whole grid remains
-    // inside the fixed 600 × 280 map even as dialog shortcuts are added.
-    final int lineLimit = compact ? 4 : _shelfLine;
-    final double cellSize = compact ? 20 : 22;
-    final double verticalPadding = compact ? 6 : 8;
-    final double itemGap = compact ? 5 : 8;
+  /// One shelf — a quiet glass column of icons, left of the video. A
+  /// shelf runs [_shelfLine] keys before it starts a new column.
+  Widget _shelf(
+    List<ShortcutEntry> entries, {
+    _ShelfMetrics metrics = _regular,
+  }) {
+    // The Dialogs miniature lays its five shelves out in two rows by
+    // hand, with smaller cells, so the grid — shelves plus the four
+    // component cards — stays inside the fixed 600 × 280 map.
     final List<List<ShortcutEntry>> lines = <List<ShortcutEntry>>[];
-    for (int i = 0; i < entries.length; i += lineLimit) {
+    for (int i = 0; i < entries.length; i += _shelfLine) {
       lines.add(entries.sublist(
         i,
-        (i + lineLimit) > entries.length ? entries.length : i + lineLimit,
+        (i + _shelfLine) > entries.length ? entries.length : i + _shelfLine,
       ));
     }
     return GlassCapsule(
       radius: 10,
       blur: 12,
       padding: EdgeInsets.symmetric(
-        horizontal: compact ? 5 : 6,
-        vertical: verticalPadding,
+        horizontal: metrics.pad,
+        vertical: metrics.padV,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           for (int i = 0; i < lines.length; i++) ...<Widget>[
-            if (i > 0) const SizedBox(width: 8),
+            if (i > 0) const SizedBox(width: _ShelfMetrics.columnGap),
             Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 for (final ShortcutEntry e in lines[i]) ...<Widget>[
-                  if (e != lines[i].first) SizedBox(height: itemGap),
-                  _ridelessIcon(e, size: cellSize),
+                  if (e != lines[i].first) SizedBox(height: metrics.itemGap),
+                  _ridelessIcon(e, size: metrics.cell),
                 ],
               ],
             ),
@@ -593,24 +899,119 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     );
   }
 
-  Widget _shelfRow(List<List<ShortcutEntry>> shelves, {bool compact = false}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        for (final List<ShortcutEntry> s in shelves) ...<Widget>[
-          _shelf(s, compact: compact),
-          const SizedBox(width: 8),
-        ],
-      ],
+  /// The shelves as one block that always fits the box it is given —
+  /// the gutter left of the video (§4.1 · "a shelf always fits the
+  /// box").
+  ///
+  /// The shelves keep their registry order and flow onto a second line
+  /// when the next one would not fit, and the whole block then scales
+  /// down as a single quiet piece if the two lines are still too tall.
+  /// Nothing is ever clipped out of the map: a registry entry nobody can
+  /// point at is a shortcut nobody can find, and that is the one way a
+  /// living map is allowed to lie.
+  Widget _shelfBlock() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints c) {
+        final List<List<ShortcutEntry>> shelves = _ridelessShelves();
+        if (shelves.isEmpty) return const SizedBox.shrink();
+        final List<List<(List<ShortcutEntry>, double)>> rows =
+            _packShelves(shelves, c.maxWidth, _regular);
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: c.maxWidth,
+            height: _rowsHeight(rows, _regular),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (int r = 0; r < rows.length; r++) ...<Widget>[
+                  if (r > 0) const SizedBox(height: _ShelfMetrics.rowGap),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      for (int s = 0; s < rows[r].length; s++) ...<Widget>[
+                        if (s > 0)
+                          const SizedBox(width: _ShelfMetrics.shelfGap),
+                        _shelf(rows[r][s].$1),
+                      ],
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  /// The block's own height in this mode — the OSD deck places itself
+  /// clear of it rather than on top of the reference marks.
+  double get _shelfBlockHeight {
+    final List<List<(List<ShortcutEntry>, double)>> rows = _packShelves(
+      _ridelessShelves(),
+      ShortcutsTab.miniatureSize.width - _ShelfMetrics.gutter * 2,
+      _regular,
+    );
+    return _rowsHeight(rows, _regular);
+  }
+
+  /// Greedy line packing: a shelf moves to the next line when it would
+  /// not fit beside the ones already there. Each shelf rides with the
+  /// width it was measured at, so the block's height can be known
+  /// without laying it out twice.
+  static List<List<(List<ShortcutEntry>, double)>> _packShelves(
+    List<List<ShortcutEntry>> shelves,
+    double width,
+    _ShelfMetrics metrics,
+  ) {
+    final List<List<(List<ShortcutEntry>, double)>> rows =
+        <List<(List<ShortcutEntry>, double)>>[];
+    List<(List<ShortcutEntry>, double)> row = <(List<ShortcutEntry>, double)>[];
+    double used = 0;
+    for (final List<ShortcutEntry> s in shelves) {
+      final double w = metrics.widthOf(s.length);
+      if (row.isNotEmpty && used + _ShelfMetrics.shelfGap + w > width) {
+        rows.add(row);
+        row = <(List<ShortcutEntry>, double)>[];
+        used = 0;
+      }
+      if (row.isNotEmpty) used += _ShelfMetrics.shelfGap;
+      row.add((s, w));
+      used += w;
+    }
+    if (row.isNotEmpty) rows.add(row);
+    return rows;
+  }
+
+  /// The height [_packShelves]'s rows need — every shelf's own line
+  /// count, tallest shelf per line.
+  static double _rowsHeight(
+    List<List<(List<ShortcutEntry>, double)>> rows,
+    _ShelfMetrics metrics,
+  ) {
+    double height = 0;
+    for (int r = 0; r < rows.length; r++) {
+      if (r > 0) height += _ShelfMetrics.rowGap;
+      double tallest = 0;
+      for (final List<(List<ShortcutEntry>, double)> shelf in rows[r]) {
+        final double h = metrics.heightOf(shelf.$1.length);
+        if (h > tallest) tallest = h;
+      }
+      height += tallest;
+    }
+    return height;
   }
 
   /// One rideless key in a shelf: the action's own mark where SALU has
   /// one, otherwise its keycap. Hover names it on the detail strip.
   Widget _ridelessIcon(ShortcutEntry e, {double size = 22}) {
-    final bool lit = _isLit(e);
+    final bool lit = _isLit(e) || _isChosen(e);
     return MouseRegion(
+      key: ValueKey<String>('shelf:${e.id}'),
       onEnter: (_) => _select(e),
       child: GestureDetector(
         onTap: () => _select(e),
@@ -788,19 +1189,20 @@ class ShortcutsTabState extends State<ShortcutsTab> {
               child: Container(color: AppColors.threadFill),
             ),
           ),
-        // The OSD deck — below the chrome.
+        // The OSD deck — clear of the shelves, the way the real deck
+        // sits clear of the chrome: the map's marks are never covered.
         Positioned(
-          left: 0,
-          right: 0,
-          top: fullscreen ? 14 : chromeH + 30,
-          child: Center(child: _osdCard()),
+          right: playlistOpen ? 190 : 20,
+          bottom: 14,
+          child: _osdCard(),
         ),
         // The rideless shelves — every key with no always-visible
         // control, one shelf per group, left of the video (§4.1).
         Positioned(
-          left: 10,
-          top: fullscreen ? 12 : chromeH + 12,
-          child: _shelfRow(_ridelessShelves()),
+          left: _ShelfMetrics.gutter,
+          right: _ShelfMetrics.gutter,
+          top: fullscreen ? 12 : chromeH + 8,
+          child: _shelfBlock(),
         ),
         // The playlist panel (Ctrl+L).
         AnimatedPositioned(
@@ -900,7 +1302,11 @@ class ShortcutsTabState extends State<ShortcutsTab> {
         children: <Widget>[
           _control(ShortcutAnchor.openMedia, const PlusMark(size: 14)),
           const SizedBox(width: 4),
-          _control(ShortcutAnchor.playlist, const NowRowMark(size: 14)),
+          _control(
+            ShortcutAnchor.playlist,
+            const NowRowMark(size: 14),
+            onHover: _revealPlaylist,
+          ),
           const Spacer(),
           _control(
             ShortcutAnchor.playPause,
@@ -1185,9 +1591,10 @@ class ShortcutsTabState extends State<ShortcutsTab> {
         // The rideless shelf (subtitle sync keys) — under the strip,
         // where the strip's own width leaves room.
         Positioned(
-          left: 10,
-          bottom: 10,
-          child: _shelfRow(_ridelessShelves()),
+          left: _ShelfMetrics.gutter,
+          right: _ShelfMetrics.gutter,
+          bottom: _ShelfMetrics.gutter,
+          child: _shelfBlock(),
         ),
       ],
     );
@@ -1288,14 +1695,19 @@ class ShortcutsTabState extends State<ShortcutsTab> {
         Positioned(
           left: 0,
           right: 0,
-          top: fullscreen ? 14 : stripH + rowH + 40,
+          // Below the shelf block — the OSD deck must never sit on top
+          // of the reference marks.
+          top: (fullscreen ? 12 : stripH + rowH + 12) +
+              _shelfBlockHeight +
+              8,
           child: Center(child: _osdCard()),
         ),
         // The rideless shelves — one per group, left of the page (§4.1).
         Positioned(
-          left: 10,
+          left: _ShelfMetrics.gutter,
+          right: _ShelfMetrics.gutter,
           top: fullscreen ? 12 : stripH + rowH + 12,
-          child: _shelfRow(_ridelessShelves()),
+          child: _shelfBlock(),
         ),
       ],
     );
@@ -1439,44 +1851,64 @@ class ShortcutsTabState extends State<ShortcutsTab> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           for (final List<ShortcutEntry> s in row) ...<Widget>[
-            _shelf(s, compact: true),
+            _shelf(s, metrics: _compact),
             const SizedBox(width: 8),
           ],
         ],
       );
     }
 
+    // A card is one component of Group D, and it is a live one: point
+    // at it and it becomes the focused surface, the one that owns
+    // `Enter`, `Esc` and the arrows — the way the real dialog works
+    // (§2 · Group D · "focused components").
     Widget card(ShortcutGroup group, Widget mock) {
       final bool lit = <bool>[
         for (final ShortcutEntry e in SaluShortcuts.forScope(ShortcutScope.dialog))
-          if (e.group == group) _isLit(e),
+          if (e.group == group) _isLit(e) || _isChosen(e),
       ].any((bool b) => b);
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: lit ? const Color(0x604C9EEB) : AppColors.surfaceOutline,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              group.label,
-              style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
+      final bool focused = dialogFocus == group;
+      return MouseRegion(
+        onEnter: (_) => _focusDialog(group),
+        child: GestureDetector(
+          onTap: () => _focusDialog(group),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: lit || focused
+                    ? const Color(0x604C9EEB)
+                    : AppColors.surfaceOutline,
+              ),
             ),
-            const Spacer(),
-            mock,
-            const Spacer(),
-          ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  group.label,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: focused ? FontWeight.w600 : FontWeight.w400,
+                    color:
+                        focused ? AppColors.textPrimary : AppColors.textSecondary,
+                  ),
+                ),
+                const Spacer(),
+                mock,
+                const Spacer(),
+              ],
+            ),
+          ),
         ),
       );
     }
 
-    Widget field({bool focused = false}) => Container(
+    Widget field({String text = '', bool focused = false, bool clearable = false}) =>
+        Container(
           height: 18,
+          padding: const EdgeInsets.symmetric(horizontal: 5),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(5),
@@ -1484,49 +1916,148 @@ class ShortcutsTabState extends State<ShortcutsTab> {
               color: focused ? AppColors.accent : AppColors.surfaceOutline,
             ),
           ),
-        );
-
-    return Padding(
-      padding: const EdgeInsets.all(10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Row(
             children: <Widget>[
-              shelfRow(topShelves),
-              const SizedBox(height: 8),
-              shelfRow(bottomShelves),
+              Expanded(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 9.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              // The playlist field's own clear × — it stands only while
+              // there is something to clear.
+              if (clearable)
+                const Icon(Icons.close_rounded, size: 9, color: AppColors.iconIdle),
             ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              children: <Widget>[
-                Expanded(
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(child: card(ShortcutGroup.urlModal, field(focused: true))),
-                      const SizedBox(width: 10),
-                      Expanded(child: card(ShortcutGroup.addressDropdown, field())),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(child: card(ShortcutGroup.findBar, field())),
-                      const SizedBox(width: 10),
-                      Expanded(child: card(ShortcutGroup.playlistSearch, field())),
-                    ],
-                  ),
-                ),
-              ],
+        );
+
+    /// One line of a mock list — a saved URL or an address suggestion.
+    Widget line(String text, {required bool on}) => Container(
+          height: 12,
+          margin: const EdgeInsets.only(top: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: on ? const Color(0x264C9EEB) : Colors.transparent,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          alignment: Alignment.centerLeft,
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 8.5,
+              color: on ? AppColors.textPrimary : AppColors.textSecondary,
             ),
           ),
-        ],
-      ),
+        );
+
+    final bool urlFocused = dialogFocus == ShortcutGroup.urlModal;
+    final Widget urlCard = dialogUrlOpen
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              field(text: 'https://', focused: urlFocused),
+              for (int i = 0; i < _savedUrls.length; i++)
+                line(_savedUrls[i], on: urlFocused && urlCursor == i),
+            ],
+          )
+        : field(text: 'Modal closed', focused: urlFocused);
+
+    final bool addressFocusedHere = dialogFocus == ShortcutGroup.addressDropdown;
+    final Widget addressCard = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        field(text: 'example.com', focused: addressFocusedHere),
+        if (suggestionsOpen)
+          for (int i = 0; i < _suggestions.length; i++)
+            line(_suggestions[i],
+                on: addressFocusedHere && suggestionCursor == i),
+      ],
+    );
+
+    final bool findFocusedHere = dialogFocus == ShortcutGroup.findBar;
+    final Widget findCard = findDialogOpen
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              field(text: 'find', focused: findFocusedHere),
+              line('find  ·  $findDialogMatch / 4', on: findFocusedHere),
+            ],
+          )
+        : field(text: 'Find bar closed', focused: findFocusedHere);
+
+    final bool searchFocusedHere = dialogFocus == ShortcutGroup.playlistSearch;
+    final Widget searchCard = field(
+      text: query,
+      focused: queryFocused && searchFocusedHere,
+      clearable: query.isNotEmpty,
+    );
+
+    return Stack(
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  shelfRow(topShelves),
+                  const SizedBox(height: 8),
+                  shelfRow(bottomShelves),
+                ],
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  children: <Widget>[
+                    Expanded(
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                              child: card(ShortcutGroup.urlModal, urlCard)),
+                          const SizedBox(width: 10),
+                          Expanded(child: card(ShortcutGroup.addressDropdown, addressCard)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(child: card(ShortcutGroup.findBar, findCard)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: card(ShortcutGroup.playlistSearch, searchCard)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        // The mock OSD deck — a Group D key answers here too, so the
+        // last action is visible on the map and not only on the strip.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 8,
+          child: Center(child: _osdCard()),
+        ),
+      ],
     );
   }
 }
