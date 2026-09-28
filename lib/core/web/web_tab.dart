@@ -177,6 +177,18 @@ class WebTab {
     } catch (_) {}
   }
 
+  /// Reloads the current document while bypassing WebView2's HTTP cache,
+  /// the browser-standard Ctrl+F5 / Ctrl+Shift+R behavior.
+  Future<void> hardReload() async {
+    if (startMode.value) return;
+    final WebviewController? c = _controller;
+    if (c == null) return;
+    failed.value = false;
+    try {
+      await c.hardReload();
+    } catch (_) {}
+  }
+
   /// The browser Home button navigates the active website to its own root
   /// page — for example, a YouTube video becomes `youtube.com/` — while
   /// staying in the same tab. A fresh tab has no website home, so it keeps

@@ -168,6 +168,8 @@ class Webview {
   void LoadStringContent(const std::string& content);
   bool Stop();
   bool Reload();
+  // SALU addition: Ctrl+F5 / Ctrl+Shift+R, bypassing the HTTP cache.
+  bool HardReload();
   bool GoBack();
   bool GoForward();
   void AddScriptToExecuteOnDocumentCreated(

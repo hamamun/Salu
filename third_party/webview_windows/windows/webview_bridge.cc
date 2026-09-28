@@ -13,6 +13,7 @@ constexpr auto kErrorInvalidArgs = "invalidArguments";
 constexpr auto kMethodLoadUrl = "loadUrl";
 constexpr auto kMethodLoadStringContent = "loadStringContent";
 constexpr auto kMethodReload = "reload";
+constexpr auto kMethodHardReload = "hardReload";
 constexpr auto kMethodStop = "stop";
 constexpr auto kMethodGoBack = "goBack";
 constexpr auto kMethodGoForward = "goForward";
@@ -521,6 +522,14 @@ void WebviewBridge::HandleMethodCall(
   // reload
   if (method_name.compare(kMethodReload) == 0) {
     if (webview_->Reload()) {
+      return result->Success();
+    }
+    return result->Error(kMethodFailed);
+  }
+
+  // hardReload (SALU addition, VENDOR_NOTES.md): cache-bypassing reload.
+  if (method_name.compare(kMethodHardReload) == 0) {
+    if (webview_->HardReload()) {
       return result->Success();
     }
     return result->Error(kMethodFailed);

@@ -440,6 +440,16 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     return _methodChannel.invokeMethod('reload');
   }
 
+  /// SALU addition: Reloads the current document while bypassing the HTTP
+  /// cache.
+  Future<void> hardReload() async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    return _methodChannel.invokeMethod('hardReload');
+  }
+
   /// Stops all navigations and pending resource fetches.
   Future<void> stop() async {
     if (_isDisposed) {

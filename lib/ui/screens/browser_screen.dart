@@ -1132,7 +1132,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
   /// Browser keyboard (Microsoft Edge / Chrome standard):
   ///   - Tab management: Ctrl+T, Ctrl+W, Ctrl+Tab / Ctrl+PgDn, Ctrl+Shift+Tab / Ctrl+PgUp,
   ///     Ctrl+1..8, Ctrl+9, Ctrl+Shift+T (reopen closed)
-  ///   - Navigation: Alt+Left (Back), Alt+Right (Forward), Alt+Home (Home), F5 / Ctrl+R / Ctrl+F5 (Reload)
+  ///   - Navigation: Alt+Left (Back), Alt+Right (Forward), Alt+Home (Home),
+  ///     F5 / Ctrl+R (reload), Ctrl+F5 / Ctrl+Shift+R (hard reload)
   ///   - Address bar: Ctrl+L, Alt+D, F6
   ///   - Find: Ctrl+F, F3 (next/prev)
   ///   - Panels: Ctrl+H (History), Ctrl+J (Downloads), Ctrl+D (Favourite), Ctrl+Shift+O (Hub),
@@ -1153,10 +1154,16 @@ class _BrowserScreenState extends State<BrowserScreen> {
       return KeyEventResult.handled;
     }
 
-    // Reload: F5, Ctrl+F5, Ctrl+Shift+R
-    if (key == LogicalKeyboardKey.f5 ||
-        (ctrl && shift && key == LogicalKeyboardKey.keyR) ||
-        (ctrl && key == LogicalKeyboardKey.f5)) {
+    // A hard reload bypasses WebView2's HTTP cache; ordinary reload keeps
+    // its cached-resource behavior (Edge / Chromium convention).
+    if (((ctrl && !shift && key == LogicalKeyboardKey.f5) ||
+            (ctrl && shift && key == LogicalKeyboardKey.keyR)) &&
+        !alt) {
+      unawaited(_tab?.hardReload() ?? Future<void>.value());
+      return KeyEventResult.handled;
+    }
+    if ((key == LogicalKeyboardKey.f5 && !ctrl && !shift && !alt) ||
+        (ctrl && !shift && !alt && key == LogicalKeyboardKey.keyR)) {
       unawaited(_tab?.reload() ?? Future<void>.value());
       return KeyEventResult.handled;
     }

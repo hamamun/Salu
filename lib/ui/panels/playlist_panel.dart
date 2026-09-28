@@ -1026,16 +1026,17 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         height: 30,
         child: Row(
           children: <Widget>[
-            _withPeekKeys('player.repeat', _repeatButton()),
-            const SizedBox(width: 4),
-            _withPeekKeys('player.shuffle', _shuffleButton()),
-            const SizedBox(width: 8),
-            Expanded(
-              child: AltPeekAnchor(
-                anchor: ShortcutAnchor.playlistSearch,
-                child: _searchField(count, shown),
-              ),
+            _withPeekAnchor(
+              ShortcutAnchor.playlistRepeat,
+              _repeatButton(),
             ),
+            const SizedBox(width: 4),
+            _withPeekAnchor(
+              ShortcutAnchor.playlistShuffle,
+              _shuffleButton(),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _searchField(count, shown)),
             const SizedBox(width: 8),
             _withPeekKeys(
               'player.clearPlaylist',
@@ -1097,10 +1098,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
               const SizedBox(width: 14),
             ],
             Expanded(
-              child: AltPeekAnchor(
-                anchor: ShortcutAnchor.playlistSearch,
-                child: _searchField(count, count, channel: true),
-              ),
+              child: _searchField(count, count, channel: true),
             ),
             const SizedBox(width: 14),
             _withPeekKeys(
@@ -1142,6 +1140,10 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   Widget _groupByButton(bool searching) {
     return AltPeekAnchor(
       anchor: ShortcutAnchor.playlistGroupBy,
+      // The playlist and the group-by pill each hold ChromeLock for
+      // their lifetime. This is the pill's own opener, so it must remain
+      // eligible for Alt-Peek while either lock is held.
+      ignoreLock: true,
       child: SaluIconButton(
         tooltip: _pillOpen ? null : 'Group by',
         size: 30,
@@ -1152,12 +1154,25 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     );
   }
 
+  Widget _withPeekAnchor(ShortcutAnchor anchor, Widget child) {
+    return AltPeekAnchor(
+      anchor: anchor,
+      // PlaylistPanel owns ChromeLock while open; its own header remains
+      // eligible for Alt-Peek.
+      ignoreLock: true,
+      child: child,
+    );
+  }
+
   Widget _withPeekKeys(String entryId, Widget child) {
     final ShortcutEntry? entry = SaluShortcuts.byId(entryId);
     return AltPeekAnchor(
       entries: entry == null
           ? const <ShortcutEntry>[]
           : <ShortcutEntry>[entry],
+      // PlaylistPanel holds ChromeLock while open. Its header is the
+      // surface being explored, just like the right-click menu's own rows.
+      ignoreLock: true,
       child: child,
     );
   }
@@ -1244,56 +1259,70 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         onKeyEvent: _onFieldKey,
         child: Row(
           children: <Widget>[
-            // The magnifier names the field — no placeholder text (rule 1).
-            SizedBox(
-              width: 18,
-              child: IconTheme.merge(
-                data: IconThemeData(
-                  color: noMatch
-                      ? AppColors.iconIdle.withAlpha(95)
-                      : AppColors.iconIdle,
-                ),
-                child: const MagnifierMark(size: 14),
-              ),
-            ),
-            const SizedBox(width: 6),
             Expanded(
-              child: TextField(
-                controller: _search,
-                focusNode: _searchFocus,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 12.5,
+              child: AltPeekAnchor(
+                anchor: ShortcutAnchor.playlistSearch,
+                // The panel holds ChromeLock while open; its search input
+                // is still a live control on the panel's own surface.
+                ignoreLock: true,
+                child: Row(
+                  children: <Widget>[
+                    // The magnifier names the field — no placeholder text
+                    // (rule 1).
+                    SizedBox(
+                      width: 18,
+                      child: IconTheme.merge(
+                        data: IconThemeData(
+                          color: noMatch
+                              ? AppColors.iconIdle.withAlpha(95)
+                              : AppColors.iconIdle,
+                        ),
+                        child: const MagnifierMark(size: 14),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: TextField(
+                        controller: _search,
+                        focusNode: _searchFocus,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12.5,
+                        ),
+                        cursorColor: AppColors.textPrimary,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        onChanged: (String value) => setState(() {
+                          _query = value.trim();
+                          // A search suspends the grouping (§10.3) — and
+                          // grouped stepping with it, until the search clears.
+                          _view.searching.value = _query.isNotEmpty;
+                        }),
+                      ),
+                    ),
+                    Text(
+                      channel
+                          ? '$total'
+                          : (_query.isEmpty ? '$total' : '$shown / $total'),
+                      style: TextStyle(
+                        color: stale
+                            ? AppColors.textPrimary
+                            : const Color(0xFF7C7C80),
+                        fontSize: 10,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures()
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                cursorColor: AppColors.textPrimary,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 8),
-                ),
-                onChanged: (String value) => setState(() {
-                  _query = value.trim();
-                  // A search suspends the grouping (§10.3) — and grouped
-                  // stepping with it, until the search clears.
-                  _view.searching.value = _query.isNotEmpty;
-                }),
               ),
             ),
-            Text(
-              channel
-                  ? '$total'
-                  : (_query.isEmpty ? '$total' : '$shown / $total'),
-              style: TextStyle(
-                color: stale
-                    ? AppColors.textPrimary
-                    : const Color(0xFF7C7C80),
-                fontSize: 10,
-                fontFeatures: const <FontFeature>[
-                  FontFeature.tabularFigures()
-                ],
-              ),
-            ),
-            // ✕ clears the text — only while there is some.
+            // ✕ clears the text — only while there is some. Keep it
+            // separate from the search anchor so its Esc tip is exclusive.
             if (_query.isNotEmpty) ...<Widget>[
               const SizedBox(width: 4),
               AltPeekAnchor(
@@ -1301,6 +1330,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
                   SaluShortcuts.byId('dialog.playlistSearch.escape')!,
                 ],
                 scope: ShortcutScope.dialog,
+                ignoreLock: true,
                 child: _clearX(),
               ),
             ],

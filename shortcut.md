@@ -36,7 +36,7 @@
 | `M` (Bare key) | **Mute / Unmute** | **Standardized:** Universal media player standard (mpv, VLC, MPC-HC, YouTube). |
 | `Ctrl + M` | **Toggle Mini Mode** | **Standardized:** Moves Mini player toggle to `Ctrl+M` so bare `M` is safely reserved for Mute. |
 | `S` | **Stop** | Stops playback and parks queue (MPC-HC standard). |
-| `Shift + S` / `Alt + S` | **Toggle Shuffle** | **Assigned:** Toggles shuffle with OSD confirmation card. |
+| `Shift + S` / `Alt + S` / `Ctrl + Shift + S` | **Toggle Shuffle** | **Assigned:** Toggles shuffle with OSD confirmation card. |
 | `R` (Bare key) | **Cycle Repeat Mode** | **Assigned:** Cycles Repeat (Off → All → One → Off) with OSD card. |
 | `Page Up` | **Previous Item** | Previous playlist item / channel (MPC-HC standard). |
 | `Page Down` | **Next Item** | Next playlist item / channel (MPC-HC standard). |
@@ -143,7 +143,7 @@
 |---|---|---|
 | `Ctrl + L` / `Alt + D` / `F6` | **Focus Address Bar** | **Standardized:** Selects address bar text (Edge standard). |
 | `Ctrl + R` / `F5` | **Reload Page** | **Standardized:** Refreshes current page (Edge standard). |
-| `Ctrl + F5` / `Ctrl + Shift + R` | **Hard Reload** | **Assigned:** Re-fetches page fresh from network. |
+| `Ctrl + F5` / `Ctrl + Shift + R` | **Hard Reload** | **Assigned:** Bypasses WebView2's HTTP cache for the reload. |
 | `Alt + ←` (Left Arrow) | **Back** | **Assigned:** Navigates back in tab history (Edge standard). |
 | `Alt + →` (Right Arrow) | **Forward** | **Assigned:** Navigates forward in tab history (Edge standard). |
 | `Alt + Home` | **Home** | **Assigned:** Navigates website to its root / home page. |
@@ -172,7 +172,7 @@
 | `Ctrl + -` / `Ctrl + Num -` | **Zoom Out** | Steps page zoom down. |
 | `Ctrl + 0` / `Ctrl + Num 0` | **Reset Zoom** | Resets zoom to 100%. |
 | `F11` | **Browser Fullscreen** | **Assigned:** Toggles fullscreen window (Edge standard). |
-| `Esc` (Page Fullscreen) | **Release Page Fullscreen** | Releases web page fullscreen mode back to browser chrome. |
+| `Esc` | **Close Popup / Release Page Fullscreen** | Closes the top browser popup first; otherwise releases page fullscreen, then exits app fullscreen if active. |
 | `Ctrl + Shift + W` / `Alt + W` | **Switch to Player Mode** | **Assigned:** Seamless toggle between Web and Player mode. |
 
 ---
@@ -198,7 +198,10 @@
 #### 4. Playlist Panel Search Field
 - `Esc` (1st press): Clear search query.
 - `Esc` (2nd press): Unfocus search field.
-- `Esc` (group-by pill open): Close group-by pill.
+
+#### 5. Playlist Group-by Choices (Player mode)
+- `1` / `2` / `3` / `4` (numpad aliases work): Choose Flat / Category / Country / Language.
+- `Esc`: Close the Group by choices.
 
 ---
 
@@ -301,14 +304,17 @@ document about SALU; it is SALU.
 2. **The miniature** (~280 px) — the mock player: title bar, timeline,
    control row, video surface. Every always-visible control is its clean
    icon — **no key text printed on or under it** (the Version B chips are
-   gone). Every key with no always-visible control lives on a **quiet
-   glass shelf at the left of the video — one shelf per group, icons only**
-   (the action's own mark where SALU has one — shuffle, repeat, open
-   folder, URL, find, info, remote, settings, mode switch, sync arrows —
+   gone). Every unanchored key lives on a **quiet glass shelf at the left
+   of the video — one shelf per group, icons only**
+   (the action's own mark where SALU has one — open folder, URL, find, info,
+   remote, settings, mode switch, sync arrows —
    and its keycap where the key is the whole action — `[ ] \`, `. ,`,
    `F3`, `Enter`, …). A group taller than five keys runs in two lines so
-   a shelf always fits the box. The title bar stays silent (no shortcuts
-   live there).
+   a shelf always fits the box. `Ctrl+L` opens the miniature playlist panel,
+   which shows compact **Local** and **M3U** header variants, keeping each
+   playlist-only key on its own
+   real control instead of orphaning it on a shelf. The title bar stays
+   silent (no shortcuts live there).
 3. **The detail strip** — below the miniature, **the only place key text
    appears on the tab**: left column keycap + group + action (+ guard);
    right column the same key in the other three modes (the §3 conflict
@@ -327,7 +333,8 @@ lines, part of this work).
 **It answers — the liveness engine:** while the tab is open it swallows the
 keyboard, and every registered key fires its real mock feedback: transport
 keys move the mock timeline and volume, `Space` swaps the play mark, the
-mock OSD deck flashes its card, `Ctrl+L` slides the mock playlist panel,
+mock OSD deck flashes its card, `Ctrl+L` opens the mock playlist panel and
+`Ctrl+G` / `Ctrl+D` open it through their Group by / favourites actions,
 `F`/`F11` really hides the mock chrome (and brings the bottom hairline),
 and the mode keys really flip the miniature: `Ctrl+M` drops it to the mini
 bar, `Ctrl+U` raises the Open URL modal, `Alt+W` / `Ctrl+Shift+W` flip
@@ -383,6 +390,8 @@ tooltips:
 | Speaker (sound group) | `↑ ↓ · M` (one tooltip, three keys) |
 | Timeline, left end | `0–9 · Home · End` |
 | Tune mark | `Ctrl+E · Cmd+E` |
+| Repeat mark (local playlist header) | `R` |
+| Shuffle mark (local playlist header) | `Shift+S · Alt+S · Ctrl+Shift+S` |
 | Group by mark (M3U playlist) | `Ctrl+G` |
 | Flat / Category / Country / Language pill options | `1` / `2` / `3` / `4` (while the pill is open) |
 | Favourites filter (M3U playlist) | `Ctrl+D` |
@@ -401,8 +410,9 @@ follows **visibility**, not a fixed map:
 
 * the **Open pill's marks** (while the pill is up): film frame `Ctrl+O`,
   stacked frames `Ctrl+Shift+O`, link `Ctrl+U`;
-* the **right-click menu's rows**: Shuffle `Shift+S`, Repeat `R`, Info
-  `Ctrl+I`, Settings `F2`, Remote `Ctrl+Shift+R`.
+* the **right-click menu's rows**: Shuffle
+  `Shift+S · Alt+S · Ctrl+Shift+S`, Repeat `R`, Info `Ctrl+I`, Settings
+  `F2`, Remote `Ctrl+Shift+R`.
 
 Both hold the `ChromeLock` while open (they ARE the modal), so they are
 the surfaces that answer the peek *through* the lock.
@@ -422,8 +432,9 @@ hairline cluster is gone; the surface stays silent.)
   key in between) — so `Alt+Tab` and `Alt+F4` never flash a peek.
 * Hide on: Alt release · mouse leaving the control · focus loss / window
   blur (Windows may never deliver the Alt-up after an `Alt+Tab` — the peek
-  must never freeze on screen) · a modal holding the `ChromeLock` (except
-  the right-click menu's own rows).
+  must never freeze on screen) · a modal holding the `ChromeLock`, except
+  the modal/panel's own controls (the right-click menu rows and playlist
+  header/pill opt in so their keys remain discoverable on their own surface).
 * Mode switch while Alt is held (`Alt+W`): the action fires, and the
   tooltip follows the new surface.
 * **Mini mode: out of scope v1** — the 32-px strip has no room and few

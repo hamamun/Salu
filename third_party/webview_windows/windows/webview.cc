@@ -873,6 +873,15 @@ bool Webview::Reload() {
   return SUCCEEDED(webview_->Reload());
 }
 
+// SALU addition: Page.reload exposes the browser's cache-bypass reload.
+bool Webview::HardReload() {
+  if (!IsValid()) {
+    return false;
+  }
+  return SUCCEEDED(webview_->CallDevToolsProtocolMethod(
+      L"Page.reload", L"{\"ignoreCache\":true}", nullptr));
+}
+
 bool Webview::GoBack() {
   if (!IsValid()) {
     return false;
