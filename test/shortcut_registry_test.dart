@@ -46,7 +46,43 @@ void main() {
       expect(m(LogicalKeyboardKey.keyM)?.id, 'player.mute');
       expect(m(LogicalKeyboardKey.keyM, ctrl: true)?.id, 'player.mini');
       expect(m(LogicalKeyboardKey.digit7)?.id, 'player.jumpPercent');
+      expect(m(LogicalKeyboardKey.keyG, ctrl: true)?.id, 'player.groupBy');
+      expect(m(LogicalKeyboardKey.keyD, ctrl: true)?.id, 'player.playlistFavourites');
+      expect(
+        SaluShortcuts.match(
+          ShortcutScope.player,
+          LogicalKeyboardKey.delete,
+          ctrl: true,
+          shift: true,
+          alt: false,
+        )?.id,
+        'player.clearPlaylist',
+      );
       expect(m(LogicalKeyboardKey.keyQ), isNull);
+      expect(
+        SaluShortcuts.match(ShortcutScope.dialog, LogicalKeyboardKey.digit1,
+            ctrl: false, shift: false, alt: false)?.id,
+        'dialog.groupFlat',
+      );
+      expect(
+        SaluShortcuts.byId('dialog.groupCountry')?.guard,
+        ShortcutGuard.groupByPillOpen,
+      );
+      expect(
+        SaluShortcuts.match(ShortcutScope.player, LogicalKeyboardKey.keyE,
+            ctrl: false, shift: false, alt: false, meta: true)?.id,
+        'player.tune',
+      );
+      expect(
+        SaluShortcuts.match(ShortcutScope.player, LogicalKeyboardKey.arrowUp,
+            ctrl: false, shift: false, alt: false, meta: true)?.id,
+        'player.tuneNudge',
+      );
+      expect(
+        SaluShortcuts.match(ShortcutScope.player, LogicalKeyboardKey.arrowUp,
+            ctrl: false, shift: false, alt: true, meta: true)?.id,
+        'player.tuneFocus',
+      );
     });
 
     test('the same key reads per mode (§1.1)', () {
@@ -72,7 +108,11 @@ void main() {
       expect(p(ShortcutAnchor.seekForward), '→');
       expect(p(ShortcutAnchor.sound), '↑ ↓ · M');
       expect(p(ShortcutAnchor.timeline), '0–9 · Home · End');
-      expect(p(ShortcutAnchor.tune), 'Ctrl+E');
+      expect(p(ShortcutAnchor.tune), 'Ctrl+E · Cmd+E');
+      expect(p(ShortcutAnchor.playlistGroupBy), 'Ctrl+G');
+      expect(p(ShortcutAnchor.playlistSearch), 'Ctrl+F');
+      expect(p(ShortcutAnchor.playlistFavourites), 'Ctrl+D');
+      expect(p(ShortcutAnchor.playlistClear), 'Ctrl+Shift+Delete');
       expect(p(ShortcutAnchor.fetch), 'Ctrl+Shift+F');
       expect(p(ShortcutAnchor.fullscreen), 'F · F11');
 
@@ -85,6 +125,11 @@ void main() {
       expect(w(ShortcutAnchor.webDownloads), 'Ctrl+J');
       expect(w(ShortcutAnchor.webFavourite), 'Ctrl+D');
       expect(w(ShortcutAnchor.webHub), 'Ctrl+Shift+O');
+      expect(
+        SaluShortcuts.match(ShortcutScope.web, LogicalKeyboardKey.backspace,
+            ctrl: true, shift: true, alt: false)?.id,
+        'web.clearData',
+      );
       expect(w(ShortcutAnchor.webBack), 'Alt+←');
       expect(w(ShortcutAnchor.webForward), 'Alt+→');
 

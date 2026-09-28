@@ -131,6 +131,7 @@ class _BrowserHistoryPanelState extends State<BrowserHistoryPanel> {
                         const Spacer(),
                         SaluIconButton(
                           size: 24,
+                          tooltip: 'Close',
                           onTap: widget.onClose,
                           child: const CloseMark(size: 10),
                         ),

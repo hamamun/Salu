@@ -168,6 +168,7 @@ class _TabChip extends StatelessWidget {
                         side: PeekSide.below,
                         child: SaluIconButton(
                           size: 22,
+                          tooltip: 'Close tab',
                           onTap: onClose,
                           child: const CloseMark(size: 10),
                         ),
@@ -175,6 +176,7 @@ class _TabChip extends StatelessWidget {
                     else
                       SaluIconButton(
                         size: 22,
+                        tooltip: 'Close tab',
                         onTap: onClose,
                         child: const CloseMark(size: 10),
                       ),

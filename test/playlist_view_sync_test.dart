@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/channel_grouping.dart';
 import 'package:salu/core/channel_view_service.dart';
@@ -143,5 +144,11 @@ void main() {
       findsOneWidget,
     );
 
+    // While the pill owns focus, 3 selects Country (Flat=1, Category=2,
+    // Country=3, Language=4) without colliding with Player seek digits.
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.pump();
+    expect(view.groupMode.value, ChannelGroupMode.country);
+    expect(PanelService.instance.groupPillOpen.value, isFalse);
   });
 }
