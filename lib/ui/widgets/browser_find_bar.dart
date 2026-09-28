@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../theme/app_theme.dart';
+import 'alt_peek.dart';
 import 'salu_icon_button.dart';
 import 'salu_marks.dart';
 
@@ -10,6 +12,9 @@ import 'salu_marks.dart';
 /// type, and every match lights up; Enter walks forward, Shift+Enter
 /// walks back, Esc closes. The screen owns the query + the count (it
 /// runs the script and survives navigations); this bar is only the face.
+///
+/// The three buttons answer Alt-Peek with their registered keys —
+/// `Shift+F3` · `F3` · `Esc` (the bar IS the transient surface).
 class BrowserFindBar extends StatelessWidget {
   const BrowserFindBar({
     super.key,
@@ -99,29 +104,48 @@ class BrowserFindBar extends StatelessWidget {
               const SizedBox(width: 4),
               _Count(query: query, total: total, index: index),
               const SizedBox(width: 2),
-              SaluIconButton(
-                size: 26,
-                onTap: onPrev,
-                tooltip: 'Previous',
-                child: const RevealChevronMark(up: true, size: 15),
+              AltPeekAnchor(
+                entries: _peekKeys('web.findPrevious'),
+                side: PeekSide.below,
+                child: SaluIconButton(
+                  size: 26,
+                  onTap: onPrev,
+                  tooltip: 'Previous',
+                  child: const RevealChevronMark(up: true, size: 15),
+                ),
               ),
-              SaluIconButton(
-                size: 26,
-                onTap: onNext,
-                tooltip: 'Next',
-                child: const RevealChevronMark(up: false, size: 15),
+              AltPeekAnchor(
+                entries: _peekKeys('web.findNext'),
+                side: PeekSide.below,
+                child: SaluIconButton(
+                  size: 26,
+                  onTap: onNext,
+                  tooltip: 'Next',
+                  child: const RevealChevronMark(up: false, size: 15),
+                ),
               ),
-              SaluIconButton(
-                size: 26,
-                onTap: onClose,
-                tooltip: 'Close',
-                child: const CloseMark(size: 11),
+              AltPeekAnchor(
+                entries: _peekKeys('dialog.find.close'),
+                side: PeekSide.below,
+                child: SaluIconButton(
+                  size: 26,
+                  onTap: onClose,
+                  tooltip: 'Close',
+                  child: const CloseMark(size: 11),
+                ),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// The registered key a button answers the Alt-Peek with — null (never
+  /// shown) when the id has no registry entry.
+  static List<ShortcutEntry>? _peekKeys(String id) {
+    final ShortcutEntry? e = SaluShortcuts.byId(id);
+    return e == null ? null : <ShortcutEntry>[e];
   }
 }
 

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/browser_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/window_state_service.dart';
 import '../../theme/app_theme.dart';
 import '../mini/mini_marks.dart';
+import 'alt_peek.dart';
 import 'dot_grid_icon.dart';
 import 'salu_icon_button.dart';
 import 'salu_marks.dart';
@@ -81,6 +84,17 @@ class CustomTitleBar extends StatelessWidget {
 
   /// Fixed height of the caption area.
   static const double height = 40;
+
+  /// Whether Web mode owns the window — the settings key's scope follows
+  /// it (F2 / `Ctrl+,` means Web settings while the browser is on stage).
+  static bool get _web => BrowserService.instance.isWeb;
+
+  /// The registered key a caption button answers the Alt-Peek with —
+  /// null (never shown) when the id has no registry entry.
+  static List<ShortcutEntry>? _peekKeys(String id) {
+    final ShortcutEntry? e = SaluShortcuts.byId(id);
+    return e == null ? null : <ShortcutEntry>[e];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -183,19 +197,30 @@ class CustomTitleBar extends StatelessWidget {
                 // Web mode hides it (mini.md §8 — the browser does not fit
                 // a 32-px strip), so it never appears to lie.
                 if (showMini)
-                  SaluIconButton(
-                    tooltip: 'Mini bar mode',
-                    onTap: windows.toggleMini,
-                    hitSize: const Size(46, CustomTitleBar.height),
-                    child: const MiniBarMark(size: 18),
+                  AltPeekAnchor(
+                    // Ctrl+M — the mini toggle's own key (§4.2 extends to
+                    // every control with a registered key; Min/Max/Close
+                    // have none and stay honestly silent).
+                    entries: _peekKeys('player.mini'),
+                    side: PeekSide.below,
+                    child: SaluIconButton(
+                      tooltip: 'Mini bar mode',
+                      onTap: windows.toggleMini,
+                      hitSize: const Size(46, CustomTitleBar.height),
+                      child: const MiniBarMark(size: 18),
+                    ),
                   ),
                 // SALU settings — six dots in two lines (left of Minimize).
-                SaluIconButton(
-                  tooltip: 'Settings',
-                  enabled: onSettings != null,
-                  onTap: onSettings ?? () {},
-                  hitSize: const Size(46, CustomTitleBar.height),
-                  child: const DotGridIcon(size: 18),
+                AltPeekAnchor(
+                  entries: _peekKeys(_web ? 'web.settings' : 'player.settings'),
+                  side: PeekSide.below,
+                  child: SaluIconButton(
+                    tooltip: 'Settings',
+                    enabled: onSettings != null,
+                    onTap: onSettings ?? () {},
+                    hitSize: const Size(46, CustomTitleBar.height),
+                    child: const DotGridIcon(size: 18),
+                  ),
                 ),
                 // Minimize — one thin rule.
                 SaluIconButton(
