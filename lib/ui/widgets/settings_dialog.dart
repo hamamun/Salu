@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
+
+import '../../core/association/association_plan.dart';
+import '../../core/association/association_service.dart';
 
 import '../../core/language_names.dart';
 import '../../core/remote/remote_pairing.dart';
@@ -21,6 +25,8 @@ import 'remote_firewall_dialog.dart';
 import 'salu_icon_button.dart';
 import 'shortcuts_tab.dart';
 import 'update_dialog.dart';
+
+part 'associations_tab.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
 /// backdrop, opened by the four-dot button in the title bar and by the
@@ -46,7 +52,8 @@ import 'update_dialog.dart';
 /// OpenSubtitles account, EQ memory, paired phones and the per-site
 /// pop-up rules are never part of it.
 ///
-/// Current tabs: General · Subtitles · Web · Updates · Shortcuts. The tab
+/// Current tabs: General · Subtitles · Web · Updates · Associations ·
+/// Shortcuts. The tab
 /// strip is untouched — it is the one place the window explains itself by
 /// structure, and Shortcuts stays exactly as it is.
 class SettingsDialog extends StatefulWidget {
@@ -65,7 +72,7 @@ class SettingsDialog extends StatefulWidget {
 
 /// The window's tabs. Public because a caller picks the one to open
 /// on ([SettingsDialog.initialTab]).
-enum SettingsTab { general, subtitles, web, updates, shortcuts }
+enum SettingsTab { general, subtitles, web, updates, associations, shortcuts }
 
 class _SettingsDialogState extends State<SettingsDialog> {
   /// Opens on the door the viewer came through, then moves only by their
@@ -188,6 +195,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     selected: _tab == SettingsTab.updates,
                     onTap: () => setState(() => _tab = SettingsTab.updates),
                   ),
+                  // association.md §4 — file types, default player and the
+                  // Explorer right-click verbs.
+                  _TabButton(
+                    label: 'Associations',
+                    selected: _tab == SettingsTab.associations,
+                    onTap: () => setState(() => _tab = SettingsTab.associations),
+                  ),
                   // shortcut.md §4.1 — the Shortcuts tab (the Living Map): the
                   // rightmost tab, a reference page rather than a setting.
                   _TabButton(
@@ -211,6 +225,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       SettingsTab.subtitles => const _SubtitlesTab(),
       SettingsTab.web => const _WebTab(),
       SettingsTab.updates => const _UpdatesTab(),
+      SettingsTab.associations => const _AssociationsTab(),
       SettingsTab.shortcuts => const ShortcutsTab(),
     };
   }
