@@ -133,8 +133,9 @@ RIGHT-CLICK
 
 - [x] Plan (this file)
 - [x] Implementation (§5).
-- [ ] `flutter analyze` + `flutter test test/association_plan_test.dart`
-      (the build sandbox could not download the Flutter SDK).
+- [x] `flutter analyze` (changed files: no issues) +
+      `flutter test test/association_plan_test.dart` — passed on a
+      windows-latest CI runner.
 - [ ] Native checks (§6) on Windows 10 + 11.
 
 Notes: multi-selecting files → "Play with SALU" launches one process per
