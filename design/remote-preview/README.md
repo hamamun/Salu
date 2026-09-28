@@ -12,6 +12,11 @@ Review artifact only. Not the real player, no Flutter code, nothing wired into
 `lib/`. The APK is a separate later project (D1) and the PC side is specced but
 not built; this page is how both are meant to look and behave before either is.
 
+The settings window's **tab strip and its master reset** are not part of this
+mock — it shows the Remote group and the two 2026-09-28 additions that live
+inside a tab: the `Default · …` line under a pill set and a group's reset
+mark.
+
 ## Run
 
 ```bash
@@ -45,7 +50,7 @@ Everything is wired: press things on one side and watch the other follow.
 | **Browse → Files → tap a row** | the file never travels. The phone sends a **path**, the PC opens it locally — a 40 GB file costs one message |
 | **Drag an EQ band** | the curve follows, the preset turns to **My**, and `eq_set` carries all ten gains |
 | **Switch to Web, then open Tune** | the equalizer is gone and a D-pad is there instead. Walk it with `▲▼` and watch the ring move on the PC's page |
-| **Turn Remote off** in Settings | the port frees, `Show pairing code` disables, no QR is offered, and the phone drops to its offline body (D10) |
+| **Turn Remote off** in Settings | the port frees, `Pairing code` disables, no QR is offered, and the phone drops to its offline body (D10) |
 | **Watch the socket panel** | every line is a real §6 frame. Press anything and read what actually goes over the wire |
 
 Toolbar: **Switch PC to Web/Player mode** drives the PC side directly (to prove
@@ -99,8 +104,10 @@ tools would pick.
 | QR on a **white** card, no animation | §10.2 — dark-on-glass does not scan |
 | The code rotates when the panel closes | **A5** |
 | Status line, three of the five spec'd shapes | `● Connected · Wi-Fi · 192.168.0.12 · 7258` · `○ Waiting for your phone` · `Remote is off — turn it on in Settings`. §10.2 adds `Starting…` and `Couldn't start the remote (port busy)`, which need a real socket to be honest about |
-| Footnote under the code | "This code is only for pairing. It changes when you close this panel." |
-| Remembered phones, `Forget` with no confirm | §10.2 — names only, never tokens or IPs |
+| The code under the card | a value only — its caption and the old footnote are retired (owner ruling, 2026-09-28) |
+| Remembered phones, `Forget` mark with no confirm | §10.2 — names only, never tokens or IPs |
+| **Set Top bar off Borderless** | the group caption grows a small reset mark; press it and the toast says `Top bar reset` (follow.md rule 3 — no confirm dialogs) |
+| **Read the line under a pill set** | `Default · Borderless` — the factory default, as a word, always |
 | The firewall hint, one line + one button | appears only while waiting, never as a wall of text |
 | The panel never auto-closes | a QR that vanishes mid-scan is worse than one that lingers |
 | Settings section, after the Equalizer block | §10.3, `_AutoEqSwitch` layout. Two switches + two rows |

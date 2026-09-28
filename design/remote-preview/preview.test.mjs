@@ -479,10 +479,10 @@ await check('a wrong code is refused, the right one connects', async () => {
 await check('turning Remote off tears it down on both sides (D10)', async () => {
   act('toggleRemote').click();
   assert.equal(S.remoteOn, false);
-  assert.match($('#settings').textContent, /Show pairing code/);
+  assert.match($('#settings').textContent, /Pairing code/);
   openStrip();
   tap('remote');
-  assert.match($('.modal .statusline').textContent, /Remote is off/);
+  assert.match($('.modal .statusline').textContent, /Off/);
   assert.equal($('.qrcard'), null, 'no QR may be offered while remote is off');
   tap('closePanel');
   assert.match($('#phone .nothing').textContent, /Remote is off on the PC/);

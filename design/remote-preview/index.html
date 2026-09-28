@@ -154,17 +154,17 @@
   .barrier{position:absolute;inset:0;background:rgba(0,0,0,.6);z-index:40;display:grid;
     place-items:center;animation:fade .18s ease}
   @keyframes fade{from{opacity:0}to{opacity:1}}
-  .modal{width:400px;background:var(--surface);border:1px solid var(--outline);
-    border-radius:16px;padding:16px 18px 16px;animation:rise .22s cubic-bezier(.22,1,.36,1);
+  .modal{width:340px;background:var(--surface);border:1px solid var(--outline);
+    border-radius:16px;padding:14px 16px 14px;animation:rise .22s cubic-bezier(.22,1,.36,1);
     box-shadow:0 24px 60px rgba(0,0,0,.6)}
   @keyframes rise{from{opacity:0;transform:scale(.965)}to{opacity:1;transform:scale(1)}}
-  .modal .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .modal .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
   .modal .hd h3{font-size:14.5px;font-weight:600}
   .xbtn{width:26px;height:26px;display:grid;place-items:center;cursor:pointer;border-radius:6px}
   .xbtn svg{width:13px;height:13px;stroke:var(--idle);stroke-width:1.9;stroke-linecap:round}
   .xbtn:hover svg{stroke:var(--text)}
   .statusline{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--sec);
-    margin-bottom:14px}
+    margin-bottom:12px}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--unknown);flex:none}
   .dot.alive{background:var(--alive)}
   .dot.dead{background:var(--dead)}
@@ -172,40 +172,35 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   .qrcard{width:232px;margin:0 auto;padding:12px;background:#fff;border-radius:8px}
   .qrcard svg{display:block;width:208px;height:208px}
-  .qrnote{text-align:center;font-size:11.5px;color:var(--sec);margin-top:11px;line-height:1.6}
-  .qrnote .code{font:13px/1.4 "Cascadia Mono",Consolas,monospace;color:var(--text);
-    letter-spacing:.08em}
+  .qrnote{text-align:center;font-size:13px;color:var(--text);margin-top:10px;line-height:1.6}
+  .qrnote .code{font:15px/1.4 "Cascadia Mono",Consolas,monospace;color:var(--text);
+    font-weight:600;letter-spacing:.12em}
   .sect{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
-    color:#7c7c80;margin:16px 0 7px}
-  .prow{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;font-size:12px}
+    color:#7c7c80;margin:13px 0 3px}
+  .prow{display:flex;align-items:center;gap:9px;padding:5px 8px;border-radius:7px;font-size:12px}
   .prow:hover{background:var(--surface-hi)}
   .prow .nm{flex:1}
   .prow .st{color:var(--sec);font-size:11px}
   .prow .fg{color:var(--sec);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:5px}
   .prow .fg:hover{color:var(--dead);background:rgba(224,91,91,.10)}
   .empty{color:#77777c;font-size:11.5px;padding:4px 8px}
-  .fw{margin-top:14px;padding:10px 12px;border:1px solid #4a3a22;background:#241f16;
-    border-radius:9px;font-size:11.5px;color:#e0c79a;line-height:1.5}
-  .fw button{margin-top:7px;background:transparent;border:1px solid #5a4a24;color:#e8c48a;
-    border-radius:6px;padding:4px 10px;font:inherit;font-size:11px;cursor:pointer}
-  .fw button:hover{background:#2f2718}
-  .foot{margin-top:12px;font-size:10.5px;color:#6e6e73;line-height:1.5}
+  .fw{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:11.5px;
+    color:var(--sec)}
 
   /* ── Settings preview ──────────────────────────────────────────────── */
   .settings{width:760px;max-width:100%;margin-top:18px;background:var(--surface);
     border:1px solid var(--outline);border-radius:12px;padding:16px 18px}
   .settings h3{font-size:13px;font-weight:600;margin-bottom:3px}
   .settings .sub{color:var(--sec);font-size:11.5px;margin-bottom:13px}
-  .srow{display:flex;align-items:flex-start;gap:12px;padding:11px 12px;border-radius:9px;
+  .srow{display:flex;align-items:center;gap:12px;padding:5px 10px;border-radius:8px;
     border:1px solid transparent}
   .srow:hover{background:var(--surface-hi)}
-  .srow .tile{width:30px;height:30px;flex:none;display:grid;place-items:center;
-    border-radius:7px;background:#2c2c2f}
+  .srow .tile{display:none}
   .srow .tile svg{width:16px;height:16px;stroke:var(--idle);fill:none;stroke-width:1.7;
     stroke-linecap:round;stroke-linejoin:round}
   .srow .txt{flex:1}
   .srow .txt .t{font-size:12.5px}
-  .srow .txt .h{font-size:11px;color:var(--sec);margin-top:2px;line-height:1.45}
+  .srow .txt .h{display:none}
   .sw{width:34px;height:20px;flex:none;border-radius:10px;padding:2px;cursor:pointer;
     background:#3A3A3C;transition:background .15s cubic-bezier(.22,1,.36,1);margin-top:5px}
   .sw i{display:block;width:16px;height:16px;border-radius:50%;background:#fff;
@@ -213,8 +208,27 @@
   .sw.on{background:var(--accent)}
   .sw.on i{transform:translateX(14px)}
   .sw.dis{opacity:.4;cursor:default}
-  .chev{color:var(--sec);font-size:14px;margin-top:6px}
+  .chev{color:var(--sec);font-size:14px}
   .srow.dis .t,.srow.dis .h{opacity:.45}
+  .srow .val{color:var(--sec);font-size:11.5px}
+  /* caption row: small uppercase label + the group's reset mark (only
+     while the group stands off its defaults — owner enhancement 3) */
+  .cap{display:flex;align-items:center;height:20px;padding:0 2px 0 10px;
+    font-size:10.5px;font-weight:600;letter-spacing:1.1px;text-transform:uppercase;
+    color:#8b8b90}
+  .cap .sp{flex:1}
+  .cap .rst{cursor:pointer;display:grid;place-items:center;width:18px;height:18px}
+  .cap .rst svg{width:12px;height:12px;stroke:var(--idle);fill:none;stroke-width:1.8;
+    stroke-linecap:round}
+  .cap .rst:hover svg{stroke:var(--text)}
+  /* pill sets: one hairline capsule + a read-out of the factory default */
+  .pillwrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+  .pills{display:flex;padding:2px;border:1px solid var(--outline);border-radius:999px}
+  .pill{height:22px;display:grid;place-items:center;padding:0 10px;border-radius:999px;
+    font-size:11.5px;color:var(--sec);cursor:pointer;letter-spacing:.2px;white-space:nowrap}
+  .pill:hover{color:var(--text)}
+  .pill.on{background:rgba(76,158,235,.12);color:var(--accent);font-weight:600}
+  .pillnote{font-size:10px;letter-spacing:.3px;color:var(--sec)}
 
   /* ── the phone ─────────────────────────────────────────────────────── */
   .phonecol{width:344px;flex:none}
@@ -583,7 +597,7 @@
         <tr><td><b><code>web_key</code> is a new verb</b></td><td><code>remote.md</code> §17.4 has <code>browser_nav</code> and the <code>web_media_*</code> family but nothing that moves focus. The side keys reuse <code>browser_nav</code>; the arrows and OK need <code>web_key {key}</code> added to the spec.</td></tr>
         <tr><td><b>Volume changes show nothing on the PC</b></td><td><b>A1</b> — remote commands raise an OSD card except volume and mute; you are already looking at your phone.</td></tr>
         <tr><td><b>Browse → Files, tap a row</b></td><td>The file never travels. The phone sends a <i>path</i>, the PC opens it locally — a 40 GB file costs one message.</td></tr>
-        <tr><td><b>Settings → Remote toggle</b></td><td><b>D10</b>, default ON. Off tears the listener down: the port frees, <code>Show pairing code</code> disables, and the phone drops.</td></tr>
+        <tr><td><b>Settings → Remote toggle</b></td><td><b>D10</b>, default ON. Off tears the listener down: the port frees, <code>Pairing code</code> disables, and the phone drops.</td></tr>
         <tr><td><b>Tune says "Nothing is playing"</b></td><td>EQ, subtitles and audio are meaningless with no media — the tab says so in one place instead of showing dead sliders.</td></tr>
       </tbody>
     </table>
