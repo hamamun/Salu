@@ -17,6 +17,7 @@ import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
 import '../../core/settings_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/transport_actions.dart';
 import '../../core/tune/tune_model.dart';
 import '../../core/tune_service.dart';
@@ -345,7 +346,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           title: title,
                           onSettings: _openWebSettings,
                           leading: const WebModeToggle(),
-                          badge: _downloadBadge,
+                          // While Web mode owns the window the badge is the
+                          // shelf's door — its key (Ctrl+J) answers Alt-Peek.
+                          badge: _downloadBadge == null
+                              ? null
+                              : AltPeekAnchor(
+                                  scope: ShortcutScope.web,
+                                  anchor: ShortcutAnchor.webDownloads,
+                                  side: PeekSide.below,
+                                  child: _downloadBadge!,
+                                ),
                           showMini: false,
                         );
                       },

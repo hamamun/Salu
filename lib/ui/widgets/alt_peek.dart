@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -165,9 +166,9 @@ enum PeekSide { below, above, overStart }
 /// Wraps a visible control; while the peek is armed and the mouse is on
 /// the control, the control's key fades in as a tooltip in SALU's own
 /// tooltip look (the app's `TooltipTheme` — same surface, border and
-/// font as the name tooltips). The tooltip never moves the control (it
-/// floats in an unclipped overlay — follow.md rule 5) and its text is
-/// never cut off.
+/// font as the name tooltips). The tooltip **renders in an OverlayPortal**
+/// so it floats above all clipping parents (pills, menus, glass capsules)
+/// and is never cut off.
 ///
 /// The legend comes from the registry: [anchor] names the visible
 /// control ([SaluShortcuts.chipLegend]) — or [entries] name the exact
@@ -204,7 +205,28 @@ class AltPeekAnchor extends StatefulWidget {
 }
 
 class _AltPeekAnchorState extends State<AltPeekAnchor> {
+  /// The tip floats this far off the control's edge (§4.2 — it never
+  /// covers the mark and never sits INSIDE it, the old overlap bug).
+  static const double _gap = 6;
+
+  /// The tip keeps this much window edge around itself — a legend near
+  /// the window border slides inward instead of leaving the window.
+  static const double _margin = 4;
+
   bool _hovering = false;
+
+  /// The tip's overlay child. Shown once, on mount, and kept for the
+  /// anchor's life — visibility is decided inside the child (the tip is
+  /// an empty box unless the peek is armed AND the mouse is on the
+  /// control), so no show/hide juggling ever races a build phase. The
+  /// entry lives in the ROOT overlay: no pill, menu or capsule can clip
+  /// it, and it paints above every non-overlay surface (the right-click
+  /// menu, the chrome) and above earlier entries.
+  final OverlayPortalController _portal = OverlayPortalController();
+
+  /// Marks the control's box — the tip reads the box's on-screen rect
+  /// from here (the anchor's own context would find a big ancestor box).
+  final GlobalKey _childKey = GlobalKey();
 
   static String _fold(ShortcutEntry e) =>
       e.legend ?? e.combos.map((ShortcutCombo c) => c.label).join(' · ');
@@ -219,6 +241,26 @@ class _AltPeekAnchorState extends State<AltPeekAnchor> {
     return entries.map(_fold).join(' · ');
   }
 
+  bool get _showTip {
+    final bool locked = ChromeLock.instance.isLocked;
+    return AltPeek.instance.visible.value &&
+        _hovering &&
+        (widget.ignoreLock || !locked);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Only when a legend exists — the portal is built then. (A keyless
+    // control builds its plain child and never mounts a portal.) The
+    // post-frame show picks up a peek armed before this control existed
+    // too (mode switch with Alt held).
+    if (_legend.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_portal.isShowing) _portal.show();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final String legend = _legend;
@@ -228,75 +270,133 @@ class _AltPeekAnchorState extends State<AltPeekAnchor> {
       listenable: _peekListenable,
       builder: (BuildContext context, Widget? _) {
         final bool armed = AltPeek.instance.visible.value;
-        final bool locked = ChromeLock.instance.isLocked;
-        final bool show =
-            armed && _hovering && (widget.ignoreLock || !locked);
-        // Opaque: hover is geometric, so the region stays on the hit
-        // path even while AbsorbPointer holds the child — otherwise
-        // arming would fire a phantom exit and the tooltip could never
-        // appear.
+        final bool hovering = _hovering;
+        // Armed AND hovered, the control's own name tooltip stands
+        // down: the pointer is absorbed, so the inner Tooltip never
+        // wakes and the key tooltip takes its place. Keys still reach
+        // the focused field — only the pointer is held.
+        final bool absorb = armed && hovering;
         return MouseRegion(
           opaque: true,
           onEnter: (_) => setState(() => _hovering = true),
           onExit: (_) => setState(() => _hovering = false),
-          child: Stack(
-            clipBehavior: Clip.none,
-            // The control keeps exactly the constraints it had without
-            // the anchor — wrapping must never re-lay it out.
-            fit: StackFit.passthrough,
-            children: <Widget>[
-              // Armed AND hovered, the control's own name tooltip stands
-              // down: the pointer is absorbed, so the inner Tooltip
-              // never wakes and the key tooltip takes its place. Keys
-              // still reach the focused field — only the pointer is
-              // held — and every other control stays interactive.
-              AbsorbPointer(
-                absorbing: armed && _hovering,
-                child: widget.child,
-              ),
-              _positioned(
-                IgnorePointer(
-                  child: ExcludeFocus(
-                    child: _PeekFade(
-                      show: show,
-                      child: _PeekTip(legend),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          child: OverlayPortal(
+            controller: _portal,
+            overlayLocation: OverlayChildLocation.rootOverlay,
+            overlayChildBuilder: _buildOverlayChild,
+            child: AbsorbPointer(
+              absorbing: absorb,
+              child: KeyedSubtree(key: _childKey, child: widget.child),
+            ),
           ),
         );
       },
     );
   }
 
-  /// The tooltip floats in a 200-px zone centred on the control, so even
-  /// the longest legend (`Ctrl+Shift+O`) sits whole over a small mark.
-  Widget _positioned(Widget tip) {
-    switch (widget.side) {
-      case PeekSide.below:
-        return Positioned(
-          left: -100,
-          right: -100,
-          top: 26,
-          child: Center(child: tip),
-        );
-      case PeekSide.above:
-        return Positioned(
-          left: -100,
-          right: -100,
-          bottom: 26,
-          child: Center(child: tip),
-        );
+  /// The tip — built in the root Overlay, so it floats above every
+  /// clipping parent (the pill's glass, the right menu's capsule, the
+  /// web rows) and is never cut off (follow.md rule 5). The overlay child
+  /// arrives with the full window's tight constraints, so the layout
+  /// delegate fills the window and places the tip at absolute
+  /// coordinates; the fade wrapper stays mounted so the fade-out can
+  /// play (while the peek is away it shows nothing).
+  Widget _buildOverlayChild(BuildContext context) {
+    final BuildContext? targetContext = _childKey.currentContext;
+    final RenderObject? ro = targetContext?.findRenderObject();
+    if (ro is! RenderBox || !ro.attached || !ro.hasSize) {
+      return const SizedBox.shrink();
+    }
+    return IgnorePointer(
+      child: ExcludeFocus(
+        child: CustomSingleChildLayout(
+          delegate: _PeekPositionDelegate(
+            target: ro.localToGlobal(Offset.zero) & ro.size,
+            side: widget.side,
+            gap: _gap,
+            margin: _margin,
+          ),
+          child: _PeekFade(
+            show: _showTip,
+            child: _PeekTip(_legend),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lays the key tooltip out against the control's on-screen box — centred
+/// above or below it, the timeline's tip hugging its left end — clamped to
+/// stay inside the window (flipping to the other side at an edge). The
+/// same recipe Flutter's own [Tooltip] uses; running in the root overlay
+/// it can never be clipped by the control's ancestors.
+class _PeekPositionDelegate extends SingleChildLayoutDelegate {
+  const _PeekPositionDelegate({
+    required this.target,
+    required this.side,
+    required this.gap,
+    required this.margin,
+  });
+
+  /// The control's box in global (== root-overlay) coordinates.
+  final Rect target;
+  final PeekSide side;
+  final double gap;
+  final double margin;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.loose(constraints.biggest);
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    double dx = target.left + (target.width - childSize.width) / 2;
+    double dy;
+    switch (side) {
       case PeekSide.overStart:
         // The timeline: above the bar, hugging its left end.
-        return Positioned(
-          left: 0,
-          bottom: 26,
-          child: Align(alignment: Alignment.centerLeft, child: tip),
-        );
+        dx = target.left;
+        dy = target.top - gap - childSize.height;
+      case PeekSide.above:
+        dy = target.top - gap - childSize.height;
+        if (dy < margin) dy = target.bottom + gap; // flip below at the top edge
+      case PeekSide.below:
+        dy = target.bottom + gap;
+        if (dy + childSize.height > size.height - margin) {
+          dy = target.top - gap - childSize.height; // flip above at the bottom edge
+        }
     }
+    dx = dx.clamp(margin, math.max(margin, size.width - childSize.width - margin));
+    dy = dy.clamp(margin, math.max(margin, size.height - childSize.height - margin));
+    return Offset(dx, dy);
+  }
+
+  @override
+  bool shouldRelayout(_PeekPositionDelegate old) =>
+      target != old.target ||
+      side != old.side ||
+      gap != old.gap ||
+      margin != old.margin;
+}
+
+/// Fade in 120 ms, fade out 100 ms (§4.2 · timing). While the peek is
+/// away the tip is not built at all — nothing is on screen (and nothing
+/// is findable); the AnimatedSwitcher keeps the outgoing tip mounted just
+/// long enough to play the fade-out.
+class _PeekFade extends StatelessWidget {
+  const _PeekFade({required this.show, required this.child});
+
+  final bool show;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: AltPeek.fadeIn,
+      reverseDuration: AltPeek.fadeOut,
+      child: show ? child : const SizedBox.shrink(),
+    );
   }
 }
 
@@ -333,24 +433,6 @@ class _PeekTip extends StatelessWidget {
               ),
             ),
       ),
-    );
-  }
-}
-
-/// Fade in 120 ms, fade out 100 ms (§4.2 · timing). At rest nothing is
-/// built at all — the tooltip exists only while the peek does.
-class _PeekFade extends StatelessWidget {
-  const _PeekFade({required this.show, required this.child});
-
-  final bool show;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: AltPeek.fadeIn,
-      reverseDuration: AltPeek.fadeOut,
-      child: show ? child : const SizedBox.shrink(),
     );
   }
 }

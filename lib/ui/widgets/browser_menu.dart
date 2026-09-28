@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/web/web_tab.dart';
 import '../../theme/app_theme.dart';
+import 'alt_peek.dart';
 import 'salu_icon_button.dart';
 
 /// The browser menu — the ⋮ at the row's right edge (Chrome's ⋮ slot):
@@ -71,6 +73,7 @@ class BrowserMenu extends StatelessWidget {
               _MenuRow(
                 label: 'New tab',
                 onTap: onNewTab,
+                keys: _keys('web.newTab'),
               ),
               const _MenuDivider(),
               if (tab != null) ...<Widget>[
@@ -82,18 +85,22 @@ class BrowserMenu extends StatelessWidget {
                 label: 'Find in page…',
                 enabled: page,
                 onTap: onFind,
+                keys: _keys('web.find'),
               ),
               _MenuRow(
                 label: 'History',
                 onTap: onHistory,
+                keys: _keys('web.history'),
               ),
               _MenuRow(
                 label: 'Downloads',
                 onTap: onDownloads,
+                keys: _keys('web.downloads'),
               ),
               _MenuRow(
                 label: 'Clear browsing data…',
                 onTap: onClearData,
+                keys: _keys('web.clearData'),
               ),
               _MenuRow(
                 label: 'Open in Edge',
@@ -104,6 +111,7 @@ class BrowserMenu extends StatelessWidget {
               _MenuRow(
                 label: 'Settings',
                 onTap: onSettings,
+                keys: _keys('web.settings'),
               ),
             ],
           ),
@@ -130,6 +138,7 @@ class _MenuRow extends StatefulWidget {
     required this.label,
     this.enabled = true,
     this.onTap,
+    this.keys,
   }) : trailing = null;
 
   final String label;
@@ -137,8 +146,19 @@ class _MenuRow extends StatefulWidget {
   final bool enabled;
   final VoidCallback? onTap;
 
+  /// The row's registered key(s) — the Alt-Peek's tooltip names it while
+  /// Alt is held and the mouse is on the row (the menu IS the transient
+  /// surface; rows with no key — Open in Edge — stay honestly silent).
+  final List<ShortcutEntry>? keys;
+
   @override
   State<_MenuRow> createState() => _MenuRowState();
+}
+
+/// The row's registered keys — the Alt-Peek's tooltip names them.
+List<ShortcutEntry>? _keys(String id) {
+  final ShortcutEntry? e = SaluShortcuts.byId(id);
+  return e == null ? null : <ShortcutEntry>[e];
 }
 
 class _MenuRowState extends State<_MenuRow> {
@@ -147,7 +167,7 @@ class _MenuRowState extends State<_MenuRow> {
   @override
   Widget build(BuildContext context) {
     final bool live = widget.enabled && widget.onTap != null;
-    return MouseRegion(
+    final Widget row = MouseRegion(
       cursor: live ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -180,11 +200,18 @@ class _MenuRowState extends State<_MenuRow> {
         ),
       ),
     );
+    if (widget.keys == null) return row;
+    return AltPeekAnchor(
+      entries: widget.keys,
+      side: PeekSide.below,
+      child: row,
+    );
   }
 }
 
 /// Zoom — Chrome's − / % / + cluster: the steps climb the engine's own
-/// ladder, the percentage resets to 100%.
+/// ladder, the percentage resets to 100%. Each of the three answers the
+/// Alt-Peek with its own key (`Ctrl+-` · `Ctrl+0` · `Ctrl+=`).
 class _ZoomRow extends StatelessWidget {
   const _ZoomRow({required this.tab});
 
@@ -209,25 +236,37 @@ class _ZoomRow extends StatelessWidget {
                   ),
                 ),
               ),
-              _ZoomBtn(label: '−', onTap: () => tab.zoomOut()),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => tab.resetZoom(),
-                child: Container(
-                  width: 52,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    '${(z * 100).round()}%',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+              AltPeekAnchor(
+                entries: _keys('web.zoomOut'),
+                side: PeekSide.below,
+                child: _ZoomBtn(label: '−', onTap: () => tab.zoomOut()),
+              ),
+              AltPeekAnchor(
+                entries: _keys('web.zoomReset'),
+                side: PeekSide.below,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => tab.resetZoom(),
+                  child: Container(
+                    width: 52,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      '${(z * 100).round()}%',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   ),
                 ),
               ),
-              _ZoomBtn(label: '+', onTap: () => tab.zoomIn()),
+              AltPeekAnchor(
+                entries: _keys('web.zoomIn'),
+                side: PeekSide.below,
+                child: _ZoomBtn(label: '+', onTap: () => tab.zoomIn()),
+              ),
             ],
           ),
         );

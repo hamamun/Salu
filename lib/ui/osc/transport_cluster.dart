@@ -177,7 +177,12 @@ class TransportCluster extends StatelessWidget {
               },
             ),
             const SizedBox(width: _inGroup),
-            const VolumeBar(width: 140),
+            // The bar answers the peek with the sound group's own legend
+            // (`↑ ↓ · M`) — it is part of that group (§4.2 · anchors).
+            const AltPeekAnchor(
+              anchor: ShortcutAnchor.sound,
+              child: VolumeBar(width: 140),
+            ),
           ],
         );
       },

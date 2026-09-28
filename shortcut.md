@@ -419,6 +419,38 @@ hairline cluster is gone; the surface stays silent.)
 * **Mini mode: out of scope v1** — the 32-px strip has no room and few
   keys; the Shortcuts tab's Mini miniature covers it.
 
+**Unclippable recipe (fix pass 2026-09-27):** the key tooltip renders in
+the **root Overlay** (`OverlayPortal` with `OverlayChildLocation.rootOverlay` — the same move
+the Open pill itself makes), so no ancestor can clip it: not the pill's
+glass capsule, not the right menu's, not the web rows. It is placed by a
+layout delegate against the control's on-screen box: centred **6 px off
+the control's edge** (it can never sit INSIDE the mark again), hugging
+the timeline's left end for the timeline, clamped to the window —
+flipping to the other side at an edge, so the key is never cut, not even
+at the screen border.
+
+**Everything with a key answers (owner ruling 2026-09-27 — "all
+buttons"): while §4.2's anchors stand, these also answer the peek with
+their exact registry entries (the pill-marks `entries` recipe):**
+
+* the **title bar's doors** — the Mini-bar glyph (`Ctrl+M`), the
+  Settings dots (`F2 · Ctrl+,` — `web.settings` while Web owns the
+  window) and the **Player · Web switch** (`Alt+W · Ctrl+Shift+W`).
+  Min / Max / Close have no keys and stay honestly silent;
+* the **Web ⋮ menu's rows** while the menu is open — New tab `Ctrl+T`,
+  Find `Ctrl+F`, History `Ctrl+H`, Downloads `Ctrl+J`, Clear browsing
+  data `Ctrl+Shift+Delete`, Settings `F2`, and the zoom cluster
+  (`Ctrl+-` · `Ctrl+0` · `Ctrl+=`). Rows with no key (Open in Edge,
+  Desktop mode) stay silent;
+* the **find bar's buttons** while it is open — Previous `Shift+F3`,
+  Next `F3`, Close `Esc`;
+* the **volume bar** beside the speaker (the sound group's `↑ ↓ · M`)
+  and the **Web-mode title strip's download badge** (`Ctrl+J`).
+
+The Living Map is untouched by this ruling: none of these ride a
+registry anchor, so they stay on the map's rideless shelves where §4.1
+keeps them.
+
 ### 4.3 Build order
 
 1. **The registry** (§4.0) — the foundation both surfaces read.
@@ -436,4 +468,5 @@ hairline cluster is gone; the surface stays silent.)
 | 2 · Shortcuts tab, slice A | `lib/ui/widgets/shortcuts_tab.dart`, `SettingsTab.shortcuts` | Done (Version C) — mode pill, miniature per mode (Player · Mini · Web · Dialogs), **clean icons on every always-visible control (no key text on or under them)**, the **rideless glass shelves at the left of the video — generated from `rideless(scope)`, one shelf per group, icons only** (the action's own mark or its keycap; two lines past five keys), hover/tap detail strip with the cross-mode column. Tab strip scrolls horizontally when narrow. |
 | 3 · Alt-Peek | `lib/ui/widgets/alt_peek.dart` | Done (Version C) — hold-Alt **arming** (200 ms alone) + hover → the key as a **tooltip in the app's `TooltipTheme`** (never cut off), the name tooltip stands down while armed. Player chrome, the Web row (tab strip + address row), the **Open pill's marks** and the **right-click menu's rows** (`entries` + `ignoreLock` — those surfaces are their own modals). Chrome hidden: silent (no cluster). Mini: out of scope v1 (as specified). |
 | 4 · Shortcuts tab, slice B | `ShortcutsTabState` liveness engine (+ `test/shortcuts_tab_test.dart`) | Done — registered keys drive the mock (timeline, volume, play mark, OSD card, playlist, fullscreen + hairline, mini / web / URL modal flips, web tabs, panels, find, zoom); `Esc` walks panel → fullscreen → closes Settings. |
+| 5 · Fix pass | `lib/ui/widgets/alt_peek.dart` (+ the wrapped surfaces) | Done (2026-09-27) — the key tooltip moved into the **root Overlay** (`OverlayPortal` on the root Overlay + a `SingleChildLayoutDelegate` against the control's on-screen box): the **"got inside the peel and cut"** bug is gone — the tip sits **6 px outside** the mark, floats above the pill/menu glass and the web rows, and **clamps/flips at the window edges** so no legend is ever clipped (§4.2 · Unclippable recipe). Coverage per the owner's "all buttons" ruling: title bar's Mini / Settings / Player·Web switch, the **Web ⋮ menu's rows + zoom cluster**, the volume bar, and the Web title strip's download badge now answer the peek (`entries` recipe — registry unchanged, Living Map untouched). |
 
