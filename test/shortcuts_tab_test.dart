@@ -46,6 +46,10 @@ void main() {
         modifier: LogicalKeyboardKey.controlLeft);
     expect(map.playlistOpen, isTrue);
 
+    await chord(tester, LogicalKeyboardKey.keyG,
+        modifier: LogicalKeyboardKey.controlLeft);
+    expect(map.selected?.id, 'player.groupBy');
+
     await chord(tester, LogicalKeyboardKey.keyF);
     expect(map.fullscreen, isTrue);
 

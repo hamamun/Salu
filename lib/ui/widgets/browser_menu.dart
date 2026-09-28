@@ -288,6 +288,7 @@ class _ZoomBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return SaluIconButton(
       size: 28,
+      tooltip: label == '−' ? 'Zoom out' : 'Zoom in',
       onTap: onTap,
       child: Builder(
         builder: (BuildContext context) => Text(

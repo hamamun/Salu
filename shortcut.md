@@ -15,7 +15,7 @@
    * **Player Mode:** Aligned with industry-standard desktop media players (mpv, VLC, MPC-HC, YouTube).
    * **Web Mode:** Aligned with Microsoft Edge on Windows (and Chromium standard browser conventions).
 3. **Typing Guard Safety (`_isTyping`):**  
-   All bare single-key shortcuts automatically stand down when focus sits inside an active text input field (`EditableText`). Keystrokes type letters into the field instead of triggering transport actions. Modifier combinations (`Ctrl`, `Alt`) remain active globally.
+   All bare single-key shortcuts automatically stand down when focus sits inside an active text input field (`EditableText`). Keystrokes type letters into the field instead of triggering transport actions. Modifier combinations (`Ctrl`, `Alt`) remain active globally. Context-only keys are owned by their focused surface: while the playlist Group by pill is open, `1`–`4` select its four modes; they do not trigger Player seek jumps.
 
 ---
 
@@ -85,6 +85,9 @@
 | `Ctrl + Shift + O` | **Open Folder** | **Standardized:** Universal media player standard (VLC) for opening a directory. |
 | `Ctrl + U` | **Open URL Modal** | Opens the centered glass URL input modal. |
 | `Ctrl + L` | **Toggle Playlist** | Slides out the Playlist and channel manager panel (VLC standard). |
+| `Ctrl + G` | **Open playlist Group by** | Opens the playlist panel and its Group by choices (Flat / Category / Country / Language). While the pill is open: `1` Flat, `2` Category, `3` Country, `4` Language (numpad aliases work; unavailable modes are ignored). These digits are context-only; normal Player seek keys and Web tab shortcuts are unchanged. |
+| `Ctrl + D` | **Toggle channel favourites filter** | Opens the playlist and toggles its M3U favourites-only view. |
+| `Ctrl + Shift + Delete` | **Clear playlist** | Clears the queue (local playlist or M3U list). |
 | `Ctrl + F` | **Find in Playlist** | **Standardized:** Focuses search input field in Playlist panel. |
 | `Ctrl + Shift + F` | **Search Subtitles** | **Assigned:** Opens the online subtitle search dialog directly. |
 | `Ctrl + I` | **Toggle Info Panel** | **Assigned:** Opens/closes media technical info panel. |
@@ -96,8 +99,8 @@
 #### 7. Tune / Equalizer Keyboard Tier
 | Shortcut | Action | Description / Notes |
 |---|---|---|
-| `Ctrl + ↑` / `Ctrl + ↓` | **Nudge Parameter** | Steps the value of the currently focused parameter line. |
-| `Ctrl + Alt + ↑` / `↓` | **Change Focused Parameter** | Walks focus across the 4 Tune sections (Tone, EQ, Picture, etc.). |
+| `Ctrl + ↑` / `Ctrl + ↓` / `Cmd + ↑` / `Cmd + ↓` | **Nudge Parameter** | Steps the value of the currently focused parameter line. |
+| `Ctrl + Alt + ↑` / `↓` / `Cmd + Alt + ↑` / `↓` | **Change Focused Parameter** | Walks focus across the 4 Tune sections (Tone, EQ, Picture, etc.). |
 
 ---
 
@@ -152,7 +155,7 @@
 | `Ctrl + J` | **Downloads Shelf** | **Assigned:** Opens Downloads panel / shelf (Edge standard). |
 | `Ctrl + D` | **Add / Edit Favourite** | **Assigned:** Opens Favourite sheet for current page (Edge standard). |
 | `Ctrl + Shift + O` | **Favourites Hub** | **Assigned:** Opens full Favourites manager hub (Edge standard). |
-| `Ctrl + Shift + Delete` | **Clear Browsing Data** | **Assigned:** Opens Clear Browsing Data dialog (Edge standard). |
+| `Ctrl + Shift + Delete` / `Ctrl + Shift + Backspace` | **Clear Browsing Data** | **Assigned:** Opens Clear Browsing Data dialog (Edge standard). |
 | `F2` / `Ctrl + ,` | **Browser Settings** | **Assigned:** Opens SALU settings directly on the **Web** tab. |
 
 #### 4. Page Search (Find Bar)
@@ -379,7 +382,14 @@ tooltips:
 | Seek back / forward marks | `←` / `→` |
 | Speaker (sound group) | `↑ ↓ · M` (one tooltip, three keys) |
 | Timeline, left end | `0–9 · Home · End` |
-| Tune mark | `Ctrl+E` |
+| Tune mark | `Ctrl+E · Cmd+E` |
+| Group by mark (M3U playlist) | `Ctrl+G` |
+| Flat / Category / Country / Language pill options | `1` / `2` / `3` / `4` (while the pill is open) |
+| Favourites filter (M3U playlist) | `Ctrl+D` |
+| Playlist search field (local + M3U) | `Ctrl+F` |
+| Clear playlist mark (local + M3U) | `Ctrl+Shift+Delete` |
+| Close playlist mark (local + M3U) | `Ctrl+L` |
+| Search clear × (when visible) | `Esc` |
 | Fetch mark | `Ctrl+Shift+F` |
 | Fullscreen mark | `F · F11` |
 

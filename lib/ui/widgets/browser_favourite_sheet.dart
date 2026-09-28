@@ -120,6 +120,7 @@ class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
                 ),
                 SaluIconButton(
                   size: 24,
+                  tooltip: 'Close',
                   onTap: widget.onClose,
                   child: const CloseMark(size: 10),
                 ),

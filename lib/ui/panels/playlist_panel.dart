@@ -12,11 +12,13 @@ import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_grouping_cache.dart';
 import '../../core/queue_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
 import '../osc/controller_panel.dart' show kChromeBlockHeight;
 import '../osd/osd_controller.dart';
+import '../widgets/alt_peek.dart';
 import '../widgets/channel_logo.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/live_light.dart';
@@ -192,8 +194,34 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     _view.groupMode.addListener(_onSharedViewChanged);
     _view.openGroup.addListener(_onSharedViewChanged);
     _panel.playlistSearchFocusTick.addListener(_onSearchFocusRequested);
+    _panel.playlistGroupByTick.addListener(_onGroupByRequested);
+    _panel.playlistFavouritesTick.addListener(_onFavouritesRequested);
+    _panel.playlistClearTick.addListener(_onClearRequested);
     if (_panel.playlistOpen.value) _onOpenChanged();
   }
+
+  void _onGroupByRequested() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_panel.playlistOpen.value) return;
+      if (_queue.items.value.isEmpty || !_queue.items.value.first.isChannel) {
+        return;
+      }
+      if (_searchFocus.hasFocus || _query.isNotEmpty) _clearQuery();
+      _openPill();
+    });
+  }
+
+  void _onFavouritesRequested() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_panel.playlistOpen.value ||
+          _queue.items.value.isEmpty || !_queue.items.value.first.isChannel) {
+        return;
+      }
+      setState(() => _favOnly = !_favOnly);
+    });
+  }
+
+  void _onClearRequested() => unawaited(_clearAll());
 
   void _onSearchFocusRequested() {
     if (mounted && _panel.playlistOpen.value) {
@@ -206,6 +234,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   @override
   void dispose() {
     _panel.playlistSearchFocusTick.removeListener(_onSearchFocusRequested);
+    _panel.playlistGroupByTick.removeListener(_onGroupByRequested);
+    _panel.playlistFavouritesTick.removeListener(_onFavouritesRequested);
+    _panel.playlistClearTick.removeListener(_onClearRequested);
     _panel.playlistOpen.removeListener(_onOpenChanged);
     _queue.index.removeListener(_onIndexChanged);
     _queue.items.removeListener(_onItemsChanged);
@@ -864,12 +895,36 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         child: Focus(
           autofocus: true,
           onKeyEvent: (FocusNode node, KeyEvent event) {
-            if (event is KeyDownEvent &&
-                event.logicalKey == LogicalKeyboardKey.escape) {
+            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+            if (event.logicalKey == LogicalKeyboardKey.escape) {
               _closePill('tap outside / Esc');
               return KeyEventResult.handled;
             }
-            return KeyEventResult.ignored;
+            final HardwareKeyboard keyboard = HardwareKeyboard.instance;
+            if (keyboard.isControlPressed ||
+                keyboard.isShiftPressed ||
+                keyboard.isAltPressed ||
+                keyboard.isMetaPressed) {
+              return KeyEventResult.ignored;
+            }
+            final LogicalKeyboardKey key = event.logicalKey;
+            final ChannelGroupMode? mode = switch (key) {
+              LogicalKeyboardKey.digit1 || LogicalKeyboardKey.numpad1 =>
+                ChannelGroupMode.flat,
+              LogicalKeyboardKey.digit2 || LogicalKeyboardKey.numpad2 =>
+                ChannelGroupMode.category,
+              LogicalKeyboardKey.digit3 || LogicalKeyboardKey.numpad3 =>
+                ChannelGroupMode.country,
+              LogicalKeyboardKey.digit4 || LogicalKeyboardKey.numpad4 =>
+                ChannelGroupMode.language,
+              _ => null,
+            };
+            if (mode == null) return KeyEventResult.ignored;
+            final bool available =
+                QueueGroupingCache.instance.availability(_queue.items.value)[mode] ??
+                    false;
+            if (available) _chooseMode(mode);
+            return KeyEventResult.handled;
           },
           child: Padding(
             padding: const EdgeInsets.only(top: 42, left: 10),
@@ -971,27 +1026,38 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         height: 30,
         child: Row(
           children: <Widget>[
-            _repeatButton(),
+            _withPeekKeys('player.repeat', _repeatButton()),
             const SizedBox(width: 4),
-            _shuffleButton(),
+            _withPeekKeys('player.shuffle', _shuffleButton()),
             const SizedBox(width: 8),
-            Expanded(child: _searchField(count, shown)),
+            Expanded(
+              child: AltPeekAnchor(
+                anchor: ShortcutAnchor.playlistSearch,
+                child: _searchField(count, shown),
+              ),
+            ),
             const SizedBox(width: 8),
-            _headerButton(
-              tooltip: 'Clear playlist',
-              active: false,
-              mark: const TrashMark(size: 16),
-              onTap: () => unawaited(_clearAll()),
+            _withPeekKeys(
+              'player.clearPlaylist',
+              _headerButton(
+                tooltip: 'Clear playlist',
+                active: false,
+                mark: const TrashMark(size: 16),
+                onTap: () => unawaited(_clearAll()),
+              ),
             ),
             const SizedBox(width: 4),
-            _headerButton(
-              tooltip: 'Close playlist',
-              active: false,
-              mark: Transform.rotate(
-                angle: 0.7853981633974483,
-                child: const PlusMark(size: 16),
+            _withPeekKeys(
+              'player.playlist',
+              _headerButton(
+                tooltip: 'Close playlist',
+                active: false,
+                mark: Transform.rotate(
+                  angle: 0.7853981633974483,
+                  child: const PlusMark(size: 16),
+                ),
+                onTap: () => _panel.closePlaylist(),
               ),
-              onTap: () => _panel.closePlaylist(),
             ),
           ],
         ),
@@ -1019,31 +1085,45 @@ class _PlaylistPanelState extends State<PlaylistPanel>
             if (!hidePair) ...<Widget>[
               _groupByButton(searching),
               const SizedBox(width: 6),
-              _headerButton(
-                tooltip: 'Favourites',
-                active: _favOnly,
-                mark: BookmarkMark(size: 18, filled: _favOnly),
-                onTap: () => setState(() => _favOnly = !_favOnly),
+              _withPeekKeys(
+                'player.playlistFavourites',
+                _headerButton(
+                  tooltip: 'Favourites',
+                  active: _favOnly,
+                  mark: BookmarkMark(size: 18, filled: _favOnly),
+                  onTap: () => setState(() => _favOnly = !_favOnly),
+                ),
               ),
               const SizedBox(width: 14),
             ],
-            Expanded(child: _searchField(count, count, channel: true)),
-            const SizedBox(width: 14),
-            _headerButton(
-              tooltip: 'Clear playlist',
-              active: false,
-              mark: const TrashMark(size: 16),
-              onTap: () => unawaited(_clearAll()),
+            Expanded(
+              child: AltPeekAnchor(
+                anchor: ShortcutAnchor.playlistSearch,
+                child: _searchField(count, count, channel: true),
+              ),
             ),
             const SizedBox(width: 14),
-            _headerButton(
-              tooltip: 'Close playlist',
-              active: false,
-              mark: Transform.rotate(
-                angle: 0.7853981633974483,
-                child: const PlusMark(size: 16),
+            _withPeekKeys(
+              'player.clearPlaylist',
+              _headerButton(
+                tooltip: 'Clear playlist',
+                active: false,
+                mark: const TrashMark(size: 16),
+                onTap: () => unawaited(_clearAll()),
               ),
-              onTap: () => _panel.closePlaylist(),
+            ),
+            const SizedBox(width: 14),
+            _withPeekKeys(
+              'player.playlist',
+              _headerButton(
+                tooltip: 'Close playlist',
+                active: false,
+                mark: Transform.rotate(
+                  angle: 0.7853981633974483,
+                  child: const PlusMark(size: 16),
+                ),
+                onTap: () => _panel.closePlaylist(),
+              ),
             ),
           ],
         ),
@@ -1060,12 +1140,25 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// panel's own topmost layer ([_pillSurfaceLayer]) — the button only
   /// toggles the state; the surface answers for the rest.
   Widget _groupByButton(bool searching) {
-    return SaluIconButton(
-      tooltip: _pillOpen ? null : 'Group by',
-      size: 30,
-      active: _pillOpen,
-      onTap: _togglePill,
-      child: GroupByMark(size: 18, quiet: searching),
+    return AltPeekAnchor(
+      anchor: ShortcutAnchor.playlistGroupBy,
+      child: SaluIconButton(
+        tooltip: _pillOpen ? null : 'Group by',
+        size: 30,
+        active: _pillOpen,
+        onTap: _togglePill,
+        child: GroupByMark(size: 18, quiet: searching),
+      ),
+    );
+  }
+
+  Widget _withPeekKeys(String entryId, Widget child) {
+    final ShortcutEntry? entry = SaluShortcuts.byId(entryId);
+    return AltPeekAnchor(
+      entries: entry == null
+          ? const <ShortcutEntry>[]
+          : <ShortcutEntry>[entry],
+      child: child,
     );
   }
 
@@ -1203,7 +1296,13 @@ class _PlaylistPanelState extends State<PlaylistPanel>
             // ✕ clears the text — only while there is some.
             if (_query.isNotEmpty) ...<Widget>[
               const SizedBox(width: 4),
-              _clearX(),
+              AltPeekAnchor(
+                entries: <ShortcutEntry>[
+                  SaluShortcuts.byId('dialog.playlistSearch.escape')!,
+                ],
+                scope: ShortcutScope.dialog,
+                child: _clearX(),
+              ),
             ],
           ],
         ),
@@ -1975,13 +2074,24 @@ class _GroupPillOption extends StatelessWidget {
       ChannelGroupMode.language => 'Language',
       ChannelGroupMode.country => 'Country',
     };
-    return SaluIconButton(
-      tooltip: label,
-      size: 30,
-      active: selected,
-      enabled: available,
-      onTap: () => onChoose(mode),
-      child: mark,
+    final String entryId = switch (mode) {
+      ChannelGroupMode.flat => 'dialog.groupFlat',
+      ChannelGroupMode.category => 'dialog.groupCategory',
+      ChannelGroupMode.country => 'dialog.groupCountry',
+      ChannelGroupMode.language => 'dialog.groupLanguage',
+    };
+    return AltPeekAnchor(
+      entries: <ShortcutEntry>[SaluShortcuts.byId(entryId)!],
+      scope: ShortcutScope.dialog,
+      ignoreLock: true,
+      child: SaluIconButton(
+        tooltip: label,
+        size: 30,
+        active: selected,
+        enabled: available,
+        onTap: () => onChoose(mode),
+        child: mark,
+      ),
     );
   }
 }

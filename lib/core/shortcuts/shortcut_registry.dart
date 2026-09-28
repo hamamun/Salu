@@ -45,7 +45,8 @@ enum ShortcutGroup {
   urlModal('Open URL modal'),
   addressDropdown('Address bar dropdown'),
   findBar('Find-in-page bar'),
-  playlistSearch('Playlist search field');
+  playlistSearch('Playlist search field'),
+  playlist('Playlist');
 
   const ShortcutGroup(this.label);
 
@@ -59,7 +60,8 @@ enum ShortcutGuard {
   subtitleSelected('While a subtitle is selected'),
   tunePanelOpen('While the Tune panel is open'),
   pageFullscreen('While a page owns the screen'),
-  findBarOpen('While the find bar is open');
+  findBarOpen('While the find bar is open'),
+  groupByPillOpen('While the playlist Group by choices are open');
 
   const ShortcutGuard(this.label);
 
@@ -71,6 +73,10 @@ enum ShortcutAnchor {
   // Player chrome (§4.2 table).
   openMedia,
   playlist,
+  playlistGroupBy,
+  playlistSearch,
+  playlistFavourites,
+  playlistClear,
   playPause,
   stop,
   previous,
@@ -107,12 +113,14 @@ class ShortcutCombo {
     this.ctrl = false,
     this.shift = false,
     this.alt = false,
+    this.meta = false,
   });
 
   final LogicalKeyboardKey key;
   final bool ctrl;
   final bool shift;
   final bool alt;
+  final bool meta;
 
   /// Exact match — the modifiers must agree both ways, so `Shift+S`
   /// never reads as `S`.
@@ -121,11 +129,13 @@ class ShortcutCombo {
     required bool ctrl,
     required bool shift,
     required bool alt,
+    bool meta = false,
   }) =>
       pressed == key &&
       ctrl == this.ctrl &&
       shift == this.shift &&
-      alt == this.alt;
+      alt == this.alt &&
+      meta == this.meta;
 
   /// The keycap legend, e.g. `Ctrl+Shift+F`.
   String get label {
@@ -133,6 +143,7 @@ class ShortcutCombo {
     if (ctrl) b.write('Ctrl+');
     if (shift) b.write('Shift+');
     if (alt) b.write('Alt+');
+    if (meta) b.write('Cmd+');
     b.write(keyName(key));
     return b.toString();
   }
@@ -143,10 +154,11 @@ class ShortcutCombo {
       other.key == key &&
       other.ctrl == ctrl &&
       other.shift == shift &&
-      other.alt == alt;
+      other.alt == alt &&
+      other.meta == meta;
 
   @override
-  int get hashCode => Object.hash(key, ctrl, shift, alt);
+  int get hashCode => Object.hash(key, ctrl, shift, alt, meta);
 
   @override
   String toString() => label;
@@ -237,9 +249,10 @@ class ShortcutEntry {
     required bool ctrl,
     required bool shift,
     required bool alt,
+    bool meta = false,
   }) {
     for (final ShortcutCombo c in combos) {
-      if (c.matches(key, ctrl: ctrl, shift: shift, alt: alt)) return true;
+      if (c.matches(key, ctrl: ctrl, shift: shift, alt: alt, meta: meta)) return true;
     }
     return false;
   }
@@ -587,6 +600,7 @@ class SaluShortcuts {
       id: 'player.findInPlaylist',
       action: 'Find in playlist',
       group: ShortcutGroup.surfaces,
+      anchor: ShortcutAnchor.playlistSearch,
     ),
     ShortcutEntry(
       scope: ShortcutScope.player,
@@ -605,11 +619,40 @@ class SaluShortcuts {
     ),
     ShortcutEntry(
       scope: ShortcutScope.player,
-      combos: <ShortcutCombo>[ShortcutCombo(_K.keyE, ctrl: true)],
+      combos: <ShortcutCombo>[
+        ShortcutCombo(_K.keyE, ctrl: true),
+        ShortcutCombo(_K.keyE, meta: true),
+      ],
       id: 'player.tune',
       action: 'Toggle Tune panel',
       group: ShortcutGroup.surfaces,
       anchor: ShortcutAnchor.tune,
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.player,
+      combos: <ShortcutCombo>[ShortcutCombo(_K.keyG, ctrl: true)],
+      id: 'player.groupBy',
+      action: 'Open playlist Group by',
+      group: ShortcutGroup.playlist,
+      anchor: ShortcutAnchor.playlistGroupBy,
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.player,
+      combos: <ShortcutCombo>[ShortcutCombo(_K.keyD, ctrl: true)],
+      id: 'player.playlistFavourites',
+      action: 'Toggle playlist favourites filter',
+      group: ShortcutGroup.playlist,
+      anchor: ShortcutAnchor.playlistFavourites,
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.player,
+      combos: <ShortcutCombo>[
+        ShortcutCombo(_K.delete, ctrl: true, shift: true),
+      ],
+      id: 'player.clearPlaylist',
+      action: 'Clear playlist',
+      group: ShortcutGroup.playlist,
+      anchor: ShortcutAnchor.playlistClear,
     ),
     ShortcutEntry(
       scope: ShortcutScope.player,
@@ -645,6 +688,8 @@ class SaluShortcuts {
       combos: <ShortcutCombo>[
         ShortcutCombo(_K.arrowUp, ctrl: true),
         ShortcutCombo(_K.arrowDown, ctrl: true),
+        ShortcutCombo(_K.arrowUp, meta: true),
+        ShortcutCombo(_K.arrowDown, meta: true),
       ],
       id: 'player.tuneNudge',
       action: 'Nudge the focused Tune parameter',
@@ -656,6 +701,8 @@ class SaluShortcuts {
       combos: <ShortcutCombo>[
         ShortcutCombo(_K.arrowUp, ctrl: true, alt: true),
         ShortcutCombo(_K.arrowDown, ctrl: true, alt: true),
+        ShortcutCombo(_K.arrowUp, meta: true, alt: true),
+        ShortcutCombo(_K.arrowDown, meta: true, alt: true),
       ],
       id: 'player.tuneFocus',
       action: 'Move focus across the Tune sections',
@@ -945,6 +992,7 @@ class SaluShortcuts {
       scope: ShortcutScope.web,
       combos: <ShortcutCombo>[
         ShortcutCombo(_K.delete, ctrl: true, shift: true),
+        ShortcutCombo(_K.backspace, ctrl: true, shift: true),
       ],
       id: 'web.clearData',
       action: 'Clear browsing data',
@@ -1130,6 +1178,54 @@ class SaluShortcuts {
     ),
     ShortcutEntry(
       scope: ShortcutScope.dialog,
+      combos: <ShortcutCombo>[
+        ShortcutCombo(_K.digit1),
+        ShortcutCombo(_K.numpad1),
+      ],
+      id: 'dialog.groupFlat',
+      action: 'Choose Flat grouping',
+      group: ShortcutGroup.playlist,
+      guard: ShortcutGuard.groupByPillOpen,
+      legend: '1',
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.dialog,
+      combos: <ShortcutCombo>[
+        ShortcutCombo(_K.digit2),
+        ShortcutCombo(_K.numpad2),
+      ],
+      id: 'dialog.groupCategory',
+      action: 'Choose Category grouping',
+      group: ShortcutGroup.playlist,
+      guard: ShortcutGuard.groupByPillOpen,
+      legend: '2',
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.dialog,
+      combos: <ShortcutCombo>[
+        ShortcutCombo(_K.digit3),
+        ShortcutCombo(_K.numpad3),
+      ],
+      id: 'dialog.groupCountry',
+      action: 'Choose Country grouping',
+      group: ShortcutGroup.playlist,
+      guard: ShortcutGuard.groupByPillOpen,
+      legend: '3',
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.dialog,
+      combos: <ShortcutCombo>[
+        ShortcutCombo(_K.digit4),
+        ShortcutCombo(_K.numpad4),
+      ],
+      id: 'dialog.groupLanguage',
+      action: 'Choose Language grouping',
+      group: ShortcutGroup.playlist,
+      guard: ShortcutGuard.groupByPillOpen,
+      legend: '4',
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.dialog,
       combos: <ShortcutCombo>[ShortcutCombo(_K.escape)],
       id: 'dialog.playlistSearch.escape',
       action: 'Clear query, then leave the field',
@@ -1177,10 +1273,11 @@ class SaluShortcuts {
     required bool ctrl,
     required bool shift,
     required bool alt,
+    bool meta = false,
   }) {
     for (final ShortcutEntry e in entries) {
       if (e.scope != scope) continue;
-      if (e.matches(key, ctrl: ctrl, shift: shift, alt: alt)) return e;
+      if (e.matches(key, ctrl: ctrl, shift: shift, alt: alt, meta: meta)) return e;
     }
     return null;
   }
@@ -1195,7 +1292,7 @@ class SaluShortcuts {
         for (final ShortcutScope s in ShortcutScope.values)
           if (s != except)
             s: match(s, combo.key,
-                ctrl: combo.ctrl, shift: combo.shift, alt: combo.alt),
+                ctrl: combo.ctrl, shift: combo.shift, alt: combo.alt, meta: combo.meta),
       };
 
   /// The chip legend for [anchor] — the key only, never the action (§4.2 ·
@@ -1216,6 +1313,11 @@ class SaluShortcuts {
   static const Map<ShortcutAnchor, String> _chipOverrides =
       <ShortcutAnchor, String>{
     ShortcutAnchor.sound: '↑ ↓ · M',
+    ShortcutAnchor.tune: 'Ctrl+E · Cmd+E',
+    ShortcutAnchor.playlistGroupBy: 'Ctrl+G',
+    ShortcutAnchor.playlistSearch: 'Ctrl+F',
+    ShortcutAnchor.playlistFavourites: 'Ctrl+D',
+    ShortcutAnchor.playlistClear: 'Ctrl+Shift+Delete',
     ShortcutAnchor.timeline: '0–9 · Home · End',
     ShortcutAnchor.fullscreen: 'F · F11',
     ShortcutAnchor.webAddress: 'Ctrl+L',

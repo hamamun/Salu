@@ -59,6 +59,23 @@ class PanelService {
   /// Fired when a keyboard shortcut requests focus on the playlist search field.
   final ValueNotifier<int> playlistSearchFocusTick = ValueNotifier<int>(0);
 
+  /// Fired when Ctrl+G requests the playlist's Group by pill.
+  final ValueNotifier<int> playlistGroupByTick = ValueNotifier<int>(0);
+  final ValueNotifier<int> playlistFavouritesTick = ValueNotifier<int>(0);
+  final ValueNotifier<int> playlistClearTick = ValueNotifier<int>(0);
+
+  void requestPlaylistGroupBy() {
+    if (!playlistOpen.value) togglePlaylist();
+    playlistGroupByTick.value++;
+  }
+
+  void requestPlaylistFavourites() {
+    if (!playlistOpen.value) togglePlaylist();
+    playlistFavouritesTick.value++;
+  }
+
+  void requestPlaylistClear() => playlistClearTick.value++;
+
   void requestPlaylistSearchFocus() {
     if (!playlistOpen.value) {
       togglePlaylist();

@@ -85,6 +85,7 @@ class BrowserSitePanel extends StatelessWidget {
                   ),
                   SaluIconButton(
                     size: 24,
+                    tooltip: 'Close',
                     onTap: onClose,
                     child: const CloseMark(size: 10),
                   ),
@@ -331,6 +332,7 @@ class BlockedPopupList extends StatelessWidget {
                     ),
                     SaluIconButton(
                       size: 24,
+                      tooltip: 'Close',
                       onTap: onClose,
                       child: const CloseMark(size: 10),
                     ),

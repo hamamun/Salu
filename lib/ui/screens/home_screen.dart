@@ -615,6 +615,22 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.ignored;
     }
 
+    // Playlist actions: Group by, channel favourites filter, and clear queue.
+    if (ctrl && !shift && !alt && key == LogicalKeyboardKey.keyG && down) {
+      PanelService.instance.requestPlaylistGroupBy();
+      return KeyEventResult.handled;
+    }
+    if (ctrl && !shift && !alt && key == LogicalKeyboardKey.keyD && down) {
+      if (QueueService.instance.isChannelList) {
+        PanelService.instance.requestPlaylistFavourites();
+        return KeyEventResult.handled;
+      }
+    }
+    if (ctrl && shift && key == LogicalKeyboardKey.delete && down) {
+      PanelService.instance.requestPlaylistClear();
+      return KeyEventResult.handled;
+    }
+
     // Esc — dismisses the topmost popup first (follow.md rule 3):
     // Info → menu → Open pill → existing resume / tune / track / playlist
     // tiers. If no popups open, exit fullscreen if currently fullscreen.
@@ -681,11 +697,12 @@ class _HomeScreenState extends State<HomeScreen> {
     // ── Tune: the silent keyboard tier (eq_imp.md §6) ──────────────────
     final bool tuneCtrl = ctrl ||
         HardwareKeyboard.instance.isMetaPressed;
-    if (tuneCtrl && !repeat && key == LogicalKeyboardKey.keyE) {
+    if (tuneCtrl && !shift && !alt && !repeat && key == LogicalKeyboardKey.keyE) {
       PanelService.instance.toggleTunePanel();
       return KeyEventResult.handled;
     }
     if (tuneCtrl &&
+        !shift &&
         !repeat &&
         (key == LogicalKeyboardKey.arrowUp ||
             key == LogicalKeyboardKey.arrowDown)) {

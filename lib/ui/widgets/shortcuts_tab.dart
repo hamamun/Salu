@@ -53,6 +53,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   bool muted = false;
   bool fullscreen = false;
   bool playlistOpen = false;
+  bool playlistFavouritesOnly = false;
   bool urlModalOpen = false;
   double speed = 1.0;
   int subDelayMs = 0;
@@ -135,13 +136,14 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     final bool ctrl = hw.isControlPressed;
     final bool shift = hw.isShiftPressed;
     final bool alt = hw.isAltPressed;
+    final bool meta = hw.isMetaPressed;
 
-    final ShortcutEntry? entry =
-        SaluShortcuts.match(mode, key, ctrl: ctrl, shift: shift, alt: alt);
+    final ShortcutEntry? entry = SaluShortcuts.match(mode, key,
+        ctrl: ctrl, shift: shift, alt: alt, meta: meta);
     if (entry == null) return KeyEventResult.handled;
     ShortcutCombo? combo;
     for (final ShortcutCombo c in entry.combos) {
-      if (c.matches(key, ctrl: ctrl, shift: shift, alt: alt)) combo = c;
+      if (c.matches(key, ctrl: ctrl, shift: shift, alt: alt, meta: meta)) combo = c;
     }
     final bool repeat = event is KeyRepeatEvent;
     bool handled = true;
@@ -164,6 +166,9 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
     switch (entry.id) {
       // ── Player + mini transport ─────────────────────────────────────
+      case 'player.groupBy':
+        _flash('Group by');
+        return true;
       case 'player.playPause':
       case 'mini.playPause':
         if (repeat) return true;
@@ -275,6 +280,13 @@ class ShortcutsTabState extends State<ShortcutsTab> {
       case 'player.playlist':
         if (repeat) return true;
         playlistOpen = !playlistOpen;
+      case 'player.playlistFavourites':
+        playlistOpen = true;
+        playlistFavouritesOnly = !playlistFavouritesOnly;
+        _flash(playlistFavouritesOnly ? 'Favourites only' : 'All channels');
+      case 'player.clearPlaylist':
+        playlistOpen = false;
+        _flash('Playlist cleared');
       case 'player.findInPlaylist':
         playlistOpen = true;
       case 'player.openUrl':
@@ -872,6 +884,17 @@ class ShortcutsTabState extends State<ShortcutsTab> {
           _control(ShortcutAnchor.openMedia, const PlusMark(size: 14)),
           const SizedBox(width: 4),
           _control(ShortcutAnchor.playlist, const NowRowMark(size: 14)),
+          const SizedBox(width: 4),
+          _control(ShortcutAnchor.playlistGroupBy, const GroupByMark(size: 14)),
+          const SizedBox(width: 4),
+          _control(ShortcutAnchor.playlistSearch, const MagnifierMark(size: 14)),
+          const SizedBox(width: 4),
+          _control(
+            ShortcutAnchor.playlistFavourites,
+            BookmarkMark(size: 14, filled: playlistFavouritesOnly),
+          ),
+          const SizedBox(width: 4),
+          _control(ShortcutAnchor.playlistClear, const TrashMark(size: 14)),
           const Spacer(),
           _control(
             ShortcutAnchor.playPause,
