@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salu/core/shortcuts/shortcut_registry.dart';
 import 'package:salu/theme/app_theme.dart';
 import 'package:salu/ui/widgets/alt_peek.dart';
+import 'package:salu/ui/widgets/salu_marks.dart';
 import 'package:salu/ui/widgets/shortcuts_tab.dart';
 
 Future<ShortcutsTabState> pumpTab(WidgetTester tester) async {
@@ -44,11 +45,54 @@ void main() {
 
     await chord(tester, LogicalKeyboardKey.keyL,
         modifier: LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
     expect(map.playlistOpen, isTrue);
+
+    // The miniature shows both real playlist-header variants. Hovering
+    // each mark selects its registered action in the detail strip.
+    expect(find.byType(RepeatMark), findsOneWidget);
+    expect(find.byType(ShuffleMark), findsOneWidget);
+    expect(find.byType(GroupByMark), findsOneWidget);
+    expect(find.byType(BookmarkMark), findsOneWidget);
+    expect(find.byType(MagnifierMark), findsOneWidget);
+    expect(find.byType(TrashMark), findsNWidgets(2));
+
+    await tester.sendMouseMoveTo(tester.getCenter(find.byType(RepeatMark)));
+    await tester.pump();
+    expect(map.selected?.id, 'player.repeat');
+    await tester.sendMouseMoveTo(tester.getCenter(find.byType(ShuffleMark)));
+    await tester.pump();
+    expect(map.selected?.id, 'player.shuffle');
+    await tester.sendMouseMoveTo(tester.getCenter(find.byType(GroupByMark)));
+    await tester.pump();
+    expect(map.selected?.id, 'player.groupBy');
+    await tester.sendMouseMoveTo(tester.getCenter(find.byType(BookmarkMark)));
+    await tester.pump();
+    expect(map.selected?.id, 'player.playlistFavourites');
+    await tester.sendMouseMoveTo(tester.getCenter(find.byType(MagnifierMark)));
+    await tester.pump();
+    expect(map.selected?.id, 'player.findInPlaylist');
+    await tester.sendMouseMoveTo(
+      tester.getCenter(find.byType(TrashMark).first),
+    );
+    await tester.pump();
+    expect(map.selected?.id, 'player.clearPlaylist');
+    expect(tester.takeException(), isNull);
 
     await chord(tester, LogicalKeyboardKey.keyG,
         modifier: LogicalKeyboardKey.controlLeft);
     expect(map.selected?.id, 'player.groupBy');
+
+    // The full player also accepts Ctrl+Shift+S for shuffle; keep the
+    // Living Map registry and mock liveness in sync with that handler.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(map.selected?.id, 'player.shuffle');
+    expect(map.shuffle, isTrue);
 
     await chord(tester, LogicalKeyboardKey.keyF);
     expect(map.fullscreen, isTrue);
@@ -74,9 +118,28 @@ void main() {
     await chord(tester, LogicalKeyboardKey.keyT,
         modifier: LogicalKeyboardKey.controlLeft);
     expect(map.webTabs, 4);
+    await chord(tester, LogicalKeyboardKey.keyR,
+        modifier: LogicalKeyboardKey.controlLeft);
+    expect(map.selected?.id, 'web.reload');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(map.selected?.id, 'web.hardReload');
 
     // Let the mock deck's card timer run out.
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('Group by opens the miniature playlist',
+      (WidgetTester tester) async {
+    final ShortcutsTabState map = await pumpTab(tester);
+    await chord(tester, LogicalKeyboardKey.keyG,
+        modifier: LogicalKeyboardKey.controlLeft);
+    expect(map.selected?.id, 'player.groupBy');
+    expect(map.playlistOpen, isTrue);
   });
 
   testWidgets('the mode pill switches the miniature',
@@ -85,6 +148,9 @@ void main() {
     await tester.tap(find.text('Dialogs').first);
     await tester.pump();
     expect(map.mode, ShortcutScope.dialog);
+    // Dialogs has the fullest shelf layout; it must stay within the
+    // miniature's fixed height rather than overflowing its left column.
+    expect(tester.takeException(), isNull);
     await tester.tap(find.text('Mini').first);
     await tester.pump();
     expect(map.mode, ShortcutScope.mini);

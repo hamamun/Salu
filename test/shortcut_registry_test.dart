@@ -43,6 +43,32 @@ void main() {
       expect(m(LogicalKeyboardKey.space)?.id, 'player.playPause');
       expect(m(LogicalKeyboardKey.keyS)?.id, 'player.stop');
       expect(m(LogicalKeyboardKey.keyS, shift: true)?.id, 'player.shuffle');
+      expect(m(LogicalKeyboardKey.keyS, ctrl: true, shift: true)?.id,
+          'player.shuffle');
+      expect(m(LogicalKeyboardKey.keyR)?.id, 'player.repeat');
+      expect(
+        SaluShortcuts.forAnchor(
+          ShortcutScope.player,
+          ShortcutAnchor.playlistShuffle,
+        ).single.id,
+        'player.shuffle',
+      );
+      expect(
+        SaluShortcuts.forAnchor(
+          ShortcutScope.player,
+          ShortcutAnchor.playlistRepeat,
+        ).single.id,
+        'player.repeat',
+      );
+      final Iterable<String> playerShelfIds = SaluShortcuts.rideless(
+        ShortcutScope.player,
+      ).map((ShortcutEntry e) => e.id);
+      expect(playerShelfIds, isNot(contains('player.shuffle')));
+      expect(playerShelfIds, isNot(contains('player.repeat')));
+      expect(
+        SaluShortcuts.byId('player.shuffle')?.keys,
+        'Shift+S / Alt+S / Ctrl+Shift+S',
+      );
       expect(m(LogicalKeyboardKey.keyM)?.id, 'player.mute');
       expect(m(LogicalKeyboardKey.keyM, ctrl: true)?.id, 'player.mini');
       expect(m(LogicalKeyboardKey.digit7)?.id, 'player.jumpPercent');
@@ -69,6 +95,10 @@ void main() {
         ShortcutGuard.groupByPillOpen,
       );
       expect(
+        SaluShortcuts.byId('dialog.groupBy.escape')?.guard,
+        ShortcutGuard.groupByPillOpen,
+      );
+      expect(
         SaluShortcuts.match(ShortcutScope.player, LogicalKeyboardKey.keyE,
             ctrl: false, shift: false, alt: false, meta: true)?.id,
         'player.tune',
@@ -82,6 +112,29 @@ void main() {
         SaluShortcuts.match(ShortcutScope.player, LogicalKeyboardKey.arrowUp,
             ctrl: false, shift: false, alt: true, meta: true)?.id,
         'player.tuneFocus',
+      );
+    });
+
+    test('Web normal and cache-bypassing reloads are distinct', () {
+      ShortcutEntry? web(
+        LogicalKeyboardKey key, {
+        bool ctrl = false,
+        bool shift = false,
+      }) =>
+          SaluShortcuts.match(
+            ShortcutScope.web,
+            key,
+            ctrl: ctrl,
+            shift: shift,
+            alt: false,
+          );
+
+      expect(web(LogicalKeyboardKey.f5)?.id, 'web.reload');
+      expect(web(LogicalKeyboardKey.keyR, ctrl: true)?.id, 'web.reload');
+      expect(web(LogicalKeyboardKey.f5, ctrl: true)?.id, 'web.hardReload');
+      expect(
+        web(LogicalKeyboardKey.keyR, ctrl: true, shift: true)?.id,
+        'web.hardReload',
       );
     });
 
@@ -109,6 +162,11 @@ void main() {
       expect(p(ShortcutAnchor.sound), '↑ ↓ · M');
       expect(p(ShortcutAnchor.timeline), '0–9 · Home · End');
       expect(p(ShortcutAnchor.tune), 'Ctrl+E · Cmd+E');
+      expect(p(ShortcutAnchor.playlistRepeat), 'R');
+      expect(
+        p(ShortcutAnchor.playlistShuffle),
+        'Shift+S · Alt+S · Ctrl+Shift+S',
+      );
       expect(p(ShortcutAnchor.playlistGroupBy), 'Ctrl+G');
       expect(p(ShortcutAnchor.playlistSearch), 'Ctrl+F');
       expect(p(ShortcutAnchor.playlistFavourites), 'Ctrl+D');

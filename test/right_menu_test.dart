@@ -222,7 +222,10 @@ void main() {
     // The menu holds ChromeLock, but its own row must still answer. Waiting
     // longer than Tooltip's delay verifies the name chip stays suppressed.
     await tester.pump(const Duration(milliseconds: 700));
-    expect(find.text('Shift+S'), findsOneWidget);
+    expect(
+      find.text('Shift+S · Alt+S · Ctrl+Shift+S'),
+      findsOneWidget,
+    );
     expect(find.text('Shuffle'), findsNothing);
 
     AltPeek.instance.debugSetVisible(false);

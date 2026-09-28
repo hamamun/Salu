@@ -3,7 +3,7 @@
 SALU vendors the `webview_windows` plugin (upstream:
 <https://github.com/jnschulze/flutter-webview-windows>, pub 0.4.0,
 upstream commit `ed81bbe`) so it can reach WebView2 controls the upstream
-plugin never exposed. There are exactly **three** deltas, all small and all
+plugin never exposed. There are exactly **four** deltas, all small and all
 marked with "SALU addition"/"SALU delta" in the comments where they live.
 Everything else is byte-identical to upstream.
 
@@ -115,9 +115,28 @@ No native file changed; the method channel verbs it uses are upstream's.
 
 ---
 
+## Delta 4 — Cache-bypassing hard reload
+
+> Chromium's `Page.reload` DevTools command accepts `ignoreCache: true`,
+> which is the behavior users expect from Ctrl+F5 / Ctrl+Shift+R. The
+> upstream controller only exposes WebView2's ordinary `Reload()`, so SALU
+> adds a distinct method rather than presenting an ordinary reload as a
+> hard reload.
+
+### The changes
+
+| File | Change |
+| --- | --- |
+| `windows/webview.h` | declares `bool HardReload();` |
+| `windows/webview.cc` | calls `Page.reload` with `{"ignoreCache":true}` through WebView2's DevTools protocol |
+| `windows/webview_bridge.cc` | routes the `hardReload` method-channel call |
+| `lib/src/webview.dart` | exposes `WebviewController.hardReload()` |
+
+---
+
 ## Upgrading
 
 Re-copy upstream over this folder (keep `VENDOR_NOTES.md`), re-apply the
-edits in **all three** tables above (they are small and marked with "SALU
+edits in **all four** tables above (they are small and marked with "SALU
 addition"/"SALU delta" in comments), and update the upstream commit in
 this file.

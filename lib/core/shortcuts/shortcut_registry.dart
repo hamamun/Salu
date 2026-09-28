@@ -73,6 +73,8 @@ enum ShortcutAnchor {
   // Player chrome (§4.2 table).
   openMedia,
   playlist,
+  playlistRepeat,
+  playlistShuffle,
   playlistGroupBy,
   playlistSearch,
   playlistFavourites,
@@ -382,10 +384,13 @@ class SaluShortcuts {
       combos: <ShortcutCombo>[
         ShortcutCombo(_K.keyS, shift: true),
         ShortcutCombo(_K.keyS, alt: true),
+        // The Player handler accepts this explicit Ctrl+Shift chord too.
+        ShortcutCombo(_K.keyS, ctrl: true, shift: true),
       ],
       id: 'player.shuffle',
       action: 'Toggle shuffle',
       group: ShortcutGroup.transport,
+      anchor: ShortcutAnchor.playlistShuffle,
     ),
     ShortcutEntry(
       scope: ShortcutScope.player,
@@ -393,6 +398,7 @@ class SaluShortcuts {
       id: 'player.repeat',
       action: 'Cycle repeat (Off → All → One)',
       group: ShortcutGroup.transport,
+      anchor: ShortcutAnchor.playlistRepeat,
     ),
     ShortcutEntry(
       scope: ShortcutScope.player,
@@ -1074,7 +1080,7 @@ class SaluShortcuts {
       scope: ShortcutScope.web,
       combos: <ShortcutCombo>[ShortcutCombo(_K.escape)],
       id: 'web.escape',
-      action: 'Release page fullscreen / exit fullscreen',
+      action: 'Close popup, release page fullscreen / exit fullscreen',
       group: ShortcutGroup.webZoom,
     ),
     ShortcutEntry(
@@ -1227,6 +1233,14 @@ class SaluShortcuts {
     ShortcutEntry(
       scope: ShortcutScope.dialog,
       combos: <ShortcutCombo>[ShortcutCombo(_K.escape)],
+      id: 'dialog.groupBy.escape',
+      action: 'Close Group by choices',
+      group: ShortcutGroup.playlist,
+      guard: ShortcutGuard.groupByPillOpen,
+    ),
+    ShortcutEntry(
+      scope: ShortcutScope.dialog,
+      combos: <ShortcutCombo>[ShortcutCombo(_K.escape)],
       id: 'dialog.playlistSearch.escape',
       action: 'Clear query, then leave the field',
       group: ShortcutGroup.playlistSearch,
@@ -1314,6 +1328,8 @@ class SaluShortcuts {
       <ShortcutAnchor, String>{
     ShortcutAnchor.sound: '↑ ↓ · M',
     ShortcutAnchor.tune: 'Ctrl+E · Cmd+E',
+    ShortcutAnchor.playlistRepeat: 'R',
+    ShortcutAnchor.playlistShuffle: 'Shift+S · Alt+S · Ctrl+Shift+S',
     ShortcutAnchor.playlistGroupBy: 'Ctrl+G',
     ShortcutAnchor.playlistSearch: 'Ctrl+F',
     ShortcutAnchor.playlistFavourites: 'Ctrl+D',

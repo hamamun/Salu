@@ -167,6 +167,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     switch (entry.id) {
       // ── Player + mini transport ─────────────────────────────────────
       case 'player.groupBy':
+        playlistOpen = true;
         _flash('Group by');
         return true;
       case 'player.playPause':
@@ -504,19 +505,29 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   Widget _control(ShortcutAnchor anchor, Widget mark) {
     final List<ShortcutEntry> riding = SaluShortcuts.forAnchor(mode, anchor);
     final bool lit = riding.any(_isLit);
-    final Widget icon = IconTheme(
-      data: IconThemeData(
-        color: lit ? AppColors.textPrimary : AppColors.iconIdle,
-        size: 16,
+    return _controlSurface(
+      anchor,
+      IconTheme(
+        data: IconThemeData(
+          color: lit ? AppColors.textPrimary : AppColors.iconIdle,
+          size: 16,
+        ),
+        child: SizedBox(width: 24, height: 24, child: Center(child: mark)),
       ),
-      child: SizedBox(width: 24, height: 24, child: Center(child: mark)),
     );
-    if (riding.isEmpty) return icon;
+  }
+
+  /// An anchored miniature surface that is not a standard 24-px icon —
+  /// e.g. the playlist search field. Hovering still selects its registry
+  /// entry, just as it does for [_control].
+  Widget _controlSurface(ShortcutAnchor anchor, Widget child) {
+    final List<ShortcutEntry> riding = SaluShortcuts.forAnchor(mode, anchor);
+    if (riding.isEmpty) return child;
     return MouseRegion(
       onEnter: (_) => _select(riding.first),
       child: GestureDetector(
         onTap: () => _select(riding.first),
-        child: icon,
+        child: child,
       ),
     );
   }
@@ -534,23 +545,33 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     return groups.values.toList();
   }
 
-  /// One shelf — a quiet glass column of icons, left of the video. A
-  /// group taller than five keys runs in two lines so the shelf always
-  /// fits the miniature (600 × 280 design box).
+  /// One shelf — a quiet glass column of icons, left of the video. Regular
+  /// shelves wrap after five keys; the denser Dialogs variant wraps after
+  /// four so its two-row grid stays inside the miniature.
   static const int _shelfLine = 5;
 
-  Widget _shelf(List<ShortcutEntry> entries) {
+  Widget _shelf(List<ShortcutEntry> entries, {bool compact = false}) {
+    // The Dialogs miniature has five independent shelves, arranged in two
+    // rows. Use a denser four-key column there so the whole grid remains
+    // inside the fixed 600 × 280 map even as dialog shortcuts are added.
+    final int lineLimit = compact ? 4 : _shelfLine;
+    final double cellSize = compact ? 20 : 22;
+    final double verticalPadding = compact ? 6 : 8;
+    final double itemGap = compact ? 5 : 8;
     final List<List<ShortcutEntry>> lines = <List<ShortcutEntry>>[];
-    for (int i = 0; i < entries.length; i += _shelfLine) {
+    for (int i = 0; i < entries.length; i += lineLimit) {
       lines.add(entries.sublist(
         i,
-        (i + _shelfLine) > entries.length ? entries.length : i + _shelfLine,
+        (i + lineLimit) > entries.length ? entries.length : i + lineLimit,
       ));
     }
     return GlassCapsule(
       radius: 10,
       blur: 12,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 5 : 6,
+        vertical: verticalPadding,
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,8 +582,8 @@ class ShortcutsTabState extends State<ShortcutsTab> {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 for (final ShortcutEntry e in lines[i]) ...<Widget>[
-                  if (e != lines[i].first) const SizedBox(height: 8),
-                  _ridelessIcon(e),
+                  if (e != lines[i].first) SizedBox(height: itemGap),
+                  _ridelessIcon(e, size: cellSize),
                 ],
               ],
             ),
@@ -572,13 +593,13 @@ class ShortcutsTabState extends State<ShortcutsTab> {
     );
   }
 
-  Widget _shelfRow(List<List<ShortcutEntry>> shelves) {
+  Widget _shelfRow(List<List<ShortcutEntry>> shelves, {bool compact = false}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         for (final List<ShortcutEntry> s in shelves) ...<Widget>[
-          _shelf(s),
+          _shelf(s, compact: compact),
           const SizedBox(width: 8),
         ],
       ],
@@ -587,7 +608,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
 
   /// One rideless key in a shelf: the action's own mark where SALU has
   /// one, otherwise its keycap. Hover names it on the detail strip.
-  Widget _ridelessIcon(ShortcutEntry e) {
+  Widget _ridelessIcon(ShortcutEntry e, {double size = 22}) {
     final bool lit = _isLit(e);
     return MouseRegion(
       onEnter: (_) => _select(e),
@@ -599,8 +620,8 @@ class ShortcutsTabState extends State<ShortcutsTab> {
             size: 15,
           ),
           child: SizedBox(
-            width: 22,
-            height: 22,
+            width: size,
+            height: size,
             child: Center(child: _ridelessMark(e, lit)),
           ),
         ),
@@ -622,10 +643,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
       // Player · transport
       case 'player.mini':
         return const MinimizeMark(size: 13);
-      case 'player.shuffle':
-        return const ShuffleMark(size: 15);
-      case 'player.repeat':
-        return const RepeatMark(size: 15);
       // Player · window
       case 'player.escape':
         return const CloseMark(size: 12);
@@ -884,17 +901,6 @@ class ShortcutsTabState extends State<ShortcutsTab> {
           _control(ShortcutAnchor.openMedia, const PlusMark(size: 14)),
           const SizedBox(width: 4),
           _control(ShortcutAnchor.playlist, const NowRowMark(size: 14)),
-          const SizedBox(width: 4),
-          _control(ShortcutAnchor.playlistGroupBy, const GroupByMark(size: 14)),
-          const SizedBox(width: 4),
-          _control(ShortcutAnchor.playlistSearch, const MagnifierMark(size: 14)),
-          const SizedBox(width: 4),
-          _control(
-            ShortcutAnchor.playlistFavourites,
-            BookmarkMark(size: 14, filled: playlistFavouritesOnly),
-          ),
-          const SizedBox(width: 4),
-          _control(ShortcutAnchor.playlistClear, const TrashMark(size: 14)),
           const Spacer(),
           _control(
             ShortcutAnchor.playPause,
@@ -951,6 +957,39 @@ class ShortcutsTabState extends State<ShortcutsTab> {
   }
 
   Widget _playlistPanel() {
+    // Local queues and M3U lists have different headers. Show both compact
+    // variants in the reference miniature so every header shortcut rides
+    // the control it actually belongs to without pretending they coexist.
+    Widget headerVariant(String label, List<Widget> controls) =>
+        SizedBox(
+          height: 24,
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: 24,
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 7.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              ...controls,
+            ],
+          ),
+        );
+
+    final Widget close = _control(
+      ShortcutAnchor.playlist,
+      Transform.rotate(
+        angle: 0.7853981633974483,
+        child: const PlusMark(size: 12),
+      ),
+    );
+    final Widget clear =
+        _control(ShortcutAnchor.playlistClear, const TrashMark(size: 12));
+
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xF01E1E1E),
@@ -960,15 +999,51 @@ class ShortcutsTabState extends State<ShortcutsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Container(
-            height: 18,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(
-                color: selected?.id == 'player.findInPlaylist'
-                    ? AppColors.accent
-                    : AppColors.surfaceOutline,
+          headerVariant('Local', <Widget>[
+            _control(ShortcutAnchor.playlistRepeat, const RepeatMark(size: 13)),
+            _control(
+              ShortcutAnchor.playlistShuffle,
+              const ShuffleMark(size: 13),
+            ),
+            clear,
+            close,
+          ]),
+          const SizedBox(height: 2),
+          headerVariant('M3U', <Widget>[
+            _control(
+              ShortcutAnchor.playlistGroupBy,
+              const GroupByMark(size: 13),
+            ),
+            _control(
+              ShortcutAnchor.playlistFavourites,
+              BookmarkMark(size: 13, filled: playlistFavouritesOnly),
+            ),
+            clear,
+            close,
+          ]),
+          const SizedBox(height: 3),
+          _controlSurface(
+            ShortcutAnchor.playlistSearch,
+            Container(
+              height: 18,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: selected?.id == 'player.findInPlaylist'
+                      ? AppColors.accent
+                      : AppColors.surfaceOutline,
+                ),
+              ),
+              alignment: Alignment.centerLeft,
+              child: IconTheme(
+                data: IconThemeData(
+                  color: selected?.id == 'player.findInPlaylist'
+                      ? AppColors.accent
+                      : AppColors.iconIdle,
+                ),
+                child: const MagnifierMark(size: 11),
               ),
             ),
           ),
@@ -1364,7 +1439,7 @@ class ShortcutsTabState extends State<ShortcutsTab> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           for (final List<ShortcutEntry> s in row) ...<Widget>[
-            _shelf(s),
+            _shelf(s, compact: true),
             const SizedBox(width: 8),
           ],
         ],
