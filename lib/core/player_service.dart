@@ -2206,6 +2206,22 @@ class PlayerService {
     }
   }
 
+  /// The engine's own version string — mpv's `mpv-version` property (e.g.
+  /// `mpv 0.38.0`) — for Settings → About. `''` whenever the engine has
+  /// nothing to say: the platform is not the native player, the engine is
+  /// not up yet, or the read failed. One guarded read in the same shape as
+  /// [_refreshHwdecStatus], so a page of facts can never take the player
+  /// down with it.
+  Future<String> readEngineVersion() async {
+    try {
+      final PlatformPlayer? platform = player.platform;
+      if (platform is! NativePlayer) return '';
+      return (await platform.getProperty('mpv-version')).toString().trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<void> _setWindowTitle(String title) async {
     if (!Platform.isWindows) return;
     try {

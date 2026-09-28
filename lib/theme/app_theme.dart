@@ -37,6 +37,11 @@ class AppColors {
   /// Secondary, de-emphasized text/icons.
   static const Color textSecondary = Color(0xFF9A9A9A);
 
+  /// The owner's signature tone — the About tab's "created by HAM" line,
+  /// and nothing else. White at ~20 % over the dark canvas: there if you
+  /// look for it, gone if you don't. Deliberately not a UI color.
+  static const Color whisper = Color(0x33EDEDED);
+
   /// Hairline separators.
   static const Color divider = Color(0xFF3A3A3C);
 

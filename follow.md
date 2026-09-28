@@ -23,8 +23,10 @@
    web.md and updater.md §7 are superseded. Settings is drawn as one quiet
    column — small uppercase caption, one-line rows (label left, control
    right, hairline between rows) — with pill pickers in place of stacked
-   radio tiles. The Shortcuts tab and the tab strip are exempt: they stay
-   exactly as they are.
+   radio tiles. The Shortcuts tab, the About tab and the tab strip are
+   exempt: they stay exactly as they are. About (owner, 2026-09-28) is a
+   reference page like Shortcuts — a name and one quiet gist line per
+   feature, no settings on it, so no reset marks and no default lines.
    **Two standing rules came with it.** (a) Every pill set names its
    factory default in one quiet line beneath it — `Default · Borderless`
    — because a word is read at a glance and a dot or a badge has to be

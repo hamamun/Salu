@@ -295,9 +295,11 @@ is a bug.
 > approved in preview the same day. The Alt-Peek design (§4.2) is
 > untouched.
 
-A fifth tab in the Settings dialog (`SettingsTab.shortcuts`, rightmost —
-after Updates; a reference page, not a setting). Pure reference: nothing on
-it is configurable.
+A tab in the Settings dialog (`SettingsTab.shortcuts` — a reference page,
+not a setting). Pure reference: nothing on it is configurable. The **About**
+tab (`SettingsTab.about`, phase_9_details.md · step 2, owner 2026-09-28)
+sits to its right as the window's second reference page; Shortcuts stays
+exactly as it is.
 
 **The idea:** a keyboard is a grid of keys; SALU is a map of *places*. So
 the tab shows **a miniature SALU that is alive** — the app itself, shrunken,

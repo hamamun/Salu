@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/association/association_plan.dart';
 import '../../core/association/association_service.dart';
+import '../../core/browser_service.dart';
 
 import '../../core/language_names.dart';
+import '../../core/player_service.dart';
 import '../../core/remote/remote_pairing.dart';
 import '../../core/remote/remote_service.dart';
 import '../../core/settings_service.dart';
@@ -23,9 +25,11 @@ import '../osd/osd_controller.dart';
 import 'dot_grid_icon.dart';
 import 'remote_firewall_dialog.dart';
 import 'salu_icon_button.dart';
+import 'salu_marks.dart';
 import 'shortcuts_tab.dart';
 import 'update_dialog.dart';
 
+part 'about_tab.dart';
 part 'associations_tab.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
@@ -53,9 +57,10 @@ part 'associations_tab.dart';
 /// pop-up rules are never part of it.
 ///
 /// Current tabs: General · Subtitles · Web · Updates · Associations ·
-/// Shortcuts. The tab
-/// strip is untouched — it is the one place the window explains itself by
-/// structure, and Shortcuts stays exactly as it is.
+/// Shortcuts · About. The tab strip is untouched — it is the one place the
+/// window explains itself by structure, and Shortcuts stays exactly as it
+/// is. About (phase_9_details.md · step 2) sits to its right as the
+/// window's second reference page: nothing on it is a setting.
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key, this.initialTab = SettingsTab.general, this.onOpenRemote});
 
@@ -159,7 +164,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   /// one row that belongs to all tabs, which is exactly what that control
   /// governs; it is silent while every preference sits on its default.
   Widget _buildTabStrip() {
-    // Five labels overflow very narrow dialogs — below that width the
+    // Seven labels overflow very narrow dialogs — below that width the
     // tabs slide horizontally instead (shortcut.md §4.1 · accommodation).
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -202,12 +207,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     selected: _tab == SettingsTab.associations,
                     onTap: () => setState(() => _tab = SettingsTab.associations),
                   ),
-                  // shortcut.md §4.1 — the Shortcuts tab (the Living Map): the
-                  // rightmost tab, a reference page rather than a setting.
+                  // shortcut.md §4.1 — the Shortcuts tab (the Living Map):
+                  // a reference page rather than a setting.
                   _TabButton(
                     label: 'Shortcuts',
                     selected: _tab == SettingsTab.shortcuts,
                     onTap: () => setState(() => _tab = SettingsTab.shortcuts),
+                  ),
+                  // phase_9_details.md · step 2 — the About tab, right of
+                  // Shortcuts: who SALU is, what only it does, and the
+                  // engine it runs on. The window's second reference page.
+                  _TabButton(
+                    label: 'About',
+                    selected: _tab == SettingsTab.about,
+                    onTap: () => setState(() => _tab = SettingsTab.about),
                   ),
                 ],
               ),
@@ -227,6 +240,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       SettingsTab.updates => const _UpdatesTab(),
       SettingsTab.associations => const _AssociationsTab(),
       SettingsTab.shortcuts => const ShortcutsTab(),
+      SettingsTab.about => const _AboutTab(),
     };
   }
 }
