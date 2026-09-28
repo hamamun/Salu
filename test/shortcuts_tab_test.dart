@@ -152,8 +152,12 @@ void main() {
       for (final ShortcutEntry e in SaluShortcuts.rideless(scope)) {
         final Finder icon = find.byKey(ValueKey<String>('shelf:${e.id}'));
         expect(icon, findsOneWidget, reason: '${e.id} is missing from $scope');
+        final Rect iconRect = tester.getRect(icon);
         expect(
-          map.containsRect(tester.getRect(icon)),
+          iconRect.left >= map.left &&
+              iconRect.right <= map.right &&
+              iconRect.top >= map.top &&
+              iconRect.bottom <= map.bottom,
           isTrue,
           reason: '${e.id} hangs off the $scope map',
         );
