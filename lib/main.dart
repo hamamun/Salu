@@ -6,9 +6,11 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/association/association_service.dart';
 import 'core/browser_service.dart';
 import 'core/channel_favourites_service.dart';
 import 'core/channel_load_service.dart';
+import 'core/drop_handler.dart';
 import 'core/folder_autoload_service.dart';
 import 'core/media_utils.dart';
 import 'core/player_service.dart';
@@ -25,6 +27,13 @@ import 'ui/screens/home_screen.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // association.md §3 — `salu.exe --unregister` removes every per-user
+  // registry entry SALU wrote (the uninstaller hook) and exits at once.
+  if (Platform.isWindows && args.contains('--unregister')) {
+    AssociationService.instance.unregisterAll();
+    exit(0);
+  }
 
   // ── Phase 1 · Step 6: strict single instance + file argument routing. ─
   // If SALU is already running and the user double-clicks a media file,
@@ -44,7 +53,20 @@ Future<void> main(List<String> args) async {
         await windowManager.ensureInitialized();
         await windowManager.show();
         await windowManager.focus();
+        // association.md §3 — Explorer's right-click verbs: `--enqueue`
+        // appends to the running queue, and a folder plays as a block.
+        final String? folder = extractFolderFromArgs(secondArgs);
         final String? path = extractMediaPathFromArgs(secondArgs);
+        final bool enqueue = secondArgs.contains('--enqueue');
+        final String? target = path ?? folder;
+        if (enqueue && target != null && PlayerService.instance.hasMedia.value) {
+          await DropHandler.appendDroppedToQueue(<String>[target]);
+          return;
+        }
+        if (path == null && folder != null) {
+          await DropHandler.handleDroppedPaths(<String>[folder]);
+          return;
+        }
         if (path != null) {
           // A `.m3u` / `.m3u8` argument is a channel directory SALU
           // reads itself (playlist_imp.md M55); anything else opens as
@@ -129,6 +151,27 @@ Future<void> main(List<String> args) async {
   await BrowserService.instance.load();
 
   runApp(SaluApp(initialFilePath: extractMediaPathFromArgs(args)));
+
+  // association.md §3 — a folder handed over by "Play with SALU" /
+  // "Add to SALU queue" on a cold start plays as a block.
+  final String? initialFolder = extractFolderFromArgs(args);
+  if (initialFolder != null && extractMediaPathFromArgs(args) == null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(DropHandler.handleDroppedPaths(<String>[initialFolder]));
+    });
+  }
+
+  // association.md §3 — keep "Open with → SALU" pointing at this exe
+  // (first run, moved folder). Registry-only, never claims a file type.
+  if (Platform.isWindows) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        AssociationService.instance.ensureRegistered();
+      } catch (error) {
+        debugPrint('[SALU] association upkeep failed: $error');
+      }
+    });
+  }
 
   // The WebView2 environment is heavy and Web mode may never be picked —
   // so it boots AFTER the first frame, never blocking it, exactly once
@@ -247,6 +290,16 @@ String? extractMediaPathFromArgs(List<String> args) {
         (MediaUtils.isMedia(arg) || MediaUtils.isPlaylist(arg))) {
       return arg;
     }
+  }
+  return null;
+}
+
+/// The first argument that is an existing folder (Explorer's folder verbs).
+String? extractFolderFromArgs(List<String> args) {
+  for (final String rawArg in args) {
+    final String arg = rawArg.replaceAll('"', '').trim();
+    if (arg.isEmpty || arg.startsWith('--')) continue;
+    if (Directory(arg).existsSync()) return arg;
   }
   return null;
 }
