@@ -23,7 +23,7 @@ import 'shortcuts_tab.dart';
 import 'update_dialog.dart';
 
 /// SALU's settings window — a centered, SALU-styled dialog over a dimmed
-/// backdrop, opened by the 6-dot button in the title bar and by the
+/// backdrop, opened by the four-dot button in the title bar and by the
 /// browser's own ⋮ menu.
 ///
 /// **The list is the design (owner ruling, 2026-09-28).** Every tab is one

@@ -123,13 +123,13 @@ ambient `IconTheme`):
 |---|---|---|
 | Shuffle | `ShuffleMark` | exists — reuse as-is |
 | Repeat | `RepeatMark` (quiet / bead) | exists — reuse as-is |
-| Settings | `DotGridIcon` (six dots) | exists — reuse as-is |
+| Settings | `DotGridIcon` (four dots) | exists — reuse as-is |
 | Info | **`InfoMark`** | **new** — **LOCKED: the sheet** — a page with a folded corner and two content rules, drawn in the family's stroke. (The circle-i proposal was dropped by the owner: a letter-in-a-circle is the one shape in this family that is *borrowed* rather than drawn.) |
 | Remote | — | **not drawn in this build.** The fifth seat is reserved and empty (§9): Remote is a separate workstream with its own design and its own mark, decided there |
 
 **Legibility finding (from the preview's own true-size render,
 `design/right-menu-preview/marks-true-size.png`):** at the real 18–20 px the
-**sheet**, the six dots, the ¾ arc and the shuffle marks all hold — the sheet's
+**sheet**, the four dots, the ¾ arc and the shuffle marks all hold — the sheet's
 fold and its two content rules survive the downscale, which is what earned it
 the lock. (The render also holds the record of what *failed*: a phone-with-arcs
 mark turned into a blob at 20 px. That is the bar — a new mark is judged at true

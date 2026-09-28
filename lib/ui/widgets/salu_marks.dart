@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 /// (gray → white glide) lights them up automatically.
 ///
 /// Family so far:
-///   · six dots       — Settings            (dot_grid_icon.dart)
+///   · four dots (2×2) — Settings            (dot_grid_icon.dart)
 ///   · thin plus      — Open media          [PlusMark] (rotates 45° to ×)
 ///   · film frame     — Open File           [FilmFrameMark]
 ///   · stacked frames — Open Folder         [StackedFramesMark]
