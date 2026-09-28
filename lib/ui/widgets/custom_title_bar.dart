@@ -21,7 +21,7 @@ import 'salu_marks.dart';
 ///
 /// Contains: a [DragToMoveArea] spanning the full width, the SALU mark in
 /// the left corner (with the mode switch beside it), the current media
-/// title in the center, and the caption row on the right — the 6-dot
+/// title in the center, and the caption row on the right — the four-dot
 /// settings button followed by the Windows caption buttons (Minimize /
 /// Maximize / Close) drawn as SALU marks in the family's own thin stroke
 /// (follow.md rule 6) — never stock glyphs. Every control in the row
@@ -55,7 +55,7 @@ class CustomTitleBar extends StatelessWidget {
   /// Title of the playing media; falls back to "SALU".
   final String? title;
 
-  /// Opens the settings window (the 6-dot button, left of Minimize).
+  /// Opens the settings window (the four-dot button, left of Minimize).
   final VoidCallback? onSettings;
 
   /// When true the bar renders plain content only: no gradient backdrop
@@ -210,7 +210,7 @@ class CustomTitleBar extends StatelessWidget {
                       child: const MiniBarMark(size: 18),
                     ),
                   ),
-                // SALU settings — six dots in two lines (left of Minimize).
+                // SALU settings — four dots in two columns (left of Minimize).
                 AltPeekAnchor(
                   entries: _peekKeys(_web ? 'web.settings' : 'player.settings'),
                   side: PeekSide.below,

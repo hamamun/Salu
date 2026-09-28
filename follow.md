@@ -55,7 +55,7 @@
    Thin, monochrome, geometric marks drawn in the same stroke language as
    the existing dot-grid settings mark (`DotGridIcon`). Current family
    (`lib/ui/widgets/salu_marks.dart` + `lib/ui/widgets/transport_marks.dart`):
-   - six dots = Settings
+   - four dots (two columns of two) = Settings
    - thin **+** = Open media (rotates 45° to **×** while its menu is open)
    - film frame = Open File · stacked frames = Open Folder · link = Open URL
    - solid triangle = Play · triangle + tag = Play & Save (the Open-URL
