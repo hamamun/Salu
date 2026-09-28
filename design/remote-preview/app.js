@@ -22,6 +22,9 @@ const M = {
   next:  (s=18) => svg(s, '<path d="M1.8 5.76L6.12 9L1.8 12.24M7.92 5.76L12.24 9l-4.32 3.24"/><path d="M16.2 4.32v9.36"/>'),
   pause: (s=18) => svg(s, '<path d="M6.48 4.32v9.36M11.52 4.32v9.36"/>'),
   stop:  (s=18) => svg(s, '<rect x="3.78" y="3.78" width="10.44" height="10.44" rx="2.34"/>'),
+  // salu_marks.dart · the reset mark (restart lineage: 3/4 arc + arrowhead)
+  restart: (s=12) => svg(s, '<path d="M13.05 6.4A5.1 5.1 0 1 0 13.9 10"/>' +
+    '<path d="M12.23 3.2L13.05 6.4L9.85 7.1"/>'),
   // salu_marks.dart · _RepeatPainter — 3/4 arc + arrowhead, bead for repeat-one
   repeat: (s=18, quiet=false, bead=false) => svg(s,
     `<path d="M11.77 5.77A4.5 4.5 0 1 0 12.5 9"/>` +
@@ -156,6 +159,8 @@ const PLACES = [
 
 const S = {
   remoteOn: true, fileAccess: true,
+  // titleBarMode — 'borderless' is the factory default (settings_service.dart)
+  titleBarMode: 'borderless',
   status: 'running',            // running | off | waiting
   ip: '192.168.0.12', port: 7258, pcName: 'DESKTOP-ABC',
   code: '7K4MQP2X',
@@ -489,29 +494,32 @@ function renderSettings() {
   const on = S.remoteOn;
   $('settings').innerHTML = `
     <h3>Settings · General · Remote</h3>
-    <div class="sub">Slots in after the Equalizer block, using the <code>_AutoEqSwitch</code> layout. Global — reachable in Player <i>and</i> Web mode, and in mini.</div>
+    <div class="sub">The compact pass (owner ruling, 2026-09-28): caption + one-line rows, label left / control right, no helper lines — what a name cannot carry rides as a tooltip. Global — reachable in Player <i>and</i> Web mode, and in mini.</div>
+    <div class="cap">Top bar${S.titleBarMode !== 'borderless' ? `<span class="sp"></span><span class="rst" data-act="resetTopBar" title="Reset Top bar to defaults">${M.restart(12)}</span>` : ''}</div>
     <div class="srow">
-      <span class="tile">${M.qr(16)}</span>
-      <span class="txt"><span class="t">Remote control</span>
-        <span class="h">Let the SALU Remote app on your phone control playback. Local network only.</span></span>
+      <span class="txt"><span class="t">Behaviour</span></span>
+      <span class="pillwrap"><span class="pills">
+        <span class="pill ${S.titleBarMode === 'borderless' ? 'on' : ''}" data-act="tbm-borderless">Borderless</span>
+        <span class="pill ${S.titleBarMode === 'pin' ? 'on' : ''}" data-act="tbm-pin">Pin (playback off)</span>
+        <span class="pill ${S.titleBarMode === 'locked' ? 'on' : ''}" data-act="tbm-locked">Locked</span>
+      </span><span class="pillnote">Default · Borderless</span></span>
+    </div>
+    <div class="cap">Remote${(!on || !S.fileAccess) ? `<span class="sp"></span><span class="rst" data-act="resetRemote" title="Reset Remote to defaults">${M.restart(12)}</span>` : ''}</div>
+    <div class="srow">
+      <span class="txt"><span class="t">Remote control</span></span>
       <span class="sw ${on ? 'on' : ''}" data-act="toggleRemote"><i></i></span>
     </div>
     <div class="srow ${on ? '' : 'dis'}">
-      <span class="tile">${M.folder(16)}</span>
-      <span class="txt"><span class="t">Let phones browse PC files</span>
-        <span class="h">Read-only. Folders and media names only. <i>(v1.1 · default ON)</i></span></span>
+      <span class="txt"><span class="t">Phone file access</span></span>
       <span class="sw ${on && S.fileAccess ? 'on' : ''} ${on ? '' : 'dis'}" data-act="toggleFiles"><i></i></span>
     </div>
-    <div class="srow ${on ? '' : 'dis'}" data-act="${on ? 'openPanel' : ''}" style="${on ? 'cursor:pointer' : ''}">
-      <span class="tile">${M.qr(16)}</span>
-      <span class="txt"><span class="t">Show pairing code…</span>
-        <span class="h">${on ? 'Opens the Remote panel.' : 'Turn remote control on to pair a phone.'}</span></span>
+    <div class="srow ${on ? '' : 'dis'}" data-act="${on ? 'openPanel' : ''}" title="${on ? 'Opens the Remote panel' : 'Turn remote control on to pair a phone'}" style="${on ? 'cursor:pointer' : ''}">
+      <span class="txt"><span class="t">Pairing code</span></span>
       <span class="chev">›</span>
     </div>
-    <div class="srow" style="cursor:default">
-      <span class="tile">${M.dots(16)}</span>
-      <span class="txt"><span class="t">Remembered phones</span>
-        <span class="h">${S.devices.length} paired · opens the same panel</span></span>
+    <div class="srow" data-act="openPanel" style="cursor:pointer">
+      <span class="txt"><span class="t">Remembered phones</span></span>
+      <span class="st" style="color:var(--sec);font-size:11.5px">${S.devices.length}</span>
       <span class="chev">›</span>
     </div>`;
 }
@@ -521,15 +529,13 @@ function renderRemotePanel() {
   const running = S.remoteOn;
   const waiting = running && !S.connected;
   const statusHtml = !running
-    ? '<span class="dot dead"></span> Remote is off — turn it on in Settings'
+    ? '<span class="dot"></span> Off'
     : waiting
-      ? '<span class="dot wait"></span> Waiting for your phone'
-      : `<span class="dot alive"></span> Connected · Wi-Fi · ${S.ip} · ${S.port}`;
+      ? `<span class="dot wait"></span> Waiting · Wi-Fi · ${S.ip}:${S.port}`
+      : `<span class="dot alive"></span> Connected · Wi-Fi · ${S.ip}:${S.port}`;
 
-  let qrHtml;
-  if (!running) {
-    qrHtml = `<div class="qrnote" style="padding:52px 0">Turn remote control on in Settings<br>to pair a phone.</div>`;
-  } else {
+  let qrHtml = '';
+  if (running) {
     let code;
     try {
       code = encodeQr(pairUri(), 'M');
@@ -548,32 +554,29 @@ function renderRemotePanel() {
       }
       qrHtml = `<div class="qrcard"><svg viewBox="0 0 208 208" shape-rendering="crispEdges">
           <rect width="208" height="208" fill="#fff"/><g fill="#000">${rects}</g></svg></div>
-        <div class="qrnote">Scan with <b style="color:var(--text)">SALU Remote</b><br>
-          or enter <span class="code">${prettyCode()}</span></div>`;
+        <div class="qrnote"><span class="code">${prettyCode()}</span></div>`;
     } else {
       qrHtml = `<div class="qrnote" style="padding:52px 0">Payload too long for this preview encoder.</div>`;
     }
   }
 
+  // No phones = no group at all (rule 1): an empty list is not narrated.
   const devices = S.devices.length
-    ? S.devices.map((d) => `<div class="prow">
-        <span class="dot ${d.control ? 'alive' : 'unknown'}" style="background:${d.control ? 'var(--alive)' : 'var(--unknown)'}"></span>
+    ? `<div class="sect">Phones</div>` + S.devices.map((d) => `<div class="prow">
         <span class="nm">${esc(d.name)}</span>
         <span class="st">${esc(d.sub)}</span>
-        <span class="fg" data-act="forget" data-id="${d.id}">✕ Forget</span>
+        <span class="fg" data-act="forget" data-id="${d.id}" title="Forget">${M.x(11)}</span>
       </div>`).join('')
-    : '<div class="empty">No phones paired yet.</div>';
+    : '';
 
   return `<div class="barrier" data-act="closePanel">
     <div class="modal" data-stop>
       <div class="hd"><h3>Remote</h3><span class="xbtn" data-act="closePanel">${M.x(13)}</span></div>
       <div class="statusline">${statusHtml}</div>
       ${qrHtml}
-      ${running ? `<div class="foot">This code is only for pairing. It changes when you close this panel.</div>` : ''}
-      <div class="sect">Phones</div>
       ${devices}
-      ${waiting ? `<div class="fw">⚠ Can't connect? Windows Firewall may be blocking SALU.
-        <br><button data-act="noop">Open firewall settings</button></div>` : ''}
+      ${waiting ? `<div class="fw">⚠ Windows Firewall may be blocking SALU.
+        <span class="icb" data-act="noop" title="Windows Firewall settings">${M.dots(12)}</span></div>` : ''}
     </div></div>`;
 }
 
@@ -990,6 +993,12 @@ document.addEventListener('click', (e) => {
     case 'closePanel': if (!stop) closeRemotePanel(); break;
     case 'forget': forgetDevice(t.dataset.id); break;
     case 'toggleRemote': toggleRemote(); break;
+    case 'tbm-borderless': S.titleBarMode = 'borderless'; render(); break;
+    case 'tbm-pin': S.titleBarMode = 'pin'; render(); break;
+    case 'tbm-locked': S.titleBarMode = 'locked'; render(); break;
+    case 'resetTopBar': S.titleBarMode = 'borderless'; osd('Top bar reset'); render(); break;
+    case 'resetRemote':
+      S.remoteOn = true; S.fileAccess = true; osd('Remote reset'); render(); break;
     case 'toggleFiles': if (S.remoteOn) { S.fileAccess = !S.fileAccess; render(); } break;
     case 'openPanel': S.remotePanel = true; render(); break;
     case 'noop': break;

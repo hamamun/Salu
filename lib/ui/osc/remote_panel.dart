@@ -9,10 +9,23 @@ import '../../core/remote/remote_service.dart';
 import '../../core/settings_service.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/remote_firewall_dialog.dart';
+import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 
 /// QR pairing surface. The pairing code is owned by RemoteService and is
 /// stable for the lifetime of this dialog; disposing the dialog rotates it.
+///
+/// **Compact pass (owner ruling, 2026-09-28).** The panel sizes itself to
+/// its content — a 340 px column that grows and shrinks with the phone
+/// list, so no scroll bar and no reserved empty space. It prints the
+/// status, the ticket and the phone rows, and nothing else: the "Scan with
+/// SALU Remote" line, the footnote about the code changing, and the empty
+/// phones sentence are gone (follow.md rule 1), and every action is a mark
+/// with a tooltip (rule 6).
+///
+/// **The QR itself is untouched** — 208 px on a white card with its 12 px
+/// quiet zone, no scaling, no animation. The APK reads it perfectly and
+/// nothing here moves a module.
 class RemotePanel extends StatefulWidget {
   const RemotePanel({super.key});
 
@@ -45,49 +58,75 @@ class _RemotePanelState extends State<RemotePanel> {
       alignment: Alignment.center,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       backgroundColor: Colors.transparent,
-      child: SizedBox(
-        width: 400,
-        height: 520,
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF333336)),
-            boxShadow: const <BoxShadow>[
-              BoxShadow(color: Color(0x80000000), blurRadius: 48, offset: Offset(0, 16)),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              _header(),
-              const Divider(height: 1, color: AppColors.divider),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-                  child: _body(),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: constraints.maxHeight),
+            child: SizedBox(
+              width: 340,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.surfaceOutline),
+                  boxShadow: const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x80000000),
+                      blurRadius: 48,
+                      offset: Offset(0, 16),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    _header(),
+                    const Divider(
+                        height: 1, thickness: 1, color: AppColors.divider),
+                    Flexible(
+                      child: ScrollConfiguration(
+                        // No bar, ever: the panel fits its content, and the
+                        // scroll view is only a small-window fallback.
+                        behavior: ScrollConfiguration.of(context)
+                            .copyWith(scrollbars: false),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                          child: _body(),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _header() => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
         child: Row(
           children: <Widget>[
-            const QrMark(size: 20),
-            const SizedBox(width: 12),
-            const Text('Remote', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            const QrMark(size: 18),
+            const SizedBox(width: 10),
+            const Text(
+              'Remote',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+                letterSpacing: 0.2,
+              ),
+            ),
             const Spacer(),
-            IconButton(
+            SaluIconButton(
+              size: 30,
               tooltip: 'Close',
-              icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
-              onPressed: () => Navigator.of(context).pop(),
+              onTap: () => Navigator.of(context).pop(),
+              child: const Icon(Icons.close, size: 16),
             ),
           ],
         ),
@@ -114,8 +153,8 @@ class _RemotePanelState extends State<RemotePanel> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               _statusLine(),
-              const SizedBox(height: 14),
-              if (payload != null)
+              const SizedBox(height: 12),
+              if (payload != null) ...<Widget>[
                 Center(
                   child: Container(
                     color: Colors.white,
@@ -128,84 +167,125 @@ class _RemotePanelState extends State<RemotePanel> {
                       errorCorrectionLevel: QrErrorCorrectLevel.M,
                     ),
                   ),
-                )
-              else
-                _emptyNetwork(),
-              if (payload != null) ...<Widget>[
+                ),
                 const SizedBox(height: 10),
-                Center(child: Text('Scan with SALU Remote', style: _secondaryStyle)),
-                const SizedBox(height: 4),
-                Center(child: Text(formatPairingCode(_remote.pairingCode.value ?? ''), style: const TextStyle(fontSize: 18, letterSpacing: 2.2, color: AppColors.textPrimary, fontWeight: FontWeight.w600))),
-                const SizedBox(height: 5),
-                const Center(child: Text('This code is only for pairing. It changes when you close this panel.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
-              ],
-              const SizedBox(height: 18),
-              _phones(),
-              _firewallArea(),
+                // The manual-entry fallback for phones without a working
+                // camera. It is a value, so it carries no sentence.
+                Center(
+                  child: Text(
+                    formatPairingCode(_remote.pairingCode.value ?? ''),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      letterSpacing: 2.4,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ] else if (_remote.status.value == RemoteStatus.running)
+                // Running but with no private address to pair over — the
+                // one case the box speaks for. Off is already said by the
+                // status line above, so nothing is repeated under it.
+                _emptyNetwork(),
+              ..._phones(),
+              ..._firewallArea(),
             ],
           );
         },
       );
 
+  /// One line of state: a dot and the shortest true thing about it. No
+  /// sentence ever — `Off` is `Off`, and the settings door is a tooltip
+  /// away on the switch that turns it on.
   Widget _statusLine() {
     final RemoteStatus state = _remote.status.value;
+    final String? address = _remote.address.value;
+    final String network = _remote.networkName.value ?? 'LAN';
     final String copy;
     if (state == RemoteStatus.off) {
-      copy = 'Remote is off — turn it on in Settings';
+      copy = 'Off';
     } else if (state == RemoteStatus.starting) {
       copy = 'Starting…';
     } else if (state == RemoteStatus.failed) {
-      copy = _remote.statusDetail.value ?? "Couldn't start the remote";
-    } else if (_remote.connectedCount.value > 0 && _remote.address.value != null) {
-      copy = 'Connected · ${_remote.networkName.value ?? 'LAN'} · ${_remote.address.value} · ${_remote.port.value}';
-    } else if (_remote.address.value == null) {
-      copy = _remote.statusDetail.value ?? 'SALU is not on a local network';
+      copy = _remote.statusDetail.value ?? "Couldn't start";
+    } else if (address == null) {
+      copy = _remote.statusDetail.value ?? 'Not on a local network';
+    } else if (_remote.connectedCount.value > 0) {
+      copy = 'Connected · $network · $address:${_remote.port.value}';
     } else {
-      copy = 'Waiting for your phone · ${_remote.networkName.value ?? 'LAN'} · ${_remote.address.value}:${_remote.port.value}';
+      copy = 'Waiting · $network · $address:${_remote.port.value}';
     }
-    final bool good = state == RemoteStatus.running && _remote.address.value != null;
+    final bool good = state == RemoteStatus.running && address != null;
     return Row(
       children: <Widget>[
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: good ? const Color(0xFF70C28A) : AppColors.textSecondary, shape: BoxShape.circle)),
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: good ? AppColors.statusAlive : AppColors.statusUnknown,
+            shape: BoxShape.circle,
+          ),
+        ),
         const SizedBox(width: 8),
-        Expanded(child: Text(copy, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary))),
+        Expanded(
+          child: Text(
+            copy,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
       ],
     );
   }
 
   Widget _emptyNetwork() => Container(
-        height: 100,
+        height: 96,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
-        child: const Text('A private Wi-Fi or Ethernet address is needed for pairing.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'A private Wi-Fi or Ethernet address is needed for pairing.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+        ),
       );
 
-  Widget _phones() {
+  /// The paired phones — the group exists only while it has a member. An
+  /// empty list is not a state SALU narrates (rule 1), and with no phones
+  /// there is nothing to forget.
+  List<Widget> _phones() {
     final List<RemoteDevice> list = _remote.devices.value;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('Phones', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-        const SizedBox(height: 8),
-        if (list.isEmpty)
-          const Text('No phones paired yet.', style: _secondaryStyle)
-        else
-          ...list.map((RemoteDevice device) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(child: Text(device.name, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary))),
-                    Text(device.control ? 'has control' : device.online ? 'connected' : _lastSeen(device), style: _secondaryStyle),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () => _remote.forgetDevice(device.id),
-                      child: const Text('Forget', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                    ),
-                  ],
-                ),
-              )),
-      ],
-    );
+    if (list.isEmpty) return const <Widget>[];
+    return <Widget>[
+      const SizedBox(height: 14),
+      const Text(
+        'PHONES',
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.1,
+          color: AppColors.textSecondary,
+        ),
+      ),
+      const SizedBox(height: 2),
+      for (final RemoteDevice device in list)
+        _PhoneRow(
+          name: device.name,
+          state: device.control
+              ? 'has control'
+              : (device.online ? 'connected' : _lastSeen(device)),
+          onForget: () => _remote.forgetDevice(device.id),
+        ),
+    ];
   }
 
   /// The panel's firewall surface (remote.md §8.3, amended 2026-09-21).
@@ -216,62 +296,159 @@ class _RemotePanelState extends State<RemotePanel> {
   /// fix. When the probe can't say (third-party firewall, group policy),
   /// the original 90-second hint still lands after a connectionless wait,
   /// with the manual settings door.
-  Widget _firewallArea() {
+  List<Widget> _firewallArea() {
     if (_remote.status.value != RemoteStatus.running) {
-      return const SizedBox.shrink();
+      return const <Widget>[];
     }
-    final RemoteFirewallStatus firewall = RemoteFirewallService.instance.status.value;
+    final RemoteFirewallStatus firewall =
+        RemoteFirewallService.instance.status.value;
     if (firewall.needsAttention) {
       final String copy = switch (firewall.ruleState) {
         RemoteFirewallRuleState.blocked => 'Windows Firewall is blocking SALU.',
-        RemoteFirewallRuleState.missing => 'Phones need a Windows Firewall permission to reach SALU.',
-        RemoteFirewallRuleState.stalePath => 'SALU moved — its firewall rule points at the old location.',
-        _ => 'This Wi-Fi is Public — phones can’t see SALU on it.',
+        RemoteFirewallRuleState.missing => 'Phones need a firewall permission.',
+        RemoteFirewallRuleState.stalePath =>
+          'SALU moved — the firewall rule is stale.',
+        _ => 'This Wi-Fi is Public.',
       };
-      return Padding(
-        padding: const EdgeInsets.only(top: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.textSecondary),
-            const SizedBox(width: 8),
-            Expanded(child: Text(copy, style: _secondaryStyle)),
-            TextButton(
-              onPressed: () => unawaited(showRemoteFirewallDialog(context)),
-              child: const Text('Fix…', style: TextStyle(fontSize: 11)),
-            ),
-          ],
+      return <Widget>[
+        const SizedBox(height: 12),
+        _HintRow(
+          text: copy,
+          icon: Icons.build_outlined,
+          tooltip: 'Fix firewall rule',
+          onTap: () => unawaited(showRemoteFirewallDialog(context)),
         ),
-      );
+      ];
     }
     if (_remote.firewallHintVisible) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.textSecondary),
-            const SizedBox(width: 8),
-            const Expanded(child: Text("Can't connect? Windows Firewall may be blocking SALU.", style: _secondaryStyle)),
-            TextButton(
-              onPressed: () => RemoteFirewallService.instance.openWindowsFirewallSettings(),
-              child: const Text('Open firewall settings', style: TextStyle(fontSize: 11)),
-            ),
-          ],
+      return <Widget>[
+        const SizedBox(height: 12),
+        _HintRow(
+          text: 'Windows Firewall may be blocking SALU.',
+          icon: Icons.settings_outlined,
+          tooltip: 'Windows Firewall settings',
+          onTap: () => unawaited(
+              RemoteFirewallService.instance.openWindowsFirewallSettings()),
         ),
-      );
+      ];
     }
-    return const SizedBox.shrink();
+    return const <Widget>[];
   }
 
   String _lastSeen(RemoteDevice device) {
     final DateTime? seen = device.lastSeenAt;
     if (seen == null) return 'not connected';
     final Duration age = DateTime.now().difference(seen);
-    if (age.inMinutes < 1) return 'last seen just now';
-    if (age.inHours < 1) return 'last seen ${age.inMinutes}m ago';
-    return 'last seen ${age.inHours}h ago';
+    if (age.inMinutes < 1) return 'just now';
+    if (age.inHours < 1) return '${age.inMinutes}m ago';
+    return '${age.inHours}h ago';
   }
+}
 
-  static const TextStyle _secondaryStyle = TextStyle(fontSize: 12, color: AppColors.textSecondary);
+/// One paired phone: name, state, and the forget mark.
+class _PhoneRow extends StatefulWidget {
+  const _PhoneRow({
+    required this.name,
+    required this.state,
+    required this.onForget,
+  });
+
+  final String name;
+  final String state;
+  final VoidCallback onForget;
+
+  @override
+  State<_PhoneRow> createState() => _PhoneRowState();
+}
+
+class _PhoneRowState extends State<_PhoneRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 30,
+        padding: const EdgeInsets.only(left: 8, right: 2),
+        decoration: BoxDecoration(
+          color: _hovered ? const Color(0x0DFFFFFF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                widget.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              widget.state,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SaluIconButton(
+              size: 24,
+              tooltip: 'Forget',
+              onTap: widget.onForget,
+              child: const Icon(Icons.close, size: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The one warning line the panel may show — state plus the mark that
+/// fixes it. Silent the rest of the time (rule 1).
+class _HintRow extends StatelessWidget {
+  const _HintRow({
+    required this.text,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final String text;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        const Icon(Icons.warning_amber_outlined,
+            size: 14, color: AppColors.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        SaluIconButton(
+          size: 26,
+          tooltip: tooltip,
+          onTap: onTap,
+          child: Icon(icon, size: 14),
+        ),
+      ],
+    );
+  }
 }

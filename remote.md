@@ -534,51 +534,57 @@ what the Resume toast appears on, §17.5); plus its own device/controller notifi
 
 A centered modal, built from the `open_url_dialog.dart` recipe: `showGeneralDialog`,
 barrier `0x99000000`, dismissible, 220 ms fade + scale, `ChromeLock` acquired on open
-and released on close. Roughly **400 × 520**, radius 16, `AppColors.surface` — the same
-shell Settings uses, so it reads as one family.
+and released on close. **A 340 px column that sizes to its content** (owner ruling,
+2026-09-28 — it was a fixed 400 × 520, which forced a scroll bar), radius 16,
+`AppColors.surface` — the same shell Settings uses, so it reads as one family. No
+scroll bar is ever drawn: the column grows with the phone list and the scroll view
+under it is only a small-window fallback.
 
 ```
-┌─ Remote ───────────────────────────────── ✕ ─┐
-│  ● Connected · Wi-Fi · 192.168.0.12 · 7258   │   ← status line (status dot)
-│                                              │
-│        ┌──────────────────────────┐          │
-│        │                          │          │
-│        │        [ QR CODE ]       │          │   ← 208 px, on WHITE
-│        │                          │          │      with a 12 px quiet zone
-│        └──────────────────────────┘          │
-│         Scan with SALU Remote                │
-│         or enter 7K4M-QP2X                   │
-│                                              │
-│  Phones                                      │
-│   Pixel 7 · has control            ✕ Forget  │
-│   Redmi Note · last seen 2 h ago   ✕ Forget  │
-│                                              │
-│  ⚠ Can't connect? Windows Firewall may be    │
-│    blocking SALU.  [Open firewall settings]  │
-└──────────────────────────────────────────────┘
+┌─ Remote ──────────────────────────── ✕ ─┐
+│  ● Connected · Wi-Fi · 192.168.0.12:7258│   ← status line (status dot) — state
+│                                         │      words only, never a sentence
+│        ┌──────────────────────────┐     │
+│        │                          │     │
+│        │        [ QR CODE ]       │     │   ← 208 px, on WHITE, untouched
+│        │                          │     │      with a 12 px quiet zone
+│        └──────────────────────────┘     │
+│                7K4M-QP2X                │   ← the manual-entry value
+│                                         │
+│  PHONES                                 │   ← hidden entirely when empty
+│   Pixel 7              has control  ✕   │   ← ✕ = Forget (mark + tooltip)
+│   Redmi Note              2h ago    ✕   │
+│                                         │
+│  ⚠ Windows Firewall is blocking SALU. ⌗ │   ← state + the fix mark
+└─────────────────────────────────────────┘
 ```
 
-Rules and copy:
+Rules and copy (**labels and values only** — owner ruling 2026-09-28, follow.md rule 1):
 
-- **Status line** (live): `Starting…` · `● Connected · <network> · <ip> · <port>` ·
-  `○ Waiting for your phone` (running, none connected) · `Remote is off — turn it on in
-  Settings` · `Couldn't start the remote (port busy)`.
+- **Status line** (live), state words only: `Off` · `Starting…` · `Connected · <network> ·
+  <ip>:<port>` · `Waiting · <network> · <ip>:<port>` (running, none connected) · `Not on
+  a local network` · `Couldn't start`. The old sentences (`Remote is off — turn it on in
+  Settings`) are retired; the switch that turns it on is one tooltip away in Settings.
 - **The QR sits on a white card.** A dark QR on dark glass scans badly. 12 px quiet
   zone, pure black modules, no rounded corners on the code itself, **no animation and
-  no scaling** on the QR widget.
+  no scaling** on the QR widget. **Untouched by the 2026-09-28 compact pass** — the APK
+  reads it as it always has.
 - **QR payload** is a URI, so any camera app can read it and offer to open the app:
 
   `salu://pair?v=1&n=DESKTOP-ABC&h=192.168.0.12&p=7258&c=7K4MQP2X`
 
   (`v` protocol · `n` PC name · `h` host · `p` port · `c` pairing code.)
   The APK registers an intent filter for `salu://` later — free deep-link scanning.
-- **Manual-entry line** shows the code as `7K4M-QP2X` for phones without a working camera.
-- **One honest footnote:** *"This code is only for pairing. It changes when you close
-  this panel."*
-- **Phones list:** name + `has control` / `connected` / `last seen …`, and a `Forget`
-  cross. Empty state: *"No phones paired yet."* Forgetting is immediate (no confirm —
-  it is trivially reversible by re-pairing; do **not** add a dialog).
-- **Firewall hint** appears only under the §8.3 trigger; it is one line + one button.
+- **Manual-entry line** shows the code as `7K4M-QP2X` under the card, with no caption
+  around it — a value needs no sentence. (The "Scan with SALU Remote" prompt and the
+  "changes when you close this panel" footnote are both retired.)
+- **Phones list:** a small `PHONES` caption, then name · `has control` / `connected` /
+  `last seen …` (now short: `2h ago`), and the **Forget mark** (`✕` + tooltip — never a
+  word button). With nothing paired the group is **not drawn at all**; the old
+  *"No phones paired yet."* empty state is retired. Forgetting is immediate (no confirm
+  — it is trivially reversible by re-pairing; do **not** add a dialog).
+- **Firewall hint** appears only under the §8.3 trigger; it is one line + one mark:
+  `build` = the one-UAC fix dialog, `settings` = the Windows Firewall page.
 - The panel **listens to `RemoteService`'s notifiers**, so a phone pairing while it is
   open appears in the list live. It must not auto-close on pairing.
 - **Escape / barrier click / ✕** all dismiss. Dialogs own their Esc above the
@@ -586,32 +592,22 @@ Rules and copy:
 
 ### 10.3 Settings → General → Remote section
 
-Slots in after the Equalizer block, using the exact `_AutoEqSwitch` layout (icon tile +
-title + helper + `_SaluSwitch`).
+Slots in after the Equalizer group as `REMOTE`, in the settings window's own row
+vocabulary (caption + one-line rows; owner ruling 2026-09-28 — the old icon-tile +
+two-line helper tile is gone along with `_AutoEqSwitch`'s helper line):
 
 ```
-Remote
-Control SALU from your phone over your Wi-Fi.
-  ┌────────────────────────────────────────────────┐
-  │ [QR tile]  Remote control              ( ●──)  │
-  │            Let the SALU Remote app on your     │
-  │            phone control playback. Local       │
-  │            network only.                       │
-  └────────────────────────────────────────────────┘
-  ┌────────────────────────────────────────────────┐
-  │ Let phones browse PC files          ( ●──)     │   ← v1.1 (§17.6) · default ON
-  │ Read-only. Folders and media names only.       │
-  └────────────────────────────────────────────────┘
-  ┌────────────────────────────────────────────────┐
-  │ Show pairing code…                          ›  │   ← opens the same panel
-  └────────────────────────────────────────────────┘
-  Remembered phones · 2                         ›     ← opens the panel (P2)
+REMOTE
+  Remote control                     ( ●──)    ← tooltip: Local network only.
+  Phone file access                  ( ●──)    ← v1.1 (§17.6) · default ON
+  Pairing code                          ›      ← opens the same panel
+  Remembered phones          2          ›      ← opens the panel (P2)
 ```
 
 - **Toggle default: ON** (D10). Off tears the listener down and frees the port; on
   starts it again without a restart and without a re-pair.
-- When it is off, `Show pairing code` is disabled with the helper
-  *"Turn remote control on to pair a phone."*
+- When it is off, `Pairing code` is disabled (its name dims) and its tooltip carries the
+  one piece of information that matters: *"Turn remote control on to pair a phone."*
 - Flipping the toggle while the panel is open updates the panel live.
 - The section is **global** — reachable in Player *and* Web mode, and in mini, which is
   what makes it a real off switch rather than a player-only one.

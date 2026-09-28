@@ -13,6 +13,34 @@
    onboarding text, no "you can also…" lines. The UI must explain itself by
    design. (Standard OS-convention tooltips on hover-delay are allowed —
    they name a control, they never teach.)
+   **Owner ruling 2026-09-28 — Settings and the Remote panel carry labels
+   and values only.** Every per-section and per-row helper sentence in
+   `lib/ui/widgets/settings_dialog.dart` and
+   `lib/ui/osc/remote_panel.dart` is retired (the "Choose when the top bar
+   hides itself" / "Let the SALU Remote app…" class of copy). A label, a
+   value, and a hover-delay tooltip on the control are the whole
+   vocabulary; the older "locked helper copy" strings in cc.md §2.3,
+   web.md and updater.md §7 are superseded. Settings is drawn as one quiet
+   column — small uppercase caption, one-line rows (label left, control
+   right, hairline between rows) — with pill pickers in place of stacked
+   radio tiles. The Shortcuts tab and the tab strip are exempt: they stay
+   exactly as they are.
+   **Two standing rules came with it.** (a) Every pill set names its
+   factory default in one quiet line beneath it — `Default · Borderless`
+   — because a word is read at a glance and a dot or a badge has to be
+   learned. (b) Every group whose settings have a factory default wears a
+   small reset mark on its caption **while anything in the group stands
+   off that default** (silent when it is all on defaults); the reset
+   applies instantly and leaves the house Undo toast, never a confirm
+   dialog (rule 3). Groups that hold no default carry no mark:
+   OpenSubtitles (signed-in material) and the per-site pop-up rules.
+   (c) **The master reset lives at the right end of the tab strip** — the
+   one row that belongs to all tabs. It wears the same mark, appears only
+   while *any* preference stands off its default, and one press puts every
+   preference back behind a single `Settings reset` Undo toast. Scope is
+   **preferences only**: the OpenSubtitles account, EQ memory, paired
+   phones, favourites/history and the per-site pop-up rules are never
+   touched by it (owner ruling, 2026-09-28).
 2. **No keyboard-shortcut labels in any menu/popup.** Shortcuts (Ctrl+O,
    Ctrl+U, Space, …) silently work, but are never printed in the UI.
 3. **No confirmation dialogs.** Destructive actions (delete) execute

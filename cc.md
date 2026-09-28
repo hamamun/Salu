@@ -243,9 +243,11 @@ Settings
 
 - **API key field** (D2): single-line, obscured with show/hide eye, paste-friendly.
   - Persisted in `shared_preferences` (`subtitle_api_key`) the moment it changes.
-  - Empty = signed-out state; the engine no-ops (D11), the field's helper reads
-    `Needed for subtitle search & download.` — naming, not teaching (follow.md rule 1
-    allows settings helper lines; the General tab already uses them).
+  - Empty = signed-out state; the engine no-ops (D11).
+    **AMENDED 2026-09-28 (owner ruling, follow.md rule 1):** the helper line
+    (`Needed for subtitle search & download.`) is retired — the Settings window now
+    prints labels and values only, and the field keeps its name above it. The
+    `_SecretField`/`_PlainField` helper parameter is gone with it.
   - Trailing clear (×) when non-empty. No "Test" button in v1 — the first real
     search is the test; a 401 surfaces once as an OSD card (see §3.5), not a
     dialog.
@@ -257,8 +259,9 @@ Settings
     constant in the source tree, so it keeps the password out of plain sight in
     `%APPDATA%` and nothing more — stated in the code so nobody later reads it as
     protection. Clearing the field removes the stored value (signs SALU out).
-    The field's helper names both facts: `Remembered between sessions — stored
-    scrambled.`
+    **AMENDED 2026-09-28:** the helper line (`Remembered between sessions — stored
+    scrambled.`) is retired with the rest of the settings helpers; the scrambling
+    itself is unchanged.
   - The **Bearer token still lives in memory only** and is dropped whenever any
     credential changes. Restart = one silent `/login`, no UI.
   - The original "never persisted" rule is what broke downloads: `/download` was
