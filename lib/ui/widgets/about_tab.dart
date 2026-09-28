@@ -179,10 +179,10 @@ class _AboutTabState extends State<_AboutTab> {
                     valueTooltip: _kRepoUrl,
                     onTap: _openRepo,
                     trailing: SaluIconButton(
-                      child: const LinkMark(size: 16),
                       onTap: _openRepo,
                       tooltip: 'Open repository',
                       size: 26,
+                      child: const LinkMark(size: 16),
                     ),
                   ),
                   const _Row(

@@ -77,7 +77,7 @@ class SettingsDialog extends StatefulWidget {
 
 /// The window's tabs. Public because a caller picks the one to open
 /// on ([SettingsDialog.initialTab]).
-enum SettingsTab { general, subtitles, web, updates, associations, shortcuts }
+enum SettingsTab { general, subtitles, web, updates, associations, shortcuts, about }
 
 class _SettingsDialogState extends State<SettingsDialog> {
   /// Opens on the door the viewer came through, then moves only by their
