@@ -138,6 +138,85 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
+  testWidgets('every rideless key is on the map, in every mode (§4.1)',
+      (WidgetTester tester) async {
+    await pumpTab(tester);
+    // The Player map alone carries 23 rideless keys — six shelves that
+    // want more than the map's width on one line. Nothing may hang off
+    // the edge: a key the map cannot show is a key nobody can find.
+    for (final ShortcutScope scope in ShortcutScope.values) {
+      await tester.tap(find.text(scope.label).first);
+      await tester.pumpAndSettle();
+      final Rect map =
+          tester.getRect(find.byKey(const ValueKey<String>('livingMap')));
+      for (final ShortcutEntry e in SaluShortcuts.rideless(scope)) {
+        final Finder icon = find.byKey(ValueKey<String>('shelf:${e.id}'));
+        expect(icon, findsOneWidget, reason: '${e.id} is missing from $scope');
+        expect(
+          map.containsRect(tester.getRect(icon)),
+          isTrue,
+          reason: '${e.id} hangs off the $scope map',
+        );
+      }
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the Playlist mark reveals the keys inside the panel',
+      (WidgetTester tester) async {
+    final ShortcutsTabState map = await pumpTab(tester);
+    // At rest the panel is closed, so `R`, `Shift+S`, `Ctrl+G`,
+    // `Ctrl+D`, `Ctrl+Shift+Delete` and `Ctrl+F` ride marks that are
+    // off the map. Pointing at the Playlist mark slides it open —
+    // those six keys stay on their own control and are never listed
+    // twice.
+    expect(map.playlistOpen, isFalse);
+    final TestGesture mouse =
+        await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byType(NowRowMark)));
+    await tester.pumpAndSettle();
+    expect(map.playlistOpen, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the focused dialog component owns its keys (§2 · Group D)',
+      (WidgetTester tester) async {
+    await pumpTab(tester);
+    await tester.tap(find.text('Dialogs').first);
+    await tester.pumpAndSettle();
+    final ShortcutsTabState map =
+        tester.state<ShortcutsTabState>(find.byType(ShortcutsTab));
+
+    // The URL modal is the focused card: the arrows walk its saved list.
+    await chord(tester, LogicalKeyboardKey.arrowDown);
+    expect(map.urlCursor, 1);
+    expect(map.osd, contains('ocean'));
+
+    // Pointing at the find bar hands `Enter` to the find bar, not to the
+    // modal behind it.
+    final TestGesture mouse =
+        await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.text('Find-in-page bar')));
+    await tester.pump();
+    expect(map.dialogFocus, ShortcutGroup.findBar);
+    await chord(tester, LogicalKeyboardKey.enter);
+    expect(map.findDialogMatch, 2);
+
+    // `Esc` walks the open surfaces top down — the app's own order —
+    // and only then belongs to the Settings window.
+    await chord(tester, LogicalKeyboardKey.escape);
+    expect(map.findDialogOpen, isFalse);
+    await chord(tester, LogicalKeyboardKey.escape);
+    expect(map.suggestionsOpen, isFalse);
+    await chord(tester, LogicalKeyboardKey.escape);
+    expect(map.dialogUrlOpen, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Group by opens the miniature playlist',
       (WidgetTester tester) async {
     final ShortcutsTabState map = await pumpTab(tester);

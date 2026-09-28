@@ -102,6 +102,10 @@
 | `Ctrl + ↑` / `Ctrl + ↓` / `Cmd + ↑` / `Cmd + ↓` | **Nudge Parameter** | Steps the value of the currently focused parameter line. |
 | `Ctrl + Alt + ↑` / `↓` / `Cmd + Alt + ↑` / `↓` | **Change Focused Parameter** | Walks focus across the 4 Tune sections (Tone, EQ, Picture, etc.). |
 
+*The tier answers whether or not the Tune panel is on screen: with the
+panel open the value moves under the pointer, with it closed the same
+keystroke moves it and the OSD deck says how far. No availability guard.*
+
 ---
 
 ### Group B: Mini Mode (32-px Strip)
@@ -199,9 +203,17 @@
 - `Esc` (1st press): Clear search query.
 - `Esc` (2nd press): Unfocus search field.
 
-#### 5. Playlist Group-by Choices (Player mode)
+#### 5. Playlist Group-by Choices (Player-mode surface)
 - `1` / `2` / `3` / `4` (numpad aliases work): Choose Flat / Category / Country / Language.
 - `Esc`: Close the Group by choices.
+
+*These ride a Player surface (the playlist's Group by pill), but they are
+context-only keys owned by their focused surface (§1.3), so the registry
+files them under `ShortcutScope.dialog` — in Player scope they would
+collide with the `0`–`9` seek jumps. The Living Map shows them on the
+Dialogs shelf for the same reason; their detail-strip cross-mode column
+therefore reads "Player · Jump to 0 % – 90 %", which is the truth: while
+the pill is open they choose a grouping, and when it is shut they seek.*
 
 ---
 
@@ -309,11 +321,20 @@ document about SALU; it is SALU.
    (the action's own mark where SALU has one — open folder, URL, find, info,
    remote, settings, mode switch, sync arrows —
    and its keycap where the key is the whole action — `[ ] \`, `. ,`,
-   `F3`, `Enter`, …). A group taller than five keys runs in two lines so
-   a shelf always fits the box. `Ctrl+L` opens the miniature playlist panel,
-   which shows compact **Local** and **M3U** header variants, keeping each
-   playlist-only key on its own
-   real control instead of orphaning it on a shelf. The title bar stays
+   `F3`, `Enter`, …). **A shelf always fits the box:** a shelf runs three
+   keys before it starts a new column, and the whole block flows onto a
+   second line when the next shelf would not fit beside the others (the
+   Player map's twenty-three unanchored keys need ~770 px on one line and
+   the map is 600 px wide) — scaling down as one quiet piece only if two
+   lines are still too tall. A shelf that cannot be placed inside the map
+   is a shortcut that cannot be found, so the block is measured before it
+   is laid out and the map never clips one. `Ctrl+L` opens the miniature
+   playlist panel, which shows compact **Local** and **M3U** header
+   variants, keeping each playlist-only key on its own
+   real control instead of orphaning it on a shelf; pointing at the
+   Playlist mark opens that panel too, so `R`, `Shift+S`, `Ctrl+G`,
+   `Ctrl+D`, `Ctrl+Shift+Delete` and `Ctrl+F` are reachable by mouse as
+   well as by key without ever being listed twice. The title bar stays
    silent (no shortcuts live there).
 3. **The detail strip** — below the miniature, **the only place key text
    appears on the tab**: left column keycap + group + action (+ guard);
@@ -341,6 +362,19 @@ bar, `Ctrl+U` raises the Open URL modal, `Alt+W` / `Ctrl+Shift+W` flip
 Player ⇄ Web. `Esc` follows the app's own order — panel → fullscreen → (in
 the app) close Settings — the rule taught by the mirror itself.
 Unregistered keys do nothing.
+
+**Dialogs is a live surface too (Group D).** Several of its components
+share `Enter`, `Esc` and `↑ ↓`, so the map keeps the app's rule instead of
+letting the registry's first match win: each card is a real component and
+**pointing at it makes it the focused one**, the surface that owns those
+keys (the typing guard of §1.3, written for a map). The arrows walk the
+focused card's list, `Enter` plays / submits / steps the match,
+`Shift+Enter` steps back, the Group by digits light the choice they took,
+and the playlist field keeps its own two-step `Esc` (clear the query, then
+leave the field). `Esc` walks the *open* surfaces top down — find bar →
+suggestions → Group by pill → URL modal → the Settings window — the same
+order the app itself closes them in. A key the focused card does not
+answer stays unanswered; the map never borrows another card's shortcut.
 
 **Fidelity rules:** the mock reuses the real recipes (glass capsule,
 keycap, marks) so the map can never drift from the surface it describes;
@@ -420,7 +454,9 @@ the surfaces that answer the peek *through* the lock.
 **Anchors — Web mode:** the browser row's visible marks (new tab `+` →
 `Ctrl+T`, close `×` → `Ctrl+W`, address bar → `Ctrl+L`, history →
 `Ctrl+H`, downloads → `Ctrl+J`, favourite → `Ctrl+D`, hub →
-`Ctrl+Shift+O`, back / forward → `Alt+←` / `Alt+→`).
+`Ctrl+Shift+O`, back / forward → `Alt+←` / `Alt+→`, reload →
+`Ctrl+R · F5`, home → `Alt+Home` — the last two are registry anchors
+too, added with the row's own marks).
 
 **Chrome hidden:** holding Alt does NOT wake the chrome — and with the
 chrome away there is no control to hover, so nothing appears. (Version B's
@@ -486,8 +522,9 @@ keeps them.
 | Step | Where | Status |
 |---|---|---|
 | 1 · Registry | `lib/core/shortcuts/shortcut_registry.dart` (+ `test/shortcut_registry_test.dart`) | Done — every §2 key, scope · combos · action id · group · guard · anchor · legend (compact legends for the shelf keycaps: `Ctrl+Tab`, `Ctrl+Shift+Tab`, `↑ ↓`, `↓ ↑`). Display truth; handlers unchanged. |
-| 2 · Shortcuts tab, slice A | `lib/ui/widgets/shortcuts_tab.dart`, `SettingsTab.shortcuts` | Done (Version C) — mode pill, miniature per mode (Player · Mini · Web · Dialogs), **clean icons on every always-visible control (no key text on or under them)**, the **rideless glass shelves at the left of the video — generated from `rideless(scope)`, one shelf per group, icons only** (the action's own mark or its keycap; two lines past five keys), hover/tap detail strip with the cross-mode column. Tab strip scrolls horizontally when narrow. |
+| 2 · Shortcuts tab, slice A | `lib/ui/widgets/shortcuts_tab.dart`, `SettingsTab.shortcuts` | Done (Version C) — mode pill, miniature per mode (Player · Mini · Web · Dialogs), **clean icons on every always-visible control (no key text on or under them)**, the **rideless glass shelves at the left of the video — generated from `rideless(scope)`, one shelf per group, icons only** (the action's own mark or its keycap; **a shelf always fits the box** — three keys per line, the block flows onto a second line, see fix pass 6), hover/tap detail strip with the cross-mode column. Tab strip scrolls horizontally when narrow. |
 | 3 · Alt-Peek | `lib/ui/widgets/alt_peek.dart` | Done (Version C) — hold-Alt **arming** (200 ms alone) + hover → the key as a **tooltip in the app's `TooltipTheme`** (never cut off), the name tooltip stands down while armed. Player chrome, the Web row (tab strip + address row), the **Open pill's marks** and the **right-click menu's rows** (`entries` + `ignoreLock` — those surfaces are their own modals). Chrome hidden: silent (no cluster). Mini: out of scope v1 (as specified). |
-| 4 · Shortcuts tab, slice B | `ShortcutsTabState` liveness engine (+ `test/shortcuts_tab_test.dart`) | Done — registered keys drive the mock (timeline, volume, play mark, OSD card, playlist, fullscreen + hairline, mini / web / URL modal flips, web tabs, panels, find, zoom); `Esc` walks panel → fullscreen → closes Settings. |
+| 4 · Shortcuts tab, slice B | `ShortcutsTabState` liveness engine (+ `test/shortcuts_tab_test.dart`) | Done — registered keys drive the mock (timeline, volume, play mark, OSD card, playlist, fullscreen + hairline, mini / web / URL modal flips, web tabs, panels, find, zoom); `Esc` walks panel → fullscreen → closes Settings. **Dialogs is live too** (fix pass 6): each card is a focused component that owns its own keys. |
 | 5 · Fix pass | `lib/ui/widgets/alt_peek.dart` (+ the wrapped surfaces) | Done (2026-09-27) — the key tooltip moved into the **root Overlay** (`OverlayPortal` on the root Overlay + a `SingleChildLayoutDelegate` against the control's on-screen box): the **"got inside the peel and cut"** bug is gone — the tip sits **6 px outside** the mark, floats above the pill/menu glass and the web rows, and **clamps/flips at the window edges** so no legend is ever clipped (§4.2 · Unclippable recipe). Coverage per the owner's "all buttons" ruling: title bar's Mini / Settings / Player·Web switch, the **Web ⋮ menu's rows + zoom cluster**, the volume bar, and the Web title strip's download badge now answer the peek (`entries` recipe — registry unchanged, Living Map untouched). |
+| 6 · Fix pass | `lib/ui/widgets/shortcuts_tab.dart`, `lib/core/shortcuts/shortcut_registry.dart` (+ `test/shortcuts_tab_test.dart`) | Done (2026-09-28) — **the shelves could fall off the map**: the Player map's six rideless shelves (23 keys) wanted ~770 px on one line inside a 600 px map, so the last two shelves were clipped away and `Ctrl+Shift+R` / `F2` / `Alt+W` / the two Tune keys were simply not on the tab. §4.1's "a shelf always fits the box" is now *measured*: one `_ShelfMetrics` describes what a shelf draws, the packer breaks the block onto a second line and the whole block scales down as one piece if it still does not fit — so a future registry entry can never be pushed out of the map. **The playlist-only keys are reachable by mouse too**: pointing at the Playlist mark slides the mock panel open (`R`, `Shift+S`, `Ctrl+G`, `Ctrl+D`, `Ctrl+Shift+Delete`, `Ctrl+F` keep their own controls — still never twice on the map). **Dialogs is a live surface**: each card is a focused component that owns `Enter` / `Esc` / `↑ ↓`, `Esc` walks the open surfaces in the app's own order before it lets Settings close, and the Group by digits light the choice they took. The OSD deck steps clear of the marks (bottom-right in Player, below the block in Web) so a flash never covers a reference mark. The Tune tier lost its "while the panel is open" guard — it answers either way, with an OSD card when the panel is shut. New tests: every rideless key is inside the map in all four modes, the Playlist reveal, and the Dialogs focus + `Esc` order. |
 
