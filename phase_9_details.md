@@ -10,12 +10,21 @@ Apply the final coat of paint. By the end of this phase, SALU will have a dedica
 *   Replace the default Flutter icon with the official SALU logo.
 *   Compile the logo into a multi-resolution `.ico` file so it looks incredibly sharp on the Windows Taskbar, Start Menu, and Desktop.
 
-### Step 2: The "About" Window UI (`lib/ui/modals/about_modal.dart`)
-*   Create a clean, dedicated pop-up modal (accessed via an "Info" or "About" menu button in the Global Settings).
-*   **Layout:**
-    *   Center the official SALU logo prominently at the top.
-    *   Display the current app version (e.g., `Version 1.0.0`).
-    *   Display the underlying `mpv` engine version pulled directly from `media_kit`.
+### Step 2: The "About" Window UI — **SHIPPED as Settings → About (2026-09-28)**
+
+The owner moved the About page from a standalone modal to a tab in the
+Settings dialog (`lib/ui/widgets/about_tab.dart`, a `part of` the settings
+dialog — the `associations_tab.dart` pattern), right of the Shortcuts tab.
+Layout:
+
+*   **Identity block** — the SALU logo (44 px, compact for the 620 px window), `SALU`, `Version 0.1.0`, and one line: "A borderless media player for Windows."
+*   **The player** — the gist: one borderless window, one instance, mpv underneath.
+*   **What only SALU does** — Stop parks the queue · the mini bar · the EQ follows the file · your phone is the remote · subtitles and lyrics · resume memory · a quiet keyboard · the Living Map.
+*   **Channels** — the m3u gist (SALU's own incremental parser, no cap, group-by, per-provider favourites, the inert timeline's still soft light).
+*   **The browser** — tabs beside the video, and the safety line: Windows' own Edge engine (WebView2), no custom engine.
+*   **Engine** — live values: mpv's own version (read once via `PlayerService.readEngineVersion()`), the active decoder (the `activeHwdec` notifier the Info panel reads), platform, storage.
+*   **Credits** — Source (`github.com/hamamun/Salu`, opens in SALU's own browser) · Built with (mpv · media_kit · Flutter · WebView2).
+*   **Signature** — `created by HAM`, pinned at the bottom in `AppColors.whisper` (white at ~20 %): there if you look for it, gone if you don't.
 
 ### Step 3: Credits & Links
 *   Inside the About window, include clean text links to:

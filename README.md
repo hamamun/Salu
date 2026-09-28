@@ -16,7 +16,7 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
 | 6 | Web & Stream Manager | 🚧 Built-in browser implemented (`web.md` ✅); M3U/IPTV sidebar pending |
 | 7 | Advanced Player Tools & Search Logic | ⏳ Not started |
 | 8 | SALU Remote PC server + QR UI | ✅ PC side implemented (v1.1; APK is a separate project) |
-| 9 | Branding & About Section | ⏳ Not started |
+| 9 | Branding & About Section | 🔄 In progress — Settings → About tab shipped (identity block, gist of the player, live engine facts, credits, owner signature); installer/OS polish pending |
 | Playlist B | m3u channel lists (`playlist_imp.md` §10) | ✅ Implemented — §10.13 checklist + M-10 measurements pending on a Windows build |
 
 ## What works right now (Phase 1 + 2 + transport pass)
@@ -67,6 +67,10 @@ A modern, borderless,  -inspired media player for **Windows 10/11**, built with 
   Nothing is fetched from outside the file.
 - **Silent keyboard set** — Space, ←→ (ramp seek), ↑↓, M, S, PageUp/PageDown;
   none of it is ever printed in the UI.
+- **Settings → About** — the window's second reference page, right of
+  Shortcuts: the identity block, the gist of the player and its signature
+  features, live mpv/decoder facts, credits, and the owner's barely visible
+  `created by HAM` at the bottom.
 
 ## Requirements
 

@@ -11,7 +11,7 @@
 - [ ] **Phase 6: Web & Stream Manager** (`webview_windows` implementation for built-in browser, saving 10 M3U URLs and 15 Bookmarks using `shared_preferences`, sidebar library UI).
 - [ ] **Phase 7: Advanced Player Tools & Search Logic** (Lyrics engine with `.lrc` parsing and interactive scrolling view, OpenSubtitles API integration, Smart auto-download logic, and Top-3 Match search modal).
 - [ ] **Phase 8: Android Remote Server** (Local WebSocket server setup inside SALU to receive play/pause/volume commands and broadcast current player state. *Note: Android app itself will be built separately after SALU is completed*).
-- [ ] **Phase 9: Branding & About Section** (App icon integration,  -style About modal with `mpv` version info, and GitHub credits).
+- [x] **Phase 9: Branding & About Section** ✅ (App icon integrated; **Settings → About tab shipped 2026-09-28** — identity block, the gist of the player and its signature features, live mpv/decoder facts, credits and the owner signature, right of the Shortcuts tab. Remaining: installer / file-association polish.)
 
 ---
 
