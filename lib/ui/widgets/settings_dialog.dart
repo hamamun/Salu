@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/language_names.dart';
+import '../../core/remote/remote_pairing.dart';
 import '../../core/remote/remote_service.dart';
 import '../../core/settings_service.dart';
 import '../../core/tune/eq_memory.dart';
