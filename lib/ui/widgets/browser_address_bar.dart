@@ -590,7 +590,7 @@ class WebSuggestionMenu extends StatelessWidget {
     return TextFieldTapRegion(
       child: Material(
         elevation: 0,
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           decoration: BoxDecoration(

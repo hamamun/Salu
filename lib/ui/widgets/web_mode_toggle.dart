@@ -41,7 +41,7 @@ class WebModeToggle extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
               decoration: BoxDecoration(
-                color: context.palette.glass,
+                color: context.overlayTint(context.palette.glass),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: context.palette.surfaceOutline),
               ),

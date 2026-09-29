@@ -124,7 +124,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
           return Container(
             width: width,
             decoration: BoxDecoration(
-              color: context.palette.background,
+              color: context.overlayTint(context.palette.background),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: context.palette.surfaceOutline),
               boxShadow: const <BoxShadow>[
@@ -158,7 +158,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: context.palette.surface,
+                          color: context.overlayTint(context.palette.surface),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
                             color: context.palette.surfaceOutline,
@@ -238,7 +238,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                             vertical: 9,
                           ),
                           decoration: BoxDecoration(
-                            color: context.palette.surface,
+                            color: context.overlayTint(context.palette.surface),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: context.palette.surfaceOutline,
@@ -546,7 +546,7 @@ class _ItemRowState extends State<_ItemRow> {
                   vertical: 3.5,
                 ),
                 decoration: BoxDecoration(
-                  color: context.palette.surface,
+                  color: context.overlayTint(context.palette.surface),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: context.palette.surfaceOutline),
                 ),

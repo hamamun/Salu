@@ -72,7 +72,8 @@ class _MiniShellState extends State<MiniShell> {
   /// The bar's surface: `rgba(30,30,31,.97)` — the preview's own value,
   /// one notch off [AppColors.background] exactly as the mock has it.
   Color get _surface =>
-      context.palette.resolve(const Color(0xF71E1E1F), const Color(0xF7F3F3F6));
+      context.overlayTint(context.palette.resolve(
+          const Color(0xF71E1E1F), const Color(0xF7F3F3F6)));
 
   /// The transient line currently swapped into the title area (§6).
   String? _swapText;

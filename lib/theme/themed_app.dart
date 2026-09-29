@@ -15,17 +15,22 @@ class SaluThemedApp extends StatelessWidget {
     return ValueListenableBuilder<SaluThemeMode>(
       valueListenable: SettingsService.instance.themeMode,
       builder: (BuildContext context, SaluThemeMode mode, Widget? child) {
-        return MaterialApp(
-          title: 'SALU',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light,
-          darkTheme: AppTheme.dark,
-          themeMode: switch (mode) {
-            SaluThemeMode.defaultTheme => ThemeMode.dark,
-            SaluThemeMode.light => ThemeMode.light,
-            SaluThemeMode.system => ThemeMode.system,
-          },
-          home: child,
+        return ValueListenableBuilder<int>(
+          valueListenable: SettingsService.instance.overlayTransparency,
+          builder: (BuildContext context, int transparency, Widget? home) =>
+              MaterialApp(
+                title: 'SALU',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.lightFor(transparency),
+                darkTheme: AppTheme.darkFor(transparency),
+                themeMode: switch (mode) {
+                  SaluThemeMode.defaultTheme => ThemeMode.dark,
+                  SaluThemeMode.light => ThemeMode.light,
+                  SaluThemeMode.system => ThemeMode.system,
+                },
+                home: home,
+              ),
+          child: child,
         );
       },
       child: home,

@@ -154,7 +154,7 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
         width: 440,
         child: Container(
           decoration: BoxDecoration(
-            color: context.palette.background,
+            color: context.overlayTint(context.palette.background),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: context.palette.surfaceOutline),
             boxShadow: const <BoxShadow>[
@@ -354,7 +354,7 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: context.palette.surface,
+              color: context.overlayTint(context.palette.surface),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: context.palette.surfaceOutline),
             ),
@@ -395,7 +395,7 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: context.palette.surface,
+              color: context.overlayTint(context.palette.surface),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: context.palette.surfaceOutline),
             ),
@@ -577,7 +577,7 @@ class _MessageBody extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: context.palette.surfaceOutline),
       ),
@@ -734,7 +734,7 @@ class _CenteredLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: context.palette.surfaceOutline),
       ),

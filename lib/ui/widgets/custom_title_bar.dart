@@ -111,9 +111,11 @@ class CustomTitleBar extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: <Color>[
-                  context.palette.resolve(
-                    const Color(0xB3121212),
-                    const Color(0xB3F4F4F7),
+                  context.overlayTint(
+                    context.palette.resolve(
+                      const Color(0xB3121212),
+                      const Color(0xB3F4F4F7),
+                    ),
                   ),
                   context.palette.resolve(
                     const Color(0x00121212),

@@ -187,9 +187,11 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
               width: 470,
               constraints: const BoxConstraints(maxHeight: 428),
               decoration: BoxDecoration(
-                color: context.palette.resolve(
-                  const Color(0xFA252526),
-                  const Color(0xFAF7F7FA),
+                color: context.overlayTint(
+                  context.palette.resolve(
+                    const Color(0xFA252526),
+                    const Color(0xFAF7F7FA),
+                  ),
                 ),
                 border: Border.all(color: context.palette.surfaceOutline),
                 borderRadius: BorderRadius.circular(13),

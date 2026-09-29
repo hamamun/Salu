@@ -223,7 +223,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         width: 520,
         child: Container(
           decoration: BoxDecoration(
-            color: context.palette.background,
+            color: context.overlayTint(context.palette.background),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: context.palette.surfaceOutline),
             boxShadow: const <BoxShadow>[
@@ -483,7 +483,7 @@ class _ComponentTable extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: context.palette.surfaceOutline),
       ),
@@ -648,7 +648,7 @@ class _CenteredLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: context.palette.surfaceOutline),
       ),

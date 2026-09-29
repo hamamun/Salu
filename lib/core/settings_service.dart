@@ -128,6 +128,10 @@ class SettingsService {
 
   static const String _keyTitleBarMode = 'title_bar_mode';
   static const String _keyThemeMode = 'appearance_theme_mode';
+  static const String _keyOverlayTransparency = 'appearance_overlay_transparency';
+
+  /// Conservative ceiling until Windows video contrast checks can justify more.
+  static const int maxOverlayTransparency = 40;
   static const String _keyResumeMode = 'resume_mode';
   static const String _keyFolderAutoloadMode = 'folder_autoload_mode';
 
@@ -169,6 +173,11 @@ class SettingsService {
   final ValueNotifier<SaluThemeMode> themeMode = ValueNotifier<SaluThemeMode>(
     SaluThemeMode.defaultTheme,
   );
+
+  Future<void> _overlayWrite = Future<void>.value();
+
+  /// Percentage of original overlay tint removed (0 = original appearance).
+  final ValueNotifier<int> overlayTransparency = ValueNotifier<int>(0);
 
   /// How the title bar handles itself while idle (see [TitleBarMode]).
   final ValueNotifier<TitleBarMode> titleBarMode = ValueNotifier<TitleBarMode>(
@@ -317,6 +326,10 @@ class SettingsService {
       final String? rawTheme = prefs.getString(_keyThemeMode);
       themeMode.value = SaluThemeMode.values.asNameMap()[rawTheme] ??
           SaluThemeMode.defaultTheme;
+      final Object? savedTransparency = prefs.get(_keyOverlayTransparency);
+      overlayTransparency.value = savedTransparency is int
+          ? savedTransparency.clamp(0, maxOverlayTransparency).toInt()
+          : 0;
       final String? raw = prefs.getString(_keyTitleBarMode);
       if (raw != null) {
         // `asNameMap()` lives on the `EnumByName` extension over
@@ -403,6 +416,7 @@ class SettingsService {
     } catch (_) {
       // Corrupt/missing prefs — fall back to the defaults, silently.
       themeMode.value = SaluThemeMode.defaultTheme;
+      overlayTransparency.value = 0;
       titleBarMode.value = TitleBarMode.borderless;
       resumeMode.value = ResumeMode.all;
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
@@ -437,6 +451,25 @@ class SettingsService {
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }
+  }
+
+  /// Apply on every drag tick; commit only at drag end to avoid writing
+  /// intermediate positions out of order. Other callers persist by default.
+  Future<void> setOverlayTransparency(int percent, {bool persist = true}) async {
+    final int safe = percent.clamp(0, maxOverlayTransparency).toInt();
+    overlayTransparency.value = safe;
+    if (!persist) return;
+    // A reset followed immediately by Undo must not finish its older write
+    // last. Serialize only committed values; slider drag ticks stay in memory.
+    _overlayWrite = _overlayWrite.then((_) async {
+      try {
+        final SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(_keyOverlayTransparency, safe);
+      } catch (_) {
+        // The live value still applies if storage is unavailable.
+      }
+    });
+    await _overlayWrite;
   }
 
   /// Applies a new title bar mode instantly and persists it.

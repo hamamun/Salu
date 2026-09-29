@@ -178,7 +178,7 @@ class _TunePanelState extends State<TunePanel>
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           decoration: BoxDecoration(
-            color: context.palette.glass,
+            color: context.overlayTint(context.palette.glass),
             borderRadius: BorderRadius.circular(11),
             border: Border.all(color: context.palette.surfaceOutline),
             boxShadow: const <BoxShadow>[

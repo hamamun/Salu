@@ -57,7 +57,7 @@ class BrowserMenu extends StatelessWidget {
       },
       child: Material(
         elevation: 0,
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: 280,
