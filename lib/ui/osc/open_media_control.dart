@@ -11,6 +11,7 @@ import '../widgets/alt_peek.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
+import 'controller_panel.dart' show controllerAtBottom;
 import 'open_url_dialog.dart';
 
 /// SALU's Open Media control — the leftmost item of the control row,
@@ -204,6 +205,11 @@ class _PillOverlay extends StatelessWidget {
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
+    final bool openAbove = controllerAtBottom;
+    final double verticalOffset =
+        openAbove ? -(_PillBody.height + 6) : childSize.height + 6;
+    final Alignment scaleAlignment =
+        openAbove ? Alignment.bottomLeft : Alignment.topLeft;
     return Focus(
       // Esc closes (follow.md motion language). The pill briefly owns
       // focus; every other key is left alone.
@@ -228,20 +234,20 @@ class _PillOverlay extends StatelessWidget {
             ),
           ),
           // Re-anchors this subtree to the "+" button's on-screen box —
-          // (0, 0) here is the button's top-left corner — then drops the
-          // pill 6px below it, matching the old bottomLeft→topLeft
-          // CompositedTransformFollower anchoring.
+          // (0, 0) here is the button's top-left corner — then places the
+          // pill 6px below it for top/default placements, or 6px above it
+          // when the controller sits at the bottom.
           Transform(
             transform: childPaintTransform,
-            child: Padding(
-              padding: EdgeInsets.only(top: childSize.height + 6),
+            child: Transform.translate(
+              offset: Offset(0, verticalOffset),
               child: Align(
                 alignment: Alignment.topLeft,
                 child: FadeTransition(
                   opacity: curved,
                   child: ScaleTransition(
                     scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved),
-                    alignment: Alignment.topLeft,
+                    alignment: scaleAlignment,
                     child: _PillBody(onAction: onAction),
                   ),
                 ),
@@ -256,6 +262,8 @@ class _PillOverlay extends StatelessWidget {
 
 class _PillBody extends StatelessWidget {
   const _PillBody({required this.onAction});
+
+  static const double height = 42;
 
   final ValueChanged<_OpenAction> onAction;
 
@@ -276,7 +284,7 @@ class _PillBody extends StatelessWidget {
     return AltPeekAnchor(
       entries: _keys(keyId),
       ignoreLock: true,
-      side: PeekSide.below,
+      side: controllerAtBottom ? PeekSide.above : PeekSide.below,
       child: SaluIconButton(
         tooltip: tooltip,
         size: 36,
@@ -292,7 +300,7 @@ class _PillBody extends StatelessWidget {
     // see GlassCapsule).
     return GlassCapsule(
       radius: 21,
-      height: 42,
+      height: height,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         mainAxisSize: MainAxisSize.min,
