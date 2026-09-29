@@ -234,15 +234,15 @@ void main() {
     // The track and the fill lose exactly the set fraction of their alpha,
     // so the bars fade with the panels around them.
     expect(
-      tester.widget<ColoredBox>(paintIn(MediaTimeline)).color!.a,
+      tester.widget<ColoredBox>(paintIn(MediaTimeline)).color.a,
       closeTo(palette.barTrack.a * 0.6, 0.005),
     );
     expect(
-      tester.widget<ColoredBox>(paintIn(VolumeBar).first).color!.a,
+      tester.widget<ColoredBox>(paintIn(VolumeBar).first).color.a,
       closeTo(palette.barTrack.a * 0.6, 0.005),
     );
     expect(
-      tester.widget<ColoredBox>(paintIn(VolumeBar).last).color!.a,
+      tester.widget<ColoredBox>(paintIn(VolumeBar).last).color.a,
       closeTo(palette.barFill.a * 0.6, 0.005),
     );
 
