@@ -1180,6 +1180,20 @@ class _HomeScreenState extends State<HomeScreen> {
   /// forth costs the tree, not the state.
   Widget _buildPlayer() {
     final bool chromeVisible = _chromeVisible || _dropHovering;
+    final String placementName = _settings.controllerPlacement.value.name;
+
+    // Placement changes intentionally recreate these surfaces so their
+    // controller-relative anchors are recalculated. The placement alone is
+    // not a sufficient key, though: all of these widgets are Stack
+    // siblings, so each slot needs its own key to avoid duplicate-key
+    // assertions.
+    final Key playlistSurfaceKey =
+        ValueKey<String>('playlist-panel-$placementName');
+    final Key trackSurfaceKey =
+        ValueKey<String>('track-panel-$placementName');
+    final Key tuneSurfaceKey = ValueKey<String>('tune-panel-$placementName');
+    final Key infoSurfaceKey = ValueKey<String>('info-panel-$placementName');
+    final Key osdSurfaceKey = ValueKey<String>('osd-deck-$placementName');
 
     return Scaffold(
       backgroundColor: context.palette.background,
@@ -1245,20 +1259,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 //     anchored below the chrome block (top: kChromeBlockHeight).
                 //     Sits under the OSD deck (z-order §4.2) and under the
                 //     resume-toast dismiss layer.
-                PlaylistPanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
+                PlaylistPanel(key: playlistSurfaceKey),
 
                 // 5b · The Fetch button's slide-down track panel (cc.md
                 //      §6, D14) — audio / embedded subs / local subs,
                 //      live-mirroring mpv. Below the control row on the
                 //      right; above the video, below the OSD deck.
-                TrackPanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
+                TrackPanel(key: trackSurfaceKey),
 
                 // 5c · The Tune panel (eq_imp.md §1.2) — the fourth panel in
                 //      the one-popup world: opening it closes the Playlist
                 //      and Tracks panels, Esc closes it, and it locks the
                 //      chrome awake while it is up.
-                Positioned.fill(child: TunePanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value))),
-                InfoPanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
+                Positioned.fill(child: TunePanel(key: tuneSurfaceKey)),
+                InfoPanel(key: infoSurfaceKey),
 
                 // 6 · Resume-toast click-outside: dismiss ONLY — never
                 //     triggers Restart, never swallows the click (the
@@ -1280,7 +1294,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // 7 · The OSD deck — top center, anchored below the
                 //     chrome block, never waking the chrome.
-                OsdDeck(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
+                OsdDeck(key: osdSurfaceKey),
               ],
             ),
           ),
