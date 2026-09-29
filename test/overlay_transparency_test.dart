@@ -4,6 +4,8 @@ import 'package:salu/core/player_service.dart';
 import 'package:salu/core/settings_service.dart';
 import 'package:salu/theme/app_theme.dart';
 import 'package:salu/theme/themed_app.dart';
+import 'package:salu/ui/osc/media_timeline.dart';
+import 'package:salu/ui/osc/volume_bar.dart';
 import 'package:salu/ui/osd/osd_controller.dart';
 import 'package:salu/ui/widgets/glass_capsule.dart';
 import 'package:salu/ui/widgets/settings_dialog.dart';
@@ -152,6 +154,81 @@ void main() {
           .color
           .a,
       closeTo(0.6, 0.005),
+    );
+  });
+
+  testWidgets('seek and volume bars tint with the surfaces, labels do not', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const SaluThemedApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 800,
+            child: Column(
+              children: <Widget>[MediaTimeline(), VolumeBar(readOnly: true)],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final AppPalette palette = Theme.of(
+      tester.element(find.byType(MediaTimeline)),
+    ).extension<AppPalette>()!;
+
+    Finder paintIn(Type bar) => find.descendant(
+      of: find.byType(bar),
+      matching: find.byType(ColoredBox),
+    );
+    // Idle bars paint exactly their track (+ fill for the volume bar);
+    // no hover, so no ruler ticks, playhead or chip are on screen.
+    expect(find.byType(MediaTimeline), findsOneWidget);
+    expect(paintIn(MediaTimeline), findsOneWidget);
+    expect(paintIn(VolumeBar), findsNWidgets(2));
+
+    // 0 % leaves both bars on their exact original colours.
+    expect(
+      tester.widget<ColoredBox>(paintIn(MediaTimeline)).color,
+      palette.barTrack,
+    );
+    expect(
+      tester.widget<ColoredBox>(paintIn(VolumeBar).first).color,
+      palette.barTrack,
+    );
+    expect(
+      tester.widget<ColoredBox>(paintIn(VolumeBar).last).color,
+      palette.barFill,
+    );
+
+    await settings.setOverlayTransparency(40);
+    await tester.pumpAndSettle();
+
+    // The track and the fill lose exactly the set fraction of their alpha,
+    // so the bars fade with the panels around them.
+    expect(
+      tester.widget<ColoredBox>(paintIn(MediaTimeline)).color!.a,
+      closeTo(palette.barTrack.a * 0.6, 0.005),
+    );
+    expect(
+      tester.widget<ColoredBox>(paintIn(VolumeBar).first).color!.a,
+      closeTo(palette.barTrack.a * 0.6, 0.005),
+    );
+    expect(
+      tester.widget<ColoredBox>(paintIn(VolumeBar).last).color!.a,
+      closeTo(palette.barFill.a * 0.6, 0.005),
+    );
+
+    // The values riding inside the now see-through bars stay opaque.
+    for (final Text readout in tester.widgetList<Text>(
+      find.text('00:00:00'),
+    )) {
+      expect(readout.style!.color, palette.textPrimary);
+    }
+    expect(
+      tester.widget<Text>(find.text('100%')).style!.color,
+      palette.iconIdle,
     );
   });
 
