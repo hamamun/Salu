@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:collection';
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart'
     show
         PointerCancelEvent,
@@ -9,10 +13,12 @@ import 'package:flutter/gestures.dart'
         PointerSignalEvent,
         PointerUpEvent;
 import 'package:flutter/material.dart';
+import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
 
 import '../../core/clock_format.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
+import '../../core/settings_service.dart';
 import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/live_light.dart';
@@ -67,6 +73,12 @@ class _MediaTimelineState extends State<MediaTimeline> {
 
   /// Pointer x as a fraction of the bar (0..1) — shows the hover chip.
   double? _hoverFrac;
+  Uint8List? _hoverThumbnail;
+  String? _thumbnailKey;
+  Timer? _thumbnailDebounce;
+  int _thumbnailRequest = 0;
+  final LinkedHashMap<String, Uint8List> _thumbnailCache =
+      LinkedHashMap<String, Uint8List>();
 
   /// Press/drag scrub position (0..1) — preview only; committed on release.
   double? _pressFrac;
@@ -90,6 +102,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
       _player.duration,
       _player.transportState,
       _player.isBuffering,
+      _player.currentPath,
       QueueService.instance.items,
     ]);
   }
@@ -97,6 +110,60 @@ class _MediaTimelineState extends State<MediaTimeline> {
   double _clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 
   Duration get _duration => _player.duration.value;
+
+  /// Extract only after the pointer settles briefly, then reuse nearby
+  /// one-second samples. The bounded in-memory cache avoids repeatedly
+  /// decoding frames while moving back and forth along the same video.
+  void _queueThumbnail(double frac) {
+    final String? path = _player.currentPath.value;
+    if (path == null || path.contains('://') || !_usable) return;
+    final int timeMs = (_targetForFrac(frac).inMilliseconds ~/ 1000) * 1000;
+    final String key = '$path@$timeMs';
+    if (key == _thumbnailKey) return;
+    _thumbnailKey = key;
+    final int request = ++_thumbnailRequest;
+    _thumbnailDebounce?.cancel();
+    final Uint8List? cached = _thumbnailCache.remove(key);
+    if (cached != null) {
+      _thumbnailCache[key] = cached;
+      setState(() => _hoverThumbnail = cached);
+      return;
+    }
+    setState(() => _hoverThumbnail = null);
+    _thumbnailDebounce = Timer(const Duration(milliseconds: 140), () async {
+      try {
+        final Uint8List? bytes = await FlutterVideoThumbnailPlus.thumbnailData(
+          video: path,
+          imageFormat: ImageFormat.jpeg,
+          maxWidth: 240,
+          maxHeight: 135,
+          timeMs: timeMs,
+          quality: 65,
+        );
+        if (!mounted || request != _thumbnailRequest || bytes == null) return;
+        _thumbnailCache[key] = bytes;
+        while (_thumbnailCache.length > 48) {
+          _thumbnailCache.remove(_thumbnailCache.keys.first);
+        }
+        setState(() => _hoverThumbnail = bytes);
+      } catch (_) {
+        // Unsupported codecs / paths simply leave the ordinary time chip.
+      }
+    });
+  }
+
+  void _clearThumbnail() {
+    _thumbnailDebounce?.cancel();
+    _thumbnailRequest++;
+    _thumbnailKey = null;
+    if (_hoverThumbnail != null) setState(() => _hoverThumbnail = null);
+  }
+
+  @override
+  void dispose() {
+    _thumbnailDebounce?.cancel();
+    super.dispose();
+  }
 
   /// A live channel is loaded — the empty inert light state (§10.8a).
   bool get _live => _player.isLiveMode;
@@ -236,10 +303,13 @@ class _MediaTimelineState extends State<MediaTimeline> {
                 child: MouseRegion(
                   onHover: (PointerHoverEvent e) {
                     if (!usable) return;
-                    setState(() => _hoverFrac = _fracAt(e.localPosition.dx, w));
+                    final double frac = _fracAt(e.localPosition.dx, w);
+                    setState(() => _hoverFrac = frac);
+                    _queueThumbnail(frac);
                   },
                   onExit: (PointerExitEvent e) {
                     if (_hoverFrac != null) setState(() => _hoverFrac = null);
+                    _clearThumbnail();
                   },
                   child: _buildBody(w, usable),
                 ),
@@ -292,7 +362,24 @@ class _MediaTimelineState extends State<MediaTimeline> {
       shadows: <Shadow>[Shadow(color: Color(0x99000000), blurRadius: 2)],
     );
 
+    final bool previewAbove =
+        SettingsService.instance.controllerPlacement.value ==
+            ControllerPlacement.bottom ||
+        SettingsService.instance.controllerPlacement.value ==
+            ControllerPlacement.bottomEdge;
+    const double previewWidth = 192;
+    const double previewHeight = 108;
+    final double previewLeft = w <= previewWidth
+        ? 0
+        : (clampedChipFrac * w - previewWidth / 2)
+            .clamp(0.0, w - previewWidth)
+            .toDouble();
+    final double previewTop = previewAbove
+        ? -(previewHeight + 5)
+        : MediaTimeline.barHeight + 5;
+
     return Stack(
+      clipBehavior: Clip.none,
       children: <Widget>[
         // ── The thick bar ─────────────────────────────────────────────
         Positioned(
@@ -397,13 +484,35 @@ class _MediaTimelineState extends State<MediaTimeline> {
             ),
           ),
         ),
-        // ── Hover / scrub time chip (below the bar) ───────────────────
-        // The timeline's chip and the volume bar's chip are ONE widget
-        // (HoverChip) — chip = value under the cursor; the bar's in-bar
-        // labels = current value.
+        // Preview is intentionally placed on the video-facing side of the
+        // bar: underneath top-mounted chrome, above bottom-mounted chrome.
+        if (showChip &&
+            _hoverThumbnail != null &&
+            _thumbnailKey?.startsWith('${_player.currentPath.value}@') == true)
+          Positioned(
+            top: previewTop,
+            left: previewLeft,
+            child: IgnorePointer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: SizedBox(
+                  width: previewWidth,
+                  height: previewHeight,
+                  child: Image.memory(
+                    _hoverThumbnail!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (showChip)
           Positioned(
-            top: MediaTimeline.barHeight + 2,
+            top: showChip && _hoverThumbnail != null
+                ? (previewAbove ? -29 : MediaTimeline.barHeight + 5 + previewHeight - 27)
+                : MediaTimeline.barHeight + 2,
             left: chipLeft,
             child: HoverChip(
               label: formatClock(_targetForFrac(clampedChipFrac)),
