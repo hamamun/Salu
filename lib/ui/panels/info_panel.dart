@@ -11,7 +11,8 @@ import '../../core/panel_service.dart';
 import '../../core/player_service.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
-import '../osc/controller_panel.dart' show kChromeBlockHeight;
+import '../osc/controller_panel.dart' show kChromeBlockHeight, controllerAtBottom, controllerBottomGap, controllerPanelTopAnchor, ControllerPanel;
+import '../widgets/custom_title_bar.dart' show CustomTitleBar;
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 
@@ -126,7 +127,7 @@ class _InfoPanelState extends State<InfoPanel>
                 // Chrome controls stay usable. The picture's closing click is
                 // consumed, never forwarded to the transport.
                 Positioned.fill(
-                  top: kChromeBlockHeight,
+                  top: controllerAtBottom ? CustomTitleBar.height : controllerPanelTopAnchor,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: _panels.closeInfo,
@@ -134,9 +135,9 @@ class _InfoPanelState extends State<InfoPanel>
                   ),
                 ),
                 Positioned(
-                  top: kChromeBlockHeight,
+                  top: controllerAtBottom ? CustomTitleBar.height : controllerPanelTopAnchor,
                   left: 0,
-                  bottom: 0,
+                  bottom: controllerAtBottom ? ControllerPanel.height + controllerBottomGap : 0,
                   width: width,
                   child: AnimatedBuilder(
                     animation: _curve,

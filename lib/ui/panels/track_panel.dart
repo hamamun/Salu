@@ -19,7 +19,7 @@ import '../../core/player_service.dart';
 import '../../core/sub_delay_service.dart' show formatSubDelay;
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
-import '../osc/controller_panel.dart' show kChromeBlockHeight;
+import '../osc/controller_panel.dart' show kChromeBlockHeight, controllerAtBottom, controllerBottomGap, controllerPanelTopAnchor, ControllerPanel;
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 import '../widgets/subtitle_search_dialog.dart';
@@ -135,6 +135,8 @@ class _TrackPanelState extends State<TrackPanel>
                   // the panel's own rows resolve in-transit and never
                   // reach this barrier.
                   Positioned.fill(
+                    top: controllerAtBottom ? 40 : controllerPanelTopAnchor,
+                    bottom: controllerAtBottom ? ControllerPanel.height + controllerBottomGap : 0,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _panels.closeTrackPanel,
@@ -142,7 +144,8 @@ class _TrackPanelState extends State<TrackPanel>
                     ),
                   ),
                   Positioned(
-                    top: kChromeBlockHeight + 6,
+                    top: controllerAtBottom ? null : controllerPanelTopAnchor + 6,
+                    bottom: controllerAtBottom ? ControllerPanel.height + controllerBottomGap + 6 : null,
                     right: 16,
                     width: TrackPanel.width,
                     child: Opacity(

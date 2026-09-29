@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/shortcuts/shortcut_registry.dart';
+import '../../core/settings_service.dart';
 import '../widgets/alt_peek.dart';
 import '../widgets/custom_title_bar.dart';
 import 'fetch_control.dart';
@@ -111,3 +112,15 @@ class ControllerPanel extends StatelessWidget {
 /// Exposed so the OSD deck anchor never drifts from the real block.
 const double kChromeBlockHeight =
     CustomTitleBar.height + ControllerPanel.height;
+
+/// Shared overlay anchor geometry used by controller-adjacent panels.
+bool get controllerAtBottom {
+  final p = SettingsService.instance.controllerPlacement.value;
+  return p == ControllerPlacement.bottom || p == ControllerPlacement.bottomEdge;
+}
+double get controllerBottomGap => SettingsService.instance.controllerPlacement.value == ControllerPlacement.bottom ? 24 : 0;
+
+double get controllerPanelTopAnchor =>
+    SettingsService.instance.controllerPlacement.value == ControllerPlacement.top
+        ? kChromeBlockHeight + 12
+        : kChromeBlockHeight;
