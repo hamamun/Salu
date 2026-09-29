@@ -158,27 +158,43 @@ and adjusts only its background alpha. Foreground text, marks, strokes, hover
 feedback, focus indicators and shadows are left unchanged. Blur strength
 is unchanged. Intentional exclusions: the opaque video/letterbox and browser
 canvas, Flutter browser start page, lyric canvas, WebView2 page content, Windows
-owned dialogs, modal dim barriers, QR/images/artwork, the mini bar's 2 px edge
-meter, editable form-field fills, interactive tabs/selected pills, and shortcut
-reference illustrations. These are not floating interface surface tints;
-reducing their opacity would expose unrelated layers or reduce usability.
+owned dialogs, modal dim barriers, QR/images/artwork, editable form-field
+fills, interactive tabs/selected pills, and shortcut reference illustrations.
+These are not floating interface surface tints; reducing their opacity would
+expose unrelated layers or reduce usability.
 
-The **media seek bar** (`ui/osc/media_timeline.dart`) and the **volume bar**
-(`ui/osc/volume_bar.dart`, including its read-only copy in the OSD volume
-card) were originally excluded here as "media progress tracks". They are now
-tinted like every other surface: the track and the progress fill run through
-the same `overlayTint` function. Only the surface parts fade — the timeline's
-playhead notch, ruler ticks and in-bar time readouts, and the volume bar's
-in-bar percent label, stay fully opaque so the position and level remain
-readable over bright video. The volume bar tints the FINAL colour, after its
-hover highlight is blended in, so the brightened state simply sits on a
-proportionally more see-through bar. Still excluded in the same family: the
-subtitle-delay bar in the track panel and the mini bar's edge meter, which
-remain at the original opacity unless reported.
+The **bar family** was originally excluded here as "media progress tracks",
+which left the controller with two solid bars in an otherwise transparent
+chrome. All four now tint like every other surface — the track and the fill
+run through the same `overlayTint` function:
+
+| Bar | File |
+| --- | --- |
+| Media seek bar | `ui/osc/media_timeline.dart` |
+| Volume bar (control row + the read-only OSD copy) | `ui/osc/volume_bar.dart` |
+| Subtitle-delay bar (track panel sync row) | `ui/panels/track_panel.dart` |
+| Mini bar's 2 px edge meter | `ui/mini/mini_progress.dart` |
+
+Only the surface parts fade. These stay fully opaque, because they are how
+the value stays readable once the bar behind it is see-through: the timeline's
+playhead notch, ruler ticks and in-bar time readouts; the volume bar's in-bar
+percent label; the subtitle-delay bar's centre detent and value; the mini
+meter's head tick. The two hoverable bars (volume, subtitle delay) tint the
+FINAL colour, after their hover highlight is blended in, so the brightened
+state simply sits on a proportionally more see-through bar.
+
+The mini meter is a `CustomPainter` and has no `BuildContext` of its own, so
+`MiniProgressStrip` now takes the `OverlayAppearance` from its widget and
+calls `tint()` directly; `BuildContext.overlay` is the one-line accessor for
+it. `OverlayAppearance` also gained value `==`/`hashCode` so the painter's
+`shouldRepaint` gate compares the percentage rather than instance identity —
+without it the strip would repaint on every unrelated theme rebuild and miss
+a change the moment it happened.
 
 Added `test/overlay_transparency_test.dart` for persistence, migration/clamp,
-live changes, tint/foreground isolation, the seek/volume bar surfaces and
-reset/Undo. All 30 changed Dart sources parse with the WASM dart_style
+live changes, tint/foreground isolation, all four bar surfaces (the mini
+meter through a recording `Canvas`, since it paints off-tree) and reset/Undo.
+All 30 changed Dart sources parse with the WASM dart_style
 formatter; `git diff --check` passes.
 Flutter analysis/tests and Windows visual/blur-performance checks are
 **not yet run** in this workspace (no Flutter/Dart SDK). Verify the new
