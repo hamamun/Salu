@@ -1376,44 +1376,48 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _positionedChromeContent() {
     final placement = _settings.controllerPlacement.value;
-    if (placement == ControllerPlacement.defaultPosition) return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      // The invisible-until-activity title bar
-                      // (immersive: paints no scrim and animates
-                      // nothing — this block owns both). While STOPPED
-                      // the title reads SALU (currentTitle is null) —
-                      // the parked item's name returns on Play.
-                      ValueListenableBuilder<String?>(
-                        valueListenable: _player.currentTitle,
-                        builder:
-                            (BuildContext context, String? title, Widget? _) {
-                          return CustomTitleBar(
-                            visible: true,
-                            immersive: true,
-                            title: title,
-                            onSettings: _openSettings,
-                            leading: BrowserService.browserSupported
-                                ? const WebModeToggle()
-                                : null,
-                            badge: _downloadBadge,
-                          );
-                        },
-                      ),
-                      // The controller container, attached directly
-                      // beneath the title bar — the two read as one
-                      // single window with no outline between them.
-                      // It stays visible even when no media is loaded;
-                      // only the parent chrome block's auto-hide logic
-                      // (configured in Settings) can hide it.
-                      const ControllerPanel(),
-                    ],
-                  );
-    if (placement == ControllerPlacement.top) return Column(children: <Widget>[
-      SizedBox(height: CustomTitleBar.height),
-      Padding(padding: const EdgeInsets.only(top: 12), child: const ControllerPanel()),
-    ]);
+    if (placement == ControllerPlacement.defaultPosition) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          // The invisible-until-activity title bar
+          // (immersive: paints no scrim and animates
+          // nothing — this block owns both). While STOPPED
+          // the title reads SALU (currentTitle is null) —
+          // the parked item's name returns on Play.
+          ValueListenableBuilder<String?>(
+            valueListenable: _player.currentTitle,
+            builder:
+                (BuildContext context, String? title, Widget? _) {
+              return CustomTitleBar(
+                visible: true,
+                immersive: true,
+                title: title,
+                onSettings: _openSettings,
+                leading: BrowserService.browserSupported
+                    ? const WebModeToggle()
+                    : null,
+                badge: _downloadBadge,
+              );
+            },
+          ),
+          // The controller container, attached directly
+          // beneath the title bar — the two read as one
+          // single window with no outline between them.
+          // It stays visible even when no media is loaded;
+          // only the parent chrome block's auto-hide logic
+          // (configured in Settings) can hide it.
+          const ControllerPanel(),
+        ],
+      );
+    }
+    if (placement == ControllerPlacement.top) {
+      return Column(children: <Widget>[
+        SizedBox(height: CustomTitleBar.height),
+        Padding(padding: const EdgeInsets.only(top: 12), child: const ControllerPanel()),
+      ]);
+    }
     return const Align(alignment: Alignment.topCenter, child: ControllerPanel());
   }
 }

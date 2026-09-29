@@ -19,7 +19,7 @@ import '../../core/player_service.dart';
 import '../../core/sub_delay_service.dart' show formatSubDelay;
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
-import '../osc/controller_panel.dart' show kChromeBlockHeight, controllerAtBottom, controllerBottomGap, controllerPanelTopAnchor, ControllerPanel;
+import '../osc/controller_panel.dart' show controllerAtBottom, controllerBottomGap, controllerPanelTopAnchor, ControllerPanel;
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 import '../widgets/subtitle_search_dialog.dart';
