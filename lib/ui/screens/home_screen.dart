@@ -570,26 +570,36 @@ class _HomeScreenState extends State<HomeScreen> {
   /// types a space instead of pausing. Ctrl combinations stay global —
   /// they never insert text.
   static int? _digitFromKey(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0)
+    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
       return 0;
-    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1)
+    }
+    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
       return 1;
-    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2)
+    }
+    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
       return 2;
-    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3)
+    }
+    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) {
       return 3;
-    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4)
+    }
+    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) {
       return 4;
-    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5)
+    }
+    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) {
       return 5;
-    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6)
+    }
+    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) {
       return 6;
-    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7)
+    }
+    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) {
       return 7;
-    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8)
+    }
+    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) {
       return 8;
-    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9)
+    }
+    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
       return 9;
+    }
     return null;
   }
 

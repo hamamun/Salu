@@ -223,8 +223,9 @@ class _MediaTimelineState extends State<MediaTimeline> {
                 onPointerUp: (PointerUpEvent e) => _onPointerUp(e, w),
                 onPointerCancel: _onPointerCancel,
                 onPointerSignal: (PointerSignalEvent event) {
-                  if (event is PointerScrollEvent)
+                  if (event is PointerScrollEvent) {
                     _onWheel(event.scrollDelta.dy);
+                  }
                 },
                 child: MouseRegion(
                   onHover: (PointerHoverEvent e) {
