@@ -66,9 +66,9 @@ class _RemotePanelState extends State<RemotePanel> {
               width: 340,
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: context.palette.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.surfaceOutline),
+                  border: Border.all(color: context.palette.surfaceOutline),
                   boxShadow: const <BoxShadow>[
                     BoxShadow(
                       color: Color(0x80000000),
@@ -82,14 +82,18 @@ class _RemotePanelState extends State<RemotePanel> {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     _header(),
-                    const Divider(
-                        height: 1, thickness: 1, color: AppColors.divider),
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: context.palette.divider,
+                    ),
                     Flexible(
                       child: ScrollConfiguration(
                         // No bar, ever: the panel fits its content, and the
                         // scroll view is only a small-window fallback.
-                        behavior: ScrollConfiguration.of(context)
-                            .copyWith(scrollbars: false),
+                        behavior: ScrollConfiguration.of(
+                          context,
+                        ).copyWith(scrollbars: false),
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                           child: _body(),
@@ -112,12 +116,12 @@ class _RemotePanelState extends State<RemotePanel> {
           children: <Widget>[
             const QrMark(size: 18),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Remote',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: context.palette.textPrimary,
                 letterSpacing: 0.2,
               ),
             ),
@@ -174,11 +178,11 @@ class _RemotePanelState extends State<RemotePanel> {
                 Center(
                   child: Text(
                     formatPairingCode(_remote.pairingCode.value ?? ''),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       letterSpacing: 2.4,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: context.palette.textPrimary,
                     ),
                   ),
                 ),
@@ -222,7 +226,9 @@ class _RemotePanelState extends State<RemotePanel> {
           width: 7,
           height: 7,
           decoration: BoxDecoration(
-            color: good ? AppColors.statusAlive : AppColors.statusUnknown,
+            color: good
+                ? context.palette.statusAlive
+                : context.palette.statusUnknown,
             shape: BoxShape.circle,
           ),
         ),
@@ -232,9 +238,9 @@ class _RemotePanelState extends State<RemotePanel> {
             copy,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
           ),
         ),
@@ -246,15 +252,16 @@ class _RemotePanelState extends State<RemotePanel> {
         height: 96,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.background,
+          color: context.palette.background,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Padding(
+        child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             'A private Wi-Fi or Ethernet address is needed for pairing.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style:
+                TextStyle(fontSize: 12, color: context.palette.textSecondary),
           ),
         ),
       );
@@ -267,13 +274,13 @@ class _RemotePanelState extends State<RemotePanel> {
     if (list.isEmpty) return const <Widget>[];
     return <Widget>[
       const SizedBox(height: 14),
-      const Text(
+      Text(
         'PHONES',
         style: TextStyle(
           fontSize: 10.5,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.1,
-          color: AppColors.textSecondary,
+          color: context.palette.textSecondary,
         ),
       ),
       const SizedBox(height: 2),
@@ -328,7 +335,8 @@ class _RemotePanelState extends State<RemotePanel> {
           icon: Icons.settings_outlined,
           tooltip: 'Windows Firewall settings',
           onTap: () => unawaited(
-              RemoteFirewallService.instance.openWindowsFirewallSettings()),
+            RemoteFirewallService.instance.openWindowsFirewallSettings(),
+          ),
         ),
       ];
     }
@@ -374,7 +382,12 @@ class _PhoneRowState extends State<_PhoneRow> {
         height: 30,
         padding: const EdgeInsets.only(left: 8, right: 2),
         decoration: BoxDecoration(
-          color: _hovered ? const Color(0x0DFFFFFF) : Colors.transparent,
+          color: _hovered
+              ? context.palette.resolve(
+                  const Color(0x0DFFFFFF),
+                  const Color(0x0D000000),
+                )
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -384,18 +397,18 @@ class _PhoneRowState extends State<_PhoneRow> {
                 widget.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Text(
               widget.state,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
             SaluIconButton(
@@ -430,15 +443,18 @@ class _HintRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        const Icon(Icons.warning_amber_outlined,
-            size: 14, color: AppColors.textSecondary),
+        Icon(
+          Icons.warning_amber_outlined,
+          size: 14,
+          color: context.palette.textSecondary,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
           ),
         ),

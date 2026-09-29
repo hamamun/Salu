@@ -28,8 +28,12 @@ Future<void> showOpenUrlDialog(BuildContext context) async {
       barrierDismissible: true,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       transitionDuration: const Duration(milliseconds: 220),
-      transitionBuilder: (BuildContext context, Animation<double> animation,
-          Animation<double> secondaryAnimation, Widget child) {
+      transitionBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+        Widget child,
+      ) {
         final CurvedAnimation curved = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutCubic,
@@ -42,8 +46,12 @@ Future<void> showOpenUrlDialog(BuildContext context) async {
           ),
         );
       },
-      pageBuilder: (BuildContext context, Animation<double> animation,
-          Animation<double> secondaryAnimation) => const OpenUrlDialog(),
+      pageBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+      ) =>
+          const OpenUrlDialog(),
     );
   } finally {
     ChromeLock.instance.release();
@@ -112,14 +120,15 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
   /// fully selected — paste → Enter → playing.
   Future<void> _prefillFromClipboard() async {
     try {
-      final ClipboardData? data =
-          await Clipboard.getData(Clipboard.kTextPlain);
+      final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
       final String text = data?.text?.trim() ?? '';
       if (!mounted || text.isEmpty) return;
       if (UrlLibraryService.looksLikeUrl(text) && _input.text.isEmpty) {
         _input.text = text;
-        _input.selection =
-            TextSelection(baseOffset: 0, extentOffset: text.length);
+        _input.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: text.length,
+        );
       }
     } catch (_) {
       // Clipboard unavailable — the input simply starts empty.
@@ -138,8 +147,7 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
 
   // ── Actions ──────────────────────────────────────────────────────────
 
-  bool get _inputPlayable =>
-      UrlLibraryService.looksLikeUrl(_input.text.trim());
+  bool get _inputPlayable => UrlLibraryService.looksLikeUrl(_input.text.trim());
 
   /// Guards against a double close: Enter can reach us both through the
   /// field's `onSubmitted` and through the dialog's key handler.
@@ -244,9 +252,9 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
                 maxHeight: math.min(560.0, constraints.maxHeight),
               ),
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: context.palette.background,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.surfaceOutline),
+                border: Border.all(color: context.palette.surfaceOutline),
                 boxShadow: const <BoxShadow>[
                   BoxShadow(
                     color: Color(0x80000000),
@@ -262,8 +270,11 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
                 children: <Widget>[
                   _buildInputRow(),
                   if (_all.isNotEmpty) ...<Widget>[
-                    const Divider(
-                        height: 1, thickness: 1, color: AppColors.divider),
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: context.palette.divider,
+                    ),
                     Flexible(child: _buildList()),
                   ],
                   if (_lastRemoved != null) _buildUndoToast(),
@@ -287,29 +298,33 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
         controller: _input,
         focusNode: _inputFocus,
         onChanged: (_) => setState(() {}),
-        onSubmitted: (_) => _playInput(
-            save: HardwareKeyboard.instance.isControlPressed),
+        onSubmitted: (_) =>
+            _playInput(save: HardwareKeyboard.instance.isControlPressed),
         onTap: () => setState(() => _cursor = -1),
-        style: const TextStyle(
-          fontSize: 14,
-          color: AppColors.textPrimary,
-        ),
-        cursorColor: AppColors.textPrimary,
+        style: TextStyle(fontSize: 14, color: context.palette.textPrimary),
+        cursorColor: context.palette.textPrimary,
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Paste a URL to play',
-          hintStyle: const TextStyle(color: AppColors.textSecondary),
+          hintStyle: TextStyle(color: context.palette.textSecondary),
           filled: true,
-          fillColor: AppColors.surface,
+          fillColor: context.palette.surface,
           contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14, vertical: 12),
+            horizontal: 14,
+            vertical: 12,
+          ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: AppColors.surfaceOutline),
+            borderSide: BorderSide(color: context.palette.surfaceOutline),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF4A4A4E)),
+            borderSide: BorderSide(
+              color: context.palette.resolve(
+                const Color(0xFF4A4A4E),
+                const Color(0xFFB8B8BE),
+              ),
+            ),
           ),
           // The two actions ride at the field's right edge — no text
           // buttons, no extra row (follow.md · hard rules 1 and 6).
@@ -325,9 +340,8 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
                 SaluIconButton(
                   size: 32,
                   // 7/7: Save dims; plain Play always works.
-                  tooltip: playable && _library.isFull
-                      ? 'List full'
-                      : 'Play & Save',
+                  tooltip:
+                      playable && _library.isFull ? 'List full' : 'Play & Save',
                   enabled: canSave,
                   onTap: () => _playInput(save: true),
                   child: const PlaySaveMark(size: 19),
@@ -357,8 +371,7 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: all.length,
       onReorderItem: _onReorder,
-      proxyDecorator:
-          (Widget child, int index, Animation<double> animation) {
+      proxyDecorator: (Widget child, int index, Animation<double> animation) {
         return Material(color: Colors.transparent, child: child);
       },
       itemBuilder: (BuildContext context, int index) {
@@ -389,9 +402,9 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
       margin: const EdgeInsets.fromLTRB(14, 4, 14, 12),
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.surfaceOutline),
+        border: Border.all(color: context.palette.surfaceOutline),
       ),
       child: Row(
         children: <Widget>[
@@ -400,16 +413,16 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
               _lastRemoved?.name ?? '',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
           ),
           TextButton(
             onPressed: _undoDelete,
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.textPrimary,
+              foregroundColor: context.palette.textPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               minimumSize: const Size(0, 32),
             ),
@@ -455,9 +468,9 @@ class _UrlRowState extends State<_UrlRow> {
   bool _hovered = false;
 
   Color get _dotColor => switch (widget.entry.health) {
-        UrlHealth.alive => AppColors.statusAlive,
-        UrlHealth.dead => AppColors.statusDead,
-        UrlHealth.unknown => AppColors.statusUnknown,
+        UrlHealth.alive => context.palette.statusAlive,
+        UrlHealth.dead => context.palette.statusDead,
+        UrlHealth.unknown => context.palette.statusUnknown,
       };
 
   @override
@@ -483,7 +496,7 @@ class _UrlRowState extends State<_UrlRow> {
           padding: const EdgeInsets.only(left: 6, right: 4),
           decoration: BoxDecoration(
             color: (_hovered || widget.highlighted)
-                ? AppColors.surfaceHighlight
+                ? context.palette.surfaceHighlight
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
@@ -492,12 +505,12 @@ class _UrlRowState extends State<_UrlRow> {
               // ≡ drag handle — the only way to reorder.
               ReorderableDragStartListener(
                 index: widget.index,
-                child: const MouseRegion(
+                child: MouseRegion(
                   cursor: SystemMouseCursors.grab,
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
                     child: IconTheme(
-                      data: IconThemeData(color: AppColors.textSecondary),
+                      data: IconThemeData(color: context.palette.textSecondary),
                       child: GripMark(size: 15),
                     ),
                   ),
@@ -518,9 +531,9 @@ class _UrlRowState extends State<_UrlRow> {
                   widget.entry.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
               ),
@@ -577,10 +590,12 @@ class _InlineEditor extends StatefulWidget {
 }
 
 class _InlineEditorState extends State<_InlineEditor> {
-  late final TextEditingController _name =
-      TextEditingController(text: widget.entry.name);
-  late final TextEditingController _url =
-      TextEditingController(text: widget.entry.url);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.entry.name,
+  );
+  late final TextEditingController _url = TextEditingController(
+    text: widget.entry.url,
+  );
   final FocusNode _nameFocus = FocusNode();
 
   @override
@@ -605,16 +620,20 @@ class _InlineEditorState extends State<_InlineEditor> {
     return InputDecoration(
       isDense: true,
       filled: true,
-      fillColor: AppColors.surface,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      fillColor: context.palette.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.surfaceOutline),
+        borderSide: BorderSide(color: context.palette.surfaceOutline),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF4A4A4E)),
+        borderSide: BorderSide(
+          color: context.palette.resolve(
+            const Color(0xFF4A4A4E),
+            const Color(0xFFB8B8BE),
+          ),
+        ),
       ),
     );
   }
@@ -634,7 +653,7 @@ class _InlineEditorState extends State<_InlineEditor> {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppColors.surfaceHighlight,
+          color: context.palette.surfaceHighlight,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -645,9 +664,11 @@ class _InlineEditorState extends State<_InlineEditor> {
                 controller: _name,
                 focusNode: _nameFocus,
                 onSubmitted: (_) => _commit(),
-                style: const TextStyle(
-                    fontSize: 13, color: AppColors.textPrimary),
-                cursorColor: AppColors.textPrimary,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.palette.textPrimary,
+                ),
+                cursorColor: context.palette.textPrimary,
                 decoration: _decoration(),
               ),
             ),
@@ -656,9 +677,11 @@ class _InlineEditorState extends State<_InlineEditor> {
               child: TextField(
                 controller: _url,
                 onSubmitted: (_) => _commit(),
-                style: const TextStyle(
-                    fontSize: 13, color: AppColors.textPrimary),
-                cursorColor: AppColors.textPrimary,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.palette.textPrimary,
+                ),
+                cursorColor: context.palette.textPrimary,
                 decoration: _decoration(),
               ),
             ),

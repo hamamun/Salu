@@ -45,8 +45,7 @@ class BrowserSitePanel extends StatelessWidget {
     return Focus(
       autofocus: true,
       onKeyEvent: (FocusNode n, KeyEvent e) {
-        if (e is KeyDownEvent &&
-            e.logicalKey == LogicalKeyboardKey.escape) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
           onClose();
           return KeyEventResult.handled;
         }
@@ -54,13 +53,13 @@ class BrowserSitePanel extends StatelessWidget {
       },
       child: Material(
         elevation: 0,
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: 320,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           child: Column(
@@ -76,10 +75,10 @@ class BrowserSitePanel extends StatelessWidget {
                       host,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                   ),
@@ -95,27 +94,28 @@ class BrowserSitePanel extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 23),
                 child: Text(
-                  secure
-                      ? 'Connection is secure'
-                      : 'Connection is not secure',
-                  style: const TextStyle(
+                  secure ? 'Connection is secure' : 'Connection is not secure',
+                  style: TextStyle(
                     fontSize: 11.5,
-                    color: AppColors.textSecondary,
+                    color: context.palette.textSecondary,
                   ),
                 ),
               ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
                 child: Divider(
-                    height: 1, thickness: 1, color: AppColors.divider),
+                  height: 1,
+                  thickness: 1,
+                  color: context.palette.divider,
+                ),
               ),
-              const Text(
+              Text(
                 'POP-UPS',
                 style: TextStyle(
                   fontSize: 10.5,
                   letterSpacing: 0.6,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
+                  color: context.palette.textSecondary,
                 ),
               ),
               const SizedBox(height: 6),
@@ -138,14 +138,14 @@ class BrowserSitePanel extends StatelessWidget {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: onVisitAllow,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 6),
                       child: Text(
                         'Allow just for this visit',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.accent,
+                          color: context.palette.accent,
                         ),
                       ),
                     ),
@@ -159,12 +159,13 @@ class BrowserSitePanel extends StatelessWidget {
                   onTap: onShowBlocked,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: context.palette.background,
                       borderRadius: BorderRadius.circular(8),
-                      border:
-                          Border.all(color: AppColors.surfaceOutline),
+                      border: Border.all(color: context.palette.surfaceOutline),
                     ),
                     child: Row(
                       children: <Widget>[
@@ -173,18 +174,18 @@ class BrowserSitePanel extends StatelessWidget {
                         Expanded(
                           child: Text(
                             '$blockedCount blocked on this page',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textPrimary,
+                              color: context.palette.textPrimary,
                             ),
                           ),
                         ),
-                        const Text(
+                        Text(
                           'View',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.accent,
+                            color: context.palette.accent,
                           ),
                         ),
                       ],
@@ -230,8 +231,11 @@ class _ChoiceRow extends StatelessWidget {
                 border: Border.all(
                   width: selected ? 4 : 1.5,
                   color: selected
-                      ? AppColors.accent
-                      : const Color(0xFF7A7A7A),
+                      ? context.palette.accent
+                      : context.palette.resolve(
+                          const Color(0xFF7A7A7A),
+                          const Color(0xFF71717A),
+                        ),
                 ),
               ),
             ),
@@ -242,17 +246,17 @@ class _ChoiceRow extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: context.palette.textPrimary,
                     ),
                   ),
                   Text(
                     helper,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.textSecondary,
+                      color: context.palette.textSecondary,
                     ),
                   ),
                 ],
@@ -294,8 +298,7 @@ class BlockedPopupList extends StatelessWidget {
     return Focus(
       autofocus: true,
       onKeyEvent: (FocusNode n, KeyEvent e) {
-        if (e is KeyDownEvent &&
-            e.logicalKey == LogicalKeyboardKey.escape) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
           onClose();
           return KeyEventResult.handled;
         }
@@ -303,14 +306,14 @@ class BlockedPopupList extends StatelessWidget {
       },
       child: Material(
         elevation: 0,
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: 380,
           constraints: const BoxConstraints(maxHeight: 420),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -324,9 +327,9 @@ class BlockedPopupList extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'Pop-ups blocked · ${items.length}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.textSecondary,
+                          color: context.palette.textSecondary,
                         ),
                       ),
                     ),
@@ -366,29 +369,28 @@ class BlockedPopupList extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: const Color(0x144C9EEB),
                           borderRadius: BorderRadius.circular(9),
-                          border:
-                              Border.all(color: const Color(0x404C9EEB)),
+                          border: Border.all(color: const Color(0x404C9EEB)),
                         ),
                         alignment: Alignment.center,
                         child: Text(
                           'Always allow on $host',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.accent,
+                            color: context.palette.accent,
                           ),
                         ),
                       ),
                     ),
                     if (!canOpen)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(top: 8),
                         child: Text(
                           'Close a tab to open links.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11.5,
-                            color: AppColors.textSecondary,
+                            color: context.palette.textSecondary,
                           ),
                         ),
                       ),
@@ -428,10 +430,10 @@ class _BlockedRow extends StatelessWidget {
                   WebAddress.hostOf(item.url),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 1),
@@ -439,9 +441,9 @@ class _BlockedRow extends StatelessWidget {
                   item.url,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppColors.textSecondary,
+                    color: context.palette.textSecondary,
                   ),
                 ),
               ],
@@ -452,16 +454,15 @@ class _BlockedRow extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: canOpen ? onOpen : null,
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               child: Text(
                 'Open',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: canOpen
-                      ? AppColors.accent
-                      : AppColors.textSecondary.withAlpha(140),
+                      ? context.palette.accent
+                      : context.palette.textSecondary.withAlpha(140),
                 ),
               ),
             ),

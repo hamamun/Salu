@@ -63,13 +63,13 @@ class BrowserFindBar extends StatelessWidget {
       onKeyEvent: _onKey,
       child: Material(
         elevation: 0,
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(10),
         child: Container(
           width: 360,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
           child: Row(
@@ -81,22 +81,21 @@ class BrowserFindBar extends StatelessWidget {
                   onChanged: onQueryChanged,
                   // Shift is still physically down when Enter submits,
                   // so the direction reads true here.
-                  onSubmitted: (_) => HardwareKeyboard
-                          .instance.isShiftPressed
+                  onSubmitted: (_) => HardwareKeyboard.instance.isShiftPressed
                       ? onPrev()
                       : onNext(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
-                  cursorColor: AppColors.accent,
-                  decoration: const InputDecoration(
+                  cursorColor: context.palette.accent,
+                  decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
                     hintText: 'Find in page',
                     hintStyle: TextStyle(
                       fontSize: 12.5,
-                      color: AppColors.textSecondary,
+                      color: context.palette.textSecondary,
                     ),
                   ),
                 ),
@@ -150,11 +149,7 @@ class BrowserFindBar extends StatelessWidget {
 }
 
 class _Count extends StatelessWidget {
-  const _Count({
-    required this.query,
-    required this.total,
-    required this.index,
-  });
+  const _Count({required this.query, required this.total, required this.index});
 
   final TextEditingController query;
   final ValueListenable<int> total;
@@ -177,7 +172,7 @@ class _Count extends StatelessWidget {
               fontSize: 11.5,
               color: t == 0
                   ? const Color(0xFFE07070)
-                  : AppColors.textSecondary,
+                  : context.palette.textSecondary,
             ),
           ),
         );

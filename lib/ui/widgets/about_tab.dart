@@ -10,11 +10,11 @@ part of 'settings_dialog.dart';
 
 /// The app's own version. `pubspec.yaml` is `0.1.0+1` and the remote
 /// protocol reports `0.1.0` — this is the one string all three agree on.
-const String _kAppVersion = '0.1.0';
+final String _kAppVersion = '0.1.0';
 
 /// The repository, opened in SALU's own browser — never an external one
 /// (the same door the remote's open-url command uses).
-const String _kRepoUrl = 'https://github.com/hamamun/Salu';
+final String _kRepoUrl = 'https://github.com/hamamun/Salu';
 
 /// Settings → About — who SALU is, what only it does, and the engine it
 /// runs on. Pure reference: the one door on the page is the repository
@@ -69,7 +69,8 @@ class _AboutTabState extends State<_AboutTab> {
                   ),
                   _AboutLine(
                     name: 'One instance',
-                    gist: 'a file opened anywhere plays in the window already open.',
+                    gist:
+                        'a file opened anywhere plays in the window already open.',
                   ),
                   _AboutLine(
                     name: 'mpv underneath',
@@ -97,7 +98,8 @@ class _AboutTabState extends State<_AboutTab> {
                   ),
                   _AboutLine(
                     name: 'Your phone is the remote',
-                    gist: 'a LAN server, paired once by QR, no cloud, no account.',
+                    gist:
+                        'a LAN server, paired once by QR, no cloud, no account.',
                   ),
                   _AboutLine(
                     name: 'Subtitles and lyrics',
@@ -134,7 +136,8 @@ class _AboutTabState extends State<_AboutTab> {
                   ),
                   _AboutLine(
                     name: 'Favourites per provider',
-                    gist: 'they survive a credential rotation, and never store a URL.',
+                    gist:
+                        'they survive a credential rotation, and never store a URL.',
                   ),
                   _AboutLine(
                     name: 'Live, on an inert timeline',
@@ -227,7 +230,7 @@ class _AboutHeader extends StatelessWidget {
               return DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.surfaceOutline),
+                  border: Border.all(color: context.palette.surfaceOutline),
                 ),
                 child: const SizedBox(width: 44, height: 44),
               );
@@ -235,21 +238,21 @@ class _AboutHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'SALU',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            color: context.palette.textPrimary,
             letterSpacing: 0.2,
           ),
         ),
         const SizedBox(height: 2),
-        Text('Version $_kAppVersion', style: _valueStyle),
+        Text('Version $_kAppVersion', style: _valueStyle(context)),
         const SizedBox(height: 5),
-        const Text(
+        Text(
           'A borderless media player for Windows.',
-          style: _defaultCaptionStyle,
+          style: _defaultCaptionStyle(context),
         ),
       ],
     );
@@ -275,10 +278,10 @@ class _AboutLine extends StatelessWidget {
           children: <InlineSpan>[
             TextSpan(
               text: name,
-              style: _labelStyle.copyWith(fontWeight: FontWeight.w600),
+              style: _labelStyle(context).copyWith(fontWeight: FontWeight.w600),
             ),
-            const TextSpan(text: ' — ', style: _valueStyle),
-            TextSpan(text: gist, style: _valueStyle),
+            TextSpan(text: ' — ', style: _valueStyle(context)),
+            TextSpan(text: gist, style: _valueStyle(context)),
           ],
         ),
       ),
@@ -311,7 +314,7 @@ class _AboutSignature extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.only(bottom: 12),
       child: Text(
         'created by HAM',
@@ -319,7 +322,7 @@ class _AboutSignature extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           letterSpacing: 0.8,
-          color: AppColors.whisper,
+          color: context.palette.whisper,
         ),
       ),
     );

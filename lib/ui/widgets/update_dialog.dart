@@ -187,9 +187,11 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       // exit(0) lands inside restartNow on Windows; a refused spawn stays
       // visible instead of pretending the swap is happening.
       if (!started) {
-        _showFailure(_UpdateFailureKind.installation,
-            detail: 'The updater script could not be started. The staged '
-                'files are untouched - closing SALU will try again.');
+        _showFailure(
+          _UpdateFailureKind.installation,
+          detail: 'The updater script could not be started. The staged '
+              'files are untouched - closing SALU will try again.',
+        );
       }
     } on UpdateSwapRefusedException catch (error) {
       // A swap that cannot work where SALU is installed (a protected folder,
@@ -221,9 +223,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         width: 520,
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.background,
+            color: context.palette.background,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
             boxShadow: const <BoxShadow>[
               BoxShadow(
                 color: Color(0x80000000),
@@ -238,12 +240,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               _buildHeader(),
-              const Divider(height: 1, thickness: 1, color: AppColors.divider),
+              Divider(height: 1, thickness: 1, color: context.palette.divider),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 child: _buildBody(),
               ),
-              const Divider(height: 1, thickness: 1, color: AppColors.divider),
+              Divider(height: 1, thickness: 1, color: context.palette.divider),
               _buildActions(),
             ],
           ),
@@ -257,17 +259,17 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       padding: const EdgeInsets.fromLTRB(20, 16, 12, 14),
       child: Row(
         children: <Widget>[
-          const IconTheme(
-            data: IconThemeData(color: AppColors.textPrimary),
+          IconTheme(
+            data: IconThemeData(color: context.palette.textPrimary),
             child: DownloadMark(size: 16),
           ),
           const SizedBox(width: 10),
-          const Text(
+          Text(
             'SALU Updater',
             style: TextStyle(
               fontSize: 15.5,
               fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
               letterSpacing: 0.2,
             ),
           ),
@@ -327,13 +329,15 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               'All updates are staged and ready to be applied.',
             ),
             const SizedBox(height: 4),
-            _DetailLine(dev
-                ? 'SALU will close, install the new files, and stay closed - '
-                    'start it again from VS Code. A rebuild replaces these '
-                    'files with the ones the build pins, so this only affects '
-                    'the build you are running.'
-                : 'SALU will close, install the new files, and reopen by '
-                    'itself in a moment.'),
+            _DetailLine(
+              dev
+                  ? 'SALU will close, install the new files, and stay closed - '
+                      'start it again from VS Code. A rebuild replaces these '
+                      'files with the ones the build pins, so this only affects '
+                      'the build you are running.'
+                  : 'SALU will close, install the new files, and reopen by '
+                      'itself in a moment.',
+            ),
             const SizedBox(height: 6),
             _DetailLine(
               'Staged in ${_updater.stagingDirOf()} · swap log: '
@@ -376,7 +380,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         ? (received / total).clamp(0.0, 1.0).toDouble()
         : 0.0;
     final int completed = progress?.completed ?? 0;
-    final int overall = progress?.overall ?? _result?.pendingUpdates.length ?? 0;
+    final int overall =
+        progress?.overall ?? _result?.pendingUpdates.length ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -399,9 +404,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                     ? '${(fraction * 100).round()}%'
                     : '…',
                 textAlign: TextAlign.right,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
-                  color: AppColors.textSecondary,
+                  color: context.palette.textSecondary,
                   fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
                 ),
               ),
@@ -418,9 +423,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     switch (_stage) {
       case _UpdateStage.checking:
         return _ActionRow(
-          children: <Widget>[
-            _UpdateAction(label: 'Cancel', onTap: _close),
-          ],
+          children: <Widget>[_UpdateAction(label: 'Cancel', onTap: _close)],
         );
       case _UpdateStage.updatesFound:
         return _ActionRow(
@@ -442,9 +445,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         );
       case _UpdateStage.downloading:
         return _ActionRow(
-          children: <Widget>[
-            _UpdateAction(label: 'Cancel', onTap: _close),
-          ],
+          children: <Widget>[_UpdateAction(label: 'Cancel', onTap: _close)],
         );
       case _UpdateStage.readyToRestart:
         // Same handoff, different promise: a dev build is not reopened.
@@ -482,9 +483,9 @@ class _ComponentTable extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.surfaceOutline),
+        border: Border.all(color: context.palette.surfaceOutline),
       ),
       child: Column(
         children: <Widget>[
@@ -495,7 +496,7 @@ class _ComponentTable extends StatelessWidget {
             header: true,
           ),
           const SizedBox(height: 6),
-          const Divider(height: 1, thickness: 1, color: AppColors.divider),
+          Divider(height: 1, thickness: 1, color: context.palette.divider),
           const SizedBox(height: 6),
           for (final ComponentStatus status in result.components)
             _ComponentRow(
@@ -530,7 +531,8 @@ class _ComponentRow extends StatelessWidget {
     final TextStyle style = TextStyle(
       fontSize: 12.5,
       fontWeight: header ? FontWeight.w600 : FontWeight.w400,
-      color: header ? AppColors.textSecondary : AppColors.textPrimary,
+      color:
+          header ? context.palette.textSecondary : context.palette.textPrimary,
       fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
     );
     return Padding(
@@ -543,12 +545,12 @@ class _ComponentRow extends StatelessWidget {
           SizedBox(
             width: 22,
             child: updating
-                ? const Text(
+                ? Text(
                     '→',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12.5,
-                      color: AppColors.accent,
+                      color: context.palette.accent,
                     ),
                   )
                 : null,
@@ -558,7 +560,7 @@ class _ComponentRow extends StatelessWidget {
               latest,
               style: updating
                   ? style.copyWith(
-                      color: AppColors.accent,
+                      color: context.palette.accent,
                       fontWeight: FontWeight.w600,
                     )
                   : style,
@@ -586,7 +588,7 @@ class _CurrentTag extends StatelessWidget {
       style: TextStyle(
         fontSize: 11,
         letterSpacing: 0.2,
-        color: AppColors.textSecondary.withAlpha(170),
+        color: context.palette.textSecondary.withAlpha(170),
       ),
     );
   }
@@ -606,7 +608,7 @@ class _UpdateProgressBar extends StatelessWidget {
         return Container(
           height: 6,
           decoration: BoxDecoration(
-            color: AppColors.barTrack,
+            color: context.palette.barTrack,
             borderRadius: BorderRadius.circular(3),
           ),
           alignment: Alignment.centerLeft,
@@ -618,7 +620,7 @@ class _UpdateProgressBar extends StatelessWidget {
                 .toDouble(),
             height: 6,
             decoration: BoxDecoration(
-              color: AppColors.barFill,
+              color: context.palette.barFill,
               borderRadius: BorderRadius.circular(3),
             ),
           ),
@@ -646,19 +648,19 @@ class _CenteredLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.surfaceOutline),
+        border: Border.all(color: context.palette.surfaceOutline),
       ),
       child: Row(
         children: <Widget>[
           if (busy) ...<Widget>[
-            const SizedBox(
+            SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 1.8,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
             const SizedBox(width: 12),
@@ -669,19 +671,19 @@ class _CenteredLine extends StatelessWidget {
               children: <Widget>[
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   detail,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     height: 1.4,
-                    color: AppColors.textSecondary,
+                    color: context.palette.textSecondary,
                   ),
                 ),
               ],
@@ -702,10 +704,10 @@ class _TitleLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13.5,
         fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        color: context.palette.textPrimary,
       ),
     );
   }
@@ -725,8 +727,8 @@ class _DetailLine extends StatelessWidget {
         fontSize: 12.5,
         height: 1.4,
         color: quieter
-            ? AppColors.textSecondary.withAlpha(150)
-            : AppColors.textSecondary,
+            ? context.palette.textSecondary.withAlpha(150)
+            : context.palette.textSecondary,
       ),
     );
   }
@@ -744,10 +746,11 @@ class _LastCheckedLine extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: SettingsService.instance.lastUpdateCheckTime,
       builder: (BuildContext context, int stamp, Widget? _) {
-        final DateTime last = stamp > 0
-            ? DateTime.fromMillisecondsSinceEpoch(stamp)
-            : checkedAt;
-        return _DetailLine('Last checked: ${formatLastChecked(DateTime.now(), last)}');
+        final DateTime last =
+            stamp > 0 ? DateTime.fromMillisecondsSinceEpoch(stamp) : checkedAt;
+        return _DetailLine(
+          'Last checked: ${formatLastChecked(DateTime.now(), last)}',
+        );
       },
     );
   }
@@ -778,12 +781,13 @@ class _UpdateActionState extends State<_UpdateAction> {
   @override
   Widget build(BuildContext context) {
     final bool lit = _hovered;
-    final Color rest =
-        widget.primary ? AppColors.textPrimary : AppColors.textSecondary;
-    final Color ink = lit ? Colors.white : rest;
+    final Color rest = widget.primary
+        ? context.palette.textPrimary
+        : context.palette.textSecondary;
+    final Color ink = lit ? context.palette.textPrimary : rest;
     final Color outline = (widget.primary || lit)
-        ? AppColors.divider
-        : AppColors.surfaceOutline;
+        ? context.palette.divider
+        : context.palette.surfaceOutline;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -809,7 +813,8 @@ class _UpdateActionState extends State<_UpdateAction> {
             constraints: const BoxConstraints(minWidth: 84),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: lit ? AppColors.surfaceHighlight : Colors.transparent,
+              color:
+                  lit ? context.palette.surfaceHighlight : Colors.transparent,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: outline),
             ),
@@ -841,10 +846,7 @@ class _ActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: children,
-      ),
+      child: Row(mainAxisAlignment: MainAxisAlignment.end, children: children),
     );
   }
 }

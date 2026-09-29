@@ -59,8 +59,9 @@ class EqCurveOverlay extends StatelessWidget {
               builder: (BuildContext context, List<double> shown) {
                 return CustomPaint(
                   painter: EqCurvePainter(
+                    palette: context.palette,
                     gains: shown,
-                    ink: AppColors.textPrimary,
+                    ink: context.palette.textPrimary,
                     fill: true,
                     // No zero rule on the picture: the film has its own
                     // horizon, and a line across it is a second UI.

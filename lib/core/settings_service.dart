@@ -53,12 +53,7 @@ enum FolderAutoloadMode {
 /// interval is a cadence: when it elapses, the next matching timing runs
 /// the full clear (history · cookies & site data · cached files ·
 /// downloads). **Off by default** — the lock.
-enum WebAutoClearInterval {
-  off,
-  days7,
-  days15,
-  days30,
-}
+enum WebAutoClearInterval { off, days7, days15, days30 }
 
 /// Interval length in days, 0 for [WebAutoClearInterval.off].
 extension WebAutoClearIntervalDays on WebAutoClearInterval {
@@ -73,38 +68,23 @@ extension WebAutoClearIntervalDays on WebAutoClearInterval {
 /// When the auto-clear runs ("player" here is SALU itself — web.md's note;
 /// the close-time sweep is the reliable one, so the rest of its work is
 /// handed to the next startup).
-enum WebAutoClearTiming {
-  onOpen,
-  onClose,
-  both,
-}
+enum WebAutoClearTiming { onOpen, onClose, both }
 
 /// The app lifecycle event the timing is matched against — the two moments
 /// [WebAutoClearTiming] can speak about, spelled with the same words.
-enum WebAutoClearTrigger {
-  open,
-  close,
-}
+enum WebAutoClearTrigger { open, close }
 
 /// What sites may open on their own (Settings → Web → Pop-ups; web.md ·
 /// pop-ups lock, 2026-09-17 cut). Block is the default — held-back pop-ups
 /// count into the address bar's badge instead of rendering anywhere — and
 /// per-site rules (`WebPopupService`) override it in either direction.
-enum WebPopupDefault {
-  block,
-  allow,
-}
+enum WebPopupDefault { block, allow }
 
 /// How often SALU checks its component & engine feeds (Settings → Updates
 /// → Automatic Update Check Frequency; updater.md §7). **Weekly is the
 /// factory default**; Off means the only check is the one behind the
 /// "Check now" button.
-enum UpdateCheckFrequency {
-  off,
-  daily,
-  weekly,
-  monthly,
-}
+enum UpdateCheckFrequency { off, daily, weekly, monthly }
 
 /// The cadence each choice stands for. `null` for [UpdateCheckFrequency.off]
 /// — "only checks when clicking 'Check now'". 24 h / 7 d / 30 d exactly as
@@ -130,11 +110,11 @@ extension UpdateCheckFrequencyInterval on UpdateCheckFrequency {
 /// default**. The choice rides on the engine's own profile API
 /// (`WebDataControlService.pageSchemeValue` / `applyPageScheme`) and
 /// applies **immediately** — pages re-theme in place, no SALU restart.
-enum WebPageScheme {
-  light,
-  dark,
-  system,
-}
+enum WebPageScheme { light, dark, system }
+
+/// The app's own appearance choice. `system` delegates resolution to
+/// MaterialApp so Windows changes are reflected without a restart.
+enum SaluThemeMode { defaultTheme, light, system }
 
 /// SALU's persisted settings, backed by `shared_preferences`.
 ///
@@ -147,6 +127,7 @@ class SettingsService {
   static final SettingsService instance = SettingsService._internal();
 
   static const String _keyTitleBarMode = 'title_bar_mode';
+  static const String _keyThemeMode = 'appearance_theme_mode';
   static const String _keyResumeMode = 'resume_mode';
   static const String _keyFolderAutoloadMode = 'folder_autoload_mode';
 
@@ -184,13 +165,20 @@ class SettingsService {
   /// Default preferred-subtitle language (D5 — ISO 639-1 `en`).
   static const String defaultSubtitleLanguage = 'en';
 
+  /// The saved SALU appearance. Default retains the original SALU look.
+  final ValueNotifier<SaluThemeMode> themeMode = ValueNotifier<SaluThemeMode>(
+    SaluThemeMode.defaultTheme,
+  );
+
   /// How the title bar handles itself while idle (see [TitleBarMode]).
-  final ValueNotifier<TitleBarMode> titleBarMode =
-      ValueNotifier<TitleBarMode>(TitleBarMode.borderless);
+  final ValueNotifier<TitleBarMode> titleBarMode = ValueNotifier<TitleBarMode>(
+    TitleBarMode.borderless,
+  );
 
   /// Which files continue from where you stopped (see [ResumeMode]).
-  final ValueNotifier<ResumeMode> resumeMode =
-      ValueNotifier<ResumeMode>(ResumeMode.all);
+  final ValueNotifier<ResumeMode> resumeMode = ValueNotifier<ResumeMode>(
+    ResumeMode.all,
+  );
 
   /// What a single-file load turns into (see [FolderAutoloadMode]).
   /// Default ON (`allVideos`) — owner's lock 2; persisted, so a manual
@@ -236,8 +224,7 @@ class SettingsService {
   /// doing. Off, downloads go straight to [webDownloadFolder] with no
   /// question at all. Applies to the next download, never to one already
   /// travelling.
-  final ValueNotifier<bool> webAskDownloadLocation =
-      ValueNotifier<bool>(true);
+  final ValueNotifier<bool> webAskDownloadLocation = ValueNotifier<bool>(true);
 
   /// Where browser downloads land, and where the Save As question starts
   /// (Settings → Web → Downloads). **Empty by default**, which means "the
@@ -305,13 +292,13 @@ class SettingsService {
   /// Auto: preferred → English → nothing (§2.2); manual search groups
   /// "best 3 in this language" (§6.5). Governs DOWNLOADS only — never an
   /// mpv override (D17).
-  final ValueNotifier<String> subtitleLanguage =
-      ValueNotifier<String>(defaultSubtitleLanguage);
+  final ValueNotifier<String> subtitleLanguage = ValueNotifier<String>(
+    defaultSubtitleLanguage,
+  );
 
   /// Auto-download toggle (D3 — default ON). OFF stops future fetches
   /// only; already-downloaded `.srt` files are never touched (D12).
-  final ValueNotifier<bool> subtitleAutoDownload =
-      ValueNotifier<bool>(true);
+  final ValueNotifier<bool> subtitleAutoDownload = ValueNotifier<bool>(true);
 
   /// How often the component feeds are checked (see
   /// [UpdateCheckFrequency]). **Weekly by default** (updater.md §7).
@@ -327,6 +314,9 @@ class SettingsService {
   Future<void> load() async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? rawTheme = prefs.getString(_keyThemeMode);
+      themeMode.value = SaluThemeMode.values.asNameMap()[rawTheme] ??
+          SaluThemeMode.defaultTheme;
       final String? raw = prefs.getString(_keyTitleBarMode);
       if (raw != null) {
         // `asNameMap()` lives on the `EnumByName` extension over
@@ -354,8 +344,9 @@ class SettingsService {
             WebAutoClearInterval.values.asNameMap()[rawAutoClear] ??
                 WebAutoClearInterval.off;
       }
-      final String? rawAutoClearTiming =
-          prefs.getString(_keyWebAutoClearTiming);
+      final String? rawAutoClearTiming = prefs.getString(
+        _keyWebAutoClearTiming,
+      );
       if (rawAutoClearTiming != null) {
         webAutoClearTiming.value =
             WebAutoClearTiming.values.asNameMap()[rawAutoClearTiming] ??
@@ -369,9 +360,8 @@ class SettingsService {
       }
       final String? rawPageScheme = prefs.getString(_keyWebPageScheme);
       if (rawPageScheme != null) {
-        webPageScheme.value =
-            WebPageScheme.values.asNameMap()[rawPageScheme] ??
-                WebPageScheme.light;
+        webPageScheme.value = WebPageScheme.values.asNameMap()[rawPageScheme] ??
+            WebPageScheme.light;
       }
       webAskDownloadLocation.value =
           prefs.getBool(_keyWebAskDownloadLocation) ?? true;
@@ -386,14 +376,12 @@ class SettingsService {
           : 7258;
       final String? rawSubtitleKey = prefs.getString(_keySubtitleApiKey);
       if (rawSubtitleKey != null) subtitleApiKey.value = rawSubtitleKey;
-      final String? rawSubtitleUser =
-          prefs.getString(_keySubtitleUsername);
+      final String? rawSubtitleUser = prefs.getString(_keySubtitleUsername);
       if (rawSubtitleUser != null) subtitleUsername.value = rawSubtitleUser;
       // D13 amended: the password comes back scrambled — [SubtitleScramble]
       // hands back '' for anything it cannot decode (corrupt/hand-edited
       // prefs), which is exactly the signed-out state SALU already handles.
-      final String? rawSubtitlePass =
-          prefs.getString(_keySubtitlePassword);
+      final String? rawSubtitlePass = prefs.getString(_keySubtitlePassword);
       if (rawSubtitlePass != null && rawSubtitlePass.isNotEmpty) {
         subtitlePassword.value = SubtitleScramble.decode(rawSubtitlePass);
       }
@@ -414,6 +402,7 @@ class SettingsService {
       lastUpdateCheckTime.value = prefs.getInt(_keyLastUpdateCheckTime) ?? 0;
     } catch (_) {
       // Corrupt/missing prefs — fall back to the defaults, silently.
+      themeMode.value = SaluThemeMode.defaultTheme;
       titleBarMode.value = TitleBarMode.borderless;
       resumeMode.value = ResumeMode.all;
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
@@ -436,6 +425,17 @@ class SettingsService {
       subtitleAutoDownload.value = true;
       updateCheckFrequency.value = UpdateCheckFrequency.weekly;
       lastUpdateCheckTime.value = 0;
+    }
+  }
+
+  /// Applies the SALU appearance instantly and persists it.
+  Future<void> setThemeMode(SaluThemeMode mode) async {
+    themeMode.value = mode;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyThemeMode, mode.name);
+    } catch (_) {
+      // In-memory change already applied; persistence is best-effort.
     }
   }
 
@@ -677,7 +677,9 @@ class SettingsService {
         await prefs.remove(_keySubtitlePassword);
       } else {
         await prefs.setString(
-            _keySubtitlePassword, SubtitleScramble.encode(password));
+          _keySubtitlePassword,
+          SubtitleScramble.encode(password),
+        );
       }
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
@@ -729,8 +731,7 @@ class SettingsService {
     lastUpdateCheckTime.value = when.millisecondsSinceEpoch;
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(
-          _keyLastUpdateCheckTime, lastUpdateCheckTime.value);
+      await prefs.setInt(_keyLastUpdateCheckTime, lastUpdateCheckTime.value);
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }
@@ -777,8 +778,10 @@ class SubtitleScramble {
   /// Scrambles [plain] into a storable, non-readable blob.
   static String encode(String plain) {
     final List<int> bytes = utf8.encode(plain);
-    final List<int> nonce =
-        List<int>.generate(_nonceBytes, (int _) => _random.nextInt(256));
+    final List<int> nonce = List<int>.generate(
+      _nonceBytes,
+      (int _) => _random.nextInt(256),
+    );
     int state = _seed(nonce);
     final List<int> out = List<int>.filled(_nonceBytes + bytes.length, 0);
     for (int i = 0; i < _nonceBytes; i++) {

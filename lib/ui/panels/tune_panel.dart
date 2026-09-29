@@ -178,9 +178,9 @@ class _TunePanelState extends State<TunePanel>
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.glass,
+            color: context.palette.glass,
             borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
             boxShadow: const <BoxShadow>[
               BoxShadow(
                 color: Color(0x80000000),
@@ -244,9 +244,8 @@ class _TunePanelState extends State<TunePanel>
           // watchable while it is open, so the body scrolls when the window
           // is short.
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height -
-                kChromeBlockHeight -
-                28,
+            maxHeight:
+                MediaQuery.sizeOf(context).height - kChromeBlockHeight - 28,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -283,10 +282,7 @@ class _TunePanelState extends State<TunePanel>
   /// time"). The part's name coming up white is the whole answer — no legend,
   /// no instruction (follow.md rule 2).
   Widget _focus(TunePart part, Widget child) {
-    return MouseRegion(
-      onEnter: (_) => _tune.focusPart(part),
-      child: child,
-    );
+    return MouseRegion(onEnter: (_) => _tune.focusPart(part), child: child);
   }
 
   // ── Part 1 · Audio Equalizer ───────────────────────────────────────────
@@ -298,8 +294,9 @@ class _TunePanelState extends State<TunePanel>
       TuneContinuum(
         focused: _tune.focusedPart.value == TunePart.eq,
         title: 'Audio Equalizer',
-        titleExtra:
-            _tune.autoPick.value == null ? null : _autoDot(_tune.autoPick.value!),
+        titleExtra: _tune.autoPick.value == null
+            ? null
+            : _autoDot(_tune.autoPick.value!),
         line: _tune.eqLine,
         position: _tune.eqKnob.value,
         previewing: _tune.previewing.value,
@@ -345,10 +342,10 @@ class _TunePanelState extends State<TunePanel>
           if (TunePresets.peakGain(curve).abs() >= 6)
             Text(
               'peak ${formatGainDb(TunePresets.peakGain(curve))} dB',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 9.5,
                 letterSpacing: 0.3,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
         ],
@@ -375,9 +372,9 @@ class _TunePanelState extends State<TunePanel>
       child: Container(
         width: 6,
         height: 6,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppColors.accent,
+          color: context.palette.accent,
         ),
       ),
     );
@@ -529,7 +526,7 @@ class _Hairline extends StatelessWidget {
     return Container(
       height: 1,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      color: AppColors.divider,
+      color: context.palette.divider,
     );
   }
 }

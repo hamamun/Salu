@@ -104,13 +104,22 @@ class CustomTitleBar extends StatelessWidget {
       height: CustomTitleBar.height,
       decoration: immersive
           ? null
-          : const BoxDecoration(
+          : BoxDecoration(
               // Soft scrim so the bar stays readable over bright video,
               // while keeping the borderless edge-to-edge illusion.
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: <Color>[Color(0xB3121212), Color(0x00121212)],
+                colors: <Color>[
+                  context.palette.resolve(
+                    const Color(0xB3121212),
+                    const Color(0xB3F4F4F7),
+                  ),
+                  context.palette.resolve(
+                    const Color(0x00121212),
+                    const Color(0x00F4F4F7),
+                  ),
+                ],
               ),
             ),
       child: Stack(
@@ -139,8 +148,8 @@ class CustomTitleBar extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: context.palette.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
                     letterSpacing: 0.2,
@@ -233,8 +242,7 @@ class CustomTitleBar extends StatelessWidget {
                 // reads as the same mark, modified: two squares.
                 ValueListenableBuilder<bool>(
                   valueListenable: windows.isMaximized,
-                  builder:
-                      (BuildContext context, bool maximized, Widget? _) {
+                  builder: (BuildContext context, bool maximized, Widget? _) {
                     return SaluIconButton(
                       tooltip: maximized ? 'Restore' : 'Maximize',
                       onTap: windows.toggleMaximize,
@@ -273,10 +281,7 @@ class CustomTitleBar extends StatelessWidget {
         opacity: visible ? 1 : 0,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
-        child: IgnorePointer(
-          ignoring: !visible,
-          child: content,
-        ),
+        child: IgnorePointer(ignoring: !visible, child: content),
       ),
     );
   }
@@ -306,14 +311,14 @@ class _SaluMarkTile extends StatelessWidget {
           // A caption-size decode of the app icon: sharp at any DPI, and
           // nowhere near the cost of the full-size PNG.
           cacheWidth: 64,
-          errorBuilder: (BuildContext context, Object error,
-              StackTrace? stack) {
+          errorBuilder:
+              (BuildContext context, Object error, StackTrace? stack) {
             // Never a broken-image glyph — a thin frame in the family's
             // ink.
             return DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: AppColors.surfaceOutline),
+                border: Border.all(color: context.palette.surfaceOutline),
               ),
               child: const SizedBox(width: 22, height: 22),
             );

@@ -18,8 +18,9 @@ class WebModeToggle extends StatelessWidget {
 
   /// The mode-appropriate registered keys — the Alt-Peek's tooltip.
   static List<ShortcutEntry>? _keys(bool web) {
-    final ShortcutEntry? e =
-        SaluShortcuts.byId(web ? 'web.playerMode' : 'player.webMode');
+    final ShortcutEntry? e = SaluShortcuts.byId(
+      web ? 'web.playerMode' : 'player.webMode',
+    );
     return e == null ? null : <ShortcutEntry>[e];
   }
 
@@ -40,20 +41,22 @@ class WebModeToggle extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.glass,
+                color: context.palette.glass,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.surfaceOutline),
+                border: Border.all(color: context.palette.surfaceOutline),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   _Word(label: 'Player', lit: !web),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(horizontal: 5),
                     child: Text(
                       '·',
-                      style: TextStyle(fontSize: 10.5,
-                          color: AppColors.textSecondary),
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: context.palette.textSecondary,
+                      ),
                     ),
                   ),
                   _Word(label: 'Web', lit: web),
@@ -82,7 +85,8 @@ class _Word extends StatelessWidget {
         fontSize: 11,
         height: 1.3,
         fontWeight: lit ? FontWeight.w600 : FontWeight.w500,
-        color: lit ? AppColors.textPrimary : AppColors.textSecondary,
+        color:
+            lit ? context.palette.textPrimary : context.palette.textSecondary,
         letterSpacing: 0.3,
       ),
       child: Text(label),

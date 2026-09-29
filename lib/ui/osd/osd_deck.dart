@@ -37,8 +37,7 @@ class OsdDeck extends StatefulWidget {
   State<OsdDeck> createState() => _OsdDeckState();
 }
 
-class _OsdDeckState extends State<OsdDeck>
-    with SingleTickerProviderStateMixin {
+class _OsdDeckState extends State<OsdDeck> with SingleTickerProviderStateMixin {
   late final AnimationController _slot;
   late final Animation<double> _fade;
   late final Animation<double> _slide; // 0 = rested, 1 = slid up
@@ -113,8 +112,7 @@ class _OsdDeckState extends State<OsdDeck>
                 // absolute). Enter: translateY −10 → 0 (the first 2 px
                 // clip at the layer's top edge, so the card never paints
                 // over the chrome block). Exit: 0 → −6.
-                final bool reversing =
-                    _slot.status == AnimationStatus.reverse;
+                final bool reversing = _slot.status == AnimationStatus.reverse;
                 final double lift = reversing
                     ? -6.0 * (1 - _slide.value)
                     : -10.0 + 10.0 * _slide.value;
@@ -166,14 +164,14 @@ class _OsdDeckState extends State<OsdDeck>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconTheme.merge(
-          data: const IconThemeData(color: AppColors.textPrimary),
+          data: IconThemeData(color: context.palette.textPrimary),
           child: const EqualizerMark(size: 17),
         ),
         const SizedBox(width: 10),
         Text(
           '${card.part} · ${card.value}',
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: context.palette.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.3,
@@ -193,14 +191,14 @@ class _OsdDeckState extends State<OsdDeck>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconTheme.merge(
-          data: const IconThemeData(color: AppColors.textPrimary),
+          data: IconThemeData(color: context.palette.textPrimary),
           child: const CcMark(size: 17),
         ),
         const SizedBox(width: 10),
         Text(
           'sub ${formatSubDelay(card.delay)}',
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: context.palette.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.3,
@@ -230,7 +228,7 @@ class _OsdDeckState extends State<OsdDeck>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconTheme.merge(
-          data: const IconThemeData(color: AppColors.textPrimary),
+          data: IconThemeData(color: context.palette.textPrimary),
           child: const CcMark(size: 17),
         ),
         const SizedBox(width: 10),
@@ -240,8 +238,8 @@ class _OsdDeckState extends State<OsdDeck>
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: context.palette.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.3,
@@ -263,7 +261,7 @@ class _OsdDeckState extends State<OsdDeck>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconTheme.merge(
-          data: const IconThemeData(color: AppColors.textPrimary),
+          data: IconThemeData(color: context.palette.textPrimary),
           child: const NowRowMark(size: 16, now: -1),
         ),
         const SizedBox(width: 10),
@@ -273,8 +271,8 @@ class _OsdDeckState extends State<OsdDeck>
             'Failed to load — ${card.name}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: context.palette.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.3,
@@ -294,7 +292,7 @@ class _OsdDeckState extends State<OsdDeck>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconTheme.merge(
-          data: const IconThemeData(color: AppColors.textPrimary),
+          data: IconThemeData(color: context.palette.textPrimary),
           child: const DownloadMark(size: 16),
         ),
         const SizedBox(width: 10),
@@ -306,8 +304,8 @@ class _OsdDeckState extends State<OsdDeck>
                 : 'Downloaded — ${card.name}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: context.palette.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.3,
@@ -325,7 +323,7 @@ class _OsdDeckState extends State<OsdDeck>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconTheme.merge(
-          data: const IconThemeData(color: AppColors.textPrimary),
+          data: IconThemeData(color: context.palette.textPrimary),
           // No chevron (now: −1) — this card reports growth, not play.
           child: const NowRowMark(size: 16),
         ),
@@ -336,8 +334,8 @@ class _OsdDeckState extends State<OsdDeck>
             '${card.count} ${card.audio ? 'tracks' : 'videos'} queued from “${card.folder}”',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: context.palette.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.3,
@@ -361,8 +359,8 @@ class _OsdDeckState extends State<OsdDeck>
               card.text!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              style: TextStyle(
+                color: context.palette.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.3,
@@ -380,7 +378,7 @@ class _OsdDeckState extends State<OsdDeck>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconTheme.merge(
-          data: const IconThemeData(color: AppColors.textPrimary),
+          data: IconThemeData(color: context.palette.textPrimary),
           child: SpeakerMark(
             size: 20,
             level: PlayerService.instance.volumeLevel.value,
@@ -393,7 +391,7 @@ class _OsdDeckState extends State<OsdDeck>
     );
   }
 
-  static Widget _mark(OsdMark mark) {
+  Widget _mark(OsdMark mark) {
     final Widget child = switch (mark) {
       OsdMark.play => const PlayChevronMark(size: 18),
       OsdMark.pause => const PauseMark(size: 18),
@@ -403,7 +401,7 @@ class _OsdDeckState extends State<OsdDeck>
       OsdMark.seekForward => const SeekForwardMark(size: 18),
     };
     return IconTheme.merge(
-      data: const IconThemeData(color: AppColors.textPrimary),
+      data: IconThemeData(color: context.palette.textPrimary),
       child: child,
     );
   }
@@ -457,8 +455,9 @@ class _ResumeToastState extends State<_ResumeToast> {
 
   @override
   Widget build(BuildContext context) {
-    final Color tone =
-        _restartHovered ? AppColors.textPrimary : AppColors.iconIdle;
+    final Color tone = _restartHovered
+        ? context.palette.textPrimary
+        : context.palette.iconIdle;
     return GlassCapsule(
       radius: 10,
       height: 40,
@@ -467,14 +466,14 @@ class _ResumeToastState extends State<_ResumeToast> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           IconTheme.merge(
-            data: const IconThemeData(color: AppColors.textPrimary),
+            data: IconThemeData(color: context.palette.textPrimary),
             child: const PlayChevronMark(size: 16),
           ),
           const SizedBox(width: 10),
           Text(
             formatClockCompact(widget.card.position),
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: context.palette.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.3,
@@ -546,7 +545,7 @@ class _UndoToastState extends State<_UndoToast> {
   @override
   Widget build(BuildContext context) {
     final Color tone =
-        _hovered ? AppColors.textPrimary : AppColors.iconIdle;
+        _hovered ? context.palette.textPrimary : context.palette.iconIdle;
     return GlassCapsule(
       radius: 10,
       height: 40,
@@ -561,8 +560,8 @@ class _UndoToastState extends State<_UndoToast> {
               widget.card.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              style: TextStyle(
+                color: context.palette.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.3,
@@ -582,8 +581,7 @@ class _UndoToastState extends State<_UndoToast> {
                 widget.card.onUndo();
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 6, horizontal: 2),
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
                 child: Text(
                   'Undo',
                   style: TextStyle(

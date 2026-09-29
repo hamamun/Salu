@@ -157,11 +157,11 @@ class _InfoPanelState extends State<InfoPanel>
                           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                           child: Container(
                             key: const ValueKey<String>('info-panel-surface'),
-                            decoration: const BoxDecoration(
-                              color: AppColors.glass,
+                            decoration: BoxDecoration(
+                              color: context.palette.glass,
                               border: Border(
                                 right: BorderSide(
-                                  color: AppColors.surfaceOutline,
+                                  color: context.palette.surfaceOutline,
                                 ),
                               ),
                             ),
@@ -173,9 +173,9 @@ class _InfoPanelState extends State<InfoPanel>
                                   height: 30,
                                   child: Row(
                                     children: <Widget>[
-                                      const IconTheme(
+                                      IconTheme(
                                         data: IconThemeData(
-                                          color: AppColors.iconIdle,
+                                          color: context.palette.iconIdle,
                                         ),
                                         child: InfoMark(size: 18),
                                       ),
@@ -264,14 +264,7 @@ class InfoRows extends StatelessWidget {
         if (duration > Duration.zero) {
           rows.add(InfoRow('Duration', formatClockCompact(duration)));
         }
-        rows.add(
-          InfoRow(
-            'Position',
-            formatClockCompact(
-              elapsed,
-            ),
-          ),
-        );
+        rows.add(InfoRow('Position', formatClockCompact(elapsed)));
         if (duration > Duration.zero) {
           rows.add(
             InfoRow(
@@ -296,18 +289,18 @@ class InfoRows extends StatelessWidget {
                 in groups.entries) ...<Widget>[
               if (group.key != groups.keys.first) ...<Widget>[
                 const SizedBox(height: 10),
-                const SizedBox(
+                SizedBox(
                   height: 1,
                   width: double.infinity,
-                  child: ColoredBox(color: AppColors.divider),
+                  child: ColoredBox(color: context.palette.divider),
                 ),
               ],
               Text(
                 group.key.toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10.5,
                   letterSpacing: 0.84,
-                  color: AppColors.textSecondary,
+                  color: context.palette.textSecondary,
                 ),
               ),
               for (final InfoRow row in group.value)
@@ -321,9 +314,9 @@ class InfoRows extends StatelessWidget {
                           row.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11.5,
-                            color: AppColors.textSecondary,
+                            color: context.palette.textSecondary,
                           ),
                         ),
                       ),
@@ -332,9 +325,9 @@ class InfoRows extends StatelessWidget {
                           row.value,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textPrimary,
+                            color: context.palette.textPrimary,
                             fontFeatures: <FontFeature>[
                               FontFeature.tabularFigures(),
                             ],

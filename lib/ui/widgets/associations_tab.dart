@@ -56,10 +56,12 @@ class _AssociationsTabState extends State<_AssociationsTab> {
   void _apply() {
     final Set<String> before = Set<String>.of(_service.associated.value);
     _service.apply(Set<String>.of(_draft));
-    OsdController.instance.show(OsdUndoCard(
-      label: 'Associations applied',
-      onUndo: () => _service.apply(before),
-    ));
+    OsdController.instance.show(
+      OsdUndoCard(
+        label: 'Associations applied',
+        onUndo: () => _service.apply(before),
+      ),
+    );
   }
 
   void _revert() =>
@@ -196,7 +198,10 @@ class _ExtensionGroup extends StatelessWidget {
               height: 22,
               child: Row(
                 children: <Widget>[
-                  Text(group.label.toUpperCase(), style: _captionStyle),
+                  Text(
+                    group.label.toUpperCase(),
+                    style: _captionStyle(context),
+                  ),
                   const Spacer(),
                   Tooltip(
                     message: 'Select all ${group.label.toLowerCase()}',
@@ -277,9 +282,10 @@ class _ExtChipState extends State<_ExtChip> {
           width: 76,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: _hovered ? _rowHover : Colors.transparent,
+            color: _hovered ? _rowHover(context) : Colors.transparent,
             border: Border.all(
-              color: widget.checked ? _pillLine : AppColors.surfaceOutline,
+              color:
+                  widget.checked ? _pillLine : context.palette.surfaceOutline,
             ),
             borderRadius: BorderRadius.circular(8),
           ),
@@ -296,10 +302,10 @@ class _ExtChipState extends State<_ExtChip> {
                     fontSize: 12,
                     letterSpacing: 0.2,
                     color: widget.isDefault
-                        ? AppColors.accent
+                        ? context.palette.accent
                         : (widget.checked
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary),
+                            ? context.palette.textPrimary
+                            : context.palette.textSecondary),
                   ),
                 ),
               ),
@@ -334,7 +340,7 @@ class _CheckBox extends StatelessWidget {
       decoration: BoxDecoration(
         color: on ? _pillFill : Colors.transparent,
         border: Border.all(
-          color: on ? AppColors.accent : AppColors.textSecondary,
+          color: on ? context.palette.accent : context.palette.textSecondary,
           width: 1.2,
         ),
         borderRadius: BorderRadius.circular(3.5),
@@ -343,7 +349,7 @@ class _CheckBox extends StatelessWidget {
           ? Icon(
               state == true ? Icons.check : Icons.remove,
               size: 11,
-              color: AppColors.accent,
+              color: context.palette.accent,
             )
           : null,
     );

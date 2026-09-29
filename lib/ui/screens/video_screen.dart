@@ -60,7 +60,7 @@ class VideoScreen extends StatelessWidget {
                     key: ValueKey<String>('video-${w}x$h-$hw'),
                     controller: service.videoController,
                     fit: BoxFit.contain,
-                    fill: AppColors.videoBackdrop,
+                    fill: context.palette.videoBackdrop,
                     // SALU builds its own OSC — the stock media_kit controls
                     // are disabled entirely.
                     controls: NoVideoControls,
@@ -69,14 +69,18 @@ class VideoScreen extends StatelessWidget {
                     // only so its state streams keep breathing (spec lock)
                     // and is never shown. The old style block retired with
                     // the overlay — the typography pass lives on mpv's side.
-                    subtitleViewConfiguration:
-                        const SubtitleViewConfiguration(visible: false),
+                    subtitleViewConfiguration: const SubtitleViewConfiguration(
+                      visible: false,
+                    ),
                   ),
                 if (hasMedia)
                   ValueListenableBuilder<AudioCanvasMode>(
                     valueListenable: audio.mode,
-                    builder:
-                        (BuildContext context, AudioCanvasMode mode, Widget? _) {
+                    builder: (
+                      BuildContext context,
+                      AudioCanvasMode mode,
+                      Widget? _,
+                    ) {
                       return switch (mode) {
                         AudioCanvasMode.lyrics => const LyricsOverlay(),
                         AudioCanvasMode.metadata => const AlbumArtView(),
@@ -102,7 +106,7 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.background,
+      color: context.palette.background,
       alignment: Alignment.center,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -125,22 +129,22 @@ class _EmptyState extends StatelessWidget {
                   filterQuality: FilterQuality.high,
                   errorBuilder:
                       (BuildContext context, Object error, StackTrace? stack) {
-                    return const Icon(
+                    return Icon(
                       Icons.play_circle_outline,
                       size: 96,
-                      color: AppColors.textSecondary,
+                      color: context.palette.textSecondary,
                     );
                   },
                 ),
               ),
               const SizedBox(height: 28),
-              const Text(
+              Text(
                 'SALU',
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 6,
-                  color: AppColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
               ),
             ],

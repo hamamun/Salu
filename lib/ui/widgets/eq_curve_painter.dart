@@ -15,7 +15,9 @@ import '../../theme/app_theme.dart';
 /// it passes through: 20 Hz at the left edge, 20 kHz at the right. The y
 /// axis is the ±12 dB grid.
 class EqCurvePainter extends CustomPainter {
+  final AppPalette palette;
   const EqCurvePainter({
+    this.palette = AppPalette.saluDefault,
     required this.gains,
     this.ink,
     this.fill = false,
@@ -48,7 +50,11 @@ class EqCurvePainter extends CustomPainter {
   static double freqToX(double hz, double width, double padding) {
     final double lo = math.log(_minHz) / math.ln10;
     final double hi = math.log(_maxHz) / math.ln10;
-    final double f = clampRange((math.log(hz) / math.ln10 - lo) / (hi - lo), 0, 1);
+    final double f = clampRange(
+      (math.log(hz) / math.ln10 - lo) / (hi - lo),
+      0,
+      1,
+    );
     return padding + (width - padding * 2) * f;
   }
 
@@ -61,14 +67,14 @@ class EqCurvePainter extends CustomPainter {
   /// The curve through the 10 band points, with a flat lead-in and lead-out
   /// so the shape reads as a response, not a polyline.
   Path responsePath(double width, double height) {
-    final List<Offset> pts = <Offset>[
-      Offset(0, gainToY(0, height)),
-    ];
+    final List<Offset> pts = <Offset>[Offset(0, gainToY(0, height))];
     for (int i = 0; i < kEqBandCount; i++) {
-      pts.add(Offset(
-        freqToX(kEqBandFreqs[i], width, padding),
-        gainToY(i < gains.length ? gains[i] : 0, height),
-      ));
+      pts.add(
+        Offset(
+          freqToX(kEqBandFreqs[i], width, padding),
+          gainToY(i < gains.length ? gains[i] : 0, height),
+        ),
+      );
     }
     pts.add(Offset(width, gainToY(0, height)));
     final Path path = Path()..moveTo(pts.first.dx, pts.first.dy);
@@ -82,7 +88,7 @@ class EqCurvePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Color color = ink ?? AppColors.iconIdle;
+    final Color color = ink ?? palette.iconIdle;
     final Path path = responsePath(size.width, size.height);
     if (fill) {
       final Path area = Path.from(path)
@@ -118,6 +124,7 @@ class EqCurvePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(EqCurvePainter old) =>
+      palette != old.palette ||
       old.strokeWidth != strokeWidth ||
       old.fill != fill ||
       old.showAxis != showAxis ||

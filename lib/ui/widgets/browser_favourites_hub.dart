@@ -55,7 +55,8 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
       widget.onClose();
       return KeyEventResult.handled;
     }
@@ -87,14 +88,14 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
           onKeyEvent: _onKey,
           child: Material(
             elevation: 0,
-            color: AppColors.surface,
+            color: context.palette.surface,
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: 320,
               constraints: const BoxConstraints(maxHeight: 420),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.surfaceOutline),
+                border: Border.all(color: context.palette.surfaceOutline),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -110,9 +111,10 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
                               ? 'No favourites yet'
                               : 'Favourites · ${all.length} of '
                                   '${WebFavouritesService.maxEntries}',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.palette.textSecondary,
+                          ),
                         ),
                         const Spacer(),
                         SaluIconButton(
@@ -129,28 +131,30 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
                       padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: AppColors.background,
+                          color: context.palette.background,
                           borderRadius: BorderRadius.circular(8),
-                          border:
-                              Border.all(color: AppColors.surfaceOutline),
+                          border: Border.all(
+                            color: context.palette.surfaceOutline,
+                          ),
                         ),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
                         child: TextField(
                           controller: _search,
                           focusNode: _searchFocus,
                           onChanged: (_) => setState(() {}),
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textPrimary),
-                          cursorColor: AppColors.accent,
-                          decoration: const InputDecoration(
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.palette.textPrimary,
+                          ),
+                          cursorColor: context.palette.accent,
+                          decoration: InputDecoration(
                             isDense: true,
                             border: InputBorder.none,
                             hintText: 'Search favourites',
                             hintStyle: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary),
+                              fontSize: 12,
+                              color: context.palette.textSecondary,
+                            ),
                           ),
                         ),
                       ),
@@ -181,8 +185,10 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
             q.isEmpty
                 ? 'Pages you star land here — up to ${WebFavouritesService.maxEntries}.'
                 : 'No match.',
-            style: const TextStyle(
-                fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(
+              fontSize: 12,
+              color: context.palette.textSecondary,
+            ),
           ),
         ),
       ];
@@ -193,34 +199,38 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
       final String group = f.folder;
       if (group != lastGroup) {
         lastGroup = group;
-        out.add(Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 3),
-          child: Row(
-            children: <Widget>[
-              if (group.isEmpty)
-                const StarMark(size: 11)
-              else
-                const FolderMark(size: 12),
-              const SizedBox(width: 6),
-              Text(
-                group.isEmpty ? 'Unsorted' : group,
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  letterSpacing: 0.6,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
+        out.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 3),
+            child: Row(
+              children: <Widget>[
+                if (group.isEmpty)
+                  const StarMark(size: 11)
+                else
+                  const FolderMark(size: 12),
+                const SizedBox(width: 6),
+                Text(
+                  group.isEmpty ? 'Unsorted' : group,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w600,
+                    color: context.palette.textSecondary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ));
+        );
       }
-      out.add(_HubRow(
-        favourite: f,
-        onOpen: () => widget.onOpen(f),
-        onEdit: () => widget.onEdit(index),
-        onRemove: () => widget.onRemove(index),
-      ));
+      out.add(
+        _HubRow(
+          favourite: f,
+          onOpen: () => widget.onOpen(f),
+          onEdit: () => widget.onEdit(index),
+          onRemove: () => widget.onRemove(index),
+        ),
+      );
     }
     return out;
   }
@@ -261,9 +271,9 @@ class _HubRow extends StatelessWidget {
                       favourite.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
-                        color: AppColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 1),
@@ -271,9 +281,9 @@ class _HubRow extends StatelessWidget {
                       WebAddress.hostOf(favourite.url),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10.5,
-                        color: AppColors.textSecondary,
+                        color: context.palette.textSecondary,
                       ),
                     ),
                   ],

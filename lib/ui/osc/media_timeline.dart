@@ -105,9 +105,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
   // ── Seek helpers ──────────────────────────────────────────────────────
 
   Duration _targetForFrac(double frac) {
-    return Duration(
-      milliseconds: (frac * _duration.inMilliseconds).round(),
-    );
+    return Duration(milliseconds: (frac * _duration.inMilliseconds).round());
   }
 
   void _commitFrac(double frac) {
@@ -169,7 +167,9 @@ class _MediaTimelineState extends State<MediaTimeline> {
     // per notch. seekTo clamps at the media bounds. Like every seek
     // from outside the ramp, this resets the ramp sequences.
     TransportActions.instance.resetSeekRamps();
-    _player.seekBy(dy > 0 ? const Duration(seconds: 1) : const Duration(seconds: -1));
+    _player.seekBy(
+      dy > 0 ? const Duration(seconds: 1) : const Duration(seconds: -1),
+    );
   }
 
   // ── Aiming ruler (minute ticks) ───────────────────────────────────────
@@ -178,9 +178,23 @@ class _MediaTimelineState extends State<MediaTimeline> {
   /// roughly 60–120 px apart on the given bar width.
   Duration _tickStep(double width) {
     const List<int> ladderMs = <int>[
-      500, 1000, 2000, 5000, 10000, 15000, 30000,
-      60000, 120000, 300000, 600000, 900000, 1800000, 3600000,
-      7200000, 14400000, 28800000,
+      500,
+      1000,
+      2000,
+      5000,
+      10000,
+      15000,
+      30000,
+      60000,
+      120000,
+      300000,
+      600000,
+      900000,
+      1800000,
+      3600000,
+      7200000,
+      14400000,
+      28800000,
     ];
     final int durMs = _duration.inMilliseconds;
     final double targetMs = durMs * 72 / (width <= 0 ? 1 : width);
@@ -209,7 +223,8 @@ class _MediaTimelineState extends State<MediaTimeline> {
                 onPointerUp: (PointerUpEvent e) => _onPointerUp(e, w),
                 onPointerCancel: _onPointerCancel,
                 onPointerSignal: (PointerSignalEvent event) {
-                  if (event is PointerScrollEvent) _onWheel(event.scrollDelta.dy);
+                  if (event is PointerScrollEvent)
+                    _onWheel(event.scrollDelta.dy);
                 },
                 child: MouseRegion(
                   onHover: (PointerHoverEvent e) {
@@ -237,8 +252,8 @@ class _MediaTimelineState extends State<MediaTimeline> {
 
     // The boundary shown on the bar: the scrub preview while pressing or
     // dragging, the real playback position otherwise.
-    final double boundaryFrac = _pressFrac ??
-        (usable ? _clamp01(pos.inMilliseconds / durMs) : 0);
+    final double boundaryFrac =
+        _pressFrac ?? (usable ? _clamp01(pos.inMilliseconds / durMs) : 0);
     final double boundaryX = boundaryFrac * w;
 
     // Time readouts.
@@ -260,16 +275,14 @@ class _MediaTimelineState extends State<MediaTimeline> {
             .clamp(0.0, w - chipWidth)
             .toDouble();
 
-    const TextStyle labelStyle = TextStyle(
-      color: AppColors.textPrimary,
+    final TextStyle labelStyle = TextStyle(
+      color: context.palette.textPrimary,
       fontSize: 12,
       fontWeight: FontWeight.w500,
       height: 1,
       letterSpacing: 0.4,
       fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-      shadows: <Shadow>[
-        Shadow(color: Color(0x99000000), blurRadius: 2),
-      ],
+      shadows: <Shadow>[Shadow(color: Color(0x99000000), blurRadius: 2)],
     );
 
     return Stack(
@@ -285,8 +298,8 @@ class _MediaTimelineState extends State<MediaTimeline> {
             child: Stack(
               children: <Widget>[
                 // Track.
-                const Positioned.fill(
-                  child: ColoredBox(color: AppColors.barTrack),
+                Positioned.fill(
+                  child: ColoredBox(color: context.palette.barTrack),
                 ),
                 // Channel mode: only the still soft light (§10.8a) — no
                 // fill, no thumb, no ruler, no readouts (not even zeros).
@@ -295,9 +308,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
                 // never degrade into the stopped-zeros state.
                 if (live)
                   Positioned.fill(
-                    child: StillSoftLight(
-                      visible: _player.isLiveReceiving,
-                    ),
+                    child: StillSoftLight(visible: _player.isLiveReceiving),
                   ),
                 // Paste-window style fill.
                 if (!live && boundaryX > 0)
@@ -306,19 +317,17 @@ class _MediaTimelineState extends State<MediaTimeline> {
                     bottom: 0,
                     left: 0,
                     width: boundaryX,
-                    child: const ColoredBox(color: AppColors.barFill),
+                    child: ColoredBox(color: context.palette.barFill),
                   ),
                 // Aiming ruler (hover / scrub) — faint vertical ticks.
                 if (showTicks && tickStep > Duration.zero)
-                  for (Duration t = tickStep;
-                      t < dur;
-                      t += tickStep)
+                  for (Duration t = tickStep; t < dur; t += tickStep)
                     Positioned(
                       top: 0,
                       bottom: 0,
                       left: w * (t.inMilliseconds / durMs),
-                      child: const ColoredBox(
-                        color: AppColors.barTick,
+                      child: ColoredBox(
+                        color: context.palette.barTick,
                         child: SizedBox(width: 1),
                       ),
                     ),
@@ -332,7 +341,7 @@ class _MediaTimelineState extends State<MediaTimeline> {
                     child: Container(
                       width: 2,
                       decoration: BoxDecoration(
-                        color: AppColors.barThumb,
+                        color: context.palette.barThumb,
                         borderRadius: BorderRadius.circular(1),
                       ),
                     ),

@@ -46,9 +46,9 @@ class GlassCapsule extends StatelessWidget {
           height: height,
           padding: padding,
           decoration: BoxDecoration(
-            color: AppColors.glass,
+            color: context.palette.glass,
             borderRadius: br,
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           child: child,
         ),

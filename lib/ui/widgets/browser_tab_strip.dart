@@ -76,10 +76,7 @@ class BrowserTabStrip extends StatelessWidget {
                   ),
                 // The “+” grows with the list and stops answering at the
                 // cap — the limit is felt, not explained.
-                _PlusTab(
-                  enabled: tabs.length < maxTabs,
-                  onTap: onNewTab,
-                ),
+                _PlusTab(enabled: tabs.length < maxTabs, onTap: onNewTab),
               ],
             ),
           ),
@@ -128,10 +125,14 @@ class _TabChip extends StatelessWidget {
                   right: compact ? 2 : 6,
                 ),
                 decoration: BoxDecoration(
-                  color: active ? AppColors.surfaceHighlight : AppColors.surface,
+                  color: active
+                      ? context.palette.surfaceHighlight
+                      : context.palette.surface,
                   borderRadius: BorderRadius.circular(9),
                   border: Border.all(
-                    color: active ? AppColors.accent : AppColors.surfaceOutline,
+                    color: active
+                        ? context.palette.accent
+                        : context.palette.surfaceOutline,
                   ),
                 ),
                 child: Row(
@@ -152,8 +153,8 @@ class _TabChip extends StatelessWidget {
                               fontSize: 12,
                               height: 1.4,
                               color: active
-                                  ? AppColors.textPrimary
-                                  : AppColors.textSecondary,
+                                  ? context.palette.textPrimary
+                                  : context.palette.textSecondary,
                             ),
                           );
                         },
@@ -164,7 +165,8 @@ class _TabChip extends StatelessWidget {
                     // closes the tab in front, never another one.
                     if (active)
                       AltPeekAnchor(
-                        scope: ShortcutScope.web, anchor: ShortcutAnchor.webCloseTab,
+                        scope: ShortcutScope.web,
+                        anchor: ShortcutAnchor.webCloseTab,
                         side: PeekSide.below,
                         child: SaluIconButton(
                           size: 22,
@@ -216,11 +218,11 @@ class _TabBadge extends StatelessWidget {
               // so the slot stays empty until a real page arrives.
               if (url == null) return const SizedBox.shrink();
               if (active && loading) {
-                return const Padding(
+                return Padding(
                   padding: EdgeInsets.all(1.5),
                   child: CircularProgressIndicator(
                     strokeWidth: 1.6,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 );
               }
@@ -234,8 +236,8 @@ class _TabBadge extends StatelessWidget {
                 width: 14,
                 height: 14,
                 gaplessPlayback: true,
-                errorBuilder:
-                    (BuildContext c, Object e, StackTrace? st) => letter,
+                errorBuilder: (BuildContext c, Object e, StackTrace? st) =>
+                    letter,
               );
             },
           );
@@ -262,8 +264,9 @@ class _Letter extends StatelessWidget {
           fontSize: 11.5,
           fontWeight: FontWeight.w600,
           height: 1.0,
-          color:
-              active ? AppColors.textPrimary : AppColors.textSecondary,
+          color: active
+              ? context.palette.textPrimary
+              : context.palette.textSecondary,
         ),
       ),
     );
@@ -284,7 +287,8 @@ class _PlusTab extends StatelessWidget {
         // The family's thin plus, reading the ambient IconTheme so the
         // SALU hover recipe lights it up (never a fixed-ink painter).
         child: AltPeekAnchor(
-          scope: ShortcutScope.web, anchor: ShortcutAnchor.webNewTab,
+          scope: ShortcutScope.web,
+          anchor: ShortcutAnchor.webNewTab,
           side: PeekSide.below,
           child: SaluIconButton(
             size: 26,

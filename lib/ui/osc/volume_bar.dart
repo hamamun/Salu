@@ -32,11 +32,7 @@ import 'hover_chip.dart';
 /// The SAME widget is reused read-only (120 × 14, no interactions)
 /// inside the OSD volume card so the two can never drift apart.
 class VolumeBar extends StatefulWidget {
-  const VolumeBar({
-    super.key,
-    this.width = 140,
-    this.readOnly = false,
-  });
+  const VolumeBar({super.key, this.width = 140, this.readOnly = false});
 
   /// Bar width — 140 in the control row, 120 in the OSD volume card.
   final double width;
@@ -57,8 +53,7 @@ class _VolumeBarState extends State<VolumeBar> {
   /// Pointer x as a fraction of the bar (0..1) — drives the hover chip.
   double? _hoverFrac;
 
-  double _fracAt(double dx, double w) =>
-      _clamp01(w <= 0 ? 0 : dx / w);
+  double _fracAt(double dx, double w) => _clamp01(w <= 0 ? 0 : dx / w);
 
   double _clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 
@@ -132,8 +127,7 @@ class _VolumeBarState extends State<VolumeBar> {
                   },
                   onPointerMove: (PointerMoveEvent e) {
                     if (!_dragging) return;
-                    setState(
-                        () => _hoverFrac = _fracAt(e.localPosition.dx, w));
+                    setState(() => _hoverFrac = _fracAt(e.localPosition.dx, w));
                     _apply(e.localPosition.dx, w);
                   },
                   onPointerUp: (PointerUpEvent e) {
@@ -156,8 +150,9 @@ class _VolumeBarState extends State<VolumeBar> {
                       if (showChip)
                         Positioned(
                           top: 26,
-                          left: (_hoverFrac! * w - 22).clamp(
-                              0.0, (w - 44).clamp(0.0, w)).toDouble(),
+                          left: (_hoverFrac! * w - 22)
+                              .clamp(0.0, (w - 44).clamp(0.0, w))
+                              .toDouble(),
                           child: HoverChip(
                             label:
                                 '${(_fracAt((_hoverFrac! * w), w) * 100).round()}%',
@@ -187,12 +182,25 @@ class _VolumeBarState extends State<VolumeBar> {
   }) {
     final double barHeight = _hovered || _dragging ? 16 : 14;
     final Color track = bright
-        ? Color.alphaBlend(const Color(0x14FFFFFF), AppColors.barTrack)
-        : AppColors.barTrack;
+        ? Color.alphaBlend(
+            context.palette.resolve(
+              const Color(0x14FFFFFF),
+              const Color(0x14000000),
+            ),
+            context.palette.barTrack,
+          )
+        : context.palette.barTrack;
     final Color fill = bright
-        ? Color.alphaBlend(const Color(0x1AFFFFFF), AppColors.barFill)
-        : AppColors.barFill;
-    final Color label = bright ? AppColors.textPrimary : AppColors.iconIdle;
+        ? Color.alphaBlend(
+            context.palette.resolve(
+              const Color(0x1AFFFFFF),
+              const Color(0x1A000000),
+            ),
+            context.palette.barFill,
+          )
+        : context.palette.barFill;
+    final Color label =
+        bright ? context.palette.textPrimary : context.palette.iconIdle;
     final double fillEnd = w * frac;
 
     // `labelX = max(pad, fillEnd − labelWidth − pad)` — the label rides

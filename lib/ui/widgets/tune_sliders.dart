@@ -34,21 +34,21 @@ import 'eq_curve_painter.dart';
 
 /// The house preview delay — §8's "~0.3 s on the control". The service owns
 /// the number and this reads it, so the two can never drift apart.
-const Duration kTuneHoverLead = TuneService.hoverLead;
+final Duration kTuneHoverLead = TuneService.hoverLead;
 
 /// Double-tap window — the sliders' reset-to-zero gesture (§1.11).
-const Duration kTuneDoubleTap = Duration(milliseconds: 320);
+final Duration kTuneDoubleTap = Duration(milliseconds: 320);
 
 /// How far apart two presses may land and still count as one double tap.
 /// Two quick DRAGS are two drags, not a reset (the gesture is "double-tap",
 /// and a tap does not travel).
-const double kTuneDoubleTapSlop = 6;
+final double kTuneDoubleTapSlop = 6;
 
 /// The band slider's track, in its 74 px box: rule from top to bottom, the
 /// label under it.
-const double _bandTop = 4;
-const double _bandBottom = 44;
-const double _bandLabelTop = 47;
+final double _bandTop = 4;
+final double _bandBottom = 44;
+final double _bandLabelTop = 47;
 
 /// A ±12 dB grid quantised to halves: the number the slider holds, the
 /// number the label shows, and the number a preset is matched against.
@@ -156,7 +156,8 @@ class _GlideListState extends State<GlideList>
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, _shown(widget.values));
+  Widget build(BuildContext context) =>
+      widget.builder(context, _shown(widget.values));
 }
 
 // ── The 10 band sliders ────────────────────────────────────────────────────
@@ -202,8 +203,9 @@ class TuneBands extends StatelessWidget {
               builder: (BuildContext context, List<double> shown) {
                 return CustomPaint(
                   painter: EqCurvePainter(
+                    palette: context.palette,
                     gains: shown,
-                    ink: AppColors.iconIdle,
+                    ink: context.palette.iconIdle,
                     fill: true,
                     strokeWidth: 1.3,
                   ),
@@ -357,11 +359,19 @@ class _TuneBandState extends State<_TuneBand> {
                 onPointerDown: (PointerDownEvent e) {
                   setState(() => _dragging = true);
                   widget.onGestureStart?.call();
-                  widget.onChanged(widget.index, _valueAt(e.localPosition.dy), false);
+                  widget.onChanged(
+                    widget.index,
+                    _valueAt(e.localPosition.dy),
+                    false,
+                  );
                 },
                 onPointerMove: (PointerMoveEvent e) {
                   if (!_dragging) return;
-                  widget.onChanged(widget.index, _valueAt(e.localPosition.dy), false);
+                  widget.onChanged(
+                    widget.index,
+                    _valueAt(e.localPosition.dy),
+                    false,
+                  );
                 },
                 onPointerUp: (PointerUpEvent e) {
                   if (!_dragging) return;
@@ -382,7 +392,10 @@ class _TuneBandState extends State<_TuneBand> {
                     widget.onChanged(widget.index, 0, true);
                   } else {
                     widget.onChanged(
-                        widget.index, _valueAt(e.localPosition.dy), true);
+                      widget.index,
+                      _valueAt(e.localPosition.dy),
+                      true,
+                    );
                   }
                   widget.onGestureEnd?.call();
                   _armTimer?.cancel();
@@ -396,6 +409,7 @@ class _TuneBandState extends State<_TuneBand> {
                 child: CustomPaint(
                   size: Size(box.maxWidth, h),
                   painter: _BandPainter(
+                    palette: context.palette,
                     y: _yFor(widget.value),
                     mid: _mid,
                     active: active,
@@ -409,9 +423,7 @@ class _TuneBandState extends State<_TuneBand> {
                         right: 0,
                         top: _bandLabelTop,
                         child: Text(
-                          naming
-                              ? formatGainDb(widget.value)
-                              : widget.label,
+                          naming ? formatGainDb(widget.value) : widget.label,
                           maxLines: 1,
                           overflow: TextOverflow.clip,
                           textAlign: TextAlign.center,
@@ -423,8 +435,8 @@ class _TuneBandState extends State<_TuneBand> {
                               FontFeature.tabularFigures(),
                             ],
                             color: naming
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary.withAlpha(200),
+                                ? context.palette.textPrimary
+                                : context.palette.textSecondary.withAlpha(200),
                           ),
                         ),
                       ),
@@ -441,7 +453,9 @@ class _TuneBandState extends State<_TuneBand> {
 }
 
 class _BandPainter extends CustomPainter {
+  final AppPalette palette;
   const _BandPainter({
+    this.palette = AppPalette.saluDefault,
     required this.y,
     required this.mid,
     required this.active,
@@ -459,8 +473,8 @@ class _BandPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final double x = size.width / 2;
     final Color idle = enabled
-        ? (active ? AppColors.textPrimary : AppColors.iconIdle)
-        : AppColors.iconIdle.withAlpha(100);
+        ? (active ? palette.textPrimary : palette.iconIdle)
+        : palette.iconIdle.withAlpha(100);
     // The rule.
     canvas.drawLine(
       Offset(x, _bandTop),
@@ -496,13 +510,14 @@ class _BandPainter extends CustomPainter {
       3.4,
       Paint()
         ..color = !enabled
-            ? AppColors.iconIdle.withAlpha(120)
-            : (previewing ? AppColors.textSecondary : AppColors.textPrimary),
+            ? palette.iconIdle.withAlpha(120)
+            : (previewing ? palette.textSecondary : palette.textPrimary),
     );
   }
 
   @override
   bool shouldRepaint(_BandPainter old) =>
+      palette != old.palette ||
       old.y != y ||
       old.active != active ||
       old.previewing != previewing ||
@@ -663,11 +678,11 @@ class _TuneFineBarState extends State<_TuneFineBar> {
               width: 50,
               child: Text(
                 widget.label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 9.5,
                   letterSpacing: 0.4,
                   height: 1,
-                  color: AppColors.textSecondary,
+                  color: context.palette.textSecondary,
                 ),
               ),
             ),
@@ -701,12 +716,18 @@ class _TuneFineBarState extends State<_TuneFineBar> {
                           setState(() => _dragging = true);
                           widget.onGestureStart?.call();
                           widget.onChanged(
-                              widget.index, _valueAt(e.localPosition.dx, w), false);
+                            widget.index,
+                            _valueAt(e.localPosition.dx, w),
+                            false,
+                          );
                         },
                         onPointerMove: (PointerMoveEvent e) {
                           if (!_dragging) return;
                           widget.onChanged(
-                              widget.index, _valueAt(e.localPosition.dx, w), false);
+                            widget.index,
+                            _valueAt(e.localPosition.dx, w),
+                            false,
+                          );
                         },
                         onPointerUp: (PointerUpEvent e) {
                           if (!_dragging) return;
@@ -736,6 +757,7 @@ class _TuneFineBarState extends State<_TuneFineBar> {
                         child: CustomPaint(
                           size: Size(w, _barHeight),
                           painter: _FineBarPainter(
+                            palette: context.palette,
                             value: widget.value,
                             behind: widget.behind,
                             active: active,
@@ -752,18 +774,18 @@ class _TuneFineBarState extends State<_TuneFineBar> {
             SizedBox(
               width: 34,
               child: Text(
-                widget.value == 0
-                    ? '0'
-                    : widget.value.round().toString(),
+                widget.value == 0 ? '0' : widget.value.round().toString(),
                 textAlign: TextAlign.end,
                 style: TextStyle(
                   fontSize: 9.5,
                   height: 1,
                   letterSpacing: 0.2,
-                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures(),
+                  ],
                   color: active
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary.withAlpha(190),
+                      ? context.palette.textPrimary
+                      : context.palette.textSecondary.withAlpha(190),
                 ),
               ),
             ),
@@ -778,7 +800,9 @@ class _TuneFineBarState extends State<_TuneFineBar> {
 /// timeline's and the volume bar's sibling, mirrored) — and, behind it, the
 /// live tone histogram when the bar is one of the two the tones answer to.
 class _FineBarPainter extends CustomPainter {
+  final AppPalette palette;
   const _FineBarPainter({
+    this.palette = AppPalette.saluDefault,
     required this.value,
     required this.active,
     required this.previewing,
@@ -801,8 +825,8 @@ class _FineBarPainter extends CustomPainter {
     final double w = size.width, h = size.height;
     final double mid = w / 2;
     final Color idle = enabled
-        ? (active ? AppColors.textPrimary : AppColors.iconIdle)
-        : AppColors.iconIdle.withAlpha(100);
+        ? (active ? palette.textPrimary : palette.iconIdle)
+        : palette.iconIdle.withAlpha(100);
     // The tones first, under everything (§7a): a scope behind the two
     // sliders that move them. Quiet enough to read as texture, never as a
     // second control — it takes no pointer, and the sliders' ink is drawn
@@ -819,11 +843,7 @@ class _FineBarPainter extends CustomPainter {
         final double x = 6 + usable * (i + 0.5) / shape.length;
         final double v = clampRange(shape[i], 0, 1);
         final double half = 1.2 + v * (reach - 1.2);
-        canvas.drawLine(
-          Offset(x, h / 2 - half),
-          Offset(x, h / 2 + half),
-          ink,
-        );
+        canvas.drawLine(Offset(x, h / 2 - half), Offset(x, h / 2 + half), ink);
       }
     }
 
@@ -833,7 +853,10 @@ class _FineBarPainter extends CustomPainter {
     );
     canvas.drawRRect(
       track,
-      Paint()..color = active ? const Color(0xFF3C3C40) : AppColors.barTrack,
+      Paint()
+        ..color = active
+            ? palette.resolve(const Color(0xFF3C3C40), const Color(0xFFB7B7C0))
+            : palette.barTrack,
     );
     final double t = clampRange(value / kPictureMax, -1, 1);
     if (t.abs() > 0.005) {
@@ -843,10 +866,9 @@ class _FineBarPainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(fill, const Radius.circular(3)),
         Paint()
-          ..color = (previewing
-                  ? AppColors.barFill.withAlpha(150)
-                  : AppColors.barFill)
-              .withAlpha(230),
+          ..color =
+              (previewing ? palette.barFill.withAlpha(150) : palette.barFill)
+                  .withAlpha(230),
       );
     }
     // Zero tick, so the neutral point is visible without hovering.
@@ -862,13 +884,14 @@ class _FineBarPainter extends CustomPainter {
       3,
       Paint()
         ..color = !enabled
-            ? AppColors.iconIdle.withAlpha(120)
-            : (previewing ? AppColors.textSecondary : AppColors.textPrimary),
+            ? palette.iconIdle.withAlpha(120)
+            : (previewing ? palette.textSecondary : palette.textPrimary),
     );
   }
 
   @override
   bool shouldRepaint(_FineBarPainter old) =>
+      palette != old.palette ||
       old.value != value ||
       old.active != active ||
       old.previewing != previewing ||

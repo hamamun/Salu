@@ -115,7 +115,7 @@ class _SaluIconButtonState extends State<SaluIconButton> {
         !on ? 1.0 : (_pressed ? 0.90 : (_hovered ? 1.06 : 1.0));
     // Disabled marks rest lower than iconIdle — dimmed, never boxed out.
     final Color rest =
-        on ? AppColors.iconIdle : AppColors.iconIdle.withAlpha(95);
+        on ? context.palette.iconIdle : context.palette.iconIdle.withAlpha(95);
 
     Widget mark = AnimatedScale(
       scale: scale,
@@ -124,7 +124,7 @@ class _SaluIconButtonState extends State<SaluIconButton> {
       child: TweenAnimationBuilder<Color?>(
         tween: ColorTween(
           begin: rest,
-          end: lit ? AppColors.textPrimary : rest,
+          end: lit ? context.palette.textPrimary : rest,
         ),
         duration: const Duration(milliseconds: 120),
         builder: (BuildContext context, Color? color, Widget? _) {
@@ -140,11 +140,14 @@ class _SaluIconButtonState extends State<SaluIconButton> {
     // Faint static glow — active state only (follow.md rule).
     if (widget.active && on) {
       mark = DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Color(0x26FFFFFF),
+              color: context.palette.resolve(
+                const Color(0x26FFFFFF),
+                const Color(0x26242428),
+              ),
               blurRadius: 14,
               spreadRadius: 1,
             ),
@@ -159,14 +162,14 @@ class _SaluIconButtonState extends State<SaluIconButton> {
         clipBehavior: Clip.none,
         children: <Widget>[
           mark,
-          const Positioned(
+          Positioned(
             top: -1,
             right: -1,
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.accent,
+                  color: context.palette.accent,
                 ),
                 child: SizedBox(width: 6, height: 6),
               ),
