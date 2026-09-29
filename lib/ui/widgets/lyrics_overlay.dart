@@ -50,7 +50,7 @@ class LyricsOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final LyricService lyrics = LyricService.instance;
     return ColoredBox(
-      color: AppColors.videoBackdrop,
+      color: context.palette.background,
       child: SizedBox.expand(
         child: ListenableBuilder(
           listenable: Listenable.merge(<Listenable>[
@@ -92,8 +92,7 @@ class LyricsOverlay extends StatelessWidget {
                 return SingleChildScrollView(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight:
-                          box.maxHeight.isFinite ? box.maxHeight : 0.0,
+                      minHeight: box.maxHeight.isFinite ? box.maxHeight : 0.0,
                     ),
                     child: Center(
                       child: ConstrainedBox(
@@ -151,16 +150,14 @@ class _LyricLineTileState extends State<_LyricLineTile> {
   Widget build(BuildContext context) {
     final bool current = widget.current;
     final bool isCenter = widget.distance == 0;
-    final double size = isCenter
-        ? 24
-        : (widget.distance <= 1 ? 16 : 14);
+    final double size = isCenter ? 24 : (widget.distance <= 1 ? 16 : 14);
     final FontWeight weight = current ? FontWeight.w600 : FontWeight.w400;
     final Color rest = current
-        ? AppColors.textPrimary
+        ? context.palette.textPrimary
         : (widget.distance <= 1
-            ? AppColors.textSecondary
-            : AppColors.textSecondary.withAlpha(140));
-    final Color color = _hovered ? AppColors.textPrimary : rest;
+            ? context.palette.textSecondary
+            : context.palette.textSecondary.withAlpha(140));
+    final Color color = _hovered ? context.palette.textPrimary : rest;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -183,10 +180,7 @@ class _LyricLineTileState extends State<_LyricLineTile> {
               height: 1.35,
               color: color,
             ),
-            child: Text(
-              widget.line.text,
-              textAlign: TextAlign.center,
-            ),
+            child: Text(widget.line.text, textAlign: TextAlign.center),
           ),
         ),
       ),

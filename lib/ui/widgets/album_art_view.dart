@@ -67,42 +67,47 @@ class AlbumArtView extends StatelessWidget {
   /// the art: 4 slots reserved, any subset of them filled.
   static double get _textBlockHeight =>
       _titleSlot +
-          _titleToArtistGap +
-          _artistRow +
-          _artistToAlbumGap +
-          _albumRow +
-          _albumToContextGap +
-          _contextRow;
+      _titleToArtistGap +
+      _artistRow +
+      _artistToAlbumGap +
+      _albumRow +
+      _albumToContextGap +
+      _contextRow;
 
-  static const TextStyle _titleStyle = TextStyle(
-    fontSize: _titleSize,
-    fontWeight: FontWeight.w600,
-    height: _titleLineHeight,
-    color: AppColors.textPrimary,
-  );
-
-  static const TextStyle _artistStyle = TextStyle(
-    fontSize: _artistSize,
-    fontWeight: FontWeight.w400,
-    height: _rowLineHeight,
-    color: AppColors.textSecondary,
-  );
-
-  static TextStyle get _albumStyle => _artistStyle.copyWith(
-        fontSize: _albumSize,
-        color: AppColors.textSecondary.withAlpha(170),
+  static TextStyle _titleStyle(BuildContext context) => TextStyle(
+        fontSize: _titleSize,
+        fontWeight: FontWeight.w600,
+        height: _titleLineHeight,
+        color: context.palette.textPrimary,
       );
 
-  static TextStyle get _contextStyle => _artistStyle.copyWith(
+  static TextStyle _artistStyle(BuildContext context) => TextStyle(
+        fontSize: _artistSize,
+        fontWeight: FontWeight.w400,
+        height: _rowLineHeight,
+        color: context.palette.textSecondary,
+      );
+
+  static TextStyle _albumStyle(BuildContext context) =>
+      _artistStyle(context).copyWith(
+        fontSize: _albumSize,
+        color: context.palette.textSecondary.withAlpha(170),
+      );
+
+  static TextStyle _contextStyle(BuildContext context) =>
+      _artistStyle(context).copyWith(
         fontSize: _contextSize,
-        color: AppColors.textSecondary.withAlpha(140),
+        color: context.palette.textSecondary.withAlpha(140),
       );
 
   @override
   Widget build(BuildContext context) {
     final AudioDisplayService audio = AudioDisplayService.instance;
     return ColoredBox(
-      color: AppColors.videoBackdrop,
+      color: context.palette.resolve(
+        context.palette.videoBackdrop,
+        AppPalette.light.background,
+      ),
       child: SizedBox.expand(
         child: ListenableBuilder(
           listenable: Listenable.merge(<Listenable>[
@@ -139,7 +144,7 @@ class AlbumArtView extends StatelessWidget {
                         if (text > 0)
                           SizedBox(
                             height: text,
-                            child: ClipRect(child: _rows(info)),
+                            child: ClipRect(child: _rows(context, info)),
                           ),
                       ],
                     ),
@@ -160,10 +165,7 @@ class AlbumArtView extends StatelessWidget {
     final double height = constraints.maxHeight;
     final double width = constraints.maxWidth;
     final double room = height - _artToTextGap - _textBlockHeight;
-    double size = math.min(
-      height * _artFractionOfHeight,
-      width - _sidePad * 2,
-    );
+    double size = math.min(height * _artFractionOfHeight, width - _sidePad * 2);
     size = math.max(size, _artMin);
     // A window too short for the design floor gives the art whatever it has
     // (a shrunken square beats clipped text); a normal one never gets here.
@@ -182,7 +184,7 @@ class AlbumArtView extends StatelessWidget {
   /// The four rows, top-packed inside their reserved block. A missing field
   /// leaves no hole — and moves nothing outside the block, because the block
   /// itself is fixed.
-  Widget _rows(AudioTrackInfo info) {
+  Widget _rows(BuildContext context, AudioTrackInfo info) {
     final List<Widget> rows = <Widget>[
       // Bottom-aligned in its two-line slot: a one-line title sits directly
       // above the artist, and a two-line title only grows upward.
@@ -190,7 +192,7 @@ class AlbumArtView extends StatelessWidget {
         height: _titleSlot,
         child: Align(
           alignment: Alignment.bottomCenter,
-          child: _text(info.title, 2, _titleStyle),
+          child: _text(info.title, 2, _titleStyle(context)),
         ),
       ),
     ];
@@ -202,17 +204,17 @@ class AlbumArtView extends StatelessWidget {
       if (info.artist != null) {
         rows
           ..add(const SizedBox(height: _titleToArtistGap))
-          ..add(_row(info.artist!, _artistRow, _artistStyle));
+          ..add(_row(info.artist!, _artistRow, _artistStyle(context)));
       }
       if (info.album != null) {
         rows
           ..add(const SizedBox(height: _artistToAlbumGap))
-          ..add(_row(info.album!, _albumRow, _albumStyle));
+          ..add(_row(info.album!, _albumRow, _albumStyle(context)));
       }
       if (contextLine.isNotEmpty) {
         rows
           ..add(const SizedBox(height: _albumToContextGap))
-          ..add(_row(contextLine, _contextRow, _contextStyle));
+          ..add(_row(contextLine, _contextRow, _contextStyle(context)));
       }
     }
 
@@ -255,7 +257,7 @@ class _Cover extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: radius,
-        border: Border.all(color: AppColors.surfaceOutline, width: 1),
+        border: Border.all(color: context.palette.surfaceOutline, width: 1),
         boxShadow: const <BoxShadow>[
           BoxShadow(
             color: Color(0x66000000),
@@ -290,7 +292,10 @@ class _Placeholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppColors.videoBackdrop,
+      color: context.palette.resolve(
+        context.palette.videoBackdrop,
+        AppPalette.light.background,
+      ),
       child: Center(
         child: FractionallySizedBox(
           widthFactor: 0.46,

@@ -103,7 +103,7 @@ class DownloadBadge extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: IconTheme.of(context).color ??
-                          AppColors.iconIdle,
+                          context.palette.iconIdle,
                     ),
                   ),
                 ),
@@ -128,15 +128,12 @@ class _Ring extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color ink = IconTheme.of(context).color ?? AppColors.iconIdle;
+    final Color ink = IconTheme.of(context).color ?? context.palette.iconIdle;
     final double? f = progress;
     if (f == null) {
       return Padding(
         padding: const EdgeInsets.all(0.5),
-        child: CircularProgressIndicator(
-          strokeWidth: 1.4,
-          color: ink,
-        ),
+        child: CircularProgressIndicator(strokeWidth: 1.4, color: ink),
       );
     }
     // `num.clamp` answers `num`, not `double` — the painter wants the
@@ -167,13 +164,7 @@ class _RingPainter extends CustomPainter {
       size.width - paint.strokeWidth,
       size.height - paint.strokeWidth,
     );
-    canvas.drawArc(
-      rect,
-      -math.pi / 2,
-      2 * math.pi * fraction,
-      false,
-      paint,
-    );
+    canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * fraction, false, paint);
   }
 
   @override

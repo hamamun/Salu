@@ -186,9 +186,9 @@ class _TrackPanelState extends State<TrackPanel>
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.glass,
+            color: context.palette.glass,
             borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
             boxShadow: const <BoxShadow>[
               BoxShadow(
                 color: Color(0x80000000),
@@ -213,16 +213,21 @@ class _TrackPanelState extends State<TrackPanel>
         // Part 1 — Audio (§6.3).
         if (surface.audio.isNotEmpty) {
           children.add(const _PartLabel('Audio'));
-          children.add(_PartRows(
-            key: const ValueKey<String>('audio-tracks'),
-            panelOpen: _panels.trackPanelOpen.value,
-            rows: surface.audio
-                .map((MpvTrack t) => _TrackRowData.fromAudio(t,
-                    surface.audio.indexOf(t) + 1))
-                .toList(),
-            onTap: (MpvTrack t) =>
-                unawaited(_player.selectAudioTrack(t)),
-          ));
+          children.add(
+            _PartRows(
+              key: const ValueKey<String>('audio-tracks'),
+              panelOpen: _panels.trackPanelOpen.value,
+              rows: surface.audio
+                  .map(
+                    (MpvTrack t) => _TrackRowData.fromAudio(
+                      t,
+                      surface.audio.indexOf(t) + 1,
+                    ),
+                  )
+                  .toList(),
+              onTap: (MpvTrack t) => unawaited(_player.selectAudioTrack(t)),
+            ),
+          );
         }
 
         final bool hasEmbedded = surface.embeddedSubs.isNotEmpty;
@@ -232,36 +237,46 @@ class _TrackPanelState extends State<TrackPanel>
         // Part 2 — Embedded subtitles; Off pinned on top (§6.3).
         if (hasEmbedded) {
           children.add(const _PartLabel('Subtitles'));
-          children.add(_PartRows(
-            key: const ValueKey<String>('embedded-tracks'),
-            panelOpen: _panels.trackPanelOpen.value,
-            rows: <_TrackRowData>[
-              _TrackRowData.offRow(selected: offMarked),
-              ...surface.embeddedSubs.map((MpvTrack t) =>
-                  _TrackRowData.fromSub(t,
-                      surface.embeddedSubs.indexOf(t) + 1)),
-            ],
-            onTap: (MpvTrack t) => unawaited(_player.selectSubTrack(t)),
-            onOffTap: () => unawaited(_player.selectSubOff()),
-          ));
+          children.add(
+            _PartRows(
+              key: const ValueKey<String>('embedded-tracks'),
+              panelOpen: _panels.trackPanelOpen.value,
+              rows: <_TrackRowData>[
+                _TrackRowData.offRow(selected: offMarked),
+                ...surface.embeddedSubs.map(
+                  (MpvTrack t) => _TrackRowData.fromSub(
+                    t,
+                    surface.embeddedSubs.indexOf(t) + 1,
+                  ),
+                ),
+              ],
+              onTap: (MpvTrack t) => unawaited(_player.selectSubTrack(t)),
+              onOffTap: () => unawaited(_player.selectSubOff()),
+            ),
+          );
         }
 
         // Part 3 — Local subs; Off lives here if there are no embedded
         // tracks (§6.3's pinned-Off rule), or nowhere on a bare video.
         if (hasLocal) {
           children.add(const _PartLabel('Local'));
-          children.add(_PartRows(
-            key: const ValueKey<String>('local-tracks'),
-            panelOpen: _panels.trackPanelOpen.value,
-            rows: <_TrackRowData>[
-              if (!hasEmbedded) _TrackRowData.offRow(selected: offMarked),
-              ...surface.localSubs.map((MpvTrack t) =>
-                  _TrackRowData.fromSub(t,
-                      surface.localSubs.indexOf(t) + 1)),
-            ],
-            onTap: (MpvTrack t) => unawaited(_player.selectSubTrack(t)),
-            onOffTap: () => unawaited(_player.selectSubOff()),
-          ));
+          children.add(
+            _PartRows(
+              key: const ValueKey<String>('local-tracks'),
+              panelOpen: _panels.trackPanelOpen.value,
+              rows: <_TrackRowData>[
+                if (!hasEmbedded) _TrackRowData.offRow(selected: offMarked),
+                ...surface.localSubs.map(
+                  (MpvTrack t) => _TrackRowData.fromSub(
+                    t,
+                    surface.localSubs.indexOf(t) + 1,
+                  ),
+                ),
+              ],
+              onTap: (MpvTrack t) => unawaited(_player.selectSubTrack(t)),
+              onOffTap: () => unawaited(_player.selectSubOff()),
+            ),
+          );
         }
 
         // Actions — always present (§6.4: the Load + Search marks are
@@ -333,8 +348,7 @@ class _TrackRowData {
         lang ?? (t.title?.isNotEmpty ?? false ? t.title! : 'Track $n');
     String sub = t.external ? 'external' : 'embedded';
     if (t.external && t.externalFilename != null) {
-      final String file =
-          t.externalFilename!.split(RegExp(r'[/\\]')).last;
+      final String file = t.externalFilename!.split(RegExp(r'[/\\]')).last;
       if (file.isNotEmpty) sub = file;
     } else if (!t.external && t.codec != null) {
       sub = 'embedded';
@@ -388,8 +402,8 @@ class _PartLabel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 7, 12, 3),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.textSecondary,
+        style: TextStyle(
+          color: context.palette.textSecondary,
           fontSize: 10,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.0,
@@ -443,8 +457,7 @@ class _PartRowsState extends State<_PartRows> {
     final int newIndex = _selectedIndex(widget);
     final String? oldId =
         oldIndex < 0 ? null : oldWidget.rows[oldIndex].track?.id;
-    final String? newId =
-        newIndex < 0 ? null : widget.rows[newIndex].track?.id;
+    final String? newId = newIndex < 0 ? null : widget.rows[newIndex].track?.id;
     if ((!oldWidget.panelOpen && widget.panelOpen) ||
         oldIndex != newIndex ||
         oldId != newId ||
@@ -474,10 +487,9 @@ class _PartRowsState extends State<_PartRows> {
       } else if (bottom > target + position.viewportDimension) {
         target = bottom - position.viewportDimension;
       }
-      target = target.clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      ).toDouble();
+      target = target
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
       // Keep manual scrolling and already-visible selections untouched.
       if (target != position.pixels) _scroll.jumpTo(target);
     });
@@ -501,10 +513,7 @@ class _PartRowsState extends State<_PartRows> {
         ),
     ];
     if (widget.rows.length <= _PartRows.maxVisible) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      );
+      return Column(mainAxisSize: MainAxisSize.min, children: children);
     }
     // Past 5 rows the part scrolls INSIDE (§6.3) — the panel NEVER
     // grows, only the inner list rows scroll.
@@ -543,8 +552,8 @@ class _TrackRowState extends State<_TrackRow> {
   Widget build(BuildContext context) {
     final _TrackRowData d = widget.data;
     final Color labelColor = _hover || d.selected
-        ? AppColors.textPrimary
-        : AppColors.iconIdle;
+        ? context.palette.textPrimary
+        : context.palette.iconIdle;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -556,7 +565,8 @@ class _TrackRowState extends State<_TrackRow> {
           height: _PartRows.rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: _hover ? AppColors.surfaceHighlight : Colors.transparent,
+            color:
+                _hover ? context.palette.surfaceHighlight : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
           ),
           child: Row(
@@ -583,8 +593,8 @@ class _TrackRowState extends State<_TrackRow> {
                           d.sub!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
+                          style: TextStyle(
+                            color: context.palette.textSecondary,
                             fontSize: 10.5,
                           ),
                         ),
@@ -596,10 +606,10 @@ class _TrackRowState extends State<_TrackRow> {
               // The tick is mpv's truth, not SALU's target (§6.3/D17) —
               // appears only on the marked row.
               if (d.selected)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(left: 8),
                   child: IconTheme(
-                    data: IconThemeData(color: AppColors.textPrimary),
+                    data: IconThemeData(color: context.palette.textPrimary),
                     child: TickMark(size: 13),
                   ),
                 ),
@@ -619,7 +629,7 @@ class _Hairline extends StatelessWidget {
     return Container(
       height: 1,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      color: AppColors.divider,
+      color: context.palette.divider,
     );
   }
 }
@@ -706,7 +716,8 @@ class _SyncRowState extends State<_SyncRow> {
   bool _dragging = false;
 
   /// Where 0 lives on the bar.
-  static const Color _detent = Color(0x40FFFFFF);
+  Color get _detent =>
+      context.palette.resolve(const Color(0x40FFFFFF), const Color(0x40242428));
 
   static const TextStyle _labelStyle = TextStyle(
     fontSize: 10,
@@ -736,12 +747,12 @@ class _SyncRowState extends State<_SyncRow> {
   void _wheel(double dy) {
     // Up = later, down = earlier — the same sense as the volume bar's
     // up = louder.
-    unawaited(_player.setSubDelay(
-      _player.subDelay.value +
-          (dy > 0
-              ? -PlayerService.subDelayStep
-              : PlayerService.subDelayStep),
-    ));
+    unawaited(
+      _player.setSubDelay(
+        _player.subDelay.value +
+            (dy > 0 ? -PlayerService.subDelayStep : PlayerService.subDelayStep),
+      ),
+    );
   }
 
   @override
@@ -758,8 +769,9 @@ class _SyncRowState extends State<_SyncRow> {
               children: <Widget>[
                 IconTheme.merge(
                   data: IconThemeData(
-                    color:
-                        active ? AppColors.textPrimary : AppColors.iconIdle,
+                    color: active
+                        ? context.palette.textPrimary
+                        : context.palette.iconIdle,
                   ),
                   child: const CcMark(size: 14),
                 ),
@@ -822,12 +834,25 @@ class _SyncRowState extends State<_SyncRow> {
     final bool bright = _hovered || _dragging;
     final double barHeight = bright ? 16 : 14;
     final Color track = bright
-        ? Color.alphaBlend(const Color(0x14FFFFFF), AppColors.barTrack)
-        : AppColors.barTrack;
+        ? Color.alphaBlend(
+            context.palette.resolve(
+              const Color(0x14FFFFFF),
+              const Color(0x14000000),
+            ),
+            context.palette.barTrack,
+          )
+        : context.palette.barTrack;
     final Color fill = bright
-        ? Color.alphaBlend(const Color(0x1AFFFFFF), AppColors.barFill)
-        : AppColors.barFill;
-    final Color label = bright ? AppColors.textPrimary : AppColors.iconIdle;
+        ? Color.alphaBlend(
+            context.palette.resolve(
+              const Color(0x1AFFFFFF),
+              const Color(0x1A000000),
+            ),
+            context.palette.barFill,
+          )
+        : context.palette.barFill;
+    final Color label =
+        bright ? context.palette.textPrimary : context.palette.iconIdle;
     final TextStyle labelStyle = _labelStyle.copyWith(color: label);
 
     // A bar too narrow to hold both a fill and its number shows the
@@ -836,9 +861,7 @@ class _SyncRowState extends State<_SyncRow> {
     if (w < labelWidth + pad * 2) {
       return SizedBox(
         height: barHeight,
-        child: Center(
-          child: Text(formatSubDelay(delay), style: labelStyle),
-        ),
+        child: Center(child: Text(formatSubDelay(delay), style: labelStyle)),
       );
     }
 
@@ -878,7 +901,7 @@ class _SyncRowState extends State<_SyncRow> {
               bottom: 0,
               left: half - 0.5,
               width: 1,
-              child: const ColoredBox(color: _detent),
+              child: ColoredBox(color: _detent),
             ),
             Positioned(
               left: labelX.toDouble(),

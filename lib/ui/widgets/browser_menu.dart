@@ -49,8 +49,7 @@ class BrowserMenu extends StatelessWidget {
     return Focus(
       autofocus: true,
       onKeyEvent: (FocusNode n, KeyEvent e) {
-        if (e is KeyDownEvent &&
-            e.logicalKey == LogicalKeyboardKey.escape) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
           onClose();
           return KeyEventResult.handled;
         }
@@ -58,13 +57,13 @@ class BrowserMenu extends StatelessWidget {
       },
       child: Material(
         elevation: 0,
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: 280,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(
@@ -126,9 +125,9 @@ class _MenuDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.symmetric(vertical: 6),
-      child: Divider(height: 1, thickness: 1, color: AppColors.divider),
+      child: Divider(height: 1, thickness: 1, color: context.palette.divider),
     );
   }
 }
@@ -176,7 +175,7 @@ class _MenuRowState extends State<_MenuRow> {
         onTap: live ? widget.onTap : null,
         child: Container(
           height: 34,
-          color: _hovered && live ? AppColors.surfaceHighlight : null,
+          color: _hovered && live ? context.palette.surfaceHighlight : null,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
             children: <Widget>[
@@ -186,8 +185,8 @@ class _MenuRowState extends State<_MenuRow> {
                   style: TextStyle(
                     fontSize: 12.5,
                     color: live
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary.withAlpha(140),
+                        ? context.palette.textPrimary
+                        : context.palette.textSecondary.withAlpha(140),
                   ),
                 ),
               ),
@@ -227,12 +226,12 @@ class _ZoomRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
             children: <Widget>[
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Zoom',
                   style: TextStyle(
                     fontSize: 12.5,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
               ),
@@ -253,10 +252,10 @@ class _ZoomRow extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Text(
                       '${(z * 100).round()}%',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                   ),
@@ -296,7 +295,7 @@ class _ZoomBtn extends StatelessWidget {
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: IconTheme.of(context).color ?? AppColors.iconIdle,
+            color: IconTheme.of(context).color ?? context.palette.iconIdle,
           ),
         ),
       ),
@@ -320,11 +319,10 @@ class _DesktopRow extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () => tab.setDesktopMode(!on),
           child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             child: Row(
               children: <Widget>[
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -332,14 +330,14 @@ class _DesktopRow extends StatelessWidget {
                         'Desktop mode',
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.textPrimary,
+                          color: context.palette.textPrimary,
                         ),
                       ),
                       Text(
                         'Identify as Edge on Windows.',
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.textSecondary,
+                          color: context.palette.textSecondary,
                         ),
                       ),
                     ],
@@ -371,7 +369,12 @@ class _MenuSwitch extends StatelessWidget {
       height: 20,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: on ? AppColors.accent : const Color(0xFF3A3A3C),
+        color: on
+            ? context.palette.accent
+            : context.palette.resolve(
+                const Color(0xFF3A3A3C),
+                const Color(0xFFB8B8C0),
+              ),
         borderRadius: BorderRadius.circular(10),
       ),
       alignment: on ? Alignment.centerRight : Alignment.centerLeft,

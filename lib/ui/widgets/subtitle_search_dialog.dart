@@ -38,11 +38,14 @@ Future<void> showSubtitleSearchDialog(BuildContext context) async {
       context: context,
       barrierColor: const Color(0x8C000000),
       barrierDismissible: true,
-      barrierLabel:
-          MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       transitionDuration: const Duration(milliseconds: 220),
-      transitionBuilder: (BuildContext context, Animation<double> animation,
-          Animation<double> secondaryAnimation, Widget child) {
+      transitionBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+        Widget child,
+      ) {
         final CurvedAnimation curved = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutCubic,
@@ -55,8 +58,11 @@ Future<void> showSubtitleSearchDialog(BuildContext context) async {
           ),
         );
       },
-      pageBuilder: (BuildContext context, Animation<double> animation,
-              Animation<double> secondaryAnimation) =>
+      pageBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+      ) =>
           const SubtitleSearchDialog(),
     );
   } finally {
@@ -70,8 +76,7 @@ class SubtitleSearchDialog extends StatefulWidget {
   const SubtitleSearchDialog({super.key});
 
   @override
-  State<SubtitleSearchDialog> createState() =>
-      _SubtitleSearchDialogState();
+  State<SubtitleSearchDialog> createState() => _SubtitleSearchDialogState();
 }
 
 class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
@@ -119,8 +124,7 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
     });
     // search() already returns an empty list for every nothing-to-show
     // case (not configured / paused / no hits) — non-nullable by design.
-    final List<SubtitleResult> rows =
-        await SubtitleService.instance.search(q);
+    final List<SubtitleResult> rows = await SubtitleService.instance.search(q);
     if (!mounted) return;
     setState(() {
       _searching = false;
@@ -183,8 +187,11 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
               width: 470,
               constraints: const BoxConstraints(maxHeight: 428),
               decoration: BoxDecoration(
-                color: const Color(0xFA252526),
-                border: Border.all(color: AppColors.surfaceOutline),
+                color: context.palette.resolve(
+                  const Color(0xFA252526),
+                  const Color(0xFAF7F7FA),
+                ),
+                border: Border.all(color: context.palette.surfaceOutline),
                 borderRadius: BorderRadius.circular(13),
                 boxShadow: const <BoxShadow>[
                   BoxShadow(
@@ -217,31 +224,35 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
     return TextField(
       controller: _query,
       focusNode: _queryFocus,
-      style: const TextStyle(
-        color: AppColors.textPrimary,
+      style: TextStyle(
+        color: context.palette.textPrimary,
         fontSize: 13,
         height: 1.4,
       ),
-      cursorColor: AppColors.textPrimary,
+      cursorColor: context.palette.textPrimary,
       cursorWidth: 1,
       onSubmitted: (_) => unawaited(_runSearch()),
       decoration: InputDecoration(
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
         filled: true,
-        fillColor: AppColors.background,
+        fillColor: context.palette.background,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(9),
-          borderSide: const BorderSide(color: AppColors.divider),
+          borderSide: BorderSide(color: context.palette.divider),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(9),
-          borderSide: const BorderSide(color: AppColors.divider),
+          borderSide: BorderSide(color: context.palette.divider),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(9),
-          borderSide: const BorderSide(color: Color(0x52FFFFFF)),
+          borderSide: BorderSide(
+            color: context.palette.resolve(
+              const Color(0x52FFFFFF),
+              const Color(0x52242428),
+            ),
+          ),
         ),
       ),
     );
@@ -299,7 +310,7 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
   /// spinner; (3) hits — `Best matches` + `All matches`, pick rows.
   Widget _resultsArea() {
     if (_searching) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(vertical: 40),
         child: Center(
           child: SizedBox(
@@ -307,7 +318,7 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
             height: 18,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
             ),
           ),
         ),
@@ -325,20 +336,23 @@ class _SubtitleSearchDialogState extends State<SubtitleSearchDialog> {
     }
 
     final String pref = LanguageNames.normalize(
-        SettingsService.instance.subtitleLanguage.value);
+      SettingsService.instance.subtitleLanguage.value,
+    );
     final List<SubtitleResult> best = rows
-        .where((SubtitleResult r) => LanguageNames.normalize(r.language) == pref)
+        .where(
+          (SubtitleResult r) => LanguageNames.normalize(r.language) == pref,
+        )
         .take(3)
         .toList();
-    final List<SubtitleResult> rest = rows
-        .where((SubtitleResult r) => !best.contains(r))
-        .toList();
+    final List<SubtitleResult> rest =
+        rows.where((SubtitleResult r) => !best.contains(r)).toList();
 
     final List<Widget> children = <Widget>[];
     if (best.isNotEmpty) {
       children
-        ..add(_GroupLabel(
-            'Best matches · ${LanguageNames.nameOf(pref) ?? pref}'))
+        ..add(
+          _GroupLabel('Best matches · ${LanguageNames.nameOf(pref) ?? pref}'),
+        )
         ..addAll(best.map(_resultRow))
         ..add(const SizedBox(height: 2));
     }
@@ -380,8 +394,8 @@ class _GroupLabel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 7, 12, 3),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.textSecondary,
+        style: TextStyle(
+          color: context.palette.textSecondary,
           fontSize: 10,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.0,
@@ -394,8 +408,11 @@ class _GroupLabel extends StatelessWidget {
 /// One 40 px, two-line pick row: title + `release · downloads` sub,
 /// the language name at the right, a tick when picked.
 class _ResultRow extends StatefulWidget {
-  const _ResultRow(
-      {required this.result, required this.picked, required this.onTap});
+  const _ResultRow({
+    required this.result,
+    required this.picked,
+    required this.onTap,
+  });
 
   final SubtitleResult result;
   final bool picked;
@@ -423,7 +440,8 @@ class _ResultRowState extends State<_ResultRow> {
           height: 40,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: _hover ? AppColors.surfaceHighlight : Colors.transparent,
+            color:
+                _hover ? context.palette.surfaceHighlight : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
           ),
           child: Row(
@@ -439,8 +457,8 @@ class _ResultRowState extends State<_ResultRow> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: _hover || widget.picked
-                            ? AppColors.textPrimary
-                            : AppColors.iconIdle,
+                            ? context.palette.textPrimary
+                            : context.palette.iconIdle,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
                       ),
@@ -450,8 +468,8 @@ class _ResultRowState extends State<_ResultRow> {
                         r.subLine,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
+                        style: TextStyle(
+                          color: context.palette.textSecondary,
                           fontSize: 10.5,
                         ),
                       ),
@@ -465,16 +483,16 @@ class _ResultRowState extends State<_ResultRow> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: widget.picked
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
+                      ? context.palette.textPrimary
+                      : context.palette.textSecondary,
                   fontSize: 11,
                 ),
               ),
               if (widget.picked)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(left: 8),
                   child: IconTheme(
-                    data: IconThemeData(color: AppColors.textPrimary),
+                    data: IconThemeData(color: context.palette.textPrimary),
                     child: TickMark(size: 13),
                   ),
                 ),

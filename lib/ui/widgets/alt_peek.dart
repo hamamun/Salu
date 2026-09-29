@@ -151,7 +151,8 @@ class PeekChip extends StatelessWidget {
             height: 1.0,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
-            color: bright ? AppColors.accent : AppColors.textPrimary,
+            color:
+                bright ? context.palette.accent : context.palette.textPrimary,
             fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
           ),
         ),
@@ -316,10 +317,7 @@ class _AltPeekAnchorState extends State<AltPeekAnchor> {
             gap: _gap,
             margin: _margin,
           ),
-          child: _PeekFade(
-            show: _showTip,
-            child: _PeekTip(_legend),
-          ),
+          child: _PeekFade(show: _showTip, child: _PeekTip(_legend)),
         ),
       ),
     );
@@ -364,11 +362,19 @@ class _PeekPositionDelegate extends SingleChildLayoutDelegate {
       case PeekSide.below:
         dy = target.bottom + gap;
         if (dy + childSize.height > size.height - margin) {
-          dy = target.top - gap - childSize.height; // flip above at the bottom edge
+          dy = target.top -
+              gap -
+              childSize.height; // flip above at the bottom edge
         }
     }
-    dx = dx.clamp(margin, math.max(margin, size.width - childSize.width - margin));
-    dy = dy.clamp(margin, math.max(margin, size.height - childSize.height - margin));
+    dx = dx.clamp(
+      margin,
+      math.max(margin, size.width - childSize.width - margin),
+    );
+    dy = dy.clamp(
+      margin,
+      math.max(margin, size.height - childSize.height - margin),
+    );
     return Offset(dx, dy);
   }
 
@@ -414,8 +420,8 @@ class _PeekTip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: tt.decoration ??
-          const BoxDecoration(
-            color: AppColors.surfaceHighlight,
+          BoxDecoration(
+            color: context.palette.surfaceHighlight,
             borderRadius: BorderRadius.all(Radius.circular(6)),
           ),
       child: Text(
@@ -423,15 +429,12 @@ class _PeekTip extends StatelessWidget {
         maxLines: 1,
         softWrap: false,
         style: (tt.textStyle ??
-                const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 12,
-                ))
+                TextStyle(color: context.palette.textPrimary, fontSize: 12))
             .merge(
-              const TextStyle(
-                fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-              ),
-            ),
+          const TextStyle(
+            fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+          ),
+        ),
       ),
     );
   }

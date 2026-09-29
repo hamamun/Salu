@@ -186,7 +186,8 @@ class _MiniSeekLineState extends State<MiniSeekLine> {
           builder: (BuildContext context, BoxConstraints constraints) {
             final double w = constraints.maxWidth;
             final bool usable = _usable;
-            final Duration duration = usable ? _player.duration.value : Duration.zero;
+            final Duration duration =
+                usable ? _player.duration.value : Duration.zero;
             final double live = duration > Duration.zero
                 ? (duration.inMicroseconds <= 0
                     ? 0.0
@@ -209,14 +210,13 @@ class _MiniSeekLineState extends State<MiniSeekLine> {
                 onPointerUp: (PointerUpEvent e) => _onPointerUp(e, w),
                 onPointerCancel: _onPointerCancel,
                 child: MouseRegion(
-                  cursor: usable
-                      ? SystemMouseCursors.click
-                      : MouseCursor.defer,
+                  cursor: usable ? SystemMouseCursors.click : MouseCursor.defer,
                   onEnter: (_) => setState(() => _hovering = true),
                   onExit: (_) => setState(() => _hovering = false),
                   // No tooltip: the bar has no room for a popup (§3).
                   child: CustomPaint(
                     painter: MiniProgressStrip(
+                      palette: context.palette,
                       frac: _pressFrac ?? live,
                       head: usable &&
                           (widget.barHovered ||
@@ -237,7 +237,12 @@ class _MiniSeekLineState extends State<MiniSeekLine> {
 
 /// The top-edge strip: track, fill, and the hover/scrub head tick.
 class MiniProgressStrip extends CustomPainter {
-  const MiniProgressStrip({required this.frac, required this.head});
+  final AppPalette palette;
+  const MiniProgressStrip({
+    this.palette = AppPalette.saluDefault,
+    required this.frac,
+    required this.head,
+  });
 
   /// 0–1 fill; the track is drawn full width whatever this says, because
   /// every pixel of the bar is persistent (§7).
@@ -256,9 +261,11 @@ class MiniProgressStrip extends CustomPainter {
       trackWidth,
       MiniMetrics.seekHeight,
     );
-    final RRect rounded =
-        RRect.fromRectAndRadius(track, const Radius.circular(1));
-    canvas.drawRRect(rounded, Paint()..color = AppColors.barTrack);
+    final RRect rounded = RRect.fromRectAndRadius(
+      track,
+      const Radius.circular(1),
+    );
+    canvas.drawRRect(rounded, Paint()..color = palette.barTrack);
 
     final double filled = (frac.clamp(0.0, 1.0).toDouble()) * trackWidth;
     if (filled > 0) {
@@ -267,7 +274,7 @@ class MiniProgressStrip extends CustomPainter {
       canvas.clipRRect(rounded);
       canvas.drawRect(
         Rect.fromLTWH(track.left, track.top, filled, track.height),
-        Paint()..color = AppColors.barFill,
+        Paint()..color = palette.barFill,
       );
       canvas.restore();
     }
@@ -276,11 +283,11 @@ class MiniProgressStrip extends CustomPainter {
     canvas.drawCircle(
       Offset(track.left + filled, track.center.dy),
       MiniMetrics.seekHeadSize / 2,
-      Paint()..color = AppColors.barThumb,
+      Paint()..color = palette.barThumb,
     );
   }
 
   @override
   bool shouldRepaint(MiniProgressStrip old) =>
-      old.frac != frac || old.head != head;
+      palette != old.palette || old.frac != frac || old.head != head;
 }

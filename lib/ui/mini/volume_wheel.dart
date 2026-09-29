@@ -51,7 +51,8 @@ class _VolumeWheelState extends State<VolumeWheel> {
         final bool silent = muted || level < 1;
         final double frac =
             silent ? 0.0 : (level / 100).clamp(0.0, 1.0).toDouble();
-        final Color ink = _hovered ? AppColors.textPrimary : AppColors.iconIdle;
+        final Color ink =
+            _hovered ? context.palette.textPrimary : context.palette.iconIdle;
         // The muted dial keeps its shape and drops its voice.
         final Color quiet = ink.withAlpha(90); // ~35 %
 
@@ -72,12 +73,12 @@ class _VolumeWheelState extends State<VolumeWheel> {
                   size: const Size.square(MiniMetrics.wheelDial),
                   painter: _WheelPainter(
                     track: silent
-                        ? AppColors.barTrack.withAlpha(90)
-                        : AppColors.barTrack,
+                        ? context.palette.barTrack.withAlpha(90)
+                        : context.palette.barTrack,
                     // The level arc sits at ~75 % ink at rest, full ink
                     // under the pointer (the preview's own recipe).
                     arc: silent ? quiet : ink.withAlpha(_hovered ? 255 : 190),
-                    head: silent ? quiet : AppColors.barThumb,
+                    head: silent ? quiet : context.palette.barThumb,
                     stroke: markStrokeFor(MiniMetrics.wheelDial),
                     frac: frac,
                   ),

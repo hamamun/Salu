@@ -9,11 +9,7 @@ import '../../theme/app_theme.dart';
 /// coincide while dragging. The chip floats BELOW its bar, over the
 /// video; it never reflows anything around it.
 class HoverChip extends StatelessWidget {
-  const HoverChip({
-    super.key,
-    required this.label,
-    this.width = 96,
-  });
+  const HoverChip({super.key, required this.label, this.width = 96});
 
   /// The value text (formatted time or percent).
   final String label;
@@ -32,13 +28,13 @@ class HoverChip extends StatelessWidget {
         height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.chipBackground,
+          color: context.palette.chipBackground,
           borderRadius: BorderRadius.circular(5),
         ),
         child: Text(
           label,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: context.palette.textPrimary,
             fontSize: 11.5,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.3,

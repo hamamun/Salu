@@ -126,8 +126,9 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
       _stage = _Stage.applying;
       _askedPrivate = flipNetworks;
     });
-    final RemoteFirewallFixResult result =
-        await _firewall.fix(makePrivate: flipNetworks);
+    final RemoteFirewallFixResult result = await _firewall.fix(
+      makePrivate: flipNetworks,
+    );
     if (!mounted) return;
     setState(() {
       switch (result.outcome) {
@@ -153,9 +154,9 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
         width: 440,
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.background,
+            color: context.palette.background,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
             boxShadow: const <BoxShadow>[
               BoxShadow(
                 color: Color(0x80000000),
@@ -176,12 +177,20 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   _buildHeader(),
-                  const Divider(height: 1, thickness: 1, color: AppColors.divider),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: context.palette.divider,
+                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                     child: _buildBody(),
                   ),
-                  const Divider(height: 1, thickness: 1, color: AppColors.divider),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: context.palette.divider,
+                  ),
                   _buildActions(),
                 ],
               );
@@ -197,17 +206,17 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
       padding: const EdgeInsets.fromLTRB(20, 16, 12, 14),
       child: Row(
         children: <Widget>[
-          const IconTheme(
-            data: IconThemeData(color: AppColors.textPrimary),
+          IconTheme(
+            data: IconThemeData(color: context.palette.textPrimary),
             child: ShieldMark(size: 16),
           ),
           const SizedBox(width: 10),
-          const Text(
+          Text(
             'Windows Firewall',
             style: TextStyle(
               fontSize: 15.5,
               fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
               letterSpacing: 0.2,
             ),
           ),
@@ -316,10 +325,10 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 1),
               child: IconTheme(
-                data: IconThemeData(color: AppColors.statusAlive),
+                data: IconThemeData(color: context.palette.statusAlive),
                 child: TickMark(size: 15),
               ),
             ),
@@ -330,11 +339,11 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
                     ? 'Done — phones on your Wi-Fi can reach SALU, and '
                         'the network is now Private.'
                     : 'Done — phones on your Wi-Fi can now reach SALU.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
                   height: 1.4,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
               ),
             ),
@@ -345,15 +354,15 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: context.palette.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.surfaceOutline),
+              border: Border.all(color: context.palette.surfaceOutline),
             ),
             child: Text(
               'Available on ${remote.networkName.value ?? 'LAN'} · $address · $port',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
           ),
@@ -386,18 +395,18 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: context.palette.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.surfaceOutline),
+              border: Border.all(color: context.palette.surfaceOutline),
             ),
             child: Text(
               detail,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 height: 1.35,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
           ),
@@ -527,13 +536,13 @@ class _RemoteFirewallDialogState extends State<_RemoteFirewallDialog> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: _firewall.openWindowsFirewallSettings,
-                  child: const Text(
+                  child: Text(
                     'Do it by hand instead',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.palette.textSecondary,
                       decoration: TextDecoration.underline,
-                      decorationColor: AppColors.textSecondary,
+                      decorationColor: context.palette.textSecondary,
                     ),
                   ),
                 ),
@@ -568,9 +577,9 @@ class _MessageBody extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.surfaceOutline),
+        border: Border.all(color: context.palette.surfaceOutline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -578,20 +587,20 @@ class _MessageBody extends StatelessWidget {
         children: <Widget>[
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13.5,
               height: 1.35,
               fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
             ),
           ),
           const SizedBox(height: 5),
           Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               height: 1.45,
-              color: AppColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
           ),
         ],
@@ -638,10 +647,11 @@ class _PrivateNetworkRowState extends State<_PrivateNetworkRow> {
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color:
-                _hovered ? AppColors.surfaceHighlight : AppColors.surface,
+            color: _hovered
+                ? context.palette.surfaceHighlight
+                : context.palette.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -655,19 +665,19 @@ class _PrivateNetworkRowState extends State<_PrivateNetworkRow> {
                   children: <Widget>[
                     Text(
                       'Mark $names as a private network',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
+                    Text(
                       'Recommended for home Wi-Fi — Public hides the PC from phones.',
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.3,
-                        color: AppColors.textSecondary,
+                        color: context.palette.textSecondary,
                       ),
                     ),
                   ],
@@ -696,14 +706,16 @@ class _SaluCheckbox extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(5),
         border: Border.all(
-          color: checked ? AppColors.iconIdle : AppColors.statusUnknown,
+          color: checked
+              ? context.palette.iconIdle
+              : context.palette.statusUnknown,
           width: 1.6,
         ),
       ),
       alignment: Alignment.center,
       child: checked
-          ? const IconTheme(
-              data: IconThemeData(color: AppColors.textPrimary),
+          ? IconTheme(
+              data: IconThemeData(color: context.palette.textPrimary),
               child: TickMark(size: 12),
             )
           : null,
@@ -722,19 +734,19 @@ class _CenteredLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.surfaceOutline),
+        border: Border.all(color: context.palette.surfaceOutline),
       ),
       child: Row(
         children: <Widget>[
           if (busy) ...<Widget>[
-            const SizedBox(
+            SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 1.8,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
             const SizedBox(width: 12),
@@ -742,10 +754,10 @@ class _CenteredLine extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
             ),
           ),
@@ -781,16 +793,17 @@ class _DialogActionState extends State<_DialogAction> {
   Widget build(BuildContext context) {
     final bool on = widget.onTap != null;
     final bool lit = on && _hovered;
-    final Color rest =
-        widget.primary ? AppColors.textPrimary : AppColors.textSecondary;
+    final Color rest = widget.primary
+        ? context.palette.textPrimary
+        : context.palette.textSecondary;
     final Color ink = !on
-        ? AppColors.textSecondary.withAlpha(110)
-        : (lit ? Colors.white : rest);
+        ? context.palette.textSecondary.withAlpha(110)
+        : (lit ? context.palette.textPrimary : rest);
     final Color outline = !on
-        ? AppColors.surfaceOutline.withAlpha(140)
+        ? context.palette.surfaceOutline.withAlpha(140)
         : (widget.primary || lit
-            ? AppColors.divider
-            : AppColors.surfaceOutline);
+            ? context.palette.divider
+            : context.palette.surfaceOutline);
 
     return MouseRegion(
       cursor: on ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -816,7 +829,8 @@ class _DialogActionState extends State<_DialogAction> {
             constraints: const BoxConstraints(minWidth: 84),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: lit ? AppColors.surfaceHighlight : Colors.transparent,
+              color:
+                  lit ? context.palette.surfaceHighlight : Colors.transparent,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: outline),
             ),

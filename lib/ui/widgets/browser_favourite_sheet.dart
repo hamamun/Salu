@@ -50,9 +50,11 @@ class BrowserFavouriteSheet extends StatefulWidget {
 
 class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
   late final TextEditingController _name = TextEditingController(
-      text: widget.entry?.name ?? widget.defaultName);
+    text: widget.entry?.name ?? widget.defaultName,
+  );
   late final TextEditingController _folder = TextEditingController(
-      text: widget.entry?.folder ?? '');
+    text: widget.entry?.folder ?? '',
+  );
   final FocusNode _nameFocus = FocusNode();
 
   @override
@@ -90,13 +92,13 @@ class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
     final List<String> folders = WebFavouritesService.instance.folders;
     return Material(
       elevation: 0,
-      color: AppColors.surface,
+      color: context.palette.surface,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 300,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.surfaceOutline),
+          border: Border.all(color: context.palette.surfaceOutline),
         ),
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 14),
         child: Column(
@@ -110,10 +112,10 @@ class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
                 Expanded(
                   child: Text(
                     editing ? 'Edit favourite' : 'Add favourite',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: context.palette.textPrimary,
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -131,8 +133,10 @@ class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
               widget.defaultUrl,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: 11,
+                color: context.palette.textSecondary,
+              ),
             ),
             const SizedBox(height: 10),
             _Field(
@@ -168,10 +172,12 @@ class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
             if (widget.full && !editing)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: const Text(
+                child: Text(
                   '15 favourites is the limit — remove one to add this.',
                   style: TextStyle(
-                      fontSize: 11, color: AppColors.textSecondary),
+                    fontSize: 11,
+                    color: context.palette.textSecondary,
+                  ),
                 ),
               ),
             const SizedBox(height: 14),
@@ -181,10 +187,11 @@ class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
                   child: TextButton(
                     onPressed: (widget.full && !editing) ? null : _commit,
                     style: TextButton.styleFrom(
-                      backgroundColor: AppColors.accent,
+                      backgroundColor: context.palette.accent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 9),
                     ),
                     child: Text(
@@ -235,33 +242,37 @@ class _Field extends StatelessWidget {
           padding: const EdgeInsets.only(left: 2, bottom: 3),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10.5,
               letterSpacing: 0.5,
-              color: AppColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: AppColors.background,
+            color: context.palette.background,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: TextField(
             controller: controller,
             focusNode: focus,
             onSubmitted: (_) => onEnter?.call(),
-            style: const TextStyle(
-                fontSize: 12.5, color: AppColors.textPrimary),
-            cursorColor: AppColors.accent,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: context.palette.textPrimary,
+            ),
+            cursorColor: context.palette.accent,
             decoration: InputDecoration(
               isDense: true,
               border: InputBorder.none,
               hintText: hint,
-              hintStyle: const TextStyle(
-                  fontSize: 12.5, color: AppColors.textSecondary),
+              hintStyle: TextStyle(
+                fontSize: 12.5,
+                color: context.palette.textSecondary,
+              ),
             ),
           ),
         ),
@@ -290,10 +301,14 @@ class _FolderChip extends StatelessWidget {
         curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? AppColors.surfaceHighlight : AppColors.background,
+          color: selected
+              ? context.palette.surfaceHighlight
+              : context.palette.background,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? AppColors.accent : AppColors.surfaceOutline,
+            color: selected
+                ? context.palette.accent
+                : context.palette.surfaceOutline,
           ),
         ),
         child: Text(
@@ -301,8 +316,8 @@ class _FolderChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             color: selected
-                ? AppColors.textPrimary
-                : AppColors.textSecondary,
+                ? context.palette.textPrimary
+                : context.palette.textSecondary,
           ),
         ),
       ),

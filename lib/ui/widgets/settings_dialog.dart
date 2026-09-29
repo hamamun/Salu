@@ -62,7 +62,11 @@ part 'associations_tab.dart';
 /// is. About (phase_9_details.md · step 2) sits to its right as the
 /// window's second reference page: nothing on it is a setting.
 class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key, this.initialTab = SettingsTab.general, this.onOpenRemote});
+  const SettingsDialog({
+    super.key,
+    this.initialTab = SettingsTab.general,
+    this.onOpenRemote,
+  });
 
   /// The tab the window opens on. General is the default at every door;
   /// the browser's own doors ask for Web — a viewer who came from the web
@@ -77,7 +81,16 @@ class SettingsDialog extends StatefulWidget {
 
 /// The window's tabs. Public because a caller picks the one to open
 /// on ([SettingsDialog.initialTab]).
-enum SettingsTab { general, subtitles, web, updates, associations, shortcuts, about }
+enum SettingsTab {
+  general,
+  appearance,
+  subtitles,
+  web,
+  updates,
+  associations,
+  shortcuts,
+  about,
+}
 
 class _SettingsDialogState extends State<SettingsDialog> {
   /// Opens on the door the viewer came through, then moves only by their
@@ -104,9 +117,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
             width: width,
             height: height,
             decoration: BoxDecoration(
-              color: AppColors.background,
+              color: context.palette.background,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF333336)),
+              border: Border.all(
+                color: context.palette.resolve(
+                  const Color(0xFF333336),
+                  const Color(0xFFD4D4DA),
+                ),
+              ),
               boxShadow: const <BoxShadow>[
                 BoxShadow(
                   color: Color(0x80000000),
@@ -120,7 +138,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
               children: <Widget>[
                 _buildHeader(),
                 _buildTabStrip(),
-                const Divider(height: 1, thickness: 1, color: AppColors.divider),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: context.palette.divider,
+                ),
                 Expanded(child: _buildBody()),
               ],
             ),
@@ -135,14 +157,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
       padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
       child: Row(
         children: <Widget>[
-          const DotGridIcon(size: 20, color: AppColors.textPrimary),
+          DotGridIcon(size: 20, color: context.palette.textPrimary),
           const SizedBox(width: 12),
-          const Text(
+          Text(
             'Settings',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
               letterSpacing: 0.2,
             ),
           ),
@@ -180,6 +202,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     selected: _tab == SettingsTab.general,
                     onTap: () => setState(() => _tab = SettingsTab.general),
                   ),
+                  _TabButton(
+                    label: 'Appearance',
+                    selected: _tab == SettingsTab.appearance,
+                    onTap: () => setState(() => _tab = SettingsTab.appearance),
+                  ),
                   // cc.md §2 — the Subtitles tab (D1…D5, D13).
                   _TabButton(
                     label: 'Subtitles',
@@ -205,7 +232,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   _TabButton(
                     label: 'Associations',
                     selected: _tab == SettingsTab.associations,
-                    onTap: () => setState(() => _tab = SettingsTab.associations),
+                    onTap: () =>
+                        setState(() => _tab = SettingsTab.associations),
                   ),
                   // shortcut.md §4.1 — the Shortcuts tab (the Living Map):
                   // a reference page rather than a setting.
@@ -235,6 +263,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget _buildBody() {
     return switch (_tab) {
       SettingsTab.general => _GeneralTab(onOpenRemote: widget.onOpenRemote),
+      SettingsTab.appearance => const _AppearanceTab(),
       SettingsTab.subtitles => const _SubtitlesTab(),
       SettingsTab.web => const _WebTab(),
       SettingsTab.updates => const _UpdatesTab(),
@@ -252,40 +281,37 @@ class _SettingsDialogState extends State<SettingsDialog> {
 // and a future Video / Audio tab costs no new design.
 
 /// The one text style for group captions — small, spaced, quiet.
-const TextStyle _captionStyle = TextStyle(
-  fontSize: 10.5,
-  fontWeight: FontWeight.w600,
-  letterSpacing: 1.1,
-  color: AppColors.textSecondary,
-);
+TextStyle _captionStyle(BuildContext context) => TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 1.1,
+      color: context.palette.textSecondary,
+    );
 
 /// A setting's name. Never a sentence.
-const TextStyle _labelStyle = TextStyle(
-  fontSize: 13.5,
-  color: AppColors.textPrimary,
-);
+TextStyle _labelStyle(BuildContext context) =>
+    TextStyle(fontSize: 13.5, color: context.palette.textPrimary);
 
 /// A setting's current value or state (a path, a date, a count, a word).
-const TextStyle _valueStyle = TextStyle(
-  fontSize: 12.5,
-  color: AppColors.textSecondary,
-);
+TextStyle _valueStyle(BuildContext context) =>
+    TextStyle(fontSize: 12.5, color: context.palette.textSecondary);
 
 /// Selected pill tint + hairline (the group-by pill's recipe, reused).
-const Color _pillFill = Color(0x1F4C9EEB);
-const Color _pillLine = Color(0x404C9EEB);
+final Color _pillFill = Color(0x1F4C9EEB);
+final Color _pillLine = Color(0x404C9EEB);
 
 /// The pointer's wash on an interactive row.
-const Color _rowHover = Color(0x0DFFFFFF);
+Color _rowHover(BuildContext context) =>
+    context.palette.resolve(const Color(0x0DFFFFFF), const Color(0x0D000000));
 
 /// The quiet line under a pill set that names the factory default — a
 /// word the viewer can read, not a dot they have to learn (owner,
 /// 2026-09-28 · enhancement 5).
-const TextStyle _defaultCaptionStyle = TextStyle(
-  fontSize: 10,
-  letterSpacing: 0.3,
-  color: AppColors.textSecondary,
-);
+TextStyle _defaultCaptionStyle(BuildContext context) => TextStyle(
+      fontSize: 10,
+      letterSpacing: 0.3,
+      color: context.palette.textSecondary,
+    );
 
 /// A group's reset wiring (enhancement 3, 2026-09-28).
 ///
@@ -319,6 +345,7 @@ class _GroupReset {
 class _Preferences {
   const _Preferences({
     required this.titleBarMode,
+    required this.themeMode,
     required this.resumeMode,
     required this.folderAutoloadMode,
     required this.autoEq,
@@ -338,6 +365,7 @@ class _Preferences {
   });
 
   final TitleBarMode titleBarMode;
+  final SaluThemeMode themeMode;
   final ResumeMode resumeMode;
   final FolderAutoloadMode folderAutoloadMode;
   final bool autoEq;
@@ -360,6 +388,7 @@ class _Preferences {
     final SettingsService s = SettingsService.instance;
     return _Preferences(
       titleBarMode: s.titleBarMode.value,
+      themeMode: s.themeMode.value,
       resumeMode: s.resumeMode.value,
       folderAutoloadMode: s.folderAutoloadMode.value,
       autoEq: s.autoEq.value,
@@ -383,6 +412,7 @@ class _Preferences {
   /// group's mark and each pill set's `Default · …` line names.
   static const _Preferences defaults = _Preferences(
     titleBarMode: TitleBarMode.borderless,
+    themeMode: SaluThemeMode.defaultTheme,
     resumeMode: ResumeMode.all,
     folderAutoloadMode: FolderAutoloadMode.allVideos,
     autoEq: false,
@@ -406,6 +436,7 @@ class _Preferences {
     final SettingsService s = SettingsService.instance;
     return <Listenable>[
       s.titleBarMode,
+      s.themeMode,
       s.resumeMode,
       s.folderAutoloadMode,
       s.autoEq,
@@ -429,6 +460,7 @@ class _Preferences {
   /// in which no reset mark is drawn anywhere.
   bool get isDefault =>
       titleBarMode == defaults.titleBarMode &&
+      themeMode == defaults.themeMode &&
       resumeMode == defaults.resumeMode &&
       folderAutoloadMode == defaults.folderAutoloadMode &&
       autoEq == defaults.autoEq &&
@@ -452,6 +484,7 @@ class _Preferences {
   void apply() {
     final SettingsService s = SettingsService.instance;
     unawaited(s.setTitleBarMode(titleBarMode));
+    unawaited(s.setThemeMode(themeMode));
     unawaited(s.setResumeMode(resumeMode));
     unawaited(s.setFolderAutoloadMode(folderAutoloadMode));
     unawaited(s.setAutoEq(autoEq));
@@ -488,15 +521,15 @@ class _Group extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _captionRow(),
+        _captionRow(context),
         for (int i = 0; i < rows.length; i++) ...<Widget>[
           if (i > 0)
-            const Divider(
+            Divider(
               height: 1,
               thickness: 1,
               indent: 10,
               endIndent: 10,
-              color: AppColors.divider,
+              color: context.palette.divider,
             ),
           rows[i],
         ],
@@ -506,9 +539,12 @@ class _Group extends StatelessWidget {
 
   /// The caption line — one fixed height whether or not the reset mark is
   /// up, so nothing in the list ever shifts under the pointer.
-  Widget _captionRow() {
+  Widget _captionRow(BuildContext context) {
     final _GroupReset? reset = this.reset;
-    final Widget label = Text(caption.toUpperCase(), style: _captionStyle);
+    final Widget label = Text(
+      caption.toUpperCase(),
+      style: _captionStyle(context),
+    );
     if (reset == null) {
       return Padding(
         padding: const EdgeInsets.only(left: 10),
@@ -603,7 +639,7 @@ class _RowState extends State<_Row> {
           curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: _hovered ? _rowHover : Colors.transparent,
+            color: _hovered ? _rowHover(context) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: ConstrainedBox(
@@ -615,19 +651,16 @@ class _RowState extends State<_Row> {
                     widget.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _labelStyle.copyWith(
+                    style: _labelStyle(context).copyWith(
                       color: widget.enabled
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
+                          ? context.palette.textPrimary
+                          : context.palette.textSecondary,
                     ),
                   ),
                 ),
                 if (widget.value != null) ...<Widget>[
                   const SizedBox(width: 12),
-                  _ValueText(
-                    text: widget.value!,
-                    tooltip: widget.valueTooltip,
-                  ),
+                  _ValueText(text: widget.value!, tooltip: widget.valueTooltip),
                 ],
                 if (widget.trailing != null) ...<Widget>[
                   const SizedBox(width: 10),
@@ -667,7 +700,7 @@ class _ValueText extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.right,
-        style: _valueStyle,
+        style: _valueStyle(context),
       ),
     );
     if (tooltip == null) return label;
@@ -688,11 +721,13 @@ class _PillPicker<T> extends StatelessWidget {
     required this.value,
     required this.onSelect,
     this.defaultValue,
+    this.iconFor,
   });
 
   /// `hint`, when given, is the pill's hover-delay tooltip.
   final List<({T value, String label, String? hint})> options;
   final T value;
+  final IconData Function(T)? iconFor;
   final ValueChanged<T> onSelect;
 
   /// The factory default. When given, the set wears one quiet line under
@@ -701,7 +736,7 @@ class _PillPicker<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget capsule = _capsule();
+    final Widget capsule = _capsule(context);
     final T? fallback = defaultValue;
     if (fallback == null) return capsule;
     String? fallbackLabel;
@@ -718,16 +753,16 @@ class _PillPicker<T> extends StatelessWidget {
       children: <Widget>[
         capsule,
         const SizedBox(height: 2),
-        Text('Default · $fallbackLabel', style: _defaultCaptionStyle),
+        Text('Default · $fallbackLabel', style: _defaultCaptionStyle(context)),
       ],
     );
   }
 
-  Widget _capsule() {
+  Widget _capsule(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.surfaceOutline),
+        border: Border.all(color: context.palette.surfaceOutline),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -736,6 +771,7 @@ class _PillPicker<T> extends StatelessWidget {
           for (final option in options)
             _Pill(
               label: option.label,
+              icon: iconFor?.call(option.value),
               hint: option.hint,
               selected: option.value == value,
               onTap: () => onSelect(option.value),
@@ -751,11 +787,13 @@ class _Pill extends StatefulWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.icon,
     this.hint,
   });
 
   final String label;
   final String? hint;
+  final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
 
@@ -785,19 +823,36 @@ class _PillState extends State<_Pill> {
           decoration: BoxDecoration(
             color: selected
                 ? _pillFill
-                : (_hovered ? _rowHover : Colors.transparent),
+                : (_hovered ? _rowHover(context) : Colors.transparent),
             borderRadius: BorderRadius.circular(999),
           ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              fontSize: 11.5,
-              letterSpacing: 0.2,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected
-                  ? AppColors.accent
-                  : (_hovered ? AppColors.textPrimary : AppColors.textSecondary),
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              if (widget.icon != null) ...<Widget>[
+                Icon(
+                  widget.icon,
+                  size: 14,
+                  color: selected
+                      ? context.palette.accent
+                      : context.palette.iconIdle,
+                ),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  letterSpacing: 0.2,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected
+                      ? context.palette.accent
+                      : (_hovered
+                          ? context.palette.textPrimary
+                          : context.palette.textSecondary),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -809,7 +864,12 @@ class _PillState extends State<_Pill> {
         child: pill,
       );
     }
-    return pill;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: widget.label,
+      child: pill,
+    );
   }
 }
 
@@ -885,7 +945,7 @@ class _RowChevron extends StatelessWidget {
     return Icon(
       Icons.chevron_right,
       size: 16,
-      color: enabled ? AppColors.textSecondary : AppColors.divider,
+      color: enabled ? context.palette.textSecondary : context.palette.divider,
     );
   }
 }
@@ -928,7 +988,7 @@ class _TabBody extends StatelessWidget {
 }
 
 /// The air between two groups.
-const SizedBox _groupGap = SizedBox(height: 10);
+final SizedBox _groupGap = SizedBox(height: 10);
 
 // ── Factory defaults (enhancement 3, owner 2026-09-28) ─────────────────────
 
@@ -956,6 +1016,14 @@ class _Defaults {
     if (before.isDefault) return;
     _Preferences.defaults.apply();
     _undo('Settings reset', before.apply);
+  }
+
+  static void theme() {
+    final SettingsService s = _s;
+    final SaluThemeMode previous = s.themeMode.value;
+    if (previous == SaluThemeMode.defaultTheme) return;
+    unawaited(s.setThemeMode(SaluThemeMode.defaultTheme));
+    _undo('Theme reset', () => unawaited(s.setThemeMode(previous)));
   }
 
   static void topBar() {
@@ -1020,8 +1088,10 @@ class _Defaults {
     final bool previous = s.subtitleAutoDownload.value;
     if (previous) return;
     unawaited(s.setSubtitleAutoDownload(true));
-    _undo('Auto-download reset',
-        () => unawaited(s.setSubtitleAutoDownload(previous)));
+    _undo(
+      'Auto-download reset',
+      () => unawaited(s.setSubtitleAutoDownload(previous)),
+    );
   }
 
   static void addressBar() {
@@ -1029,8 +1099,10 @@ class _Defaults {
     final bool previous = s.webSearchSuggestions.value;
     if (previous) return;
     unawaited(s.setWebSearchSuggestions(true));
-    _undo('Address bar reset',
-        () => unawaited(s.setWebSearchSuggestions(previous)));
+    _undo(
+      'Address bar reset',
+      () => unawaited(s.setWebSearchSuggestions(previous)),
+    );
   }
 
   static void pageColours() {
@@ -1067,8 +1139,7 @@ class _Defaults {
     final WebAutoClearInterval previous = s.webAutoClearDays.value;
     if (previous == WebAutoClearInterval.off) return;
     unawaited(s.setWebAutoClearDays(WebAutoClearInterval.off));
-    _undo('Auto-clear reset',
-        () => unawaited(s.setWebAutoClearDays(previous)));
+    _undo('Auto-clear reset', () => unawaited(s.setWebAutoClearDays(previous)));
   }
 
   static void autoClearTiming() {
@@ -1076,8 +1147,10 @@ class _Defaults {
     final WebAutoClearTiming previous = s.webAutoClearTiming.value;
     if (previous == WebAutoClearTiming.onOpen) return;
     unawaited(s.setWebAutoClearTiming(WebAutoClearTiming.onOpen));
-    _undo('Sweep timing reset',
-        () => unawaited(s.setWebAutoClearTiming(previous)));
+    _undo(
+      'Sweep timing reset',
+      () => unawaited(s.setWebAutoClearTiming(previous)),
+    );
   }
 
   static void updates() {
@@ -1085,8 +1158,76 @@ class _Defaults {
     final UpdateCheckFrequency previous = s.updateCheckFrequency.value;
     if (previous == UpdateCheckFrequency.weekly) return;
     unawaited(s.setUpdateCheckFrequency(UpdateCheckFrequency.weekly));
-    _undo('Updates reset',
-        () => unawaited(s.setUpdateCheckFrequency(previous)));
+    _undo(
+      'Updates reset',
+      () => unawaited(s.setUpdateCheckFrequency(previous)),
+    );
+  }
+}
+
+// ── Appearance tab · phase 1 (enhance.md) ──────────────────────────────
+
+class _AppearanceTab extends StatelessWidget {
+  const _AppearanceTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final SettingsService settings = SettingsService.instance;
+    return _TabBody(
+      children: <Widget>[
+        _Group(
+          caption: 'Theme',
+          reset: _GroupReset(
+            sources: <Listenable>[settings.themeMode],
+            isModified: () =>
+                settings.themeMode.value != SaluThemeMode.defaultTheme,
+            onReset: _Defaults.theme,
+          ),
+          rows: const <Widget>[_ThemeRow()],
+        ),
+      ],
+    );
+  }
+}
+
+class _ThemeRow extends StatelessWidget {
+  const _ThemeRow();
+
+  static const List<({SaluThemeMode value, String label, String? hint})>
+      options = [
+    (
+      value: SaluThemeMode.defaultTheme,
+      label: 'Default',
+      hint: 'SALU appearance',
+    ),
+    (value: SaluThemeMode.light, label: 'Light', hint: 'Light appearance'),
+    (
+      value: SaluThemeMode.system,
+      label: 'System',
+      hint: 'Follow Windows appearance',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<SaluThemeMode>(
+      valueListenable: SettingsService.instance.themeMode,
+      builder: (BuildContext context, SaluThemeMode selected, Widget? _) =>
+          _Row(
+        label: 'Theme',
+        trailing: _PillPicker<SaluThemeMode>(
+          options: options,
+          iconFor: (SaluThemeMode mode) => switch (mode) {
+            SaluThemeMode.defaultTheme => Icons.dark_mode_outlined,
+            SaluThemeMode.light => Icons.light_mode_outlined,
+            SaluThemeMode.system => Icons.desktop_windows_outlined,
+          },
+          value: selected,
+          onSelect: (SaluThemeMode mode) =>
+              unawaited(SettingsService.instance.setThemeMode(mode)),
+        ),
+      ),
+    );
   }
 }
 
@@ -1132,10 +1273,7 @@ class _GeneralTab extends StatelessWidget {
         _Group(
           caption: 'Equalizer',
           reset: _GroupReset(
-            sources: <Listenable>[
-              settings.autoEq,
-              settings.mouseOverPreview,
-            ],
+            sources: <Listenable>[settings.autoEq, settings.mouseOverPreview],
             isModified: () =>
                 settings.autoEq.value || settings.mouseOverPreview.value,
             onReset: _Defaults.equalizer,
@@ -1169,11 +1307,7 @@ class _TitleBarModeRow extends StatelessWidget {
       label: 'Pin (playback off)',
       hint: 'Stays visible while nothing is playing.',
     ),
-    (
-      value: TitleBarMode.locked,
-      label: 'Locked',
-      hint: 'Always visible.',
-    ),
+    (value: TitleBarMode.locked, label: 'Locked', hint: 'Always visible.'),
   ];
 
   @override
@@ -1198,8 +1332,8 @@ class _TitleBarModeRow extends StatelessWidget {
 class _ResumeModeRow extends StatelessWidget {
   const _ResumeModeRow();
 
-  static const List<({ResumeMode value, String label, String? hint})>
-      _options = <({ResumeMode value, String label, String? hint})>[
+  static const List<({ResumeMode value, String label, String? hint})> _options =
+      <({ResumeMode value, String label, String? hint})>[
     (
       value: ResumeMode.all,
       label: 'All files',
@@ -1361,10 +1495,12 @@ class _ClearEqMemoryRow extends StatelessWidget {
             onPressed: () {
               if (!enabled) return;
               final Map<String, EqMemoryEntry> previous = tune.clearMemory();
-              OsdController.instance.show(OsdUndoCard(
-                label: 'EQ memory cleared',
-                onUndo: () => tune.restoreMemory(previous),
-              ));
+              OsdController.instance.show(
+                OsdUndoCard(
+                  label: 'EQ memory cleared',
+                  onUndo: () => tune.restoreMemory(previous),
+                ),
+              );
             },
           ),
         );
@@ -1398,14 +1534,18 @@ class _RemoteGroup extends StatelessWidget {
       rows: <Widget>[
         const _RemoteControlRow(),
         const _RemoteFileRow(),
-        _RemotePairingRow(onOpen: () {
-          Navigator.of(context).pop();
-          onOpenRemote?.call();
-        }),
-        _RemotePhonesRow(onOpen: () {
-          Navigator.of(context).pop();
-          onOpenRemote?.call();
-        }),
+        _RemotePairingRow(
+          onOpen: () {
+            Navigator.of(context).pop();
+            onOpenRemote?.call();
+          },
+        ),
+        _RemotePhonesRow(
+          onOpen: () {
+            Navigator.of(context).pop();
+            onOpenRemote?.call();
+          },
+        ),
       ],
     );
   }
@@ -1529,9 +1669,8 @@ class _UpdatesTab extends StatelessWidget {
 class _UpdateFrequencyRow extends StatelessWidget {
   const _UpdateFrequencyRow();
 
-  static const List<
-      ({UpdateCheckFrequency value, String label, String? hint})> _options = <
-      ({UpdateCheckFrequency value, String label, String? hint})>[
+  static const List<({UpdateCheckFrequency value, String label, String? hint})>
+      _options = <({UpdateCheckFrequency value, String label, String? hint})>[
     (
       value: UpdateCheckFrequency.off,
       label: 'Off',
@@ -1565,8 +1704,8 @@ class _UpdateFrequencyRow extends StatelessWidget {
           options: _options,
           value: mode,
           defaultValue: UpdateCheckFrequency.weekly,
-          onSelect: (UpdateCheckFrequency picked) => SettingsService.instance
-              .setUpdateCheckFrequency(picked),
+          onSelect: (UpdateCheckFrequency picked) =>
+              SettingsService.instance.setUpdateCheckFrequency(picked),
         ),
       ),
     );
@@ -1594,7 +1733,8 @@ class _CheckNowRow extends StatelessWidget {
                 : (SettingsService.instance.lastUpdateCheckTime.value > 0
                     ? 'Up to date'
                     : ''));
-        final bool loud = status == 'Update ready' || status == 'Update available';
+        final bool loud =
+            status == 'Update ready' || status == 'Update available';
         return _Row(
           label: 'Check now',
           onTap: () => showUpdateDialog(context),
@@ -1607,7 +1747,9 @@ class _CheckNowRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     letterSpacing: 0.2,
-                    color: loud ? AppColors.accent : AppColors.textSecondary,
+                    color: loud
+                        ? context.palette.accent
+                        : context.palette.textSecondary,
                   ),
                 ),
               const SizedBox(width: 8),
@@ -1636,7 +1778,9 @@ class _LastCheckedRow extends StatelessWidget {
       builder: (BuildContext context, int stamp, Widget? _) {
         final String when = stamp > 0
             ? formatLastChecked(
-                DateTime.now(), DateTime.fromMillisecondsSinceEpoch(stamp))
+                DateTime.now(),
+                DateTime.fromMillisecondsSinceEpoch(stamp),
+              )
             : 'Never';
         return _Row(label: 'Last checked', value: when);
       },
@@ -1696,10 +1840,7 @@ class _WebTab extends StatelessWidget {
                 settings.webDownloadFolder.value.trim().isNotEmpty,
             onReset: _Defaults.downloads,
           ),
-          rows: const <Widget>[
-            _WebAskDownloadRow(),
-            _WebDownloadFolderRow(),
-          ],
+          rows: const <Widget>[_WebAskDownloadRow(), _WebDownloadFolderRow()],
         ),
         _groupGap,
         _Group(
@@ -1784,8 +1925,7 @@ class _WebPageSchemeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<WebPageScheme>(
       valueListenable: SettingsService.instance.webPageScheme,
-      builder: (BuildContext context, WebPageScheme current, Widget? _) =>
-          _Row(
+      builder: (BuildContext context, WebPageScheme current, Widget? _) => _Row(
         label: 'Sites see',
         trailing: _PillPicker<WebPageScheme>(
           options: _options,
@@ -1813,21 +1953,25 @@ class _PageSchemeEngineNote extends StatelessWidget {
       valueListenable: WebDataControlService.instance.pageSchemeFailed,
       builder: (BuildContext context, bool failed, Widget? _) {
         if (!failed) return const SizedBox.shrink();
-        return const Padding(
+        return Padding(
           padding: EdgeInsets.only(left: 10, right: 10),
           child: Row(
             children: <Widget>[
-              Icon(Icons.warning_amber_outlined,
-                  size: 14, color: AppColors.statusDead),
+              Icon(
+                Icons.warning_amber_outlined,
+                size: 14,
+                color: context.palette.statusDead,
+              ),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Page colours could not reach the web engine — pages '
                   'follow Windows.',
                   style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: AppColors.textSecondary),
+                    fontSize: 12,
+                    height: 1.4,
+                    color: context.palette.textSecondary,
+                  ),
                 ),
               ),
             ],
@@ -1894,7 +2038,8 @@ class _WebDownloadFolderRow extends StatelessWidget {
                   icon: Icons.restart_alt,
                   tooltip: 'Use the Windows folder',
                   onPressed: () => unawaited(
-                      SettingsService.instance.setWebDownloadFolder('')),
+                    SettingsService.instance.setWebDownloadFolder(''),
+                  ),
                 ),
               _MarkButton(
                 icon: Icons.folder_open,
@@ -1917,9 +2062,8 @@ class _WebDownloadFolderRow extends StatelessWidget {
 class _WebPopupDefaultRow extends StatelessWidget {
   const _WebPopupDefaultRow();
 
-  static const List<
-      ({WebPopupDefault value, String label, String? hint})> _options = <
-      ({WebPopupDefault value, String label, String? hint})>[
+  static const List<({WebPopupDefault value, String label, String? hint})>
+      _options = <({WebPopupDefault value, String label, String? hint})>[
     (
       value: WebPopupDefault.block,
       label: 'Block',
@@ -2005,14 +2149,14 @@ class _RuleTag extends StatelessWidget {
       decoration: BoxDecoration(
         color: allow ? _pillFill : Colors.transparent,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: allow ? _pillLine : AppColors.divider),
+        border: Border.all(color: allow ? _pillLine : context.palette.divider),
       ),
       child: Text(
         allow ? 'Allow' : 'Block',
         style: TextStyle(
           fontSize: 10.5,
           fontWeight: FontWeight.w600,
-          color: allow ? AppColors.accent : AppColors.textSecondary,
+          color: allow ? context.palette.accent : context.palette.textSecondary,
         ),
       ),
     );
@@ -2025,9 +2169,8 @@ class _RuleTag extends StatelessWidget {
 class _WebAutoClearRow extends StatelessWidget {
   const _WebAutoClearRow();
 
-  static const List<
-      ({WebAutoClearInterval value, String label, String? hint})> _options = <
-      ({WebAutoClearInterval value, String label, String? hint})>[
+  static const List<({WebAutoClearInterval value, String label, String? hint})>
+      _options = <({WebAutoClearInterval value, String label, String? hint})>[
     (
       value: WebAutoClearInterval.off,
       label: 'Off',
@@ -2054,9 +2197,9 @@ class _WebAutoClearRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<WebAutoClearInterval>(
       valueListenable: SettingsService.instance.webAutoClearDays,
-      builder: (BuildContext context, WebAutoClearInterval interval,
-              Widget? _) =>
-          _Row(
+      builder:
+          (BuildContext context, WebAutoClearInterval interval, Widget? _) =>
+              _Row(
         label: 'Clear data',
         tooltip: 'History, cookies, cached files, downloads. SALU’s own '
             'memory is never part of it.',
@@ -2079,9 +2222,8 @@ class _WebAutoClearRow extends StatelessWidget {
 class _WebAutoClearTimingRow extends StatelessWidget {
   const _WebAutoClearTimingRow();
 
-  static const List<
-      ({WebAutoClearTiming value, String label, String? hint})> _options = <
-      ({WebAutoClearTiming value, String label, String? hint})>[
+  static const List<({WebAutoClearTiming value, String label, String? hint})>
+      _options = <({WebAutoClearTiming value, String label, String? hint})>[
     (
       value: WebAutoClearTiming.onOpen,
       label: 'Opening',
@@ -2103,15 +2245,19 @@ class _WebAutoClearTimingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<WebAutoClearInterval>(
       valueListenable: SettingsService.instance.webAutoClearDays,
-      builder: (BuildContext context, WebAutoClearInterval interval,
-          Widget? _) {
+      builder:
+          (BuildContext context, WebAutoClearInterval interval, Widget? _) {
         if (interval == WebAutoClearInterval.off) {
           return const SizedBox.shrink();
         }
         final SettingsService settings = SettingsService.instance;
         return ValueListenableBuilder<WebAutoClearTiming>(
           valueListenable: settings.webAutoClearTiming,
-          builder: (BuildContext context, WebAutoClearTiming timing, Widget? _) =>
+          builder: (
+            BuildContext context,
+            WebAutoClearTiming timing,
+            Widget? _,
+          ) =>
               _Group(
             caption: 'When to run',
             reset: _GroupReset(
@@ -2128,9 +2274,10 @@ class _WebAutoClearTimingRow extends StatelessWidget {
                   options: _options,
                   value: timing,
                   defaultValue: WebAutoClearTiming.onOpen,
-                  onSelect: (WebAutoClearTiming picked) => SettingsService
-                      .instance
-                      .setWebAutoClearTiming(picked),
+                  onSelect: (WebAutoClearTiming picked) =>
+                      SettingsService.instance.setWebAutoClearTiming(
+                    picked,
+                  ),
                 ),
               ),
             ],
@@ -2164,7 +2311,7 @@ class _WebEngineFooter extends StatelessWidget {
         }
         return Padding(
           padding: const EdgeInsets.only(left: 10),
-          child: Text(label, style: _valueStyle),
+          child: Text(label, style: _valueStyle(context)),
         );
       },
     );
@@ -2275,8 +2422,7 @@ class _CredentialFieldsState extends State<_CredentialFields> {
             controller: _apiKey,
             title: 'API key',
             obscured: _keyObscured,
-            onToggleObscure: () =>
-                setState(() => _keyObscured = !_keyObscured),
+            onToggleObscure: () => setState(() => _keyObscured = !_keyObscured),
             onChanged: (String v) =>
                 SettingsService.instance.setSubtitleApiKey(v),
           ),
@@ -2324,7 +2470,7 @@ class _SecretField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(title, style: _fieldTitleStyle),
+        Text(title, style: _fieldTitleStyle(context)),
         const SizedBox(height: 5),
         _FieldShell(
           controller: controller,
@@ -2382,7 +2528,7 @@ class _PlainField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(title, style: _fieldTitleStyle),
+        Text(title, style: _fieldTitleStyle(context)),
         const SizedBox(height: 5),
         _FieldShell(controller: controller, onChanged: onChanged),
       ],
@@ -2392,12 +2538,12 @@ class _PlainField extends StatelessWidget {
 
 /// A field's name — smaller than a row label; the field below carries the
 /// value.
-const TextStyle _fieldTitleStyle = TextStyle(
-  fontSize: 12,
-  fontWeight: FontWeight.w500,
-  color: AppColors.textSecondary,
-  letterSpacing: 0.2,
-);
+TextStyle _fieldTitleStyle(BuildContext context) => TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+      color: context.palette.textSecondary,
+      letterSpacing: 0.2,
+    );
 
 /// The shared field surface: surface fill + hairline, Segoe text, and an
 /// optional trailing mini-mark cluster (eye / clear).
@@ -2418,9 +2564,9 @@ class _FieldShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.surfaceOutline),
+        border: Border.all(color: context.palette.surfaceOutline),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       child: Row(
@@ -2429,12 +2575,12 @@ class _FieldShell extends StatelessWidget {
             child: TextField(
               controller: controller,
               obscureText: obscureText,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.textPrimary,
+                color: context.palette.textPrimary,
                 letterSpacing: 0.2,
               ),
-              cursorColor: AppColors.textPrimary,
+              cursorColor: context.palette.textPrimary,
               cursorWidth: 1,
               onChanged: onChanged,
               decoration: const InputDecoration(
@@ -2488,26 +2634,28 @@ class _LanguageSelectorState extends State<_LanguageSelector> {
         _anchorKey.currentContext!.findRenderObject() as RenderBox;
     final Offset pos = box.localToGlobal(Offset.zero);
     final SettingsService settings = SettingsService.instance;
-    _entry = OverlayEntry(builder: (BuildContext overlayContext) {
-      return Stack(
-        children: <Widget>[
-          // Opaque: the choosing click must not fall through.
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _dismiss,
-              onSecondaryTap: _dismiss,
+    _entry = OverlayEntry(
+      builder: (BuildContext overlayContext) {
+        return Stack(
+          children: <Widget>[
+            // Opaque: the choosing click must not fall through.
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _dismiss,
+                onSecondaryTap: _dismiss,
+              ),
             ),
-          ),
-          Positioned(
-            left: pos.dx,
-            top: pos.dy + box.size.height + 6,
-            width: box.size.width,
-            child: _glassPill(settings),
-          ),
-        ],
-      );
-    });
+            Positioned(
+              left: pos.dx,
+              top: pos.dy + box.size.height + 6,
+              width: box.size.width,
+              child: _glassPill(settings),
+            ),
+          ],
+        );
+      },
+    );
     Overlay.of(context).insert(_entry!);
   }
 
@@ -2521,9 +2669,9 @@ class _LanguageSelectorState extends State<_LanguageSelector> {
       color: Colors.transparent,
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: context.palette.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.surfaceOutline),
+          border: Border.all(color: context.palette.surfaceOutline),
           boxShadow: const <BoxShadow>[
             BoxShadow(
               color: Color(0x80000000),
@@ -2608,9 +2756,8 @@ class _LanguageRowState extends State<_LanguageRow> {
         child: Container(
           height: 30,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          color: _hovered
-              ? AppColors.surfaceHighlight
-              : Colors.transparent,
+          color:
+              _hovered ? context.palette.surfaceHighlight : Colors.transparent,
           child: Row(
             children: <Widget>[
               Expanded(
@@ -2622,17 +2769,13 @@ class _LanguageRowState extends State<_LanguageRow> {
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: widget.selected
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
+                        ? context.palette.textPrimary
+                        : context.palette.textSecondary,
                   ),
                 ),
               ),
               if (widget.selected)
-                const Icon(
-                  Icons.check,
-                  size: 15,
-                  color: AppColors.textPrimary,
-                ),
+                Icon(Icons.check, size: 15, color: context.palette.textPrimary),
             ],
           ),
         ),
@@ -2675,7 +2818,12 @@ class _SaluSwitch extends StatelessWidget {
       height: 20,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: on ? AppColors.accent : const Color(0xFF3A3A3C),
+        color: on
+            ? context.palette.accent
+            : context.palette.resolve(
+                const Color(0xFF3A3A3C),
+                const Color(0xFFB8B8C0),
+              ),
         borderRadius: BorderRadius.circular(10),
       ),
       alignment: on ? Alignment.centerRight : Alignment.centerLeft,
@@ -2720,7 +2868,9 @@ class _TabButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+                color: selected
+                    ? context.palette.textPrimary
+                    : context.palette.textSecondary,
               ),
             ),
             const SizedBox(height: 6),
@@ -2730,7 +2880,7 @@ class _TabButton extends StatelessWidget {
               width: selected ? 44 : 0,
               height: 2.5,
               decoration: BoxDecoration(
-                color: selected ? AppColors.accent : Colors.transparent,
+                color: selected ? context.palette.accent : Colors.transparent,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),

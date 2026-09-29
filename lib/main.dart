@@ -22,7 +22,7 @@ import 'core/tune_service.dart';
 import 'core/updater/updater_service.dart';
 import 'core/url_library_service.dart';
 import 'core/window_state_service.dart';
-import 'theme/app_theme.dart';
+import 'theme/themed_app.dart';
 import 'ui/screens/home_screen.dart';
 
 Future<void> main(List<String> args) async {
@@ -59,7 +59,9 @@ Future<void> main(List<String> args) async {
         final String? path = extractMediaPathFromArgs(secondArgs);
         final bool enqueue = secondArgs.contains('--enqueue');
         final String? target = path ?? folder;
-        if (enqueue && target != null && PlayerService.instance.hasMedia.value) {
+        if (enqueue &&
+            target != null &&
+            PlayerService.instance.hasMedia.value) {
           await DropHandler.appendDroppedToQueue(<String>[target]);
           return;
         }
@@ -71,8 +73,9 @@ Future<void> main(List<String> args) async {
           // A `.m3u` / `.m3u8` argument is a channel directory SALU
           // reads itself (playlist_imp.md M55); anything else opens as
           // before.
-          final bool channels =
-              await ChannelLoadService.instance.openSource(path);
+          final bool channels = await ChannelLoadService.instance.openSource(
+            path,
+          );
           if (!channels) {
             // Single-file open-with — folder auto-load may kick in
             // (autoload_imp.md §2; the mode setting and exclusions gate
@@ -100,12 +103,10 @@ Future<void> main(List<String> args) async {
   final bool startInMini = WindowStateService.instance.isMini;
   final WindowOptions windowOptions = WindowOptions(
     title: 'SALU',
-    size: startInMini
-        ? WindowStateService.miniWindowSize
-        : const Size(1280, 720),
-    minimumSize: startInMini
-        ? WindowStateService.miniWindowSize
-        : const Size(800, 600),
+    size:
+        startInMini ? WindowStateService.miniWindowSize : const Size(1280, 720),
+    minimumSize:
+        startInMini ? WindowStateService.miniWindowSize : const Size(800, 600),
     maximumSize: startInMini ? WindowStateService.miniWindowSize : null,
     center: !startInMini,
     alwaysOnTop: startInMini,
@@ -221,23 +222,23 @@ class _CloseGuard with WindowListener {
     }
     try {
       await ResumeService.instance.flush().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
     } catch (_) {}
     try {
       // A sync offset dragged seconds before the × must never be lost.
       await SubDelayService.instance.flush().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
     } catch (_) {}
     try {
       // A bookmark tapped seconds before the × must never be lost.
       await ChannelFavouritesService.instance.flush().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
     } catch (_) {}
     try {
       // The browser's own stores flush, and the auto-clear "on player
@@ -246,25 +247,25 @@ class _CloseGuard with WindowListener {
       // startup (web.md · Auto-clear). SALU's own memory is a different
       // store — touched by the steps above, never by this one.
       await BrowserService.instance.prepareClose().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
     } catch (_) {}
     try {
       // An equalizer dragged seconds before the × must never be lost — the
       // panel state and the learning map both ride the same flush.
       await TuneService.instance.flush().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
     } catch (_) {}
     try {
       // Where the window lives — the bar's point or the full rect, and the
       // mode itself — so the next launch reopens exactly here (§5).
       await WindowStateService.instance.saveOnClose().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
     } catch (_) {}
     try {
       // updater.md §8 · "Restart Later": staged component updates are
@@ -272,9 +273,9 @@ class _CloseGuard with WindowListener {
       // spawned here with relaunch off — it waits for this PID to die,
       // swaps the files, and leaves the next launch to the user.
       await UpdaterService.instance.applyAtClose().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
     } catch (_) {}
     exit(0);
   }
@@ -313,11 +314,6 @@ class SaluApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SALU',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
-      home: HomeScreen(initialFilePath: initialFilePath),
-    );
+    return SaluThemedApp(home: HomeScreen(initialFilePath: initialFilePath));
   }
 }

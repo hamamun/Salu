@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/gestures.dart' show PointerScrollEvent, PointerSignalEvent;
+import 'package:flutter/gestures.dart'
+    show PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -70,7 +71,8 @@ class _MiniShellState extends State<MiniShell> {
 
   /// The bar's surface: `rgba(30,30,31,.97)` — the preview's own value,
   /// one notch off [AppColors.background] exactly as the mock has it.
-  static const Color _surface = Color(0xF71E1E1F);
+  Color get _surface =>
+      context.palette.resolve(const Color(0xF71E1E1F), const Color(0xF7F3F3F6));
 
   /// The transient line currently swapped into the title area (§6).
   String? _swapText;
@@ -113,11 +115,13 @@ class _MiniShellState extends State<MiniShell> {
   // ── Feedback (§6) ─────────────────────────────────────────────────────
 
   void _onCard(OsdCard card) {
-    _swap(miniSwapText(
-      card,
-      volume: _player.volumeLevel.value,
-      muted: _player.isMuted.value,
-    ));
+    _swap(
+      miniSwapText(
+        card,
+        volume: _player.volumeLevel.value,
+        muted: _player.isMuted.value,
+      ),
+    );
   }
 
   /// Shows [message] in the title area for [MiniMetrics.swapHold], then
@@ -185,8 +189,8 @@ class _MiniShellState extends State<MiniShell> {
       ]),
       builder: (BuildContext context, Widget? _) {
         final TransportState state = _player.transportState.value;
-        final bool engineLive = state == TransportState.playing ||
-            state == TransportState.paused;
+        final bool engineLive =
+            state == TransportState.playing || state == TransportState.paused;
         // Channel mode's timeline is inert, so the seeks dim there exactly
         // as they do with nothing to seek into — full mode's own rule.
         final bool seeksLive = engineLive && !_queue.isChannelList;
@@ -202,12 +206,11 @@ class _MiniShellState extends State<MiniShell> {
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: _surface,
-                  borderRadius:
-                      BorderRadius.circular(MiniMetrics.cornerRadius),
+                  borderRadius: BorderRadius.circular(MiniMetrics.cornerRadius),
                   border: Border.all(
                     color: widget.dropHovering
-                        ? AppColors.accent
-                        : AppColors.surfaceOutline,
+                        ? context.palette.accent
+                        : context.palette.surfaceOutline,
                   ),
                 ),
               ),
@@ -245,12 +248,9 @@ class _MiniShellState extends State<MiniShell> {
     );
   }
 
-  List<Widget> _row({
-    required TransportState state,
-    required bool seeksLive,
-  }) {
-    final bool engineLive = state == TransportState.playing ||
-        state == TransportState.paused;
+  List<Widget> _row({required TransportState state, required bool seeksLive}) {
+    final bool engineLive =
+        state == TransportState.playing || state == TransportState.paused;
 
     return <Widget>[
       // ── The SALU glyph — identity, and the bar's drag handle (§3) ────
@@ -388,7 +388,9 @@ class _MiniShellState extends State<MiniShell> {
     final bool swapped = swap != null;
     return TweenAnimationBuilder<Color?>(
       tween: ColorTween(
-        end: swapped ? AppColors.textPrimary : AppColors.textSecondary,
+        end: swapped
+            ? context.palette.textPrimary
+            : context.palette.textSecondary,
       ),
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
@@ -401,7 +403,7 @@ class _MiniShellState extends State<MiniShell> {
           style: TextStyle(
             fontSize: 11.5,
             letterSpacing: 0.2,
-            color: color ?? AppColors.textSecondary,
+            color: color ?? context.palette.textSecondary,
           ),
         );
       },
@@ -475,7 +477,7 @@ class _SaluTile extends StatelessWidget {
           return DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: AppColors.surfaceOutline),
+              border: Border.all(color: context.palette.surfaceOutline),
             ),
             child: const SizedBox(
               width: MiniMetrics.saluGlyph,

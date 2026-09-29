@@ -213,8 +213,10 @@ class _PlaylistPanelState extends State<PlaylistPanel>
 
   void _onFavouritesRequested() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_panel.playlistOpen.value ||
-          _queue.items.value.isEmpty || !_queue.items.value.first.isChannel) {
+      if (!mounted ||
+          !_panel.playlistOpen.value ||
+          _queue.items.value.isEmpty ||
+          !_queue.items.value.first.isChannel) {
         return;
       }
       setState(() => _favOnly = !_favOnly);
@@ -471,11 +473,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         _scheduleGroupBuild(items, revision, mode, _view.openGroup.value);
         return;
       }
-      groups ??= QueueGroupingCache.instance.groupsSync(
-        items,
-        revision,
-        mode,
-      );
+      groups ??= QueueGroupingCache.instance.groupsSync(items, revision, mode);
     }
     _groupsPending = false;
     _cacheItems = items;
@@ -509,23 +507,25 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       _groupsPending = true;
       _groupsPendingRevision = revision;
       _groupsPendingMode = mode;
-      unawaited(QueueGroupingCache.instance
-          .payloadAsync(
-            items: items,
-            revision: revision,
-            mode: mode,
-            by: mode.name,
-          )
-          .then((_) {
-        if (!mounted) return;
-        if (_queue.contentRevision != revision) return;
-        if (_view.groupMode.value != mode || _view.openGroup.value != open) {
-          return;
-        }
-        _groupsPending = false;
-        _invalidateViewCaches();
-        setState(() {});
-      }));
+      unawaited(
+        QueueGroupingCache.instance
+            .payloadAsync(
+          items: items,
+          revision: revision,
+          mode: mode,
+          by: mode.name,
+        )
+            .then((_) {
+          if (!mounted) return;
+          if (_queue.contentRevision != revision) return;
+          if (_view.groupMode.value != mode || _view.openGroup.value != open) {
+            return;
+          }
+          _groupsPending = false;
+          _invalidateViewCaches();
+          setState(() {});
+        }),
+      );
     }
     if (!identical(items, _cacheItems) || _cacheMode != mode) {
       _cachedDescriptors = const <ChannelDescriptor>[];
@@ -540,9 +540,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   int? _revealTargetPos(List<QueueItem> items) {
     _ensureChannelCache(items);
     final int current = _queue.index.value;
-    if (current < 0 ||
-        current >= items.length ||
-        _cachedDescriptors.isEmpty) {
+    if (current < 0 || current >= items.length || _cachedDescriptors.isEmpty) {
       return null;
     }
     if (identical(_cachedDescriptors, _targetDescs) &&
@@ -560,8 +558,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     if (target == null &&
         _query.isEmpty &&
         _view.groupMode.value != ChannelGroupMode.flat) {
-      final String? dest =
-          ChannelGrouping.keyFor(items, current, _view.groupMode.value);
+      final String? dest = ChannelGrouping.keyFor(
+        items,
+        current,
+        _view.groupMode.value,
+      );
       if (dest != null) {
         for (int i = 0; i < _cachedDescriptors.length; i++) {
           final ChannelDescriptor d = _cachedDescriptors[i];
@@ -599,9 +600,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           !p.hasContentDimensions) {
         return;
       }
-      final double target = (pos * _rowExtent)
-          .clamp(0.0, p.maxScrollExtent)
-          .toDouble();
+      final double target =
+          (pos * _rowExtent).clamp(0.0, p.maxScrollExtent).toDouble();
       // Already comfortably on screen (6 px slack each side)?
       final double top = p.pixels;
       final double bottom = top + p.viewportDimension;
@@ -609,9 +609,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       _programmatic = true;
       if (animate) {
         _localScroll
-            .animateTo(target,
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutCubic)
+            .animateTo(
+              target,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+            )
             .whenComplete(() => _programmatic = false);
       } else {
         _localScroll.jumpTo(target);
@@ -624,8 +626,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// into view. A deliberate call passes [force] to bypass the scroll
   /// suppression; an automatic one respects it — and a filter that hides
   /// the channel hides the reveal too (there is nothing to scroll to).
-  void _revealChannel(List<QueueItem> items,
-      {required bool animate, bool force = false}) {
+  void _revealChannel(
+    List<QueueItem> items, {
+    required bool animate,
+    bool force = false,
+  }) {
     if (_userScrolled && !force) return;
     final int? pos = _revealTargetPos(items);
     if (pos == null) return;
@@ -644,16 +649,17 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           .toDouble();
       final double top = p.pixels;
       final double bottom = top + p.viewportDimension;
-      if (target >= top + 6 &&
-          target + _channelRowExtent <= bottom - 6) {
+      if (target >= top + 6 && target + _channelRowExtent <= bottom - 6) {
         return;
       }
       _programmatic = true;
       if (animate) {
         _channelScroll
-            .animateTo(target,
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutCubic)
+            .animateTo(
+              target,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+            )
             .whenComplete(() => _programmatic = false);
       } else {
         _channelScroll.jumpTo(target);
@@ -668,8 +674,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   void _revealOnChannelIndex(List<QueueItem> items) {
     final int current = _queue.index.value;
     final ChannelGroupMode mode = _view.groupMode.value;
-    final bool grouped =
-        _query.isEmpty && mode != ChannelGroupMode.flat;
+    final bool grouped = _query.isEmpty && mode != ChannelGroupMode.flat;
     if (grouped) {
       final String? dest = ChannelGrouping.keyFor(items, current, mode);
       if (dest != null && dest != _view.openGroup.value) {
@@ -780,10 +785,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   Future<void> _removeRow(int index) async {
     final RemovedItemUndo? undo = await _player.removeFromQueue(index);
     if (!mounted || undo == null) return;
-    OsdController.instance.show(OsdUndoCard(
-      label: undo.text,
-      onUndo: () => unawaited(_player.undoRemoveFromQueue(undo)),
-    ));
+    OsdController.instance.show(
+      OsdUndoCard(
+        label: undo.text,
+        onUndo: () => unawaited(_player.undoRemoveFromQueue(undo)),
+      ),
+    );
   }
 
   /// The absolute clear, defined once in the transport facade — the remote's
@@ -798,10 +805,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   Future<void> _move(int from, int to) async {
     final MovedItemUndo? undo = await _player.moveInQueue(from, to);
     if (!mounted || undo == null) return;
-    OsdController.instance.show(OsdUndoCard(
-      label: undo.text,
-      onUndo: () => unawaited(_player.undoMoveInQueue(undo)),
-    ));
+    OsdController.instance.show(
+      OsdUndoCard(
+        label: undo.text,
+        onUndo: () => unawaited(_player.undoMoveInQueue(undo)),
+      ),
+    );
   }
 
   void _wakeFocusRelease() {
@@ -825,48 +834,53 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   @override
   Widget build(BuildContext context) {
     final bool open = _panel.playlistOpen.value;
-    return Stack(children: <Widget>[
-      if (open)
-        Positioned.fill(
+    return Stack(
+      children: <Widget>[
+        if (open)
+          Positioned.fill(
             top: kChromeBlockHeight,
             child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _panel.closePlaylist,
-                onSecondaryTap: _panel.closePlaylist)),
-      Positioned(
-        top: kChromeBlockHeight,
-        right: 0,
-        bottom: 0,
-        width: PlaylistPanel.width,
-        child: IgnorePointer(
-          // Stops hit-testing the instant it starts closing (§4.0).
-          ignoring: !open,
-          child: AnimatedBuilder(
-            animation: _curve,
-            builder: (BuildContext context, Widget? _) {
-              final double v = _curve.value.clamp(0.0, 1.0).toDouble();
-              return Opacity(
-                opacity: v,
-                child: Transform.translate(
-                  offset: Offset((1 - v) * PlaylistPanel.width, 0),
-                  child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _panel.closePlaylist,
+              onSecondaryTap: _panel.closePlaylist,
+            ),
+          ),
+        Positioned(
+          top: kChromeBlockHeight,
+          right: 0,
+          bottom: 0,
+          width: PlaylistPanel.width,
+          child: IgnorePointer(
+            // Stops hit-testing the instant it starts closing (§4.0).
+            ignoring: !open,
+            child: AnimatedBuilder(
+              animation: _curve,
+              builder: (BuildContext context, Widget? _) {
+                final double v = _curve.value.clamp(0.0, 1.0).toDouble();
+                return Opacity(
+                  opacity: v,
+                  child: Transform.translate(
+                    offset: Offset((1 - v) * PlaylistPanel.width, 0),
+                    child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onSecondaryTap: _panel.closePlaylist,
-                      child: _glass(_body())),
-                ),
-              );
-            },
+                      child: _glass(_body()),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ),
-      ),
-      // The group-by pill's surface — the LAST layer, so it sits over the
-      // panel, the chrome and the picture while it is up (pc_part.md §10,
-      // round 2: the root-overlay version of this surface never painted in
-      // front of the panel on the user's Flutter 3.47.5 build, so the pill
-      // is rendered where the tree can never hide it). Gone the instant
-      // the panel closes.
-      if (open && _pillSurface) _pillSurfaceLayer(),
-    ]);
+        // The group-by pill's surface — the LAST layer, so it sits over the
+        // panel, the chrome and the picture while it is up (pc_part.md §10,
+        // round 2: the root-overlay version of this surface never painted in
+        // front of the panel on the user's Flutter 3.47.5 build, so the pill
+        // is rendered where the tree can never hide it). Gone the instant
+        // the panel closes.
+        if (open && _pillSurface) _pillSurfaceLayer(),
+      ],
+    );
   }
 
   /// The pill's full-window surface: a dismiss layer over EVERYTHING
@@ -880,73 +894,82 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   /// Esc is owned by the surface's focus while it is up (the full order
   /// is pill → field → panel); every other key is left alone.
   Widget _pillSurfaceLayer() {
-    return Stack(children: <Widget>[
-      Positioned.fill(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _closePill('tap outside / Esc'),
-          onSecondaryTap: () => _closePill('tap outside / Esc'),
+    return Stack(
+      children: <Widget>[
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _closePill('tap outside / Esc'),
+            onSecondaryTap: () => _closePill('tap outside / Esc'),
+          ),
         ),
-      ),
-      Positioned(
-        top: kChromeBlockHeight,
-        right: 0,
-        width: PlaylistPanel.width,
-        child: Focus(
-          autofocus: true,
-          onKeyEvent: (FocusNode node, KeyEvent event) {
-            if (event is! KeyDownEvent) return KeyEventResult.ignored;
-            if (event.logicalKey == LogicalKeyboardKey.escape) {
-              _closePill('tap outside / Esc');
+        Positioned(
+          top: kChromeBlockHeight,
+          right: 0,
+          width: PlaylistPanel.width,
+          child: Focus(
+            autofocus: true,
+            onKeyEvent: (FocusNode node, KeyEvent event) {
+              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+              if (event.logicalKey == LogicalKeyboardKey.escape) {
+                _closePill('tap outside / Esc');
+                return KeyEventResult.handled;
+              }
+              final HardwareKeyboard keyboard = HardwareKeyboard.instance;
+              if (keyboard.isControlPressed ||
+                  keyboard.isShiftPressed ||
+                  keyboard.isAltPressed ||
+                  keyboard.isMetaPressed) {
+                return KeyEventResult.ignored;
+              }
+              final LogicalKeyboardKey key = event.logicalKey;
+              final ChannelGroupMode? mode = switch (key) {
+                LogicalKeyboardKey.digit1 ||
+                LogicalKeyboardKey.numpad1 =>
+                  ChannelGroupMode.flat,
+                LogicalKeyboardKey.digit2 ||
+                LogicalKeyboardKey.numpad2 =>
+                  ChannelGroupMode.category,
+                LogicalKeyboardKey.digit3 ||
+                LogicalKeyboardKey.numpad3 =>
+                  ChannelGroupMode.country,
+                LogicalKeyboardKey.digit4 ||
+                LogicalKeyboardKey.numpad4 =>
+                  ChannelGroupMode.language,
+                _ => null,
+              };
+              if (mode == null) return KeyEventResult.ignored;
+              final bool available = QueueGroupingCache.instance.availability(
+                    _queue.items.value,
+                  )[mode] ??
+                  false;
+              if (available) _chooseMode(mode);
               return KeyEventResult.handled;
-            }
-            final HardwareKeyboard keyboard = HardwareKeyboard.instance;
-            if (keyboard.isControlPressed ||
-                keyboard.isShiftPressed ||
-                keyboard.isAltPressed ||
-                keyboard.isMetaPressed) {
-              return KeyEventResult.ignored;
-            }
-            final LogicalKeyboardKey key = event.logicalKey;
-            final ChannelGroupMode? mode = switch (key) {
-              LogicalKeyboardKey.digit1 || LogicalKeyboardKey.numpad1 =>
-                ChannelGroupMode.flat,
-              LogicalKeyboardKey.digit2 || LogicalKeyboardKey.numpad2 =>
-                ChannelGroupMode.category,
-              LogicalKeyboardKey.digit3 || LogicalKeyboardKey.numpad3 =>
-                ChannelGroupMode.country,
-              LogicalKeyboardKey.digit4 || LogicalKeyboardKey.numpad4 =>
-                ChannelGroupMode.language,
-              _ => null,
-            };
-            if (mode == null) return KeyEventResult.ignored;
-            final bool available =
-                QueueGroupingCache.instance.availability(_queue.items.value)[mode] ??
-                    false;
-            if (available) _chooseMode(mode);
-            return KeyEventResult.handled;
-          },
-          child: Padding(
-            padding: const EdgeInsets.only(top: 42, left: 10),
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: FadeTransition(
-                opacity: _pillCurve,
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.96, end: 1.0)
-                      .animate(_pillCurve),
-                  alignment: Alignment.topLeft,
-                  child: _GroupPillBody(
-                    mode: _view.groupMode.value,
-                    onChoose: _chooseMode,
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 42, left: 10),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: FadeTransition(
+                  opacity: _pillCurve,
+                  child: ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 0.96,
+                      end: 1.0,
+                    ).animate(_pillCurve),
+                    alignment: Alignment.topLeft,
+                    child: _GroupPillBody(
+                      mode: _view.groupMode.value,
+                      onChoose: _chooseMode,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 
   /// The panel's frosted-glass body: `AppColors.glass` + blur 18, a
@@ -958,11 +981,16 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
-          color: AppColors.glass,
+          color: context.palette.glass,
           child: Stack(
             children: <Widget>[
-              Positioned(left: 0, top: 0, bottom: 0, width: 1,
-                  child: const ColoredBox(color: AppColors.surfaceOutline)),
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                child: ColoredBox(color: context.palette.surfaceOutline),
+              ),
               child,
             ],
           ),
@@ -994,7 +1022,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     // The mark itself, ~30 % ink, centred — no words, no hint (§4.6).
     return Center(
       child: IconTheme.merge(
-        data: const IconThemeData(color: Color(0x4DE8E8E8)),
+        data: IconThemeData(
+          color: context.palette.resolve(
+            const Color(0x4DE8E8E8),
+            const Color(0x4D242428),
+          ),
+        ),
         child: const NowRowMark(size: 46, now: -1),
       ),
     );
@@ -1019,22 +1052,16 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     final int shown = _visibleRows(_queue.items.value).length;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.palette.divider)),
       ),
       child: SizedBox(
         height: 30,
         child: Row(
           children: <Widget>[
-            _withPeekAnchor(
-              ShortcutAnchor.playlistRepeat,
-              _repeatButton(),
-            ),
+            _withPeekAnchor(ShortcutAnchor.playlistRepeat, _repeatButton()),
             const SizedBox(width: 4),
-            _withPeekAnchor(
-              ShortcutAnchor.playlistShuffle,
-              _shuffleButton(),
-            ),
+            _withPeekAnchor(ShortcutAnchor.playlistShuffle, _shuffleButton()),
             const SizedBox(width: 8),
             Expanded(child: _searchField(count, shown)),
             const SizedBox(width: 8),
@@ -1076,8 +1103,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     final bool hidePair = _searchFocused;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.palette.divider)),
       ),
       child: SizedBox(
         height: 30,
@@ -1097,9 +1124,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
               ),
               const SizedBox(width: 14),
             ],
-            Expanded(
-              child: _searchField(count, count, channel: true),
-            ),
+            Expanded(child: _searchField(count, count, channel: true)),
             const SizedBox(width: 14),
             _withPeekKeys(
               'player.clearPlaylist',
@@ -1167,9 +1192,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
   Widget _withPeekKeys(String entryId, Widget child) {
     final ShortcutEntry? entry = SaluShortcuts.byId(entryId);
     return AltPeekAnchor(
-      entries: entry == null
-          ? const <ShortcutEntry>[]
-          : <ShortcutEntry>[entry],
+      entries: entry == null ? const <ShortcutEntry>[] : <ShortcutEntry>[entry],
       // PlaylistPanel holds ChromeLock while open. Its header is the
       // surface being explored, just like the right-click menu's own rows.
       ignoreLock: true,
@@ -1247,11 +1270,14 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: const Color(0x33FFFFFF),
+        color: context.palette.resolve(
+          const Color(0x33FFFFFF),
+          const Color(0x33242428),
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: noMatch
-              ? AppColors.iconIdle.withAlpha(120)
+              ? context.palette.iconIdle.withAlpha(120)
               : Colors.transparent,
         ),
       ),
@@ -1274,8 +1300,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
                       child: IconTheme.merge(
                         data: IconThemeData(
                           color: noMatch
-                              ? AppColors.iconIdle.withAlpha(95)
-                              : AppColors.iconIdle,
+                              ? context.palette.iconIdle.withAlpha(95)
+                              : context.palette.iconIdle,
                         ),
                         child: const MagnifierMark(size: 14),
                       ),
@@ -1285,11 +1311,11 @@ class _PlaylistPanelState extends State<PlaylistPanel>
                       child: TextField(
                         controller: _search,
                         focusNode: _searchFocus,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
+                        style: TextStyle(
+                          color: context.palette.textPrimary,
                           fontSize: 12.5,
                         ),
-                        cursorColor: AppColors.textPrimary,
+                        cursorColor: context.palette.textPrimary,
                         decoration: const InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
@@ -1309,11 +1335,14 @@ class _PlaylistPanelState extends State<PlaylistPanel>
                           : (_query.isEmpty ? '$total' : '$shown / $total'),
                       style: TextStyle(
                         color: stale
-                            ? AppColors.textPrimary
-                            : const Color(0xFF7C7C80),
+                            ? context.palette.textPrimary
+                            : context.palette.resolve(
+                                const Color(0xFF7C7C80),
+                                const Color(0xFF707078),
+                              ),
                         fontSize: 10,
                         fontFeatures: const <FontFeature>[
-                          FontFeature.tabularFigures()
+                          FontFeature.tabularFigures(),
                         ],
                       ),
                     ),
@@ -1349,7 +1378,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         child: Padding(
           padding: const EdgeInsets.all(2),
           child: IconTheme.merge(
-            data: const IconThemeData(color: AppColors.iconIdle),
+            data: IconThemeData(color: context.palette.iconIdle),
             child: Transform.rotate(
               angle: 0.7853981633974483,
               child: const PlusMark(size: 12),
@@ -1386,7 +1415,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       // No match — the magnifier alone, ~30 % ink, centred (§4.5).
       return Center(
         child: IconTheme.merge(
-          data: const IconThemeData(color: Color(0x4DE8E8E8)),
+          data: IconThemeData(
+            color: context.palette.resolve(
+              const Color(0x4DE8E8E8),
+              const Color(0x4D242428),
+            ),
+          ),
           child: const MagnifierMark(size: 40),
         ),
       );
@@ -1426,7 +1460,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
     final QueueItem item = items[index];
     final bool isNow = index == _queue.index.value;
     final Widget grip = IconTheme.merge(
-      data: const IconThemeData(color: AppColors.iconIdle),
+      data: IconThemeData(color: context.palette.iconIdle),
       child: const GripMark(size: 16),
     );
     return _RowTile(
@@ -1452,7 +1486,12 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       final bool noMatch = _query.isNotEmpty;
       return Center(
         child: IconTheme.merge(
-          data: const IconThemeData(color: Color(0x4DE8E8E8)),
+          data: IconThemeData(
+            color: context.palette.resolve(
+              const Color(0x4DE8E8E8),
+              const Color(0x4D242428),
+            ),
+          ),
           child: noMatch
               ? const MagnifierMark(size: 40)
               : const BookmarkMark(size: 40),
@@ -1485,8 +1524,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           key: ValueKey<String>('c:${row.index}'),
           item: item,
           isNow: row.index == now,
-          isFavourite: favs
-              .contains(ChannelFavouritesService.channelKey(item)),
+          isFavourite: favs.contains(ChannelFavouritesService.channelKey(item)),
           onPlay: () => _play(row.index),
           onToggleFavourite: () => _toggleFavourite(item),
         );
@@ -1603,8 +1641,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
         final double top = p.pixels;
         final double bottom = top + p.viewportDimension;
         // On screen (the reveal's own 6 px slack)? No chevrons.
-        if (rowTop >= top + 6 &&
-            rowTop + _channelRowExtent <= bottom - 6) {
+        if (rowTop >= top + 6 && rowTop + _channelRowExtent <= bottom - 6) {
           return const SizedBox.shrink();
         }
         final bool above = rowTop < top + 6;
@@ -1676,7 +1713,9 @@ class _RowTileState extends State<_RowTile> {
   Widget build(BuildContext context) {
     final Widget leading = widget.canDrag
         ? ReorderableDragStartListener(
-            index: widget.index, child: widget.dragHandle)
+            index: widget.index,
+            child: widget.dragHandle,
+          )
         : widget.dragHandle;
 
     return Padding(
@@ -1692,13 +1731,18 @@ class _RowTileState extends State<_RowTile> {
             height: 36,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: _hovered ? const Color(0x0EFFFFFF) : Colors.transparent,
+              color: _hovered
+                  ? context.palette.resolve(
+                      const Color(0x0EFFFFFF),
+                      const Color(0x0E000000),
+                    )
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(9),
             ),
             child: Row(
               children: <Widget>[
                 IconTheme.merge(
-                  data: const IconThemeData(color: AppColors.iconIdle),
+                  data: IconThemeData(color: context.palette.iconIdle),
                   child: leading,
                 ),
                 const SizedBox(width: 8),
@@ -1707,8 +1751,9 @@ class _RowTileState extends State<_RowTile> {
                   width: 12,
                   child: widget.isNow
                       ? IconTheme.merge(
-                          data:
-                              const IconThemeData(color: AppColors.textPrimary),
+                          data: IconThemeData(
+                            color: context.palette.textPrimary,
+                          ),
                           child: const PlayMark(size: 12),
                         )
                       : null,
@@ -1721,8 +1766,11 @@ class _RowTileState extends State<_RowTile> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: widget.isNow
-                          ? AppColors.textPrimary
-                          : const Color(0xFFC9C9CC),
+                          ? context.palette.textPrimary
+                          : context.palette.resolve(
+                              const Color(0xFFC9C9CC),
+                              const Color(0xFF45454D),
+                            ),
                       fontSize: 13,
                       fontWeight:
                           widget.isNow ? FontWeight.w600 : FontWeight.w400,
@@ -1745,7 +1793,9 @@ class _RowTileState extends State<_RowTile> {
                         child: Padding(
                           padding: const EdgeInsets.all(4),
                           child: IconTheme.merge(
-                            data: const IconThemeData(color: AppColors.iconIdle),
+                            data: IconThemeData(
+                              color: context.palette.iconIdle,
+                            ),
                             child: const TrashMark(size: 15),
                           ),
                         ),
@@ -1811,7 +1861,12 @@ class _ChannelRowState extends State<_ChannelRow> {
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: _hovered ? const Color(0x0EFFFFFF) : Colors.transparent,
+            color: _hovered
+                ? context.palette.resolve(
+                    const Color(0x0EFFFFFF),
+                    const Color(0x0E000000),
+                  )
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(9),
           ),
           child: Row(
@@ -1821,8 +1876,7 @@ class _ChannelRowState extends State<_ChannelRow> {
                 width: 12,
                 child: widget.isNow
                     ? IconTheme.merge(
-                        data:
-                            const IconThemeData(color: AppColors.textPrimary),
+                        data: IconThemeData(color: context.palette.textPrimary),
                         child: const PlayMark(size: 12),
                       )
                     : null,
@@ -1842,8 +1896,11 @@ class _ChannelRowState extends State<_ChannelRow> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: widget.isNow
-                        ? AppColors.textPrimary
-                        : const Color(0xFFC9C9CC),
+                        ? context.palette.textPrimary
+                        : context.palette.resolve(
+                            const Color(0xFFC9C9CC),
+                            const Color(0xFF45454D),
+                          ),
                     fontSize: 13,
                     fontWeight:
                         widget.isNow ? FontWeight.w600 : FontWeight.w400,
@@ -1865,8 +1922,9 @@ class _ChannelRowState extends State<_ChannelRow> {
                       child: Padding(
                         padding: const EdgeInsets.all(4),
                         child: IconTheme.merge(
-                          data: const IconThemeData(
-                              color: AppColors.textPrimary),
+                          data: IconThemeData(
+                            color: context.palette.textPrimary,
+                          ),
                           child: BookmarkMark(
                             size: 15,
                             filled: widget.isFavourite,
@@ -1922,7 +1980,12 @@ class _ChannelGroupHeadState extends State<_ChannelGroupHead> {
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: _hovered ? const Color(0x0EFFFFFF) : Colors.transparent,
+            color: _hovered
+                ? context.palette.resolve(
+                    const Color(0x0EFFFFFF),
+                    const Color(0x0E000000),
+                  )
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(9),
           ),
           child: Row(
@@ -1934,8 +1997,8 @@ class _ChannelGroupHeadState extends State<_ChannelGroupHead> {
                   widget.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: context.palette.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1943,8 +2006,11 @@ class _ChannelGroupHeadState extends State<_ChannelGroupHead> {
               ),
               Text(
                 '${widget.count}',
-                style: const TextStyle(
-                  color: Color(0xFF7C7C80),
+                style: TextStyle(
+                  color: context.palette.resolve(
+                    const Color(0xFF7C7C80),
+                    const Color(0xFF707078),
+                  ),
                   fontSize: 11,
                   fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
                 ),
@@ -1977,7 +2043,7 @@ class _PinnedHeadTile extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: ColoredBox(
-          color: AppColors.glass,
+          color: context.palette.glass,
           child: _ChannelGroupHead(
             label: label,
             count: count,
@@ -2053,20 +2119,19 @@ class _GroupPillBody extends StatelessWidget {
         final List<Widget> options = <Widget>[];
         for (int i = 0; i < modes.length; i++) {
           if (i > 0) options.add(const SizedBox(width: 6));
-          options.add(_GroupPillOption(
-            mode: modes[i],
-            selected: modes[i] == mode,
-            available: available[modes[i]] ?? false,
-            onChoose: onChoose,
-          ));
+          options.add(
+            _GroupPillOption(
+              mode: modes[i],
+              selected: modes[i] == mode,
+              available: available[modes[i]] ?? false,
+              onChoose: onChoose,
+            ),
+          );
         }
         return GlassCapsule(
           radius: 22,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: options,
-          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: options),
         );
       },
     );
@@ -2208,10 +2273,7 @@ class _SaluScrollView extends StatelessWidget {
 /// The grab area is a few pixels wider than the 5 px paint so the thumb
 /// is easy to catch, while the painted rule stays exactly 5 px.
 class _SaluScrollbar extends StatefulWidget {
-  const _SaluScrollbar({
-    required this.controller,
-    required this.trackHeight,
-  });
+  const _SaluScrollbar({required this.controller, required this.trackHeight});
 
   final ScrollController controller;
 
@@ -2340,8 +2402,14 @@ class _SaluScrollbarState extends State<_SaluScrollbar> {
               width: 5,
               decoration: BoxDecoration(
                 color: _dragging
-                    ? const Color(0x4DFFFFFF) // ~ .30 while held
-                    : const Color(0x29FFFFFF), // ~ .16 at rest
+                    ? context.palette.resolve(
+                        const Color(0x4DFFFFFF),
+                        const Color(0x4D242428),
+                      ) // ~ .30 while held
+                    : context.palette.resolve(
+                        const Color(0x29FFFFFF),
+                        const Color(0x29242428),
+                      ), // ~ .16 at rest
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -2374,7 +2442,10 @@ class _NoScrollbars extends ScrollBehavior {
 
   @override
   Widget buildScrollbar(
-          BuildContext context, Widget child, ScrollableDetails details) =>
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) =>
       child;
 }
 

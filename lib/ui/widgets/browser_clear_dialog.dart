@@ -95,12 +95,14 @@ class _WebClearDialogState extends State<_WebClearDialog> {
     if (_busy) return;
     setState(() => _busy = true);
 
-    await WebDataControlService.instance.clear(WebDataClearFlags(
-      history: _history,
-      cookies: _cookies,
-      cache: _cache,
-      downloads: _downloads,
-    ));
+    await WebDataControlService.instance.clear(
+      WebDataClearFlags(
+        history: _history,
+        cookies: _cookies,
+        cache: _cache,
+        downloads: _downloads,
+      ),
+    );
 
     // The dialog itself is the confirmation (web.md · Clear data — LOCKED):
     // it closes, and a reopened dialog shows the reduced, cleaned footprint.
@@ -122,9 +124,9 @@ class _WebClearDialogState extends State<_WebClearDialog> {
           return Container(
             width: width,
             decoration: BoxDecoration(
-              color: AppColors.background,
+              color: context.palette.background,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceOutline),
+              border: Border.all(color: context.palette.surfaceOutline),
               boxShadow: const <BoxShadow>[
                 BoxShadow(
                   color: Color(0x80000000),
@@ -139,10 +141,10 @@ class _WebClearDialogState extends State<_WebClearDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 _buildHeader(),
-                const Divider(
+                Divider(
                   height: 1,
                   thickness: 1,
-                  color: AppColors.divider,
+                  color: context.palette.divider,
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
@@ -152,20 +154,25 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                     children: <Widget>[
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.surfaceOutline),
+                          horizontal: 12,
+                          vertical: 10,
                         ),
-                        child: const Row(
+                        decoration: BoxDecoration(
+                          color: context.palette.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: context.palette.surfaceOutline,
+                          ),
+                        ),
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Padding(
                               padding: EdgeInsets.only(top: 2),
                               child: IconTheme(
                                 data: IconThemeData(
-                                    color: AppColors.textSecondary),
+                                  color: context.palette.textSecondary,
+                                ),
                                 child: ShieldMark(size: 14),
                               ),
                             ),
@@ -177,7 +184,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   height: 1.35,
-                                  color: AppColors.textSecondary,
+                                  color: context.palette.textSecondary,
                                 ),
                               ),
                             ),
@@ -187,7 +194,8 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                       const SizedBox(height: 14),
                       _ItemRow(
                         title: 'Browsing history',
-                        subtitle: 'Clears visits from history and omnibox suggestions',
+                        subtitle:
+                            'Clears visits from history and omnibox suggestions',
                         sizeText: _measuring ? '…' : _footprint.historyLabel,
                         mark: const ClockMark(size: 15),
                         value: _history,
@@ -205,7 +213,8 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                       const SizedBox(height: 6),
                       _ItemRow(
                         title: 'Cached images & files',
-                        subtitle: 'Frees up disk space; some sites may load slower next visit',
+                        subtitle:
+                            'Frees up disk space; some sites may load slower next visit',
                         sizeText: _measuring ? '…' : _footprint.cacheLabel,
                         mark: const ReloadMark(size: 15),
                         value: _cache,
@@ -214,7 +223,8 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                       const SizedBox(height: 6),
                       _ItemRow(
                         title: 'Downloads history',
-                        subtitle: 'Clears the list of downloaded files (files stay on PC)',
+                        subtitle:
+                            'Clears the list of downloaded files (files stay on PC)',
                         sizeText: 'Records only',
                         mark: const DownloadMark(size: 15),
                         value: _downloads,
@@ -224,21 +234,25 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 9),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(10),
-                            border:
-                                Border.all(color: AppColors.surfaceOutline),
+                            horizontal: 12,
+                            vertical: 9,
                           ),
-                          child: const Row(
+                          decoration: BoxDecoration(
+                            color: context.palette.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: context.palette.surfaceOutline,
+                            ),
+                          ),
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
                               Padding(
                                 padding: EdgeInsets.only(top: 2),
                                 child: IconTheme(
                                   data: IconThemeData(
-                                      color: AppColors.textSecondary),
+                                    color: context.palette.textSecondary,
+                                  ),
                                   child: HourglassMark(size: 13),
                                 ),
                               ),
@@ -251,7 +265,7 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     height: 1.35,
-                                    color: AppColors.textSecondary,
+                                    color: context.palette.textSecondary,
                                   ),
                                 ),
                               ),
@@ -262,10 +276,10 @@ class _WebClearDialogState extends State<_WebClearDialog> {
                     ],
                   ),
                 ),
-                const Divider(
+                Divider(
                   height: 1,
                   thickness: 1,
-                  color: AppColors.divider,
+                  color: context.palette.divider,
                 ),
                 _buildActions(),
               ],
@@ -285,12 +299,12 @@ class _WebClearDialogState extends State<_WebClearDialog> {
           // History / Favourites / Site panels — no chip, no stock icon.
           const BroomMark(size: 16),
           const SizedBox(width: 10),
-          const Text(
+          Text(
             'Clear browsing data',
             style: TextStyle(
               fontSize: 15.5,
               fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
               letterSpacing: 0.2,
             ),
           ),
@@ -369,16 +383,17 @@ class _DialogActionState extends State<_DialogAction> {
   Widget build(BuildContext context) {
     final bool on = widget.enabled;
     final bool lit = on && _hovered;
-    final Color rest =
-        widget.primary ? AppColors.textPrimary : AppColors.textSecondary;
+    final Color rest = widget.primary
+        ? context.palette.textPrimary
+        : context.palette.textSecondary;
     final Color ink = !on
-        ? AppColors.textSecondary.withAlpha(110)
-        : (lit ? Colors.white : rest);
+        ? context.palette.textSecondary.withAlpha(110)
+        : (lit ? context.palette.textPrimary : rest);
     final Color outline = !on
-        ? AppColors.surfaceOutline.withAlpha(140)
+        ? context.palette.surfaceOutline.withAlpha(140)
         : (widget.primary || lit
-            ? AppColors.divider
-            : AppColors.surfaceOutline);
+            ? context.palette.divider
+            : context.palette.surfaceOutline);
 
     return MouseRegion(
       cursor: on ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -404,7 +419,8 @@ class _DialogActionState extends State<_DialogAction> {
             constraints: const BoxConstraints(minWidth: 84),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: lit ? AppColors.surfaceHighlight : Colors.transparent,
+              color:
+                  lit ? context.palette.surfaceHighlight : Colors.transparent,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(color: outline),
             ),
@@ -475,7 +491,9 @@ class _ItemRowState extends State<_ItemRow> {
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
-            color: _hovered ? AppColors.surfaceHighlight : Colors.transparent,
+            color: _hovered
+                ? context.palette.surfaceHighlight
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -489,8 +507,8 @@ class _ItemRowState extends State<_ItemRow> {
               IconTheme(
                 data: IconThemeData(
                   color: widget.value
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
+                      ? context.palette.textPrimary
+                      : context.palette.textSecondary,
                 ),
                 child: widget.mark,
               ),
@@ -503,18 +521,18 @@ class _ItemRowState extends State<_ItemRow> {
                   children: <Widget>[
                     Text(
                       widget.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       widget.subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: AppColors.textSecondary,
+                        color: context.palette.textSecondary,
                       ),
                     ),
                   ],
@@ -523,11 +541,14 @@ class _ItemRowState extends State<_ItemRow> {
               const SizedBox(width: 12),
               // Footprint badge — quiet and monochrome like everything else
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 3.5,
+                ),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: context.palette.surface,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.surfaceOutline),
+                  border: Border.all(color: context.palette.surfaceOutline),
                 ),
                 child: Text(
                   widget.sizeText,
@@ -536,8 +557,8 @@ class _ItemRowState extends State<_ItemRow> {
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.2,
                     color: widget.sizeText == 'None'
-                        ? AppColors.textSecondary
-                        : AppColors.textPrimary,
+                        ? context.palette.textSecondary
+                        : context.palette.textPrimary,
                   ),
                 ),
               ),
@@ -567,19 +588,19 @@ class _SaluCheckbox extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(5),
         border: Border.all(
-          color: checked ? AppColors.iconIdle : AppColors.statusUnknown,
+          color: checked
+              ? context.palette.iconIdle
+              : context.palette.statusUnknown,
           width: 1.6,
         ),
       ),
       alignment: Alignment.center,
       child: checked
-          ? const IconTheme(
-              data: IconThemeData(color: AppColors.textPrimary),
+          ? IconTheme(
+              data: IconThemeData(color: context.palette.textPrimary),
               child: TickMark(size: 12),
             )
           : null,
     );
   }
 }
-
-

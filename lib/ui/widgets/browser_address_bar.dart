@@ -134,8 +134,10 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
     return Container(
       height: kWebRowHeight,
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.surfaceOutline)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: context.palette.surfaceOutline),
+        ),
       ),
       child: Row(
         children: <Widget>[
@@ -145,7 +147,8 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           // Reload swaps into Stop while a page travels — the player's
           // Play⇄Pause logic wearing another suit.
           AltPeekAnchor(
-            scope: ShortcutScope.web, anchor: ShortcutAnchor.webHome,
+            scope: ShortcutScope.web,
+            anchor: ShortcutAnchor.webHome,
             side: PeekSide.below,
             child: SaluIconButton(
               size: 27,
@@ -156,26 +159,21 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           ),
           const SizedBox(width: 2),
           AltPeekAnchor(
-            scope: ShortcutScope.web, anchor: ShortcutAnchor.webBack,
+            scope: ShortcutScope.web,
+            anchor: ShortcutAnchor.webBack,
             side: PeekSide.below,
-            child: _GoButton(
-              tab: tab,
-              forward: false,
-              onTap: widget.onBack,
-            ),
+            child: _GoButton(tab: tab, forward: false, onTap: widget.onBack),
           ),
           AltPeekAnchor(
-            scope: ShortcutScope.web, anchor: ShortcutAnchor.webForward,
+            scope: ShortcutScope.web,
+            anchor: ShortcutAnchor.webForward,
             side: PeekSide.below,
-            child: _GoButton(
-              tab: tab,
-              forward: true,
-              onTap: widget.onForward,
-            ),
+            child: _GoButton(tab: tab, forward: true, onTap: widget.onForward),
           ),
           const SizedBox(width: 2),
           AltPeekAnchor(
-            scope: ShortcutScope.web, anchor: ShortcutAnchor.webReload,
+            scope: ShortcutScope.web,
+            anchor: ShortcutAnchor.webReload,
             side: PeekSide.below,
             child: _ReloadStopButton(
               tab: tab,
@@ -186,7 +184,8 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           const SizedBox(width: 7),
           Expanded(
             child: AltPeekAnchor(
-              scope: ShortcutScope.web, anchor: ShortcutAnchor.webAddress,
+              scope: ShortcutScope.web,
+              anchor: ShortcutAnchor.webAddress,
               side: PeekSide.below,
               child: _buildField(),
             ),
@@ -196,7 +195,8 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           // the ⋮. It stands only while it has something to say, and the
           // omnibox absorbs the width, so the ⋮ never moves.
           AltPeekAnchor(
-            scope: ShortcutScope.web, anchor: ShortcutAnchor.webDownloads,
+            scope: ShortcutScope.web,
+            anchor: ShortcutAnchor.webDownloads,
             side: PeekSide.below,
             child: DownloadBadge(
               onTap: widget.onDownloadsTap,
@@ -226,10 +226,12 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
           final bool focused = widget.addressFocus.hasFocus;
           return Container(
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: context.palette.surface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: focused ? AppColors.accent : AppColors.surfaceOutline,
+                color: focused
+                    ? context.palette.accent
+                    : context.palette.surfaceOutline,
               ),
             ),
             padding: const EdgeInsets.only(left: 2, right: 6),
@@ -239,7 +241,8 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
                 // badge at the far end counts held-back pop-ups.
                 _SiteButton(tab: widget.tab, onTap: widget.onSiteInfo),
                 AltPeekAnchor(
-                  scope: ShortcutScope.web, anchor: ShortcutAnchor.webFavourite,
+                  scope: ShortcutScope.web,
+                  anchor: ShortcutAnchor.webFavourite,
                   side: PeekSide.below,
                   child: SaluIconButton(
                     size: 26,
@@ -255,12 +258,12 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
                     focusNode: widget.addressFocus,
                     textInputAction: TextInputAction.go,
                     onSubmitted: (_) => widget.onSubmit(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
-                      color: AppColors.textPrimary,
+                      color: context.palette.textPrimary,
                     ),
-                    cursorColor: AppColors.accent,
-                    decoration: const InputDecoration(
+                    cursorColor: context.palette.accent,
+                    decoration: InputDecoration(
                       isDense: true,
                       filled: false,
                       hoverColor: Colors.transparent,
@@ -271,7 +274,7 @@ class _BrowserAddressBarState extends State<BrowserAddressBar> {
                       hintText: 'Search or enter web address',
                       hintStyle: TextStyle(
                         fontSize: 12.5,
-                        color: AppColors.textSecondary,
+                        color: context.palette.textSecondary,
                       ),
                     ),
                   ),
@@ -387,7 +390,7 @@ class _BlockedBadge extends StatelessWidget {
             child: Builder(
               builder: (BuildContext context) {
                 final Color ink =
-                    IconTheme.of(context).color ?? AppColors.iconIdle;
+                    IconTheme.of(context).color ?? context.palette.iconIdle;
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
@@ -587,12 +590,12 @@ class WebSuggestionMenu extends StatelessWidget {
     return TextFieldTapRegion(
       child: Material(
         elevation: 0,
-        color: AppColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(10),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.surfaceOutline),
+            border: Border.all(color: context.palette.surfaceOutline),
           ),
           padding: const EdgeInsets.symmetric(vertical: 6),
           constraints: const BoxConstraints(maxHeight: 320),
@@ -608,7 +611,7 @@ class WebSuggestionMenu extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onPick(item),
                 child: Container(
-                  color: hot ? AppColors.surfaceHighlight : null,
+                  color: hot ? context.palette.surfaceHighlight : null,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: <Widget>[
@@ -616,12 +619,16 @@ class WebSuggestionMenu extends StatelessWidget {
                         width: 16,
                         child: Center(
                           child: switch (item.kind) {
-                            WebSuggestionKind.favourite =>
-                              const StarMark(size: 12, filled: true),
-                            WebSuggestionKind.history =>
-                              const ClockMark(size: 13),
-                            WebSuggestionKind.search =>
-                              const MagnifierMark(size: 13),
+                            WebSuggestionKind.favourite => const StarMark(
+                                size: 12,
+                                filled: true,
+                              ),
+                            WebSuggestionKind.history => const ClockMark(
+                                size: 13,
+                              ),
+                            WebSuggestionKind.search => const MagnifierMark(
+                                size: 13,
+                              ),
                           },
                         ),
                       ),
@@ -631,10 +638,10 @@ class WebSuggestionMenu extends StatelessWidget {
                           item.text,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             height: 1.4,
-                            color: AppColors.textPrimary,
+                            color: context.palette.textPrimary,
                           ),
                         ),
                       ),
@@ -644,10 +651,7 @@ class WebSuggestionMenu extends StatelessWidget {
               );
               // The pointer lights the row it rests on; ↑/↓ move the
               // very same cursor through [onHover].
-              return MouseRegion(
-                onEnter: (_) => onHover(i),
-                child: row,
-              );
+              return MouseRegion(onEnter: (_) => onHover(i), child: row);
             },
           ),
         ),

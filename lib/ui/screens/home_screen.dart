@@ -90,8 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// when the whole screen dies.
   bool _webBorn = false;
 
-  final ValueNotifier<Offset> _rightMenuAnchor =
-      ValueNotifier<Offset>(Offset.zero);
+  final ValueNotifier<Offset> _rightMenuAnchor = ValueNotifier<Offset>(
+    Offset.zero,
+  );
 
   /// Named focus nodes so the keyboard follows whichever surface owns the
   /// window. Offstage keeps a widget in the tree, so `autofocus` does not
@@ -126,14 +127,20 @@ class _HomeScreenState extends State<HomeScreen> {
   /// One continuous scrim for the whole chrome block — strong at the very
   /// top (caption buttons), melting away at the block's bottom edge so the
   /// glass block merges into the video with no outline.
-  static const List<Color> _scrimColors = <Color>[
-    Color(0xF0121212),
-    Color(0xE0121212),
-    Color(0xC8121212),
-    Color(0xB4121212),
-    Color(0x99121212),
-    Color(0x00121212),
-  ];
+  List<Color> get _scrimColors => <Color>[
+        context.palette
+            .resolve(const Color(0xF0121212), const Color(0xF0F4F4F7)),
+        context.palette
+            .resolve(const Color(0xE0121212), const Color(0xE0F4F4F7)),
+        context.palette
+            .resolve(const Color(0xC8121212), const Color(0xC8F4F4F7)),
+        context.palette
+            .resolve(const Color(0xB4121212), const Color(0xB4F4F4F7)),
+        context.palette
+            .resolve(const Color(0x99121212), const Color(0x99F4F4F7)),
+        context.palette
+            .resolve(const Color(0x00121212), const Color(0x00F4F4F7)),
+      ];
   static const List<double> _scrimStops = <double>[
     0.0,
     0.2027, // y ≈ 30px
@@ -159,8 +166,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // A download landing while Player mode owns the window is worth one
     // line on the deck — the browser stays alive behind the mode switch,
     // so files keep arriving while you watch (web.md · Downloads).
-    _downloadSub =
-        WebDownloadService.instance.finished.listen(_onDownloadFinished);
+    _downloadSub = WebDownloadService.instance.finished.listen(
+      _onDownloadFinished,
+    );
     // While transient UI (open pill, URL modal) is up, the chrome must
     // not auto-hide beneath it; when the last lock releases, restart the
     // countdown fresh.
@@ -188,12 +196,13 @@ class _HomeScreenState extends State<HomeScreen> {
         // A `.m3u` / `.m3u8` launch argument lists as channels through
         // SALU's own parser (playlist_imp.md M55).
         unawaited(
-            ChannelLoadService.instance.openSource(initial).then((bool ch) {
-          if (ch) return;
-          // Single-file open-with — folder auto-load may kick in
-          // (autoload_imp.md §2).
-          unawaited(FolderAutoloadService.instance.maybeExpand(initial));
-        }));
+          ChannelLoadService.instance.openSource(initial).then((bool ch) {
+            if (ch) return;
+            // Single-file open-with — folder auto-load may kick in
+            // (autoload_imp.md §2).
+            unawaited(FolderAutoloadService.instance.maybeExpand(initial));
+          }),
+        );
       });
     }
   }
@@ -320,7 +329,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// strip yields; only the web view remains (web.md).
   Widget _buildWeb() {
     return Scaffold(
-      backgroundColor: AppColors.videoBackdrop,
+      backgroundColor: context.palette
+          .resolve(context.palette.videoBackdrop, context.palette.background),
       body: Focus(
         // No autofocus: the surface now lives in the tree across the
         // whole app, and the mode handler moves the keyboard to it
@@ -335,7 +345,10 @@ class _HomeScreenState extends State<HomeScreen> {
               children: <Widget>[
                 if (!pageOwnsScreen)
                   Container(
-                    color: const Color(0xF0121212),
+                    color: context.palette.resolve(
+                      const Color(0xF0121212),
+                      const Color(0xF0F4F4F7),
+                    ),
                     child: ValueListenableBuilder<String?>(
                       valueListenable: _browser.stripTitle,
                       builder:
@@ -443,8 +456,12 @@ class _HomeScreenState extends State<HomeScreen> {
       barrierDismissible: true,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       transitionDuration: const Duration(milliseconds: 220),
-      transitionBuilder: (BuildContext context, Animation<double> animation,
-          Animation<double> secondaryAnimation, Widget child) {
+      transitionBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+        Widget child,
+      ) {
         final CurvedAnimation curved = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutCubic,
@@ -457,13 +474,16 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       },
-      pageBuilder: (BuildContext context, Animation<double> animation,
-          Animation<double> secondaryAnimation) =>
+      pageBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+      ) =>
           GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onSecondaryTap: () => Navigator.of(context).pop(),
-            child: SettingsDialog(initialTab: tab, onOpenRemote: _openRemote),
-          ),
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTap: () => Navigator.of(context).pop(),
+        child: SettingsDialog(initialTab: tab, onOpenRemote: _openRemote),
+      ),
     ).whenComplete(ChromeLock.instance.release);
   }
 
@@ -477,16 +497,34 @@ class _HomeScreenState extends State<HomeScreen> {
       barrierDismissible: true,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       transitionDuration: const Duration(milliseconds: 220),
-      transitionBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
-        final CurvedAnimation curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
-        return FadeTransition(opacity: curved, child: ScaleTransition(scale: Tween<double>(begin: .96, end: 1).animate(curved), child: child));
-      },
-      pageBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onSecondaryTap: () => Navigator.of(context).pop(),
-            child: const RemotePanel(),
+      transitionBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+        Widget child,
+      ) {
+        final CurvedAnimation curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: .96, end: 1).animate(curved),
+            child: child,
           ),
+        );
+      },
+      pageBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+      ) =>
+          GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTap: () => Navigator.of(context).pop(),
+        child: const RemotePanel(),
+      ),
     ).whenComplete(ChromeLock.instance.release);
   }
 
@@ -503,8 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // The drop overlay that was holding the bar up just went away — wake
     // the chrome so the freshly loaded title stays visible for 3 seconds.
     _wakeChrome();
-    final List<String> paths =
-        details.files.map((file) => file.path).toList();
+    final List<String> paths = details.files.map((file) => file.path).toList();
     if (playlistOpen) {
       await DropHandler.appendDroppedToQueue(paths);
     } else {
@@ -533,16 +570,26 @@ class _HomeScreenState extends State<HomeScreen> {
   /// types a space instead of pausing. Ctrl combinations stay global —
   /// they never insert text.
   static int? _digitFromKey(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) return 0;
-    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) return 1;
-    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) return 2;
-    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) return 3;
-    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) return 4;
-    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) return 5;
-    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) return 6;
-    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) return 7;
-    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) return 8;
-    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) return 9;
+    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0)
+      return 0;
+    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1)
+      return 1;
+    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2)
+      return 2;
+    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3)
+      return 3;
+    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4)
+      return 4;
+    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5)
+      return 5;
+    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6)
+      return 6;
+    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7)
+      return 7;
+    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8)
+      return 8;
+    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9)
+      return 9;
     return null;
   }
 
@@ -584,7 +631,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Settings: F2 or Ctrl+,
-    if ((key == LogicalKeyboardKey.f2 || (ctrl && key == LogicalKeyboardKey.comma)) && down) {
+    if ((key == LogicalKeyboardKey.f2 ||
+            (ctrl && key == LogicalKeyboardKey.comma)) &&
+        down) {
       if (_browser.isWeb) {
         _openWebSettings();
       } else {
@@ -695,9 +744,12 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.handled;
     }
     // ── Tune: the silent keyboard tier (eq_imp.md §6) ──────────────────
-    final bool tuneCtrl = ctrl ||
-        HardwareKeyboard.instance.isMetaPressed;
-    if (tuneCtrl && !shift && !alt && !repeat && key == LogicalKeyboardKey.keyE) {
+    final bool tuneCtrl = ctrl || HardwareKeyboard.instance.isMetaPressed;
+    if (tuneCtrl &&
+        !shift &&
+        !alt &&
+        !repeat &&
+        key == LogicalKeyboardKey.keyE) {
       PanelService.instance.toggleTunePanel();
       return KeyEventResult.handled;
     }
@@ -719,10 +771,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final TunePart before = tune.focusedPart.value;
       if (tune.nudgeFocused(delta) != null) {
         if (sayIt) {
-          _osd.show(OsdTuneCard(
-            part: tune.partName(before),
-            value: tune.labelFor(before),
-          ));
+          _osd.show(
+            OsdTuneCard(
+              part: tune.partName(before),
+              value: tune.labelFor(before),
+            ),
+          );
         }
         return KeyEventResult.handled;
       }
@@ -760,12 +814,21 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.handled;
     }
     // Repeat: R (bare key)
-    if (!typing && !ctrl && !shift && !alt && key == LogicalKeyboardKey.keyR && down) {
+    if (!typing &&
+        !ctrl &&
+        !shift &&
+        !alt &&
+        key == LogicalKeyboardKey.keyR &&
+        down) {
       unawaited(TransportActions.instance.cycleRepeat());
       return KeyEventResult.handled;
     }
     // Tracks / Subtitles / Lyrics: C or T (standard Captions / Tracks)
-    if (!typing && !ctrl && !alt && (key == LogicalKeyboardKey.keyC || key == LogicalKeyboardKey.keyT) && down) {
+    if (!typing &&
+        !ctrl &&
+        !alt &&
+        (key == LogicalKeyboardKey.keyC || key == LogicalKeyboardKey.keyT) &&
+        down) {
       final String? path = PlayerService.instance.currentPath.value;
       final bool local = path != null &&
           !path.contains('://') &&
@@ -791,15 +854,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Playback speed: [ slower, ] faster, \ or Backspace reset to 1.0x (mpv standard)
-    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.bracketLeft && down) {
+    if (!typing &&
+        !ctrl &&
+        !alt &&
+        key == LogicalKeyboardKey.bracketLeft &&
+        down) {
       unawaited(TransportActions.instance.stepPlaybackRate(-0.1));
       return KeyEventResult.handled;
     }
-    if (!typing && !ctrl && !alt && key == LogicalKeyboardKey.bracketRight && down) {
+    if (!typing &&
+        !ctrl &&
+        !alt &&
+        key == LogicalKeyboardKey.bracketRight &&
+        down) {
       unawaited(TransportActions.instance.stepPlaybackRate(0.1));
       return KeyEventResult.handled;
     }
-    if (!typing && !ctrl && !alt && (key == LogicalKeyboardKey.backslash || key == LogicalKeyboardKey.backspace) && down) {
+    if (!typing &&
+        !ctrl &&
+        !alt &&
+        (key == LogicalKeyboardKey.backslash ||
+            key == LogicalKeyboardKey.backspace) &&
+        down) {
       unawaited(TransportActions.instance.resetPlaybackRate());
       return KeyEventResult.handled;
     }
@@ -957,15 +1033,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool typing = _isTyping;
     final bool ctrl = HardwareKeyboard.instance.isControlPressed;
 
-    if (key == LogicalKeyboardKey.escape || (ctrl && key == LogicalKeyboardKey.keyM)) {
+    if (key == LogicalKeyboardKey.escape ||
+        (ctrl && key == LogicalKeyboardKey.keyM)) {
       if (!repeat) unawaited(_windows.exitMini());
       return KeyEventResult.handled;
     }
     // Bare M mutes in Mini mode matching full player mode
-    if (!typing &&
-        down &&
-        key == LogicalKeyboardKey.keyM &&
-        !ctrl) {
+    if (!typing && down && key == LogicalKeyboardKey.keyM && !ctrl) {
       TransportActions.instance.toggleMute();
       return KeyEventResult.handled;
     }
@@ -1069,7 +1143,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool web = _browser.isWeb;
 
     return Scaffold(
-      backgroundColor: web ? AppColors.videoBackdrop : AppColors.background,
+      backgroundColor: web
+          ? context.palette.resolve(
+              context.palette.videoBackdrop, context.palette.background)
+          : context.palette.background,
       body: Stack(
         fit: StackFit.expand,
         children: <Widget>[
@@ -1080,11 +1157,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // The web surface — hidden (Offstage) while the player owns the
           // window, kept alive so a switch back lands on the exact pages
           // (web.md · mode keep-alive).
-          if (_webBorn)
-            Offstage(
-              offstage: !web,
-              child: _buildWeb(),
-            ),
+          if (_webBorn) Offstage(offstage: !web, child: _buildWeb()),
         ],
       ),
     );
@@ -1098,7 +1171,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool chromeVisible = _chromeVisible || _dropHovering;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.palette.background,
       body: Focus(
         autofocus: true,
         focusNode: _playerFocus,
@@ -1149,7 +1222,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildTopChrome(chromeVisible),
 
                 // The strip sits below panels: their barriers win close-first.
-                RightMenu(anchor: _rightMenuAnchor, onSettings: _openSettings, onRemote: _openRemote),
+                RightMenu(
+                  anchor: _rightMenuAnchor,
+                  onSettings: _openSettings,
+                  onRemote: _openRemote,
+                ),
 
                 // 5 · The slide-out playlist panel — glass over the video,
                 //     anchored below the chrome block (top: kChromeBlockHeight).
@@ -1224,7 +1301,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Container(
                 height: _chromeBlockHeight,
                 alignment: Alignment.topCenter,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -1250,8 +1327,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       // the parked item's name returns on Play.
                       ValueListenableBuilder<String?>(
                         valueListenable: _player.currentTitle,
-                        builder: (BuildContext context, String? title,
-                            Widget? _) {
+                        builder:
+                            (BuildContext context, String? title, Widget? _) {
                           return CustomTitleBar(
                             visible: true,
                             immersive: true,
@@ -1340,8 +1417,7 @@ class _AutoHideProgress extends StatelessWidget {
               }
               final Duration dur = player.duration.value;
               final double frac = dur > Duration.zero
-                  ? (player.position.value.inMilliseconds /
-                          dur.inMilliseconds)
+                  ? (player.position.value.inMilliseconds / dur.inMilliseconds)
                       .clamp(0.0, 1.0)
                       .toDouble()
                   : 0.0;
@@ -1356,7 +1432,7 @@ class _AutoHideProgress extends StatelessWidget {
                           top: 0,
                           bottom: 0,
                           width: w * frac,
-                          child: const ColoredBox(color: AppColors.threadFill),
+                          child: ColoredBox(color: context.palette.threadFill),
                         ),
                     ],
                   );
@@ -1402,14 +1478,13 @@ class _DropOverlay extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0x331E90FF),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.accent, width: 2),
+            border: Border.all(color: context.palette.accent, width: 2),
           ),
           alignment: Alignment.center,
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
             decoration: BoxDecoration(
-              color: AppColors.glass,
+              color: context.palette.glass,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -1420,14 +1495,14 @@ class _DropOverlay extends StatelessWidget {
                       ? Icons.playlist_add_outlined
                       : Icons.file_download_outlined,
                   size: 34,
-                  color: AppColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   playlistOpen ? 'Drop to add to playlist' : 'Drop to play',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: AppColors.textPrimary,
+                    color: context.palette.textPrimary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),

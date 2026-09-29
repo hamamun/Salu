@@ -34,20 +34,23 @@ class WebStartPage extends StatelessWidget {
                   width: 96,
                   height: 96,
                   alignment: Alignment.center,
-                  child: const Icon(Icons.public,
-                      size: 48, color: AppColors.textSecondary),
+                  child: Icon(
+                    Icons.public,
+                    size: 48,
+                    color: context.palette.textSecondary,
+                  ),
                 );
               },
             ),
           ),
           const SizedBox(height: 18),
-          const Text(
+          Text(
             'SALU Web Browser',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
               letterSpacing: 3,
-              color: AppColors.textPrimary,
+              color: context.palette.textPrimary,
             ),
           ),
         ],
@@ -74,10 +77,12 @@ class WebTabView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  const Text(
+                  Text(
                     'This page didn’t load',
                     style: TextStyle(
-                        fontSize: 13.5, color: AppColors.textPrimary),
+                      fontSize: 13.5,
+                      color: context.palette.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   SaluIconButton(
@@ -91,13 +96,13 @@ class WebTabView extends StatelessWidget {
             );
           }
           if (tab.loading.value) {
-            return const Center(
+            return Center(
               child: SizedBox(
                 width: 26,
                 height: 26,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: AppColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
               ),
             );
@@ -166,8 +171,7 @@ class _PermissionPrompt extends StatelessWidget {
   final String url;
   final WebviewPermissionKind kind;
 
-  static String _phrase(WebviewPermissionKind k) =>
-      switch (k) {
+  static String _phrase(WebviewPermissionKind k) => switch (k) {
         WebviewPermissionKind.microphone => 'your microphone',
         WebviewPermissionKind.camera => 'your camera',
         WebviewPermissionKind.geoLocation => 'your location',
@@ -181,10 +185,10 @@ class _PermissionPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final String host = WebAddress.hostOf(url);
     return Dialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.surfaceOutline),
+        side: BorderSide(color: context.palette.surfaceOutline),
       ),
       child: SizedBox(
         width: 380,
@@ -199,22 +203,26 @@ class _PermissionPrompt extends StatelessWidget {
                   children: <InlineSpan>[
                     TextSpan(
                       text: host,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: context.palette.textPrimary,
+                      ),
                     ),
                     const TextSpan(text: ' is asking for '),
                     TextSpan(
                       text: _phrase(kind),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: context.palette.textPrimary,
+                      ),
                     ),
                     const TextSpan(text: '.'),
                   ],
-                  style: const TextStyle(
-                      fontSize: 13, height: 1.5,
-                      color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: context.palette.textSecondary,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -222,30 +230,40 @@ class _PermissionPrompt extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
                   TextButton(
-                    onPressed: () => Navigator.of(context)
-                        .pop(WebviewPermissionDecision.deny),
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop(WebviewPermissionDecision.deny),
                     style: TextButton.styleFrom(
-                      foregroundColor: AppColors.textSecondary,
+                      foregroundColor: context.palette.textSecondary,
                     ),
-                    child: const Text('Block',
-                        style: TextStyle(fontSize: 12.5)),
+                    child: const Text(
+                      'Block',
+                      style: TextStyle(fontSize: 12.5),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   TextButton(
-                    onPressed: () => Navigator.of(context)
-                        .pop(WebviewPermissionDecision.allow),
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop(WebviewPermissionDecision.allow),
                     style: TextButton.styleFrom(
-                      backgroundColor: AppColors.accent,
+                      backgroundColor: context.palette.accent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
-                    child: const Text('Allow',
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600)),
+                    child: const Text(
+                      'Allow',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),

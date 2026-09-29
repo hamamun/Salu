@@ -54,11 +54,8 @@ class BrowserDownloadsPanel extends StatelessWidget {
       builder: (BuildContext context, Widget? _) {
         final List<WebDownloadItem> all =
             WebDownloadService.instance.items.value;
-        final int live = all
-            .where((WebDownloadItem i) => i.isRunning)
-            .length;
-        final bool hasFinished =
-            all.any((WebDownloadItem i) => !i.isRunning);
+        final int live = all.where((WebDownloadItem i) => i.isRunning).length;
+        final bool hasFinished = all.any((WebDownloadItem i) => !i.isRunning);
         return Focus(
           autofocus: true,
           onKeyEvent: (FocusNode n, KeyEvent e) {
@@ -71,14 +68,14 @@ class BrowserDownloadsPanel extends StatelessWidget {
           },
           child: Material(
             elevation: 0,
-            color: AppColors.surface,
+            color: context.palette.surface,
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: 380,
               constraints: const BoxConstraints(maxHeight: 440),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.surfaceOutline),
+                border: Border.all(color: context.palette.surfaceOutline),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -98,9 +95,9 @@ class BrowserDownloadsPanel extends StatelessWidget {
                                     : 'Downloads · ${all.length}'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textSecondary,
+                              color: context.palette.textSecondary,
                             ),
                           ),
                         ),
@@ -149,25 +146,25 @@ class BrowserDownloadsPanel extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: const Color(0x144C9EEB),
                           borderRadius: BorderRadius.circular(9),
-                          border:
-                              Border.all(color: const Color(0x404C9EEB)),
+                          border: Border.all(color: const Color(0x404C9EEB)),
                         ),
                         alignment: Alignment.center,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             IconTheme.merge(
-                              data:
-                                  const IconThemeData(color: AppColors.accent),
+                              data: IconThemeData(
+                                color: context.palette.accent,
+                              ),
                               child: const FolderMark(size: 13),
                             ),
                             const SizedBox(width: 8),
-                            const Text(
+                            Text(
                               'Open download folder',
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.accent,
+                                color: context.palette.accent,
                               ),
                             ),
                           ],
@@ -243,10 +240,10 @@ class _DownloadRow extends StatelessWidget {
                             item.fileName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                              color: context.palette.textPrimary,
                             ),
                           ),
                         ),
@@ -266,8 +263,8 @@ class _DownloadRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10.5,
                         color: item.isFailed
-                            ? AppColors.statusDead
-                            : AppColors.textSecondary,
+                            ? context.palette.statusDead
+                            : context.palette.textSecondary,
                       ),
                     ),
                   ],
@@ -331,20 +328,20 @@ class _ProgressRule extends StatelessWidget {
       child: SizedBox(
         height: 3,
         child: f == null
-            ? const ColoredBox(color: AppColors.barTrack)
+            ? ColoredBox(color: context.palette.barTrack)
             : LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints cons) {
                   return Stack(
                     children: <Widget>[
-                      const Positioned.fill(
-                        child: ColoredBox(color: AppColors.barTrack),
+                      Positioned.fill(
+                        child: ColoredBox(color: context.palette.barTrack),
                       ),
                       Positioned(
                         left: 0,
                         top: 0,
                         bottom: 0,
                         width: cons.maxWidth * f.clamp(0.0, 1.0),
-                        child: const ColoredBox(color: AppColors.barFill),
+                        child: ColoredBox(color: context.palette.barFill),
                       ),
                     ],
                   );

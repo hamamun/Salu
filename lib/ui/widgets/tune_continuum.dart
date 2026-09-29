@@ -282,8 +282,8 @@ class _TuneContinuumState extends State<TuneContinuum> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: widget.focused || _inside || _dragging
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
+                          ? context.palette.textPrimary
+                          : context.palette.textSecondary,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.0,
@@ -304,8 +304,7 @@ class _TuneContinuumState extends State<TuneContinuum> {
   }
 
   Widget _body(double w) {
-    final double span =
-        (w - _inset * 2).clamp(0.0, double.infinity).toDouble();
+    final double span = (w - _inset * 2).clamp(0.0, double.infinity).toDouble();
     final double knobX = _inset + span * widget.position;
     final List<double> stops = <double>[
       for (int i = 0; i < widget.line.length; i++)
@@ -318,6 +317,7 @@ class _TuneContinuumState extends State<TuneContinuum> {
         Positioned.fill(
           child: CustomPaint(
             painter: _ContinuumPainter(
+              palette: context.palette,
               stops: stops,
               knobX: knobX,
               lineY: _lineY,
@@ -342,7 +342,12 @@ class _TuneContinuumState extends State<TuneContinuum> {
         // row. Display-only: a click anywhere on the row picks the position
         // under the cursor, which lands on the same stop.
         for (int i = 0; i < widget.line.length; i++)
-          _stopLabel(i, w, span, widget.line.length > 1 ? span / (widget.line.length - 1) : span),
+          _stopLabel(
+            i,
+            w,
+            span,
+            widget.line.length > 1 ? span / (widget.line.length - 1) : span,
+          ),
       ],
     );
   }
@@ -356,8 +361,7 @@ class _TuneContinuumState extends State<TuneContinuum> {
     final double position = widget.line.positionOf(i);
     final double x = _inset + span * position;
     final double est = _labelWidth(stop.label);
-    final bool on =
-        !widget.custom && (widget.position - position).abs() < 1e-6;
+    final bool on = !widget.custom && (widget.position - position).abs() < 1e-6;
     // Thirteen names on one line cannot all fit at rest — so at rest the line
     // says every other one, and the moment the pointer is on the line they are
     // all there. Never a scroll, never a truncation, never a tooltip.
@@ -386,8 +390,8 @@ class _TuneContinuumState extends State<TuneContinuum> {
                 letterSpacing: 0.2,
                 fontWeight: on ? FontWeight.w600 : FontWeight.w400,
                 color: on
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary.withAlpha(200),
+                    ? context.palette.textPrimary
+                    : context.palette.textSecondary.withAlpha(200),
               ),
             ),
           ),
@@ -399,7 +403,9 @@ class _TuneContinuumState extends State<TuneContinuum> {
 
 /// The line itself: a hair-thin rule, one tick per stop, and the knob.
 class _ContinuumPainter extends CustomPainter {
+  final AppPalette palette;
   const _ContinuumPainter({
+    this.palette = AppPalette.saluDefault,
     required this.stops,
     required this.knobX,
     required this.lineY,
@@ -418,8 +424,8 @@ class _ContinuumPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Color base = enabled
-        ? (bright ? AppColors.textPrimary : AppColors.iconIdle)
-        : AppColors.iconIdle.withAlpha(110);
+        ? (bright ? palette.textPrimary : palette.iconIdle)
+        : palette.iconIdle.withAlpha(110);
     canvas.drawLine(
       Offset(10, lineY),
       Offset(size.width - 10, lineY),
@@ -438,8 +444,8 @@ class _ContinuumPainter extends CustomPainter {
     }
 
     final Color knobColor = !enabled
-        ? AppColors.iconIdle.withAlpha(120)
-        : (previewing ? AppColors.textSecondary : AppColors.textPrimary);
+        ? palette.iconIdle.withAlpha(120)
+        : (previewing ? palette.textSecondary : palette.textPrimary);
     canvas.drawCircle(
       Offset(knobX, lineY),
       4.5,
@@ -454,7 +460,7 @@ class _ContinuumPainter extends CustomPainter {
         Offset(knobX, lineY),
         7,
         Paint()
-          ..color = Colors.white.withAlpha(34)
+          ..color = palette.textPrimary.withAlpha(34)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2,
       );
@@ -463,6 +469,7 @@ class _ContinuumPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ContinuumPainter old) =>
+      palette != old.palette ||
       old.knobX != knobX ||
       old.enabled != enabled ||
       old.previewing != previewing ||
@@ -505,8 +512,10 @@ class TuneSwitch extends StatelessWidget {
                   fontSize: 10,
                   letterSpacing: 0.4,
                   color: !enabled
-                      ? AppColors.textSecondary.withAlpha(110)
-                      : (on ? AppColors.textPrimary : AppColors.textSecondary),
+                      ? context.palette.textSecondary.withAlpha(110)
+                      : (on
+                          ? context.palette.textPrimary
+                          : context.palette.textSecondary),
                 ),
               ),
               const SizedBox(width: 6),
@@ -518,8 +527,11 @@ class TuneSwitch extends StatelessWidget {
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   color: on && enabled
-                      ? AppColors.accent
-                      : const Color(0xFF3A3A3C),
+                      ? context.palette.accent
+                      : context.palette.resolve(
+                          const Color(0xFF3A3A3C),
+                          const Color(0xFFB8B8C0),
+                        ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: on ? Alignment.centerRight : Alignment.centerLeft,

@@ -102,14 +102,14 @@ class _BrowserHistoryPanelState extends State<BrowserHistoryPanel> {
           onKeyEvent: _onKey,
           child: Material(
             elevation: 0,
-            color: AppColors.surface,
+            color: context.palette.surface,
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: 360,
               constraints: const BoxConstraints(maxHeight: 440),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.surfaceOutline),
+                border: Border.all(color: context.palette.surfaceOutline),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -124,9 +124,10 @@ class _BrowserHistoryPanelState extends State<BrowserHistoryPanel> {
                           all.isEmpty
                               ? 'No history yet'
                               : 'History · ${all.length}',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.palette.textSecondary,
+                          ),
                         ),
                         const Spacer(),
                         SaluIconButton(
@@ -143,28 +144,30 @@ class _BrowserHistoryPanelState extends State<BrowserHistoryPanel> {
                       padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: AppColors.background,
+                          color: context.palette.background,
                           borderRadius: BorderRadius.circular(8),
-                          border:
-                              Border.all(color: AppColors.surfaceOutline),
+                          border: Border.all(
+                            color: context.palette.surfaceOutline,
+                          ),
                         ),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
                         child: TextField(
                           controller: _search,
                           focusNode: _searchFocus,
                           onChanged: (_) => setState(() {}),
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textPrimary),
-                          cursorColor: AppColors.accent,
-                          decoration: const InputDecoration(
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.palette.textPrimary,
+                          ),
+                          cursorColor: context.palette.accent,
+                          decoration: InputDecoration(
                             isDense: true,
                             border: InputBorder.none,
                             hintText: 'Search history',
                             hintStyle: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary),
+                              fontSize: 12,
+                              color: context.palette.textSecondary,
+                            ),
                           ),
                         ),
                       ),
@@ -178,26 +181,25 @@ class _BrowserHistoryPanelState extends State<BrowserHistoryPanel> {
                   ),
                   if (all.isNotEmpty)
                     Padding(
-                      padding:
-                          const EdgeInsets.fromLTRB(14, 4, 14, 12),
+                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: widget.onClearAll,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(9),
                             border: Border.all(
-                                color: AppColors.surfaceOutline),
+                              color: context.palette.surfaceOutline,
+                            ),
                           ),
                           alignment: Alignment.center,
-                          child: const Text(
+                          child: Text(
                             'Clear all history',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
+                              color: context.palette.textSecondary,
                             ),
                           ),
                         ),
@@ -218,14 +220,15 @@ class _BrowserHistoryPanelState extends State<BrowserHistoryPanel> {
     if (shown.isEmpty) {
       return <Widget>[
         Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Text(
             q.isEmpty
                 ? 'Pages you visit land here — newest first.'
                 : 'No match.',
-            style: const TextStyle(
-                fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(
+              fontSize: 12,
+              color: context.palette.textSecondary,
+            ),
           ),
         ),
       ];
@@ -239,26 +242,30 @@ class _BrowserHistoryPanelState extends State<BrowserHistoryPanel> {
       if (group != lastGroup) {
         lastGroup = group;
         if (group.isNotEmpty) {
-          out.add(Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 3),
-            child: Text(
-              group,
-              style: const TextStyle(
-                fontSize: 10.5,
-                letterSpacing: 0.6,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+          out.add(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 3),
+              child: Text(
+                group,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w600,
+                  color: context.palette.textSecondary,
+                ),
               ),
             ),
-          ));
+          );
         }
       }
-      out.add(_HistoryRow(
-        entry: e,
-        clock: _clock(e.visitedMs),
-        onOpen: () => widget.onOpen(e),
-        onRemove: () => widget.onRemove(index),
-      ));
+      out.add(
+        _HistoryRow(
+          entry: e,
+          clock: _clock(e.visitedMs),
+          onOpen: () => widget.onOpen(e),
+          onRemove: () => widget.onRemove(index),
+        ),
+      );
     }
     return out;
   }
@@ -285,8 +292,7 @@ class _HistoryRow extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onOpen,
         child: Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             children: <Widget>[
               Expanded(
@@ -297,9 +303,9 @@ class _HistoryRow extends StatelessWidget {
                       entry.displayTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
-                        color: AppColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 1),
@@ -307,9 +313,9 @@ class _HistoryRow extends StatelessWidget {
                       '${WebAddress.hostOf(entry.url)} · $clock',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10.5,
-                        color: AppColors.textSecondary,
+                        color: context.palette.textSecondary,
                       ),
                     ),
                   ],

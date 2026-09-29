@@ -38,12 +38,12 @@ import '../widgets/salu_icon_button.dart';
 import '../widgets/web_marks.dart';
 
 /// Chrome geometry shared with the widget files (one ruler, two users).
-const double kWebStripHeight = 36;
-const double kWebRowHeight = 44;
+final double kWebStripHeight = 36;
+final double kWebRowHeight = 44;
 
 /// web.md · tabs are capped; ten is where the strip still breathes at a
 /// 960-px window (the `+` simply goes quiet at the cap — felt, not told).
-const int kWebMaxTabs = 10;
+final int kWebMaxTabs = 10;
 
 /// The built-in browser — the Web mode's whole surface below the title
 /// strip (web.md). The tab strip, the address bar, the favourites
@@ -273,11 +273,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   // ── Tabs ───────────────────────────────────────────────────────────────
 
-  void _newTab({
-    String? url,
-    String? title,
-    bool focusAddress = false,
-  }) {
+  void _newTab({String? url, String? title, bool focusAddress = false}) {
     final WebTab tab = WebTab(initialUrl: url, initialTitle: title);
     tab.onPopupAllowed = (String popupUrl) => _openPopupTab(tab, popupUrl);
     setState(() {
@@ -412,12 +408,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
           return;
       }
     }
+
     Future<Object?> executeScript(String script) async {
       final controller = tab.controller;
       if (controller == null) return null;
       return controller.executeScript(script);
     }
-    _service.setRemoteHandlers(navigate: navigate, executeScript: executeScript);
+
+    _service.setRemoteHandlers(
+      navigate: navigate,
+      executeScript: executeScript,
+    );
     _service.setRemoteFocusHandler(executeScript);
     // pc_part.md C1 — the one fullscreen seat's host legs. The click is a
     // REAL one (the composition controller's SendMouseInput, exactly what a
@@ -440,6 +441,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         return false;
       }
     }
+
     Future<void> exitFullscreen() async {
       if (!mounted || !identical(tab, _tab)) {
         await _service.setWebFullscreen(false);
@@ -447,6 +449,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       }
       _releasePageFullscreen();
     }
+
     _service.setRemotePageHandlers(
       click: click,
       exitFullscreen: exitFullscreen,
@@ -487,8 +490,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _syncAddressTo(start ? '' : (tab.url.value ?? ''));
     }
     _updateStar();
-    _blockedCount.value =
-        tab.startMode.value ? 0 : tab.blocked.value.length;
+    _blockedCount.value = tab.startMode.value ? 0 : tab.blocked.value.length;
     _service.setStripTitle(tab.displayTitle);
     _service.setRemoteWebMirror(
       title: tab.displayTitle,
@@ -510,19 +512,16 @@ class _BrowserScreenState extends State<BrowserScreen> {
   /// and whenever the active page's media presence flips.
   void _refreshTabMirror() {
     final bool hasMedia = _service.webHasMedia.value;
-    _service.mirrorTabs(
-      <WebTabMirror>[
-        for (int i = 0; i < _tabs.length; i++)
-          WebTabMirror(
-            title: _tabs[i].displayTitle,
-            url: _tabs[i].startMode.value ? null : _tabs[i].url.value,
-            active: i == _active,
-            loading: _tabs[i].loading.value,
-            hasMedia: i == _active && hasMedia,
-          ),
-      ],
-      _active,
-    );
+    _service.mirrorTabs(<WebTabMirror>[
+      for (int i = 0; i < _tabs.length; i++)
+        WebTabMirror(
+          title: _tabs[i].displayTitle,
+          url: _tabs[i].startMode.value ? null : _tabs[i].url.value,
+          active: i == _active,
+          loading: _tabs[i].loading.value,
+          hasMedia: i == _active && hasMedia,
+        ),
+    ], _active);
   }
 
   void _onFullscreenWanted() {
@@ -540,8 +539,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   void _updateStar() {
     final WebTab? tab = _tab;
     final String? url = tab?.hasPage == true ? tab!.url.value : null;
-    final bool now =
-        url != null && _favourites.findFor(url) != null;
+    final bool now = url != null && _favourites.findFor(url) != null;
     if (_saved.value != now) _saved.value = now;
   }
 
@@ -564,14 +562,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   Future<void> _runSuggestions(String query) async {
     final int seq = ++_suggestSeq;
-    final List<WebSuggestion> favs =
-        _favourites.suggest(query, limit: 4);
-    final List<WebSuggestion> hist =
-        WebHistoryService.instance.suggest(query, limit: 4);
-    final List<String> google = SettingsService.instance
-            .webSearchSuggestions.value
-        ? await _suggestClient.fetch(query)
-        : const <String>[];
+    final List<WebSuggestion> favs = _favourites.suggest(query, limit: 4);
+    final List<WebSuggestion> hist = WebHistoryService.instance.suggest(
+      query,
+      limit: 4,
+    );
+    final List<String> google =
+        SettingsService.instance.webSearchSuggestions.value
+            ? await _suggestClient.fetch(query)
+            : const <String>[];
     if (!mounted || seq != _suggestSeq) return;
     // Only answer while the user is still talking to the bar.
     if (!_addressFocus.hasFocus || _address.text.trim() != query) return;
@@ -736,13 +735,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
     });
     _updateStar();
     // Instant removal, five seconds of regret, no dialog (follow.md rule).
-    OsdController.instance.show(OsdUndoCard(
-      label: 'Removed “${removed.name}”',
-      onUndo: () {
-        _favourites.insertAt(index, removed);
-        _updateStar();
-      },
-    ));
+    OsdController.instance.show(
+      OsdUndoCard(
+        label: 'Removed “${removed.name}”',
+        onUndo: () {
+          _favourites.insertAt(index, removed);
+          _updateStar();
+        },
+      ),
+    );
   }
 
   void _toggleFavouritePanel() {
@@ -884,8 +885,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
     setState(() => _menuOpen = false);
     if (url == null || url.isEmpty) return;
     try {
-      await Process.start(
-          'cmd', <String>['/c', 'start', '', '"microsoft-edge:$url"']);
+      await Process.start('cmd', <String>[
+        '/c',
+        'start',
+        '',
+        '"microsoft-edge:$url"',
+      ]);
     } catch (_) {}
   }
 
@@ -1117,15 +1122,24 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   static int? _digitFromKey(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) return 1;
-    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) return 2;
-    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) return 3;
-    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) return 4;
-    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) return 5;
-    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) return 6;
-    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) return 7;
-    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) return 8;
-    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) return 9;
+    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1)
+      return 1;
+    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2)
+      return 2;
+    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3)
+      return 3;
+    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4)
+      return 4;
+    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5)
+      return 5;
+    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6)
+      return 6;
+    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7)
+      return 7;
+    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8)
+      return 8;
+    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9)
+      return 9;
     return null;
   }
 
@@ -1169,7 +1183,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
 
     // Focus Address Bar: F6 or Alt+D
-    if (key == LogicalKeyboardKey.f6 || (alt && key == LogicalKeyboardKey.keyD)) {
+    if (key == LogicalKeyboardKey.f6 ||
+        (alt && key == LogicalKeyboardKey.keyD)) {
       _addressFocus.requestFocus();
       _address.selection = TextSelection(
         baseOffset: 0,
@@ -1193,7 +1208,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
 
     // Settings: F2 or Ctrl+,
-    if (key == LogicalKeyboardKey.f2 || (ctrl && key == LogicalKeyboardKey.comma)) {
+    if (key == LogicalKeyboardKey.f2 ||
+        (ctrl && key == LogicalKeyboardKey.comma)) {
       _openWebSettings();
       return KeyEventResult.handled;
     }
@@ -1233,7 +1249,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
 
     // Clear browsing data: Ctrl+Shift+Delete
-    if (shift && (key == LogicalKeyboardKey.delete || key == LogicalKeyboardKey.backspace)) {
+    if (shift &&
+        (key == LogicalKeyboardKey.delete ||
+            key == LogicalKeyboardKey.backspace)) {
       _closePopups();
       showWebClearDialog(context);
       return KeyEventResult.handled;
@@ -1272,7 +1290,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
 
     // Ctrl+9: Jump to last tab
-    if (digit == 9 || key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
+    if (digit == 9 ||
+        key == LogicalKeyboardKey.digit9 ||
+        key == LogicalKeyboardKey.numpad9) {
       if (_tabs.isNotEmpty && _active != _tabs.length - 1) {
         _closePopups();
         _select(_tabs[_tabs.length - 1]);
@@ -1337,8 +1357,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       unawaited(_tab?.zoomOut() ?? Future<void>.value());
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.digit0 ||
-        key == LogicalKeyboardKey.numpad0) {
+    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
       unawaited(_tab?.resetZoom() ?? Future<void>.value());
       return KeyEventResult.handled;
     }
@@ -1349,8 +1368,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final WebTab? tab = _tab;
     final String? url = tab?.hasPage == true ? tab!.url.value : null;
     if (url == null) return;
-    _favourites.add(url: url, name: name.isEmpty ? null : name,
-        folder: folder);
+    _favourites.add(url: url, name: name.isEmpty ? null : name, folder: folder);
     setState(() {
       _sheetOpen = false;
       _sheetIndex = null;
@@ -1423,8 +1441,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
               // Flutter start page itself instead of stacking it over a live
               // native WebView, so the WebView can never cover the home page.
               if (start) {
-                return const ColoredBox(
-                  color: AppColors.videoBackdrop,
+                return ColoredBox(
+                  color: context.palette.background,
                   child: WebStartPage(),
                 );
               }
@@ -1446,267 +1464,259 @@ class _BrowserScreenState extends State<BrowserScreen> {
               return KeyEventResult.ignored;
             },
       child: DecoratedBox(
-      decoration: const BoxDecoration(color: AppColors.videoBackdrop),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints cons) {
-          final double width = cons.maxWidth;
-          final double menuWidth =
-              (width - 184 - 52).clamp(240.0, 720.0).toDouble();
-          return Stack(
-            children: <Widget>[
-              Column(
-                children: <Widget>[
-                  if (_chrome) ...<Widget>[
-                    BrowserTabStrip(
-                      tabs: _tabs,
-                      activeIndex: _active,
-                      maxTabs: kWebMaxTabs,
-                      onSelect: (int i) => _select(_tabs[i]),
-                      onClose: _closeTab,
-                      onNewTab: () => _newTab(focusAddress: true),
-                      hub: _HubButton(
-                        open: _hubOpen,
-                        onTap: _toggleHub,
+        decoration: BoxDecoration(color: context.palette.background),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints cons) {
+            final double width = cons.maxWidth;
+            final double menuWidth =
+                (width - 184 - 52).clamp(240.0, 720.0).toDouble();
+            return Stack(
+              children: <Widget>[
+                Column(
+                  children: <Widget>[
+                    if (_chrome) ...<Widget>[
+                      BrowserTabStrip(
+                        tabs: _tabs,
+                        activeIndex: _active,
+                        maxTabs: kWebMaxTabs,
+                        onSelect: (int i) => _select(_tabs[i]),
+                        onClose: _closeTab,
+                        onNewTab: () => _newTab(focusAddress: true),
+                        hub: _HubButton(open: _hubOpen, onTap: _toggleHub),
+                      ),
+                      BrowserAddressBar(
+                        tab: tab,
+                        address: _address,
+                        addressFocus: _addressFocus,
+                        suggestionsShown: _suggestionsShown,
+                        saved: _saved,
+                        blockedCount: _blockedCount,
+                        onSubmit: _submitAddress,
+                        onQueryChanged: _onQueryChanged,
+                        onCancel: _closePopups,
+                        onFavourite: _toggleFavouritePanel,
+                        onSiteInfo: _toggleSitePanel,
+                        onBlockedTap: _toggleBlockedList,
+                        onMenu: _toggleMenu,
+                        downloadsOpen: _downloadsOpen,
+                        onDownloadsTap: _toggleDownloads,
+                        onBack: () => tab?.goBack(),
+                        onForward: () => tab?.goForward(),
+                        onReload: () => tab?.reload(),
+                        onStop: () => tab?.controller?.stop(),
+                        onHome: _goHome,
+                        onKeyEvent: _onAddressKey,
+                      ),
+                    ],
+                    Expanded(child: content),
+                  ],
+                ),
+                // One translucent sheet over everything for outside-taps —
+                // menus die with the next click anywhere, like Chrome's.
+                // Find is not a menu (Chrome keeps it while the page is
+                // clicked), so it stays out of the sheet.
+                if (_chrome &&
+                    (_hubOpen ||
+                        _sheetOpen ||
+                        _suggestionsShown ||
+                        _siteOpen ||
+                        _blockedOpen ||
+                        _menuOpen ||
+                        _historyOpen ||
+                        _downloadsOpen))
+                  Positioned.fill(
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (_) => _closePopups(),
+                    ),
+                  ),
+                if (_chrome && _suggestionsShown && _suggestions.isNotEmpty)
+                  Positioned(
+                    left: 184,
+                    top: kWebStripHeight + kWebRowHeight - 4,
+                    width: menuWidth,
+                    child: _PopGrow(
+                      child: WebSuggestionMenu(
+                        items: _suggestions,
+                        cursorIndex: _cursor,
+                        onPick: (WebSuggestion s) {
+                          _pickSuggestion(s);
+                          setState(() {});
+                        },
+                        onHover: (int i) {
+                          if (i != _cursor) setState(() => _cursor = i);
+                        },
                       ),
                     ),
-                    BrowserAddressBar(
-                      tab: tab,
-                      address: _address,
-                      addressFocus: _addressFocus,
-                      suggestionsShown: _suggestionsShown,
-                      saved: _saved,
-                      blockedCount: _blockedCount,
-                      onSubmit: _submitAddress,
-                      onQueryChanged: _onQueryChanged,
-                      onCancel: _closePopups,
-                      onFavourite: _toggleFavouritePanel,
-                      onSiteInfo: _toggleSitePanel,
-                      onBlockedTap: _toggleBlockedList,
-                      onMenu: _toggleMenu,
-                      downloadsOpen: _downloadsOpen,
-                      onDownloadsTap: _toggleDownloads,
-                      onBack: () => tab?.goBack(),
-                      onForward: () => tab?.goForward(),
-                      onReload: () => tab?.reload(),
-                      onStop: () => tab?.controller?.stop(),
-                      onHome: _goHome,
-                      onKeyEvent: _onAddressKey,
-                    ),
-                  ],
-                  Expanded(child: content),
-                ],
-              ),
-              // One translucent sheet over everything for outside-taps —
-              // menus die with the next click anywhere, like Chrome's.
-              // Find is not a menu (Chrome keeps it while the page is
-              // clicked), so it stays out of the sheet.
-              if (_chrome &&
-                  (_hubOpen ||
-                      _sheetOpen ||
-                      _suggestionsShown ||
-                      _siteOpen ||
-                      _blockedOpen ||
-                      _menuOpen ||
-                      _historyOpen ||
-                      _downloadsOpen))
-                Positioned.fill(
-                  child: Listener(
-                    behavior: HitTestBehavior.translucent,
-                    onPointerDown: (_) => _closePopups(),
                   ),
-                ),
-              if (_chrome && _suggestionsShown && _suggestions.isNotEmpty)
-                Positioned(
-                  left: 184,
-                  top: kWebStripHeight + kWebRowHeight - 4,
-                  width: menuWidth,
-                  child: _PopGrow(
-                    child: WebSuggestionMenu(
-                      items: _suggestions,
-                      cursorIndex: _cursor,
-                      onPick: (WebSuggestion s) {
-                        _pickSuggestion(s);
-                        setState(() {});
-                      },
-                      onHover: (int i) {
-                        if (i != _cursor) setState(() => _cursor = i);
-                      },
+                if (_chrome && _hubOpen)
+                  Positioned(
+                    left: 8,
+                    top: kWebStripHeight + 4,
+                    child: _PopGrow(
+                      child: BrowserFavouritesHub(
+                        onOpen: _openFavourite,
+                        onEdit: _editFavourite,
+                        onRemove: _removeFavourite,
+                        onClose: () => setState(() => _hubOpen = false),
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome && _hubOpen)
-                Positioned(
-                  left: 8,
-                  top: kWebStripHeight + 4,
-                  child: _PopGrow(
-                    child: BrowserFavouritesHub(
-                      onOpen: _openFavourite,
-                      onEdit: _editFavourite,
-                      onRemove: _removeFavourite,
-                      onClose: () => setState(() => _hubOpen = false),
+                if (_chrome && _sheetOpen)
+                  Positioned(
+                    left: 158,
+                    top: kWebStripHeight + kWebRowHeight + 2,
+                    child: _PopGrow(
+                      child: Focus(
+                        onKeyEvent: (FocusNode n, KeyEvent e) {
+                          if (e is KeyDownEvent &&
+                              e.logicalKey == LogicalKeyboardKey.escape) {
+                            setState(() {
+                              _sheetOpen = false;
+                              _sheetIndex = null;
+                            });
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: _buildSheet(),
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome && _sheetOpen)
-                Positioned(
-                  left: 158,
-                  top: kWebStripHeight + kWebRowHeight + 2,
-                  child: _PopGrow(
-                    child: Focus(
-                      onKeyEvent: (FocusNode n, KeyEvent e) {
-                        if (e is KeyDownEvent &&
-                            e.logicalKey == LogicalKeyboardKey.escape) {
-                          setState(() {
-                            _sheetOpen = false;
-                            _sheetIndex = null;
-                          });
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
-                      child: _buildSheet(),
+                if (_chrome && _siteOpen && _tab?.hasPage == true)
+                  Positioned(
+                    left: 150,
+                    top: kWebStripHeight + kWebRowHeight + 2,
+                    child: _PopGrow(
+                      child: BrowserSitePanel(
+                        pageUrl: _tab!.url.value!,
+                        secure: _tab!.url.value!.toLowerCase().startsWith(
+                              'https://',
+                            ),
+                        popupsAllowed: WebPopupService.instance.resolve(
+                          _tab!.url.value,
+                        ),
+                        blockedCount: _tab!.blocked.value.length,
+                        onPopupsChanged: _setSitePopups,
+                        onVisitAllow: _visitAllowSite,
+                        onShowBlocked: () => setState(() {
+                          _siteOpen = false;
+                          _blockedOpen = true;
+                        }),
+                        onClose: () => setState(() => _siteOpen = false),
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome && _siteOpen && _tab?.hasPage == true)
-                Positioned(
-                  left: 150,
-                  top: kWebStripHeight + kWebRowHeight + 2,
-                  child: _PopGrow(
-                    child: BrowserSitePanel(
-                      pageUrl: _tab!.url.value!,
-                      secure: _tab!.url.value!
-                          .toLowerCase()
-                          .startsWith('https://'),
-                      popupsAllowed: WebPopupService.instance
-                          .resolve(_tab!.url.value),
-                      blockedCount: _tab!.blocked.value.length,
-                      onPopupsChanged: _setSitePopups,
-                      onVisitAllow: _visitAllowSite,
-                      onShowBlocked: () => setState(() {
-                        _siteOpen = false;
-                        _blockedOpen = true;
-                      }),
-                      onClose: () =>
-                          setState(() => _siteOpen = false),
+                if (_chrome &&
+                    _blockedOpen &&
+                    _tab != null &&
+                    _tab!.blocked.value.isNotEmpty)
+                  Positioned(
+                    right: 48,
+                    top: kWebStripHeight + kWebRowHeight - 4,
+                    width: 380,
+                    child: _PopGrow(
+                      child: BlockedPopupList(
+                        items: _tab!.blocked.value,
+                        host: WebAddress.hostOf(_tab!.url.value ?? ''),
+                        canOpen: _tabs.length < kWebMaxTabs,
+                        onOpen: _openBlockedUrl,
+                        onAllowSite: () {
+                          final String? url = _tab?.url.value;
+                          if (url != null) {
+                            WebPopupService.instance.setFor(url, true);
+                          }
+                          setState(() => _blockedOpen = false);
+                        },
+                        onClose: () => setState(() => _blockedOpen = false),
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome &&
-                  _blockedOpen &&
-                  _tab != null &&
-                  _tab!.blocked.value.isNotEmpty)
-                Positioned(
-                  right: 48,
-                  top: kWebStripHeight + kWebRowHeight - 4,
-                  width: 380,
-                  child: _PopGrow(
-                    child: BlockedPopupList(
-                      items: _tab!.blocked.value,
-                      host: WebAddress.hostOf(_tab!.url.value ?? ''),
-                      canOpen: _tabs.length < kWebMaxTabs,
-                      onOpen: _openBlockedUrl,
-                      onAllowSite: () {
-                        final String? url = _tab?.url.value;
-                        if (url != null) {
-                          WebPopupService.instance.setFor(url, true);
-                        }
-                        setState(() => _blockedOpen = false);
-                      },
-                      onClose: () =>
-                          setState(() => _blockedOpen = false),
+                if (_chrome && _downloadsOpen)
+                  Positioned(
+                    right: 48,
+                    top: kWebStripHeight + kWebRowHeight - 4,
+                    child: _PopGrow(
+                      child: BrowserDownloadsPanel(
+                        onPlay: (WebDownloadItem i) =>
+                            unawaited(_playDownload(i)),
+                        onReveal: (WebDownloadItem i) =>
+                            unawaited(_revealDownload(i)),
+                        onRemove: WebDownloadService.instance.remove,
+                        onOpenFolder: () => unawaited(_openDownloadsFolder()),
+                        onClearFinished:
+                            WebDownloadService.instance.clearFinished,
+                        onClose: () {
+                          setState(() => _downloadsOpen = false);
+                          WebDownloadService.instance.setShelfOpen(false);
+                        },
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome && _downloadsOpen)
-                Positioned(
-                  right: 48,
-                  top: kWebStripHeight + kWebRowHeight - 4,
-                  child: _PopGrow(
-                    child: BrowserDownloadsPanel(
-                      onPlay: (WebDownloadItem i) =>
-                          unawaited(_playDownload(i)),
-                      onReveal: (WebDownloadItem i) =>
-                          unawaited(_revealDownload(i)),
-                      onRemove: WebDownloadService.instance.remove,
-                      onOpenFolder: () =>
-                          unawaited(_openDownloadsFolder()),
-                      onClearFinished:
-                          WebDownloadService.instance.clearFinished,
-                      onClose: () {
-                        setState(() => _downloadsOpen = false);
-                        WebDownloadService.instance.setShelfOpen(false);
-                      },
+                if (_chrome && _menuOpen)
+                  Positioned(
+                    right: 8,
+                    top: kWebStripHeight + kWebRowHeight + 2,
+                    child: _PopGrow(
+                      child: BrowserMenu(
+                        tab: _tab,
+                        onNewTab: () {
+                          setState(() => _menuOpen = false);
+                          if (_tabs.length < kWebMaxTabs) {
+                            _newTab(focusAddress: true);
+                          }
+                        },
+                        onFind: _openFind,
+                        onHistory: _openHistory,
+                        onClearData: () {
+                          setState(() => _menuOpen = false);
+                          showWebClearDialog(context);
+                        },
+                        onOpenInEdge: () => unawaited(_openInEdge()),
+                        onSettings: () {
+                          setState(() => _menuOpen = false);
+                          widget.onOpenSettings?.call();
+                        },
+                        onDownloads: _toggleDownloads,
+                        onClose: () => setState(() => _menuOpen = false),
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome && _menuOpen)
-                Positioned(
-                  right: 8,
-                  top: kWebStripHeight + kWebRowHeight + 2,
-                  child: _PopGrow(
-                    child: BrowserMenu(
-                      tab: _tab,
-                      onNewTab: () {
-                        setState(() => _menuOpen = false);
-                        if (_tabs.length < kWebMaxTabs) {
-                          _newTab(focusAddress: true);
-                        }
-                      },
-                      onFind: _openFind,
-                      onHistory: _openHistory,
-                      onClearData: () {
-                        setState(() => _menuOpen = false);
-                        showWebClearDialog(context);
-                      },
-                      onOpenInEdge: () => unawaited(_openInEdge()),
-                      onSettings: () {
-                        setState(() => _menuOpen = false);
-                        widget.onOpenSettings?.call();
-                      },
-                      onDownloads: _toggleDownloads,
-                      onClose: () =>
-                          setState(() => _menuOpen = false),
+                if (_chrome && _historyOpen)
+                  Positioned(
+                    right: 8,
+                    top: kWebStripHeight + kWebRowHeight + 2,
+                    child: _PopGrow(
+                      child: BrowserHistoryPanel(
+                        onOpen: _openHistoryEntry,
+                        onRemove: (int i) =>
+                            WebHistoryService.instance.removeAt(i),
+                        onClearAll: () => WebHistoryService.instance.clear(),
+                        onClose: () => setState(() => _historyOpen = false),
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome && _historyOpen)
-                Positioned(
-                  right: 8,
-                  top: kWebStripHeight + kWebRowHeight + 2,
-                  child: _PopGrow(
-                    child: BrowserHistoryPanel(
-                      onOpen: _openHistoryEntry,
-                      onRemove: (int i) =>
-                          WebHistoryService.instance.removeAt(i),
-                      onClearAll: () =>
-                          WebHistoryService.instance.clear(),
-                      onClose: () =>
-                          setState(() => _historyOpen = false),
+                if (_chrome && _findOpen && _tab?.hasPage == true)
+                  Positioned(
+                    right: 8,
+                    top: kWebStripHeight + kWebRowHeight + 2,
+                    child: _PopGrow(
+                      child: BrowserFindBar(
+                        query: _findQuery,
+                        queryFocus: _findFocus,
+                        total: _findTotal,
+                        index: _findIndex,
+                        onQueryChanged: _onFindQueryChanged,
+                        onNext: _findNext,
+                        onPrev: _findPrev,
+                        onClose: _closeFind,
+                      ),
                     ),
                   ),
-                ),
-              if (_chrome && _findOpen && _tab?.hasPage == true)
-                Positioned(
-                  right: 8,
-                  top: kWebStripHeight + kWebRowHeight + 2,
-                  child: _PopGrow(
-                    child: BrowserFindBar(
-                      query: _findQuery,
-                      queryFocus: _findFocus,
-                      total: _findTotal,
-                      index: _findIndex,
-                      onQueryChanged: _onFindQueryChanged,
-                      onNext: _findNext,
-                      onPrev: _findPrev,
-                      onClose: _closeFind,
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -1721,9 +1731,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (c != null) {
       unawaited(() async {
         try {
-          await c
-              .executeScript('if (document.exitFullscreen) {'
-                  ' document.exitFullscreen(); }');
+          await c.executeScript(
+            'if (document.exitFullscreen) {'
+            ' document.exitFullscreen(); }',
+          );
         } catch (_) {}
       }());
     }
@@ -1744,8 +1755,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
     return BrowserFavouriteSheet(
       entryIndex: _sheetIndex,
       entry: entry,
-      defaultName: tab?.title.value ??
-          (url.isEmpty ? '' : WebAddress.labelFor(url)),
+      defaultName:
+          tab?.title.value ?? (url.isEmpty ? '' : WebAddress.labelFor(url)),
       defaultUrl: url,
       full: _favourites.isFull,
       onSave: _saveFavourite,
