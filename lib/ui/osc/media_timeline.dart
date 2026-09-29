@@ -42,6 +42,12 @@ import 'hover_chip.dart';
 /// all. A live stream has no position. Its only content is the still
 /// soft light ([StillSoftLight], point 9 Final option A): present while
 /// data arrives, quietly fading away when the stream stalls.
+///
+/// The track and the progress fill are surface paints and follow the
+/// global **Overlay transparency** setting, like every other SALU-owned
+/// surface. The playhead notch, the ruler ticks and the in-bar time
+/// readouts are foregrounds and stay fully opaque, so the position stays
+/// readable while the bar behind it is see-through.
 class MediaTimeline extends StatefulWidget {
   const MediaTimeline({super.key});
 
@@ -298,9 +304,17 @@ class _MediaTimelineState extends State<MediaTimeline> {
             borderRadius: BorderRadius.circular(6),
             child: Stack(
               children: <Widget>[
-                // Track.
+                // Track. The track and the progress fill are SALU-owned
+                // surface paints like any panel, so they follow the global
+                // Overlay transparency and fade with the rest of the chrome.
+                // The playhead notch, the ruler ticks and the in-bar
+                // readouts below are FOREGROUND marks and stay fully
+                // opaque — they are how the position stays readable once
+                // the bar behind them is see-through.
                 Positioned.fill(
-                  child: ColoredBox(color: context.palette.barTrack),
+                  child: ColoredBox(
+                    color: context.overlayTint(context.palette.barTrack),
+                  ),
                 ),
                 // Channel mode: only the still soft light (§10.8a) — no
                 // fill, no thumb, no ruler, no readouts (not even zeros).
@@ -318,7 +332,9 @@ class _MediaTimelineState extends State<MediaTimeline> {
                     bottom: 0,
                     left: 0,
                     width: boundaryX,
-                    child: ColoredBox(color: context.palette.barFill),
+                    child: ColoredBox(
+                      color: context.overlayTint(context.palette.barFill),
+                    ),
                   ),
                 // Aiming ruler (hover / scrub) — faint vertical ticks.
                 if (showTicks && tickStep > Duration.zero)

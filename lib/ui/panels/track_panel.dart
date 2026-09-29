@@ -829,6 +829,10 @@ class _SyncRowState extends State<_SyncRow> {
 
   /// Track + the centre detent + the fill growing OUT of the middle +
   /// the value riding the fill's outer edge.
+  ///
+  /// The track and the fill follow the global **Overlay transparency**,
+  /// like every other SALU-owned surface; the detent and the value are
+  /// foregrounds and stay fully opaque.
   Widget _paint(double w) {
     final double delay = _player.subDelay.value;
     const double labelWidth = 42; // measured for `-5.0 s` at 10 px
@@ -836,24 +840,34 @@ class _SyncRowState extends State<_SyncRow> {
 
     final bool bright = _hovered || _dragging;
     final double barHeight = bright ? 16 : 14;
-    final Color track = bright
-        ? Color.alphaBlend(
-            context.palette.resolve(
-              const Color(0x14FFFFFF),
-              const Color(0x14000000),
-            ),
-            context.palette.barTrack,
-          )
-        : context.palette.barTrack;
-    final Color fill = bright
-        ? Color.alphaBlend(
-            context.palette.resolve(
-              const Color(0x1AFFFFFF),
-              const Color(0x1A000000),
-            ),
-            context.palette.barFill,
-          )
-        : context.palette.barFill;
+    // Track and fill are surface paints, so they ride the global Overlay
+    // transparency exactly like the media timeline and the volume bar. The
+    // tint lands on the FINAL colour — after the hover highlight is
+    // blended in — so the brightened state just sits on a proportionally
+    // more see-through bar. The centre detent and the value label are
+    // foregrounds and keep their full opacity.
+    final Color track = context.overlayTint(
+      bright
+          ? Color.alphaBlend(
+              context.palette.resolve(
+                const Color(0x14FFFFFF),
+                const Color(0x14000000),
+              ),
+              context.palette.barTrack,
+            )
+          : context.palette.barTrack,
+    );
+    final Color fill = context.overlayTint(
+      bright
+          ? Color.alphaBlend(
+              context.palette.resolve(
+                const Color(0x1AFFFFFF),
+                const Color(0x1A000000),
+              ),
+              context.palette.barFill,
+            )
+          : context.palette.barFill,
+    );
     final Color label =
         bright ? context.palette.textPrimary : context.palette.iconIdle;
     final TextStyle labelStyle = _labelStyle.copyWith(color: label);

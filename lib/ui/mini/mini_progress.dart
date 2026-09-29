@@ -28,6 +28,10 @@ import 'mini_metrics.dart';
 /// Channel mode has no position at all (§10.8a) and a parked queue has no
 /// timeline: the strip stays drawn (every pixel of the bar is persistent,
 /// §7) but empty and inert.
+///
+/// The track and the fill are surface paints and follow the global
+/// **Overlay transparency** setting, like every other SALU-owned surface;
+/// the head tick stays fully opaque.
 class MiniSeekLine extends StatefulWidget {
   const MiniSeekLine({
     super.key,
@@ -217,6 +221,7 @@ class _MiniSeekLineState extends State<MiniSeekLine> {
                   child: CustomPaint(
                     painter: MiniProgressStrip(
                       palette: context.palette,
+                      overlay: context.overlay,
                       frac: _pressFrac ?? live,
                       head: usable &&
                           (widget.barHovered ||
@@ -236,10 +241,21 @@ class _MiniSeekLineState extends State<MiniSeekLine> {
 }
 
 /// The top-edge strip: track, fill, and the hover/scrub head tick.
+///
+/// The track and the fill are surface paints and follow the global
+/// **Overlay transparency** setting, like the full window's timeline. The
+/// head tick is a foreground — it marks the playhead — so it stays fully
+/// opaque and the position stays readable on a see-through strip.
 class MiniProgressStrip extends CustomPainter {
   final AppPalette palette;
+
+  /// The overlay-transparency rule, handed down by the widget because a
+  /// painter has no `BuildContext`. Defaults to 0 (no transparency).
+  final OverlayAppearance overlay;
+
   const MiniProgressStrip({
     this.palette = AppPalette.saluDefault,
+    this.overlay = const OverlayAppearance(0),
     required this.frac,
     required this.head,
   });
@@ -265,7 +281,7 @@ class MiniProgressStrip extends CustomPainter {
       track,
       const Radius.circular(1),
     );
-    canvas.drawRRect(rounded, Paint()..color = palette.barTrack);
+    canvas.drawRRect(rounded, Paint()..color = overlay.tint(palette.barTrack));
 
     final double filled = (frac.clamp(0.0, 1.0).toDouble()) * trackWidth;
     if (filled > 0) {
@@ -274,7 +290,7 @@ class MiniProgressStrip extends CustomPainter {
       canvas.clipRRect(rounded);
       canvas.drawRect(
         Rect.fromLTWH(track.left, track.top, filled, track.height),
-        Paint()..color = palette.barFill,
+        Paint()..color = overlay.tint(palette.barFill),
       );
       canvas.restore();
     }
@@ -289,5 +305,8 @@ class MiniProgressStrip extends CustomPainter {
 
   @override
   bool shouldRepaint(MiniProgressStrip old) =>
-      palette != old.palette || old.frac != frac || old.head != head;
+      palette != old.palette ||
+      overlay != old.overlay ||
+      old.frac != frac ||
+      old.head != head;
 }

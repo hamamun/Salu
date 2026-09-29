@@ -31,6 +31,10 @@ import 'hover_chip.dart';
 ///
 /// The SAME widget is reused read-only (120 × 14, no interactions)
 /// inside the OSD volume card so the two can never drift apart.
+///
+/// Its track and fill are surface paints and therefore follow the global
+/// **Overlay transparency** setting, like every other SALU-owned surface.
+/// The percent label inside the bar is a foreground and stays opaque.
 class VolumeBar extends StatefulWidget {
   const VolumeBar({super.key, this.width = 140, this.readOnly = false});
 
@@ -181,24 +185,34 @@ class _VolumeBarState extends State<VolumeBar> {
     required bool bright,
   }) {
     final double barHeight = _hovered || _dragging ? 16 : 14;
-    final Color track = bright
-        ? Color.alphaBlend(
-            context.palette.resolve(
-              const Color(0x14FFFFFF),
-              const Color(0x14000000),
-            ),
-            context.palette.barTrack,
-          )
-        : context.palette.barTrack;
-    final Color fill = bright
-        ? Color.alphaBlend(
-            context.palette.resolve(
-              const Color(0x1AFFFFFF),
-              const Color(0x1A000000),
-            ),
-            context.palette.barFill,
-          )
-        : context.palette.barFill;
+    // The track and the fill are surface paints, so they ride the global
+    // Overlay transparency exactly like the panels and the media timeline.
+    // The tint is applied to the FINAL colour — after the hover highlight
+    // is blended in — so the brightened state simply sits on a
+    // proportionally more see-through bar. The in-bar percent label is a
+    // foreground and keeps its full opacity.
+    final Color track = context.overlayTint(
+      bright
+          ? Color.alphaBlend(
+              context.palette.resolve(
+                const Color(0x14FFFFFF),
+                const Color(0x14000000),
+              ),
+              context.palette.barTrack,
+            )
+          : context.palette.barTrack,
+    );
+    final Color fill = context.overlayTint(
+      bright
+          ? Color.alphaBlend(
+              context.palette.resolve(
+                const Color(0x1AFFFFFF),
+                const Color(0x1A000000),
+              ),
+              context.palette.barFill,
+            )
+          : context.palette.barFill,
+    );
     final Color label =
         bright ? context.palette.textPrimary : context.palette.iconIdle;
     final double fillEnd = w * frac;

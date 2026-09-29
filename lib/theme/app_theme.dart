@@ -26,14 +26,30 @@ class OverlayAppearance extends ThemeExtension<OverlayAppearance> {
       OverlayAppearance(other == null
           ? transparency
           : (transparency + (other.transparency - transparency) * t).round());
+
+  // By VALUE, not identity: a painter handed this as its repaint gate
+  // (the mini bar's edge meter) must not repaint just because the theme
+  // was rebuilt at the same setting, and must repaint the moment the
+  // percentage moves.
+  @override
+  bool operator ==(Object other) =>
+      other is OverlayAppearance && other.transparency == transparency;
+
+  @override
+  int get hashCode => transparency.hashCode;
 }
 
 extension SaluSurfaceContext on BuildContext {
+  /// The live overlay-transparency rule, for the rare painter that tints
+  /// off-tree (a `CustomPainter` gets no `BuildContext` of its own, so the
+  /// widget hands it this and it calls [OverlayAppearance.tint] directly).
+  /// [overlayTint] is the everyday spelling.
+  OverlayAppearance get overlay =>
+      Theme.of(this).extension<OverlayAppearance>() ??
+      const OverlayAppearance(0);
+
   /// Only call for the background tint of a SALU-owned floating surface.
-  Color overlayTint(Color original) =>
-      (Theme.of(this).extension<OverlayAppearance>() ??
-              const OverlayAppearance(0))
-          .tint(original);
+  Color overlayTint(Color original) => overlay.tint(original);
 }
 
 /// Runtime palette values. The original SALU palette remains the default.
