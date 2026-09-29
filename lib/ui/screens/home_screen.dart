@@ -150,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     // Follow title bar mode changes made from the settings window.
     _settings.titleBarMode.addListener(_onTitleBarModeChanged);
+    _settings.controllerPlacement.addListener(_onPlacementChanged);
     // The full window and the mini bar are two different trees — swapping
     // between them tears one down and builds the other (mini.md §8 · §9).
     _windows.mode.addListener(_onWindowModeChanged);
@@ -206,6 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _hideTimer?.cancel();
     _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
+    _settings.controllerPlacement.removeListener(_onPlacementChanged);
     _windows.mode.removeListener(_onWindowModeChanged);
     _browser.mode.removeListener(_onSaluModeChanged);
     unawaited(_downloadSub?.cancel());
@@ -222,6 +224,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// A new title bar mode was picked in the settings window — treat it as
   /// activity so the bar stays up for another 3 seconds under the new mode.
   void _onTitleBarModeChanged() => _wakeChrome();
+
+  void _onPlacementChanged() { if (mounted) setState(() {}); _wakeChrome(); }
 
   /// A transient UI lock was acquired or released — wake the chrome and
   /// let the timer logic re-evaluate (it refuses to hide while locked).
@@ -1227,6 +1231,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 4 · The unified top chrome — title bar + controller as a
                 //     single fused glass block (one gradient, one motion).
                 _buildTopChrome(chromeVisible),
+                if (_settings.controllerPlacement.value != ControllerPlacement.defaultPosition)
+                  _buildDetachedTitleBar(chromeVisible),
 
                 // The strip sits below panels: their barriers win close-first.
                 RightMenu(
@@ -1239,20 +1245,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 //     anchored below the chrome block (top: kChromeBlockHeight).
                 //     Sits under the OSD deck (z-order §4.2) and under the
                 //     resume-toast dismiss layer.
-                const PlaylistPanel(),
+                PlaylistPanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
 
                 // 5b · The Fetch button's slide-down track panel (cc.md
                 //      §6, D14) — audio / embedded subs / local subs,
                 //      live-mirroring mpv. Below the control row on the
                 //      right; above the video, below the OSD deck.
-                const TrackPanel(),
+                TrackPanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
 
                 // 5c · The Tune panel (eq_imp.md §1.2) — the fourth panel in
                 //      the one-popup world: opening it closes the Playlist
                 //      and Tracks panels, Esc closes it, and it locks the
                 //      chrome awake while it is up.
-                const Positioned.fill(child: TunePanel()),
-                const InfoPanel(),
+                Positioned.fill(child: TunePanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value))),
+                InfoPanel(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
 
                 // 6 · Resume-toast click-outside: dismiss ONLY — never
                 //     triggers Restart, never swallows the click (the
@@ -1274,7 +1280,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // 7 · The OSD deck — top center, anchored below the
                 //     chrome block, never waking the chrome.
-                const OsdDeck(),
+                OsdDeck(key: ValueKey<ControllerPlacement>(_settings.controllerPlacement.value)),
               ],
             ),
           ),
@@ -1284,10 +1290,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTopChrome(bool chromeVisible) {
+    final ControllerPlacement placement = _settings.controllerPlacement.value;
+    final bool bottomPlacement = placement == ControllerPlacement.bottom || placement == ControllerPlacement.bottomEdge;
+    final double edgeGap = placement == ControllerPlacement.bottom ? 24 : 0;
     return Positioned(
-      top: 0,
+      top: bottomPlacement ? null : 0,
+      bottom: bottomPlacement ? edgeGap : null,
       left: 0,
       right: 0,
+      height: bottomPlacement ? ControllerPanel.height : (placement == ControllerPlacement.top ? _chromeBlockHeight + 12 : _chromeBlockHeight),
       child: IgnorePointer(
         ignoring: !chromeVisible,
         child: Listener(
@@ -1298,7 +1309,7 @@ class _HomeScreenState extends State<HomeScreen> {
           behavior: HitTestBehavior.opaque,
           onPointerDown: (_) {},
           child: AnimatedSlide(
-            offset: chromeVisible ? Offset.zero : const Offset(0, -1),
+            offset: chromeVisible ? Offset.zero : (bottomPlacement ? const Offset(0, 1) : const Offset(0, -1)),
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
             child: AnimatedOpacity(
@@ -1306,24 +1317,66 @@ class _HomeScreenState extends State<HomeScreen> {
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutCubic,
               child: Container(
-                height: _chromeBlockHeight,
+                height: bottomPlacement ? ControllerPanel.height : (placement == ControllerPlacement.top ? _chromeBlockHeight + 12 : _chromeBlockHeight),
                 alignment: Alignment.topCenter,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: _scrimColors,
+                    colors: bottomPlacement
+                        ? _scrimColors.reversed.toList(growable: false)
+                        : _scrimColors,
                     stops: _scrimStops,
                   ),
                 ),
                 child: MouseRegion(
-                  // While the pointer works inside the visible chrome
-                  // content, auto-hide is suspended (even without mouse
-                  // movement). The region hugs the content — it never
-                  // covers the block's invisible glass areas.
                   onEnter: (_) => _onChromeEnter(),
                   onExit: (_) => _onChromeExit(),
-                  child: Column(
+                  child: _positionedChromeContent(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetachedTitleBar(bool visible) => Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(
+          ignoring: !visible,
+          child: MouseRegion(
+            onEnter: (_) => _onChromeEnter(),
+            onExit: (_) => _onChromeExit(),
+            child: AnimatedSlide(
+            offset: visible ? Offset.zero : const Offset(0, -1),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            child: AnimatedOpacity(
+              opacity: visible ? 1 : 0,
+              duration: const Duration(milliseconds: 300),
+              child: ValueListenableBuilder<String?>(
+                valueListenable: _player.currentTitle,
+                builder: (context, title, _) => CustomTitleBar(
+                  visible: true,
+                  title: title,
+                  onSettings: _openSettings,
+                  leading: BrowserService.browserSupported ? const WebModeToggle() : null,
+                  badge: _downloadBadge,
+                ),
+              ),
+            ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _positionedChromeContent() {
+    final placement = _settings.controllerPlacement.value;
+    if (placement == ControllerPlacement.defaultPosition) return Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
@@ -1356,14 +1409,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       // (configured in Settings) can hide it.
                       const ControllerPanel(),
                     ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+                  );
+    if (placement == ControllerPlacement.top) return Column(children: <Widget>[
+      SizedBox(height: CustomTitleBar.height),
+      Padding(padding: const EdgeInsets.only(top: 12), child: const ControllerPanel()),
+    ]);
+    return const Align(alignment: Alignment.topCenter, child: ControllerPanel());
   }
 }
 

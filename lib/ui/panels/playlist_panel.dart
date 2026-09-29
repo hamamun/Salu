@@ -16,7 +16,8 @@ import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/transport_actions.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
-import '../osc/controller_panel.dart' show kChromeBlockHeight;
+import '../osc/controller_panel.dart' show kChromeBlockHeight, controllerAtBottom, controllerBottomGap, controllerPanelTopAnchor, ControllerPanel;
+import '../widgets/custom_title_bar.dart' show CustomTitleBar;
 import '../osd/osd_controller.dart';
 import '../widgets/alt_peek.dart';
 import '../widgets/channel_logo.dart';
@@ -28,7 +29,7 @@ import '../widgets/salu_marks.dart';
 /// SALU's slide-out playlist panel (playlist_imp.md §4 · §10) — the *view*
 /// over the queue that the control-row Playlist mark opens.
 ///
-/// Mounted in `HomeScreen`'s Stack at `top: kChromeBlockHeight`, sliding
+/// Mounted in `HomeScreen`'s Stack at `top: controllerPanelTopAnchor`, sliding
 /// from the right edge (`Positioned top/right/bottom`, width 322) so it
 /// never covers its own toggle and never moves the chrome (rule 5). It is
 /// glass *over* the picture — the video never rescales and nothing shifts.
@@ -838,7 +839,8 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       children: <Widget>[
         if (open)
           Positioned.fill(
-            top: kChromeBlockHeight,
+            top: controllerAtBottom ? CustomTitleBar.height : controllerPanelTopAnchor,
+            bottom: controllerAtBottom ? ControllerPanel.height + controllerBottomGap : 0,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: _panel.closePlaylist,
@@ -846,9 +848,9 @@ class _PlaylistPanelState extends State<PlaylistPanel>
             ),
           ),
         Positioned(
-          top: kChromeBlockHeight,
+          top: controllerAtBottom ? CustomTitleBar.height : controllerPanelTopAnchor,
           right: 0,
-          bottom: 0,
+          bottom: controllerAtBottom ? ControllerPanel.height + controllerBottomGap : 0,
           width: PlaylistPanel.width,
           child: IgnorePointer(
             // Stops hit-testing the instant it starts closing (§4.0).
@@ -904,7 +906,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
           ),
         ),
         Positioned(
-          top: kChromeBlockHeight,
+          top: controllerPanelTopAnchor,
           right: 0,
           width: PlaylistPanel.width,
           child: Focus(

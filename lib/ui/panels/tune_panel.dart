@@ -11,7 +11,8 @@ import '../../core/tune/tune_presets.dart';
 import '../../core/tune_service.dart';
 import '../../core/ui_lock.dart';
 import '../../theme/app_theme.dart';
-import '../osc/controller_panel.dart' show kChromeBlockHeight;
+import '../osc/controller_panel.dart' show kChromeBlockHeight, controllerAtBottom, controllerBottomGap, controllerPanelTopAnchor, ControllerPanel;
+import '../widgets/custom_title_bar.dart' show CustomTitleBar;
 import '../widgets/salu_icon_button.dart';
 import '../widgets/salu_marks.dart';
 import '../widgets/transport_marks.dart';
@@ -124,6 +125,8 @@ class _TunePanelState extends State<TunePanel>
                   // Click-outside: opaque, so the closing click never falls
                   // through to the video's play/pause layer.
                   Positioned.fill(
+                    top: controllerAtBottom ? 40 : controllerPanelTopAnchor,
+                    bottom: controllerAtBottom ? ControllerPanel.height + controllerBottomGap : 0,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _panels.closeTunePanel,
@@ -131,7 +134,8 @@ class _TunePanelState extends State<TunePanel>
                     ),
                   ),
                   Positioned(
-                    top: kChromeBlockHeight + 6,
+                    top: controllerAtBottom ? null : controllerPanelTopAnchor + 6,
+                    bottom: controllerAtBottom ? ControllerPanel.height + controllerBottomGap + 6 : null,
                     left: 0,
                     right: 0,
                     child: Align(
@@ -244,8 +248,11 @@ class _TunePanelState extends State<TunePanel>
           // watchable while it is open, so the body scrolls when the window
           // is short.
           constraints: BoxConstraints(
-            maxHeight:
-                MediaQuery.sizeOf(context).height - kChromeBlockHeight - 28,
+            maxHeight: (MediaQuery.sizeOf(context).height -
+                    (controllerAtBottom
+                        ? CustomTitleBar.height + ControllerPanel.height + controllerBottomGap
+                        : controllerPanelTopAnchor) -
+                    28).clamp(120.0, MediaQuery.sizeOf(context).height).toDouble(),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

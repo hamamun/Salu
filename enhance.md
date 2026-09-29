@@ -171,3 +171,28 @@ Flutter analysis/tests and Windows visual/blur-performance checks are
 setting over bright and dark moving video in both themes, fullscreen/windowed
 and mini modes, including all listed panels and dialogs, on Windows before
 sign-off. Phase 3 remains unimplemented.
+
+## Phase 3 implementation / validation status
+
+Controller placement is now persisted in `SettingsService` as
+`appearance_controller_placement`, with a migration-safe `Default` fallback.
+The Appearance tab has a four-choice, icon-and-label placement picker and a
+group reset/Undo path. Placement applies live. Default retains the fused
+148 px title/controller block; Top keeps the title bar at the top and places
+the controller below it with a visible gap; Bottom floats the controller 24 px
+above the lower edge; Bottom edge aligns it flush to that edge. The bottom
+controller animates upward as it appears, while top/default continue to enter
+from above. Controller placements trigger recreation/re-anchoring of the
+playlist, track, tune, info and OSD surfaces. Playlist remains right-aligned;
+its bottom-placement bounds stop above the controller. Track and tune panels
+open upward for bottom placements, and the info panel is similarly bounded.
+The OSD deck moves to a clear upper-middle position for bottom placement.
+
+Added `test/controller_placement_test.dart` for the migration default, invalid
+stored values, and persistence of every enum choice. `git diff --check` passes.
+Flutter analysis, widget tests, and Windows visual/runtime checks are still
+pending because this workspace has no working Flutter/Dart SDK. In particular,
+verify short-window panel scrolling, hover popups, fullscreen/maximized and
+mini-mode transitions, toast placement, and the 24 px bottom gap on Windows
+before sign-off. Mini mode remains its existing dedicated mini bar and does
+not adopt these full-player placements.

@@ -116,6 +116,8 @@ enum WebPageScheme { light, dark, system }
 /// MaterialApp so Windows changes are reflected without a restart.
 enum SaluThemeMode { defaultTheme, light, system }
 
+enum ControllerPlacement { defaultPosition, top, bottom, bottomEdge }
+
 /// SALU's persisted settings, backed by `shared_preferences`.
 ///
 /// UI-facing state lives in [ValueNotifier]s so widgets can react instantly;
@@ -129,6 +131,7 @@ class SettingsService {
   static const String _keyTitleBarMode = 'title_bar_mode';
   static const String _keyThemeMode = 'appearance_theme_mode';
   static const String _keyOverlayTransparency = 'appearance_overlay_transparency';
+  static const String _keyControllerPlacement = 'appearance_controller_placement';
 
   /// Conservative ceiling until Windows video contrast checks can justify more.
   static const int maxOverlayTransparency = 40;
@@ -173,6 +176,9 @@ class SettingsService {
   final ValueNotifier<SaluThemeMode> themeMode = ValueNotifier<SaluThemeMode>(
     SaluThemeMode.defaultTheme,
   );
+
+  final ValueNotifier<ControllerPlacement> controllerPlacement =
+      ValueNotifier<ControllerPlacement>(ControllerPlacement.defaultPosition);
 
   Future<void> _overlayWrite = Future<void>.value();
 
@@ -326,6 +332,8 @@ class SettingsService {
       final String? rawTheme = prefs.getString(_keyThemeMode);
       themeMode.value = SaluThemeMode.values.asNameMap()[rawTheme] ??
           SaluThemeMode.defaultTheme;
+      final String? rawPlacement = prefs.getString(_keyControllerPlacement);
+      controllerPlacement.value = ControllerPlacement.values.asNameMap()[rawPlacement] ?? ControllerPlacement.defaultPosition;
       final Object? savedTransparency = prefs.get(_keyOverlayTransparency);
       overlayTransparency.value = savedTransparency is int
           ? savedTransparency.clamp(0, maxOverlayTransparency).toInt()
@@ -417,6 +425,7 @@ class SettingsService {
       // Corrupt/missing prefs — fall back to the defaults, silently.
       themeMode.value = SaluThemeMode.defaultTheme;
       overlayTransparency.value = 0;
+      controllerPlacement.value = ControllerPlacement.defaultPosition;
       titleBarMode.value = TitleBarMode.borderless;
       resumeMode.value = ResumeMode.all;
       folderAutoloadMode.value = FolderAutoloadMode.allVideos;
@@ -451,6 +460,14 @@ class SettingsService {
     } catch (_) {
       // In-memory change already applied; persistence is best-effort.
     }
+  }
+
+  Future<void> setControllerPlacement(ControllerPlacement placement) async {
+    controllerPlacement.value = placement;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyControllerPlacement, placement.name);
+    } catch (_) {}
   }
 
   /// Apply on every drag tick; commit only at drag end to avoid writing

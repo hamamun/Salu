@@ -347,6 +347,7 @@ class _Preferences {
     required this.titleBarMode,
     required this.themeMode,
     required this.overlayTransparency,
+    required this.controllerPlacement,
     required this.resumeMode,
     required this.folderAutoloadMode,
     required this.autoEq,
@@ -368,6 +369,7 @@ class _Preferences {
   final TitleBarMode titleBarMode;
   final SaluThemeMode themeMode;
   final int overlayTransparency;
+  final ControllerPlacement controllerPlacement;
   final ResumeMode resumeMode;
   final FolderAutoloadMode folderAutoloadMode;
   final bool autoEq;
@@ -392,6 +394,7 @@ class _Preferences {
       titleBarMode: s.titleBarMode.value,
       themeMode: s.themeMode.value,
       overlayTransparency: s.overlayTransparency.value,
+      controllerPlacement: s.controllerPlacement.value,
       resumeMode: s.resumeMode.value,
       folderAutoloadMode: s.folderAutoloadMode.value,
       autoEq: s.autoEq.value,
@@ -417,6 +420,7 @@ class _Preferences {
     titleBarMode: TitleBarMode.borderless,
     themeMode: SaluThemeMode.defaultTheme,
     overlayTransparency: 0,
+    controllerPlacement: ControllerPlacement.defaultPosition,
     resumeMode: ResumeMode.all,
     folderAutoloadMode: FolderAutoloadMode.allVideos,
     autoEq: false,
@@ -442,6 +446,7 @@ class _Preferences {
       s.titleBarMode,
       s.themeMode,
       s.overlayTransparency,
+      s.controllerPlacement,
       s.resumeMode,
       s.folderAutoloadMode,
       s.autoEq,
@@ -467,6 +472,7 @@ class _Preferences {
       titleBarMode == defaults.titleBarMode &&
       themeMode == defaults.themeMode &&
       overlayTransparency == defaults.overlayTransparency &&
+      controllerPlacement == defaults.controllerPlacement &&
       resumeMode == defaults.resumeMode &&
       folderAutoloadMode == defaults.folderAutoloadMode &&
       autoEq == defaults.autoEq &&
@@ -492,6 +498,7 @@ class _Preferences {
     unawaited(s.setTitleBarMode(titleBarMode));
     unawaited(s.setThemeMode(themeMode));
     unawaited(s.setOverlayTransparency(overlayTransparency));
+    unawaited(s.setControllerPlacement(controllerPlacement));
     unawaited(s.setResumeMode(resumeMode));
     unawaited(s.setFolderAutoloadMode(folderAutoloadMode));
     unawaited(s.setAutoEq(autoEq));
@@ -1033,6 +1040,14 @@ class _Defaults {
     _undo('Theme reset', () => unawaited(s.setThemeMode(previous)));
   }
 
+  static void controllerPlacement() {
+    final SettingsService s = _s;
+    final ControllerPlacement previous = s.controllerPlacement.value;
+    if (previous == ControllerPlacement.defaultPosition) return;
+    unawaited(s.setControllerPlacement(ControllerPlacement.defaultPosition));
+    _undo('Controller placement reset', () => unawaited(s.setControllerPlacement(previous)));
+  }
+
   static void transparency() {
     final SettingsService s = _s;
     final int previous = s.overlayTransparency.value;
@@ -1204,6 +1219,15 @@ class _AppearanceTab extends StatelessWidget {
           rows: const <Widget>[_ThemeRow()],
         ),
         _Group(
+          caption: 'Media controller placement',
+          reset: _GroupReset(
+            sources: <Listenable>[settings.controllerPlacement],
+            isModified: () => settings.controllerPlacement.value != ControllerPlacement.defaultPosition,
+            onReset: _Defaults.controllerPlacement,
+          ),
+          rows: const <Widget>[_ControllerPlacementRow()],
+        ),
+        _Group(
           caption: 'Overlay transparency',
           reset: _GroupReset(
             sources: <Listenable>[settings.overlayTransparency],
@@ -1256,6 +1280,24 @@ class _ThemeRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ControllerPlacementRow extends StatelessWidget {
+  const _ControllerPlacementRow();
+  static const options = <({ControllerPlacement value, String label, String? hint})>[
+    (value: ControllerPlacement.defaultPosition, label: 'Default', hint: 'Attached below title bar'),
+    (value: ControllerPlacement.top, label: 'Top', hint: 'Floating near top'),
+    (value: ControllerPlacement.bottom, label: 'Bottom', hint: 'Floating above bottom edge'),
+    (value: ControllerPlacement.bottomEdge, label: 'Bottom edge', hint: 'Aligned with bottom edge'),
+  ];
+  @override Widget build(BuildContext context) => ValueListenableBuilder<ControllerPlacement>(
+    valueListenable: SettingsService.instance.controllerPlacement,
+    builder: (context, selected, _) => _Row(label: 'Media controller placement', trailing: _PillPicker<ControllerPlacement>(
+      options: options, value: selected,
+      iconFor: (v) => switch(v) { ControllerPlacement.defaultPosition => Icons.vertical_align_top, ControllerPlacement.top => Icons.vertical_align_top_outlined, ControllerPlacement.bottom => Icons.vertical_align_bottom_outlined, ControllerPlacement.bottomEdge => Icons.vertical_align_bottom },
+      onSelect: (v) => unawaited(SettingsService.instance.setControllerPlacement(v)),
+    )),
+  );
 }
 
 /// 0% retains the original tint; increasing the value reveals more video.

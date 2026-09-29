@@ -5,7 +5,7 @@ import '../../core/player_service.dart';
 import '../../core/sub_delay_service.dart' show formatSubDelay;
 import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
-import '../osc/controller_panel.dart' show kChromeBlockHeight;
+import '../osc/controller_panel.dart' show controllerAtBottom, controllerPanelTopAnchor;
 import '../osc/volume_bar.dart';
 import '../widgets/glass_capsule.dart';
 import '../widgets/salu_marks.dart';
@@ -89,7 +89,9 @@ class _OsdDeckState extends State<OsdDeck> with SingleTickerProviderStateMixin {
     if (card == null && _slot.isDismissed) return const SizedBox.shrink();
 
     return Positioned(
-      top: kChromeBlockHeight, // the chrome block's bottom edge (= 148)
+      top: controllerAtBottom
+          ? MediaQuery.sizeOf(context).height * 0.35
+          : controllerPanelTopAnchor,
       left: 0,
       right: 0,
       height: 96,
