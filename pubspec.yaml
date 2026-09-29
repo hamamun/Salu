@@ -22,6 +22,8 @@ dependencies:
   media_kit: ^1.1.11 # Core playback logic.
   media_kit_video: ">=1.2.5 <3.0.0" # The Video widget that renders frames.
   media_kit_libs_video: ^1.0.5 # Native Windows libmpv-2.dll binaries.
+  # Windows Media Foundation frame extraction for timeline hover previews.
+  flutter_video_thumbnail_plus: ^1.0.6
   # Drag & drop of local media files onto the window.
   # (APIs verified compatible across 0.4.x–0.8.x.)
   desktop_drop: ">=0.4.4 <0.9.0"
