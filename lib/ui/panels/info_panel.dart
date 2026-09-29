@@ -158,7 +158,7 @@ class _InfoPanelState extends State<InfoPanel>
                           child: Container(
                             key: const ValueKey<String>('info-panel-surface'),
                             decoration: BoxDecoration(
-                              color: context.palette.glass,
+                              color: context.overlayTint(context.palette.glass),
                               border: Border(
                                 right: BorderSide(
                                   color: context.palette.surfaceOutline,

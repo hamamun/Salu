@@ -981,7 +981,7 @@ class _PlaylistPanelState extends State<PlaylistPanel>
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
-          color: context.palette.glass,
+          color: context.overlayTint(context.palette.glass),
           child: Stack(
             children: <Widget>[
               Positioned(
@@ -2043,7 +2043,7 @@ class _PinnedHeadTile extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: ColoredBox(
-          color: context.palette.glass,
+          color: context.overlayTint(context.palette.glass),
           child: _ChannelGroupHead(
             label: label,
             count: count,

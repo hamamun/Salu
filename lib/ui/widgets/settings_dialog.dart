@@ -117,7 +117,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
             width: width,
             height: height,
             decoration: BoxDecoration(
-              color: context.palette.background,
+              color: context.overlayTint(context.palette.background),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: context.palette.resolve(
@@ -346,6 +346,7 @@ class _Preferences {
   const _Preferences({
     required this.titleBarMode,
     required this.themeMode,
+    required this.overlayTransparency,
     required this.resumeMode,
     required this.folderAutoloadMode,
     required this.autoEq,
@@ -366,6 +367,7 @@ class _Preferences {
 
   final TitleBarMode titleBarMode;
   final SaluThemeMode themeMode;
+  final int overlayTransparency;
   final ResumeMode resumeMode;
   final FolderAutoloadMode folderAutoloadMode;
   final bool autoEq;
@@ -389,6 +391,7 @@ class _Preferences {
     return _Preferences(
       titleBarMode: s.titleBarMode.value,
       themeMode: s.themeMode.value,
+      overlayTransparency: s.overlayTransparency.value,
       resumeMode: s.resumeMode.value,
       folderAutoloadMode: s.folderAutoloadMode.value,
       autoEq: s.autoEq.value,
@@ -413,6 +416,7 @@ class _Preferences {
   static const _Preferences defaults = _Preferences(
     titleBarMode: TitleBarMode.borderless,
     themeMode: SaluThemeMode.defaultTheme,
+    overlayTransparency: 0,
     resumeMode: ResumeMode.all,
     folderAutoloadMode: FolderAutoloadMode.allVideos,
     autoEq: false,
@@ -437,6 +441,7 @@ class _Preferences {
     return <Listenable>[
       s.titleBarMode,
       s.themeMode,
+      s.overlayTransparency,
       s.resumeMode,
       s.folderAutoloadMode,
       s.autoEq,
@@ -461,6 +466,7 @@ class _Preferences {
   bool get isDefault =>
       titleBarMode == defaults.titleBarMode &&
       themeMode == defaults.themeMode &&
+      overlayTransparency == defaults.overlayTransparency &&
       resumeMode == defaults.resumeMode &&
       folderAutoloadMode == defaults.folderAutoloadMode &&
       autoEq == defaults.autoEq &&
@@ -485,6 +491,7 @@ class _Preferences {
     final SettingsService s = SettingsService.instance;
     unawaited(s.setTitleBarMode(titleBarMode));
     unawaited(s.setThemeMode(themeMode));
+    unawaited(s.setOverlayTransparency(overlayTransparency));
     unawaited(s.setResumeMode(resumeMode));
     unawaited(s.setFolderAutoloadMode(folderAutoloadMode));
     unawaited(s.setAutoEq(autoEq));
@@ -1026,6 +1033,17 @@ class _Defaults {
     _undo('Theme reset', () => unawaited(s.setThemeMode(previous)));
   }
 
+  static void transparency() {
+    final SettingsService s = _s;
+    final int previous = s.overlayTransparency.value;
+    if (previous == 0) return;
+    unawaited(s.setOverlayTransparency(0));
+    _undo(
+      'Transparency reset',
+      () => unawaited(s.setOverlayTransparency(previous)),
+    );
+  }
+
   static void topBar() {
     final SettingsService s = _s;
     final TitleBarMode previous = s.titleBarMode.value;
@@ -1185,6 +1203,15 @@ class _AppearanceTab extends StatelessWidget {
           ),
           rows: const <Widget>[_ThemeRow()],
         ),
+        _Group(
+          caption: 'Overlay transparency',
+          reset: _GroupReset(
+            sources: <Listenable>[settings.overlayTransparency],
+            isModified: () => settings.overlayTransparency.value != 0,
+            onReset: _Defaults.transparency,
+          ),
+          rows: const <Widget>[_TransparencyRow()],
+        ),
       ],
     );
   }
@@ -1229,6 +1256,67 @@ class _ThemeRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 0% retains the original tint; increasing the value reveals more video.
+/// The number belongs to the control, so the slider never depends on a
+/// tooltip to communicate its direction or current value.
+class _TransparencyRow extends StatelessWidget {
+  const _TransparencyRow();
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable: SettingsService.instance.overlayTransparency,
+        builder: (BuildContext context, int percent, Widget? _) => _Row(
+          label: 'Transparency',
+          trailing: Tooltip(
+            message: '0% original · higher is more see-through',
+            waitDuration: const Duration(milliseconds: 400),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  Icons.opacity_outlined,
+                  size: 16,
+                  color: context.palette.iconIdle,
+                ),
+                SizedBox(
+                  width: 154,
+                  child: Slider(
+                    value: percent.toDouble(),
+                    min: 0,
+                    max: SettingsService.maxOverlayTransparency.toDouble(),
+                    divisions: SettingsService.maxOverlayTransparency ~/ 5,
+                    label: '$percent%',
+                    onChanged: (double value) => unawaited(
+                      SettingsService.instance.setOverlayTransparency(
+                        value.round(),
+                        persist: false,
+                      ),
+                    ),
+                    onChangeEnd: (double value) => unawaited(
+                      SettingsService.instance.setOverlayTransparency(
+                        value.round(),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 36,
+                  child: Text(
+                    '$percent%',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.palette.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 // ── General tab ────────────────────────────────────────────────────────────
@@ -2669,7 +2757,7 @@ class _LanguageSelectorState extends State<_LanguageSelector> {
       color: Colors.transparent,
       child: Container(
         decoration: BoxDecoration(
-          color: context.palette.surface,
+          color: context.overlayTint(context.palette.surface),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: context.palette.surfaceOutline),
           boxShadow: const <BoxShadow>[

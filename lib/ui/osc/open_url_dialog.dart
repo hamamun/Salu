@@ -252,7 +252,7 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
                 maxHeight: math.min(560.0, constraints.maxHeight),
               ),
               decoration: BoxDecoration(
-                color: context.palette.background,
+                color: context.overlayTint(context.palette.background),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: context.palette.surfaceOutline),
                 boxShadow: const <BoxShadow>[
@@ -402,7 +402,7 @@ class _OpenUrlDialogState extends State<OpenUrlDialog> {
       margin: const EdgeInsets.fromLTRB(14, 4, 14, 12),
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
       decoration: BoxDecoration(
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: context.palette.surfaceOutline),
       ),

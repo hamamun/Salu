@@ -66,7 +66,7 @@ class _RemotePanelState extends State<RemotePanel> {
               width: 340,
               child: Container(
                 decoration: BoxDecoration(
-                  color: context.palette.surface,
+                  color: context.overlayTint(context.palette.surface),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: context.palette.surfaceOutline),
                   boxShadow: const <BoxShadow>[
@@ -252,7 +252,7 @@ class _RemotePanelState extends State<RemotePanel> {
         height: 96,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: context.palette.background,
+          color: context.overlayTint(context.palette.background),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Padding(

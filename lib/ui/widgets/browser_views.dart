@@ -185,7 +185,7 @@ class _PermissionPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final String host = WebAddress.hostOf(url);
     return Dialog(
-      backgroundColor: context.palette.surface,
+      backgroundColor: context.overlayTint(context.palette.surface),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: context.palette.surfaceOutline),

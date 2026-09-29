@@ -28,7 +28,7 @@ class HoverChip extends StatelessWidget {
         height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: context.palette.chipBackground,
+          color: context.overlayTint(context.palette.chipBackground),
           borderRadius: BorderRadius.circular(5),
         ),
         child: Text(

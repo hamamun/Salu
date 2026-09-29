@@ -136,4 +136,38 @@ has no working Flutter/Dart SDK and SDK downloads are blocked. Added
 page-scheme independence, palette contrast, painter invalidation and reset/Undo.
 Run `flutter analyze` and `flutter test` on an SDK-equipped machine, then check
 open dialogs/panels over bright and dark video on Windows before sign-off.
-Phase 2 and Phase 3 are not implemented.
+Phase 2 is implemented (Windows validation pending); Phase 3 is not implemented.
+
+## Phase 2 implementation / validation status
+
+Overlay transparency is implemented as a saved 0–40% setting in Appearance.
+The slider changes tint live in 5% steps; release commits the value. Zero
+leaves the original colours and alpha values untouched. The percentage is the
+**fraction of the existing tint removed**, not the opacity retained: at 40%,
+a previously 80%-opaque glass tint is 48%-opaque. The 40% ceiling is
+conservative pending Windows contrast testing; do not raise it without checking
+light/dark chrome over bright/dark moving video. Reset and master Undo restore
+both the UI and the saved value.
+
+Audited SALU-owned floating surface backgrounds: fused player chrome gradient,
+standalone title chrome, mini bar, glass controller pills/deck/toasts, hover
+chips, playlist/track/tune/info panels, settings and subtitle dialogs,
+Open URL/remote/update/firewall dialogs, and Flutter browser menus, shelves,
+popups and tooltips. The same tint function preserves each surface's colour
+and adjusts only its background alpha. Foreground text, marks, strokes, hover
+feedback, focus indicators and shadows are left unchanged. Blur strength
+is unchanged. Intentional exclusions: the opaque video/letterbox and browser
+canvas, Flutter browser start page, lyric canvas, WebView2 page content, Windows
+owned dialogs, modal dim barriers, QR/images/artwork, media progress tracks,
+editable form-field fills, interactive tabs/selected pills, and shortcut
+reference illustrations. These are not floating interface surface tints;
+reducing their opacity would expose unrelated layers or reduce usability.
+
+Added `test/overlay_transparency_test.dart` for persistence, migration/clamp,
+live changes, tint/foreground isolation and reset/Undo. All 30 changed Dart
+sources parse with the WASM dart_style formatter; `git diff --check` passes.
+Flutter analysis/tests and Windows visual/blur-performance checks are
+**not yet run** in this workspace (no Flutter/Dart SDK). Verify the new
+setting over bright and dark moving video in both themes, fullscreen/windowed
+and mini modes, including all listed panels and dialogs, on Windows before
+sign-off. Phase 3 remains unimplemented.

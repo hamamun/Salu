@@ -128,18 +128,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// top (caption buttons), melting away at the block's bottom edge so the
   /// glass block merges into the video with no outline.
   List<Color> get _scrimColors => <Color>[
-        context.palette
-            .resolve(const Color(0xF0121212), const Color(0xF0F4F4F7)),
-        context.palette
-            .resolve(const Color(0xE0121212), const Color(0xE0F4F4F7)),
-        context.palette
-            .resolve(const Color(0xC8121212), const Color(0xC8F4F4F7)),
-        context.palette
-            .resolve(const Color(0xB4121212), const Color(0xB4F4F4F7)),
-        context.palette
-            .resolve(const Color(0x99121212), const Color(0x99F4F4F7)),
-        context.palette
-            .resolve(const Color(0x00121212), const Color(0x00F4F4F7)),
+        for (final int alpha in <int>[0xF0, 0xE0, 0xC8, 0xB4, 0x99, 0x00])
+          context.overlayTint(
+            context.palette.resolve(
+              Color.fromARGB(alpha, 0x12, 0x12, 0x12),
+              Color.fromARGB(alpha, 0xF4, 0xF4, 0xF7),
+            ),
+          ),
       ];
   static const List<double> _scrimStops = <double>[
     0.0,
@@ -345,9 +340,11 @@ class _HomeScreenState extends State<HomeScreen> {
               children: <Widget>[
                 if (!pageOwnsScreen)
                   Container(
-                    color: context.palette.resolve(
-                      const Color(0xF0121212),
-                      const Color(0xF0F4F4F7),
+                    color: context.overlayTint(
+                      context.palette.resolve(
+                        const Color(0xF0121212),
+                        const Color(0xF0F4F4F7),
+                      ),
                     ),
                     child: ValueListenableBuilder<String?>(
                       valueListenable: _browser.stripTitle,
@@ -1494,7 +1491,7 @@ class _DropOverlay extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
             decoration: BoxDecoration(
-              color: context.palette.glass,
+              color: context.overlayTint(context.palette.glass),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(

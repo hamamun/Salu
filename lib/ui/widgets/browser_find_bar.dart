@@ -63,7 +63,7 @@ class BrowserFindBar extends StatelessWidget {
       onKeyEvent: _onKey,
       child: Material(
         elevation: 0,
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           width: 360,

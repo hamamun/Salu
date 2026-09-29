@@ -5,6 +5,37 @@ extension SaluPaletteContext on BuildContext {
       Theme.of(this).extension<AppPalette>() ?? AppPalette.saluDefault;
 }
 
+/// Surface-only tint adjustment. 0 preserves each existing alpha exactly;
+/// higher percentages remove that fraction of the original opacity, NOT
+/// opacity points. Foregrounds, strokes and the video canvas never use this.
+class OverlayAppearance extends ThemeExtension<OverlayAppearance> {
+  const OverlayAppearance(this.transparency);
+
+  final int transparency;
+
+  Color tint(Color original) => transparency == 0
+      ? original // Retain the exact legacy colour/alpha at the default.
+      : original.withValues(alpha: original.a * (1 - transparency / 100));
+
+  @override
+  OverlayAppearance copyWith({int? transparency}) =>
+      OverlayAppearance(transparency ?? this.transparency);
+
+  @override
+  OverlayAppearance lerp(covariant OverlayAppearance? other, double t) =>
+      OverlayAppearance(other == null
+          ? transparency
+          : (transparency + (other.transparency - transparency) * t).round());
+}
+
+extension SaluSurfaceContext on BuildContext {
+  /// Only call for the background tint of a SALU-owned floating surface.
+  Color overlayTint(Color original) =>
+      (Theme.of(this).extension<OverlayAppearance>() ??
+              const OverlayAppearance(0))
+          .tint(original);
+}
+
 /// Runtime palette values. The original SALU palette remains the default.
 class AppPalette extends ThemeExtension<AppPalette> {
   const AppPalette({
@@ -295,10 +326,15 @@ class AppTheme {
     'Segoe UI',
   ];
 
-  static ThemeData get dark => _build(AppPalette.saluDefault, Brightness.dark);
-  static ThemeData get light => _build(AppPalette.light, Brightness.light);
+  static ThemeData get dark => darkFor(0);
+  static ThemeData get light => lightFor(0);
+  static ThemeData darkFor(int transparency) =>
+      _build(AppPalette.saluDefault, Brightness.dark, transparency);
+  static ThemeData lightFor(int transparency) =>
+      _build(AppPalette.light, Brightness.light, transparency);
 
-  static ThemeData _build(AppPalette p, Brightness brightness) {
+  static ThemeData _build(AppPalette p, Brightness brightness, int transparency) {
+    final OverlayAppearance overlay = OverlayAppearance(transparency);
     final ColorScheme scheme = (brightness == Brightness.dark
             ? const ColorScheme.dark()
             : const ColorScheme.light())
@@ -322,7 +358,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
-      extensions: <ThemeExtension<dynamic>>[p],
+      extensions: <ThemeExtension<dynamic>>[p, overlay],
       brightness: brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: p.background,
@@ -337,21 +373,21 @@ class AppTheme {
         opticalSize: 24,
       ),
       cardTheme: CardThemeData(
-        color: p.surface,
+        color: overlay.tint(p.surface),
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: p.surface,
+        backgroundColor: overlay.tint(p.surface),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: p.surface,
+        color: overlay.tint(p.surface),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: p.surfaceHighlight,
+          color: overlay.tint(p.surfaceHighlight),
           borderRadius: BorderRadius.circular(6),
         ),
         textStyle: TextStyle(

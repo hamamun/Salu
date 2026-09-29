@@ -92,7 +92,7 @@ class _BrowserFavouriteSheetState extends State<BrowserFavouriteSheet> {
     final List<String> folders = WebFavouritesService.instance.folders;
     return Material(
       elevation: 0,
-      color: context.palette.surface,
+      color: context.overlayTint(context.palette.surface),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 300,

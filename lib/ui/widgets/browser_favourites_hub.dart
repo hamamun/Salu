@@ -88,7 +88,7 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
           onKeyEvent: _onKey,
           child: Material(
             elevation: 0,
-            color: context.palette.surface,
+            color: context.overlayTint(context.palette.surface),
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: 320,
@@ -131,7 +131,7 @@ class _BrowserFavouritesHubState extends State<BrowserFavouritesHub> {
                       padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: context.palette.background,
+                          color: context.overlayTint(context.palette.background),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: context.palette.surfaceOutline,

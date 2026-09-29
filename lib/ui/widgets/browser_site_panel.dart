@@ -53,7 +53,7 @@ class BrowserSitePanel extends StatelessWidget {
       },
       child: Material(
         elevation: 0,
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: 320,
@@ -163,7 +163,7 @@ class BrowserSitePanel extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: context.palette.background,
+                      color: context.overlayTint(context.palette.background),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: context.palette.surfaceOutline),
                     ),
@@ -306,7 +306,7 @@ class BlockedPopupList extends StatelessWidget {
       },
       child: Material(
         elevation: 0,
-        color: context.palette.surface,
+        color: context.overlayTint(context.palette.surface),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: 380,
