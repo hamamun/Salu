@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/shortcuts/shortcut_registry.dart';
 import '../../core/settings_service.dart';
+import '../../core/shortcuts/shortcut_registry.dart';
 import '../widgets/alt_peek.dart';
 import '../widgets/custom_title_bar.dart';
 import 'fetch_control.dart';
