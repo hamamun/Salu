@@ -1,6 +1,8 @@
 #define MyAppName "SALU"
 #define MyAppVersion "0.1.0"
 #define MyAppExeName "salu.exe"
+; Pascal Script has no local `const` blocks, so keep the WebView2 product GUID here.
+#define WebView2ClientId "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 
 [Setup]
 AppId={{A92C3F15-8D22-4E0C-9A10-5B8460D2F319}
@@ -90,15 +92,13 @@ begin
 end;
 
 function IsWebView2RuntimeInstalled: Boolean;
-const
-  WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
 begin
   Result := RuntimeVersionPresent(HKLM,
-    'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\' + WebView2Client) or
+    'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{#WebView2ClientId}') or
     RuntimeVersionPresent(HKLM,
-    'SOFTWARE\Microsoft\EdgeUpdate\Clients\' + WebView2Client) or
+    'SOFTWARE\Microsoft\EdgeUpdate\Clients\{#WebView2ClientId}') or
     RuntimeVersionPresent(HKCU,
-    'Software\Microsoft\EdgeUpdate\Clients\' + WebView2Client);
+    'Software\Microsoft\EdgeUpdate\Clients\{#WebView2ClientId}');
 end;
 
 function HasPurgeDataSwitch: Boolean;
