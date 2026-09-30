@@ -969,7 +969,7 @@ Use this if you fork SALU and want “same, but my name/colours/extensions”:
 6. If you fork Remote APK, copy `remote_protocol.dart` constants to it; change `remotePort` if needed.
 7. Run `flutter analyze && flutter test && dart format --set-exit-if-changed lib test`.
 8. Build Windows: `flutter build windows --release`; smoke-test: single instance (double-click file), Stop parks queue, drag folder natural sort, playlist search duplicates guard, translation `1/2/3/4` not intercepting `0–9` seek, mini bar 488×32 + top meter, right-menu seat gap, Web keep-alive, subtitle Fetch panel marks live, updater staging clean.
-9. For distribution: `AssociationService.unregisterAll` wired to your uninstaller (`salu.exe --unregister`), Inno/MSIX writing HKCU as in `association_plan.dart`.
+9. For Windows distribution, build the complete release folder with `flutter build windows --release`, then compile `salu.iss` in Inno Setup. The installer is x64 / Windows 10 1809+, offers per-user or all-user install, shortcut/startup choices and video/audio/playlist Open-with registration, closes SALU for upgrades, unregisters associations on uninstall, and optionally removes SALU settings/WebView2 profile. It checks for WebView2 and offers Microsoft's download page if missing. The installer packages the MSVC runtime DLLs next to `salu.exe`; test the release folder for `msvcp140.dll`, `vcruntime140.dll`, and `vcruntime140_1.dll` on Windows. Remote's consent-based Private-profile firewall setup remains in SALU; do not add a broad installer firewall rule. Code signing still requires the publisher's own certificate.
 
 No instruction-copy, no box-behind-icon, no confirm-dialog should be introduced — the three undo toasts are the approved destruction path.
 
