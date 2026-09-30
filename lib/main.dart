@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import 'core/association/association_install_args.dart';
 import 'core/association/association_service.dart';
 import 'core/browser_service.dart';
 import 'core/channel_favourites_service.dart';
@@ -33,6 +34,23 @@ Future<void> main(List<String> args) async {
   if (Platform.isWindows && args.contains('--unregister')) {
     AssociationService.instance.unregisterAll();
     exit(0);
+  }
+
+  // Inno Setup uses these switches for the user's selected file-association
+  // groups. This is registry-only, runs before the player engine starts, and
+  // never forces Windows' protected default-app choice.
+  if (Platform.isWindows) {
+    final Set<String> selectedExtensions =
+        associationExtensionsFromInstallerArgs(args);
+    if (selectedExtensions.isNotEmpty) {
+      final AssociationService associations = AssociationService.instance;
+      associations.refresh();
+      associations.apply(<String>{
+        ...associations.associated.value,
+        ...selectedExtensions,
+      });
+      exit(0);
+    }
   }
 
   // ── Phase 1 · Step 6: strict single instance + file argument routing. ─

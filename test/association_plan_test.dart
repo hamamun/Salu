@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salu/core/association/association_install_args.dart';
 import 'package:salu/core/association/association_plan.dart';
 import 'package:salu/core/association/association_registry.dart';
 import 'package:salu/core/association/association_service.dart';
@@ -61,6 +62,23 @@ void main() {
     expect(groupOf('.mp4'), AssociationGroup.video);
     expect(groupOf('.flac'), AssociationGroup.audio);
     expect(groupOf('.m3u8'), AssociationGroup.playlist);
+  });
+
+  test('installer switches select only the requested association groups', () {
+    expect(
+      associationExtensionsFromInstallerArgs(<String>[
+        '--associate-video',
+        '--associate-playlists',
+      ]),
+      <String>{
+        ...AssociationGroup.video.extensions,
+        ...AssociationGroup.playlist.extensions,
+      },
+    );
+    expect(
+      associationExtensionsFromInstallerArgs(<String>['--unknown']),
+      isEmpty,
+    );
   });
 
   test('commands quote the exe and the argument', () {
