@@ -263,6 +263,7 @@ To fork/re-brand SALU, change **only** these files/values (everything else follo
 - `window_manager.waitUntilReadyToShow(WindowOptions(... TitleBarStyle.hidden, windowButtonVisibility:false))`
 - `CustomTitleBar` (`lib/ui/widgets/custom_title_bar.dart`) draws **Min (—) · Max (□) / Restore (two squares) · Close (×)** as thin SALU marks. Hover: `iconIdle → textPrimary` + scale 1.06; press: 0.90; **no box behind**, no red close box (follow.md rule 4). Drag on the strip moves window; double-click toggles maximize.
 - Chrome fades in on mouse move, out after ~3 s of stillness **while playing** (idle shows it). Implemented in `HomeScreen` hover logic; `ChromeLock` (`lib/core/ui_lock.dart`) held by any popup.
+- **Fullscreen cursor:** the arrow goes down with the chrome — `MouseRegion(cursor: SystemMouseCursors.none)` on the player's root region, swapped back to `MouseCursor.defer` on wake. Pure Flutter, no native call. Same 3 s rhythm as the chrome (`_cursorHideDelay`) and the same wake sources, but a **stricter decision**: fullscreen only, and it ignores both the transport state (drops while PAUSED, where "Pin (playback off)" keeps the chrome up) and the title-bar mode (drops in "Locked", where the chrome itself never hides). Never hides while the chrome block is hovered, `ChromeLock` is held, a panel/pill/right-menu is open (`PanelService.anySurfaceOpen`, watched through `PanelService.surfaces` so a surface raised by the remote pulls the arrow back at once), a drop is hovering, the window is unfocused (`didChangeAppLifecycleState`), or mini/Web owns the window. Leaving fullscreen reveals it immediately; entering arms the countdown instead of firing it. Anything that reveals the chrome reveals the arrow too (`_wakeChrome` → `_showCursor`), so a visible controller can never sit there with no arrow to click it with; the two exceptions are deliberate — **transport keys** (they never wake the chrome either, so keyboard-only seeking must not flash the arrow) and **pin-mode's pause raise** (`_raiseChrome`, which lifts the bar without the arrow, since nothing the user did caused it). Child regions asking for `SystemMouseCursors.click` outrank the root while hovered.
 
 ### 6.2 Single instance & file-argument routing
 
@@ -320,8 +321,10 @@ To fork/re-brand SALU, change **only** these files/values (everything else follo
 
 ### 8.1 HomeScreen layering (bottom → top)
 
-`video canvas → drop overlay → bottom hairline (hidden when STOPPED) → top chrome (title+controller) → playlist panel → resume-toast click-outside → OSD deck → modals`  
+`video canvas → drop overlay → bottom hairline (hidden when STOPPED; never drawn for a channel list) → top chrome (title+controller) → playlist panel → resume-toast click-outside → OSD deck → modals`  
 Z: video < playlist < chrome < Open pill < OSD < barrier/modal.
+
+- **Bottom hairline** (`_AutoHideProgress`, 2 px, display-only, pointer-absorbing) shows the progress fill while the chrome is auto-hidden — local files only, playing or paused. A **channel list draws nothing there**: the still soft light that used to stand in for a progress fill has no position to show, and it fades on every buffering stall and back on every recovery, which on a fullscreen bottom edge read as a buffering lamp pulsing with the network. The gate is `QueueService.isChannelList`, *not* `PlayerService.isLiveMode` — the latter also wants `hasMedia`, still false between the playlist landing and the first stream connecting. The light remains inside the timeline (`§8.2` row 1), where it belongs to a controller the user asked for.
 
 ### 8.2 ControllerPanel (`lib/ui/osc/controller_panel.dart`)
 

@@ -155,4 +155,23 @@ class PanelService {
 
   /// Whether any panel is up — the chrome's "do not hide under me" check.
   bool get anyOpen => _popups.any((ValueNotifier<bool> popup) => popup.value);
+
+  /// Whether any surface the pointer could be about to click is up: the
+  /// one-popup world plus the group-by pill (which deliberately lives
+  /// outside it).
+  bool get anySurfaceOpen => anyOpen || groupPillOpen.value;
+
+  /// Fires whenever [anySurfaceOpen] flips.
+  ///
+  /// One hook for anything that must react to "a surface appeared / went
+  /// away" without subscribing to all seven notifiers itself — the
+  /// fullscreen cursor's force-show is its caller: a panel opened by the
+  /// remote, or by anything other than a local keypress, must bring the
+  /// hidden arrow back at once rather than at the next pointer move.
+  /// Built once (`late final`) — `Listenable.merge` allocates, and this is
+  /// registered as a listener, not read per frame.
+  late final Listenable surfaces = Listenable.merge(<Listenable>[
+    ..._popups,
+    groupPillOpen,
+  ]);
 }
