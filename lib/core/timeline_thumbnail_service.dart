@@ -4,6 +4,16 @@ import 'dart:typed_data';
 
 import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
 
+/// One job: one whole second of one file.
+final class _Job {
+  const _Job(this.path, this.timeMs);
+
+  final String path;
+  final int timeMs;
+
+  String get key => '$path@$timeMs';
+}
+
 /// SALU's timeline hover thumbnails — the shared cache plus the background
 /// generation behind it.
 ///
@@ -77,14 +87,6 @@ class TimelineThumbnailService {
   final int _maxFineQueue;
 
   final LinkedHashMap<String, Uint8List> _cache = LinkedHashMap();
-
-  /// One job: one whole second of one file.
-  final class _Job {
-    const _Job(this.path, this.timeMs);
-    final String path;
-    final int timeMs;
-    String get key => '$path@$timeMs';
-  }
 
   /// Key of the in-flight job (null = idle) — deduplicates the queues.
   String? _inFlightKey;
