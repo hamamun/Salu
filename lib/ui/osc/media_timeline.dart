@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart'
@@ -13,12 +11,12 @@ import 'package:flutter/gestures.dart'
         PointerSignalEvent,
         PointerUpEvent;
 import 'package:flutter/material.dart';
-import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
 
 import '../../core/clock_format.dart';
 import '../../core/player_service.dart';
 import '../../core/queue_service.dart';
 import '../../core/settings_service.dart';
+import '../../core/timeline_thumbnail_service.dart';
 import '../../core/transport_actions.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/live_light.dart';
@@ -73,12 +71,19 @@ class _MediaTimelineState extends State<MediaTimeline> {
 
   /// Pointer x as a fraction of the bar (0..1) — shows the hover chip.
   double? _hoverFrac;
+
+  /// The frame shown under the cursor — from the shared cache
+  /// ([TimelineThumbnailService]); null while the aimed second has no
+  /// frame yet.
   Uint8List? _hoverThumbnail;
+
+  /// The aimed second ('$path@$timeMs') — a decoded frame is shown only
+  /// when it is for exactly this one, so a late frame for a second the
+  /// cursor already left is never painted at the wrong spot.
   String? _thumbnailKey;
-  Timer? _thumbnailDebounce;
-  int _thumbnailRequest = 0;
-  final LinkedHashMap<String, Uint8List> _thumbnailCache =
-      LinkedHashMap<String, Uint8List>();
+
+  /// True while this widget has the background strip armed.
+  bool _stripArmed = false;
 
   /// Press/drag scrub position (0..1) — preview only; committed on release.
   double? _pressFrac;
@@ -105,15 +110,20 @@ class _MediaTimelineState extends State<MediaTimeline> {
       _player.currentPath,
       QueueService.instance.items,
     ]);
+    _merged.addListener(_syncStrip);
+    _syncStrip();
+    TimelineThumbnailService.instance.onFrame = _onFrame;
   }
 
   double _clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 
   Duration get _duration => _player.duration.value;
 
-  /// Extract only after the pointer settles briefly, then reuse nearby
-  /// one-second samples. The bounded in-memory cache avoids repeatedly
-  /// decoding frames while moving back and forth along the same video.
+  /// The hover preview is a pure cache lookup: the strip lane (background
+  /// grid) and the fine lane (this exact second, [requestFine]) keep the
+  /// cache warm, so the frame is usually here the instant the pointer
+  /// enters a new second — the preview flows continuously while scrubbing,
+  /// in either direction, without waiting on a decode.
   void _queueThumbnail(double frac) {
     final String? path = _player.currentPath.value;
     if (path == null || path.contains('://') || !_usable) return;
@@ -121,47 +131,63 @@ class _MediaTimelineState extends State<MediaTimeline> {
     final String key = '$path@$timeMs';
     if (key == _thumbnailKey) return;
     _thumbnailKey = key;
-    final int request = ++_thumbnailRequest;
-    _thumbnailDebounce?.cancel();
-    final Uint8List? cached = _thumbnailCache.remove(key);
+    final TimelineThumbnailService thumbs =
+        TimelineThumbnailService.instance;
+    final Uint8List? cached = thumbs.lookup(path, timeMs);
     if (cached != null) {
-      _thumbnailCache[key] = cached;
       setState(() => _hoverThumbnail = cached);
       return;
     }
     setState(() => _hoverThumbnail = null);
-    _thumbnailDebounce = Timer(const Duration(milliseconds: 140), () async {
-      try {
-        final Uint8List? bytes = await FlutterVideoThumbnailPlus.thumbnailData(
-          video: path,
-          imageFormat: ImageFormat.jpeg,
-          maxWidth: 240,
-          maxHeight: 135,
-          timeMs: timeMs,
-          quality: 65,
-        );
-        if (!mounted || request != _thumbnailRequest || bytes == null) return;
-        _thumbnailCache[key] = bytes;
-        while (_thumbnailCache.length > 48) {
-          _thumbnailCache.remove(_thumbnailCache.keys.first);
-        }
-        setState(() => _hoverThumbnail = bytes);
-      } catch (_) {
-        // Unsupported codecs / paths simply leave the ordinary time chip.
+    thumbs.requestFine(path, timeMs);
+  }
+
+  /// A decoded frame landed (fine lane, or the strip grid filling the
+  /// aimed second from behind). Shown only when it is the second the
+  /// cursor is aiming at right now.
+  void _onFrame(String path, int timeMs, Uint8List bytes) {
+    if (!mounted) return;
+    final String? key = _thumbnailKey;
+    if (key == null || key != '$path@$timeMs') return;
+    setState(() => _hoverThumbnail = bytes);
+  }
+
+  /// Arms or disarms the background strip with the media's state. The
+  /// service is idempotent per (path, duration), so the frequent position
+  /// ticks this listener rides on cost one comparison each.
+  void _syncStrip() {
+    final String? path = _player.currentPath.value;
+    if (path == null || path.contains('://') || !_usable) {
+      if (_stripArmed) {
+        _stripArmed = false;
+        TimelineThumbnailService.instance.release();
       }
-    });
+      return;
+    }
+    if (!_stripArmed) {
+      _stripArmed = true;
+      TimelineThumbnailService.instance.ensureStrip(path, _duration);
+    }
   }
 
   void _clearThumbnail() {
-    _thumbnailDebounce?.cancel();
-    _thumbnailRequest++;
     _thumbnailKey = null;
     if (_hoverThumbnail != null) setState(() => _hoverThumbnail = null);
   }
 
   @override
   void dispose() {
-    _thumbnailDebounce?.cancel();
+    final TimelineThumbnailService thumbs =
+        TimelineThumbnailService.instance;
+    if (thumbs.onFrame == _onFrame) thumbs.onFrame = null;
+    _merged.removeListener(_syncStrip);
+    // The chrome's timeline lives for the app's lifetime, so dispose is
+    // app shutdown (or a structural change) — release the grid only when
+    // the media is actually gone, so a remount with the video still
+    // current reuses the armed strip instead of restarting it.
+    if (_stripArmed && !(_usable && _player.currentPath.value != null)) {
+      thumbs.release();
+    }
     super.dispose();
   }
 
