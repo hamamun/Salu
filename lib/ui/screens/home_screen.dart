@@ -279,29 +279,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _onChromeLockChanged() => _wakeChrome();
 
   /// Transport-state transitions: in "Pin (playback off)" mode, leaving
-  /// `playing` (pause AND stop) must pin the chrome up.
+  /// `playing` (pause AND stop) must pin the chrome up — but NOT the
+  /// cursor, which hides while paused too. Hence [_raiseChrome], not
+  /// [_wakeChrome]: nothing the user did caused this raise.
   void _onTransportStateChanged() {
     if (_settings.titleBarMode.value == TitleBarMode.pinWhenPlaybackOff &&
         _player.transportState.value != TransportState.playing) {
-      _wakeChrome();
+      _raiseChrome();
     }
   }
 
+  /// The user did something — the chrome comes up, and the arrow comes
+  /// back with it.
+  ///
+  /// Every activity that reveals the chrome reveals the cursor too, so the
+  /// two can never sit in the half-state of a visible controller with no
+  /// arrow to click it with. The ONE exception is [_raiseChrome].
   void _wakeChrome() {
-    if (!_chromeVisible) setState(() => _chromeVisible = true);
-    _restartIdleTimers();
+    _showCursor();
+    _raiseChrome();
   }
 
-  /// The POINTER moved — the one wake that brings the arrow back with the
-  /// chrome instead of merely re-arming its countdown.
+  /// Raise the chrome WITHOUT touching the cursor.
   ///
-  /// Kept apart from [_wakeChrome] on purpose: a transport keypress (Space,
-  /// the seek arrows, `m`) also wakes things, and it must NOT flash the
-  /// cursor. Keyboard-only viewing is exactly when a hidden arrow should
-  /// stay hidden — the same reason those keys never wake the chrome.
-  void _wakeChromeAndCursor() {
-    _showCursor();
-    _wakeChrome();
+  /// Pin-mode's transport raise is the only caller: there the bar comes up
+  /// because playback stopped, not because the user did anything, and
+  /// revealing the arrow on every pause would undo "the cursor hides while
+  /// PAUSED too".
+  void _raiseChrome() {
+    if (!_chromeVisible) setState(() => _chromeVisible = true);
+    _restartIdleTimers();
   }
 
   /// Both idle countdowns restart together — one rhythm, so a wake source
@@ -541,13 +548,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// back too: it just crossed the screen to get here.
   void _onChromeEnter() {
     if (!_chromeHovered) setState(() => _chromeHovered = true);
-    _wakeChromeAndCursor();
+    _wakeChrome();
   }
 
   /// The pointer left the chrome block — the countdown starts afresh.
   void _onChromeExit() {
     if (_chromeHovered) setState(() => _chromeHovered = false);
-    _wakeChromeAndCursor();
+    _wakeChrome();
   }
 
   /// Files hovering over the window. One owner for the flag (the drop
@@ -1373,7 +1380,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             cursor: _cursorHidden
                 ? SystemMouseCursors.none
                 : MouseCursor.defer,
-            onHover: (_) => _wakeChromeAndCursor(),
+            onHover: (_) => _wakeChrome(),
             child: Stack(
               fit: StackFit.expand,
               children: <Widget>[
