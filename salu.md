@@ -65,7 +65,7 @@ Owner signature: `created by HAM` (About tab footer, `AppColors.whisper`).
 - **OS:** Windows 10/11 (WebView2 Runtime ships with 10/11; SALU never bundles Edge).
 - **Flutter SDK:** **3.47.5** (CI-pinned; the checked-in `pubspec.lock` was generated with it).
 - **Visual Studio:** 2022 **Desktop development with C++**, Windows 11 SDK 10.0.22000.194+.
-- **Other:** `file_selector` opens native Explorer pickers (C++ backend, no win32 Dart constraint); `nuget.exe` optional for vendored WebView2 build.
+- **Other:** `file_selector` opens native Explorer pickers (C++ backend, no win32 Dart constraint); `nuget.exe` optional for vendored WebView2 build; **Inno Setup 6** (`ISCC.exe` on PATH or in `Program Files\Inno Setup 6`) to compile `salu.iss` into the installer.
 
 ```powershell
 # one-time
@@ -77,6 +77,10 @@ flutter run -d windows
 # release
 flutter build windows --release
 # output: build\windows\x64\runner\Release\salu.exe
+
+# clean rebuild + standalone installer in one command (repo root; Inno Setup 6)
+powershell -ExecutionPolicy Bypass -File tools\build_installer.ps1
+# output: dist\SALU-Setup-<version>.exe
 
 # quality gates (run on a Windows machine with SDK)
 flutter analyze
@@ -944,8 +948,18 @@ flutter run -d windows
 # [SALU] hardware decoding: d3d11va
 
 # release
+flutter clean
+flutter pub get
 flutter build windows --release
-# installer (not yet shipped): would handle --unregister hook
+
+# standalone installer (Inno Setup 6 compiler; run from the repo root)
+iscc salu.iss
+# output: dist\SALU-Setup-<version>.exe  (git-ignored, one file per version)
+
+# or the whole clean -> pub get -> gates -> build -> installer loop in ONE command:
+powershell -ExecutionPolicy Bypass -File tools\build_installer.ps1
+# switches: -SkipClean -SkipTests -AllowVersionMismatch -OpenOutput
+# (the script refuses to build while salu.iss MyAppVersion != pubspec.yaml version)
 ```
 
 ### Verification gates (owner’s checklists still owed on a Windows box)
@@ -972,7 +986,7 @@ Use this if you fork SALU and want “same, but my name/colours/extensions”:
 6. If you fork Remote APK, copy `remote_protocol.dart` constants to it; change `remotePort` if needed.
 7. Run `flutter analyze && flutter test && dart format --set-exit-if-changed lib test`.
 8. Build Windows: `flutter build windows --release`; smoke-test: single instance (double-click file), Stop parks queue, drag folder natural sort, playlist search duplicates guard, translation `1/2/3/4` not intercepting `0–9` seek, mini bar 488×32 + top meter, right-menu seat gap, Web keep-alive, subtitle Fetch panel marks live, updater staging clean.
-9. For Windows distribution, build the complete release folder with `flutter build windows --release`, then compile `salu.iss` in Inno Setup. The installer is x64 / Windows 10 1809+, offers per-user or all-user install, shortcut/startup choices and video/audio/playlist Open-with registration, closes SALU for upgrades, unregisters associations on uninstall, and optionally removes SALU settings/WebView2 profile. It checks for WebView2 and offers Microsoft's download page if missing. The installer packages the MSVC runtime DLLs next to `salu.exe`; test the release folder for `msvcp140.dll`, `vcruntime140.dll`, and `vcruntime140_1.dll` on Windows. Remote's consent-based Private-profile firewall setup remains in SALU; do not add a broad installer firewall rule. Code signing still requires the publisher's own certificate.
+9. For Windows distribution, build the complete release folder with `flutter build windows --release`, then compile `salu.iss` in Inno Setup (`tools\build_installer.ps1` runs the whole loop; bump `#define MyAppVersion` in `salu.iss` to the pubspec version first - the script refuses a mismatch). The installer is x64 / Windows 10 1809+, offers per-user or all-user install, shortcut/startup choices and video/audio/playlist Open-with registration, closes SALU for upgrades, unregisters associations on uninstall, and optionally removes SALU settings/WebView2 profile. It checks for WebView2 and offers Microsoft's download page if missing. The installer packages the MSVC runtime DLLs next to `salu.exe`; test the release folder for `msvcp140.dll`, `vcruntime140.dll`, and `vcruntime140_1.dll` on Windows. Remote's consent-based Private-profile firewall setup remains in SALU; do not add a broad installer firewall rule. Code signing still requires the publisher's own certificate.
 
 No instruction-copy, no box-behind-icon, no confirm-dialog should be introduced — the three undo toasts are the approved destruction path.
 

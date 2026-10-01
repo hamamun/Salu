@@ -15,8 +15,16 @@ DefaultGroupName=SALU
 UninstallDisplayName=SALU
 UninstallDisplayIcon={app}\salu.exe
 SetupIconFile=windows\runner\resources\app_icon.ico
-OutputDir=.
-OutputBaseFilename=SALU-Setup
+; Installer lands in dist\ (git-ignored, survives `flutter clean`) and keeps
+; one file per version so releases never overwrite each other. For a fixed
+; name instead, use OutputBaseFilename=SALU-Setup.
+OutputDir=dist
+OutputBaseFilename=SALU-Setup-{#MyAppVersion}
+; Properties shown on the installer .exe itself (Properties -> Details).
+VersionInfoCompany=SALU
+VersionInfoProductName=SALU
+VersionInfoDescription=SALU Setup
+VersionInfoVersion={#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

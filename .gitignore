@@ -31,6 +31,9 @@ migrate_working_dir/
 .pub/
 /build/
 
+# Inno Setup output (salu.iss)
+/dist/
+
 # Symbolication related
 app.*.symbols
 
