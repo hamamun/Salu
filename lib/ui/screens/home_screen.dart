@@ -40,7 +40,6 @@ import '../widgets/alt_peek.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/download_badge.dart';
 import '../widgets/eq_curve_overlay.dart';
-import '../widgets/live_light.dart';
 import '../widgets/settings_dialog.dart';
 import '../widgets/subtitle_search_dialog.dart';
 import '../widgets/web_mode_toggle.dart';
@@ -53,7 +52,12 @@ import 'video_screen.dart';
 /// block (single shared gradient, no borders, no seams, edge to edge) that
 /// shows and hides together. When it auto-hides, a thin, display-only
 /// progress hairline remains at the very bottom of the window (hidden
-/// entirely while STOPPED — a parked queue has no progress to draw).
+/// entirely while STOPPED — a parked queue has no progress to draw — and
+/// entirely for a CHANNEL LIST, where the bottom edge stays clean).
+///
+/// In fullscreen the mouse cursor goes down with the chrome: after the
+/// cursor's own 3-second idle delay the arrow hides, and the pointer move
+/// that wakes the controller wakes it too.
 ///
 /// Layers, back to front: video canvas → drop overlay → progress hairline
 /// → top chrome → slide-out playlist panel → resume-toast click-outside
@@ -68,7 +72,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final PlayerService _player = PlayerService.instance;
   final SettingsService _settings = SettingsService.instance;
   final OsdController _osd = OsdController.instance;
@@ -117,6 +121,35 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _dropHovering = false;
 
   static const Duration _autoHideDelay = Duration(seconds: 3);
+
+  // ── Fullscreen cursor ─────────────────────────────────────────────────
+  //
+  // The arrow follows the chrome down instead of staying parked on the
+  // picture after the controller has slid away. It rides the same idle
+  // rhythm as the chrome — every wake source below feeds both — but the
+  // DECISION is deliberately stricter, so it gets its own flag and timer
+  // rather than reading `_chromeVisible`:
+  //
+  //   · fullscreen only — a windowed player always shows its cursor
+  //     (window drag/resize, the taskbar, the OS chrome all need it);
+  //   · ignores the transport state — it drops while PAUSED too, where
+  //     "Pin (playback off)" keeps the chrome up;
+  //   · ignores the title-bar mode — it drops in "Locked" too, where the
+  //     chrome itself never hides.
+  //
+  // What it never ignores is the pointer's own targets: while the chrome
+  // block is hovered, a lock is held, a surface is open, or a drop is on
+  // its way in, the cursor stays — hiding it there would take the arrow
+  // out from under an imminent click.
+
+  /// Whether the cursor is currently hidden.
+  bool _cursorHidden = false;
+  Timer? _cursorTimer;
+
+  /// Stillness after which the arrow goes down in fullscreen. The same
+  /// three seconds as the chrome's [_autoHideDelay], so the two read as
+  /// one motion rather than the arrow lagging behind the glass.
+  static const Duration _cursorHideDelay = Duration(seconds: 3);
 
   /// Fixed height of the unified chrome block: 40px title bar + 108px
   /// controller (`kChromeBlockHeight`, public — the OSD deck anchors to
@@ -172,6 +205,16 @@ class _HomeScreenState extends State<HomeScreen> {
     // Pin-mode rule: when playback stops or pauses, the pinned chrome
     // must come up (a keypress must never kill a pinned chrome).
     _player.transportState.addListener(_onTransportStateChanged);
+    // Fullscreen is the cursor's on/off switch — leaving it must bring the
+    // arrow back at once, and entering it arms (never fires) the countdown
+    // so the pointer that clicked Fullscreen is still there to see.
+    _windows.isFullscreen.addListener(_onFullscreenChanged);
+    // A surface raised by anything other than a local pointer move — the
+    // remote, a shortcut — must pull a hidden arrow straight back.
+    PanelService.instance.surfaces.addListener(_onSurfacesChanged);
+    // Losing the window restores the arrow: on return the pointer may
+    // already be resting over SALU, and no move would ever fire to show it.
+    WidgetsBinding.instance.addObserver(this);
     // The Tune panel's owner starts mirroring the player here — the same
     // place the first media is opened, so a landed file re-lays its four
     // continua (and answers Auto EQ) before the panel can ever paint.
@@ -183,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // metadata/cover surface immediately.
     LyricService.instance.startWatching();
     AudioDisplayService.instance.startWatching();
-    _restartHideTimer();
+    _restartIdleTimers();
 
     // Play the file the app was launched with, if any.
     final String? initial = widget.initialFilePath;
@@ -206,6 +249,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _cursorTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _settings.titleBarMode.removeListener(_onTitleBarModeChanged);
     _settings.controllerPlacement.removeListener(_onPlacementChanged);
     _windows.mode.removeListener(_onWindowModeChanged);
@@ -213,6 +258,8 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_downloadSub?.cancel());
     ChromeLock.instance.listenable.removeListener(_onChromeLockChanged);
     _player.transportState.removeListener(_onTransportStateChanged);
+    _windows.isFullscreen.removeListener(_onFullscreenChanged);
+    PanelService.instance.surfaces.removeListener(_onSurfacesChanged);
     _rightMenuAnchor.dispose();
     _playerFocus.dispose();
     _webFocus.dispose();
@@ -242,7 +289,99 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _wakeChrome() {
     if (!_chromeVisible) setState(() => _chromeVisible = true);
+    _restartIdleTimers();
+  }
+
+  /// The POINTER moved — the one wake that brings the arrow back with the
+  /// chrome instead of merely re-arming its countdown.
+  ///
+  /// Kept apart from [_wakeChrome] on purpose: a transport keypress (Space,
+  /// the seek arrows, `m`) also wakes things, and it must NOT flash the
+  /// cursor. Keyboard-only viewing is exactly when a hidden arrow should
+  /// stay hidden — the same reason those keys never wake the chrome.
+  void _wakeChromeAndCursor() {
+    _showCursor();
+    _wakeChrome();
+  }
+
+  /// Both idle countdowns restart together — one rhythm, so a wake source
+  /// that reaches one can never leave the other running on stale time.
+  void _restartIdleTimers() {
     _restartHideTimer();
+    _restartCursorTimer();
+  }
+
+  // ── Fullscreen cursor ─────────────────────────────────────────────────
+
+  /// Arm (or cancel) the cursor's idle countdown.
+  ///
+  /// Cancels outright — and pulls the arrow back — the moment hiding is no
+  /// longer allowed, which is what makes the guards live rather than
+  /// merely advisory: a lock taken, a panel raised, a drop arriving or a
+  /// step out of fullscreen all land here and reveal the cursor at once.
+  void _restartCursorTimer() {
+    _cursorTimer?.cancel();
+    _cursorTimer = null;
+    if (!_cursorMayHide()) {
+      _showCursor();
+      return;
+    }
+    _cursorTimer = Timer(_cursorHideDelay, () {
+      _cursorTimer = null;
+      if (!mounted || _cursorHidden) return;
+      // Re-checked at FIRE time, not at arm time: the three seconds may
+      // have grown a panel, a lock or a hovering drop that no pointer
+      // move ever announced.
+      if (!_cursorMayHide()) return;
+      setState(() => _cursorHidden = true);
+    });
+  }
+
+  void _showCursor() {
+    if (_cursorHidden && mounted) setState(() => _cursorHidden = false);
+  }
+
+  /// Whether the arrow is allowed to go down right now.
+  ///
+  /// Deliberately stricter than the chrome's own rule: it ignores the
+  /// transport state and the title-bar mode, so it hides while PAUSED and
+  /// while "Locked" — both cases where the chrome itself stays up. What it
+  /// never ignores is a target the pointer could be about to hit.
+  bool _cursorMayHide() {
+    // Windowed, maximised, mini, Web: the cursor belongs to the user.
+    if (!_windows.isFullscreen.value) return false;
+    if (_windows.isMini) return false;
+    if (_browser.isWeb) return false;
+    // Mid-interaction with something on screen — hiding here would take
+    // the arrow out from under an imminent click.
+    if (_chromeHovered) return false;
+    if (ChromeLock.instance.isLocked) return false;
+    if (PanelService.instance.anySurfaceOpen) return false;
+    if (_dropHovering) return false;
+    return true;
+  }
+
+  /// Fullscreen flipped. Entering arms the countdown (never fires it — the
+  /// pointer that clicked Fullscreen is still on screen); leaving forces
+  /// the arrow back, since a windowed player always shows its cursor.
+  void _onFullscreenChanged() => _restartCursorTimer();
+
+  /// A panel, the right menu or the group pill opened or closed. Opening
+  /// one must reveal a hidden arrow immediately — it may have been raised
+  /// by the remote, with no local pointer move to do it.
+  void _onSurfacesChanged() => _restartCursorTimer();
+
+  /// Leaving the window (alt-tab, a click on the taskbar) restores the
+  /// arrow; coming back re-arms the countdown from a clean three seconds.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _restartCursorTimer();
+    } else {
+      _cursorTimer?.cancel();
+      _cursorTimer = null;
+      _showCursor();
+    }
   }
 
   /// A mode switch changes what EXISTS (mini.md §8 · §9): mini has no
@@ -258,6 +397,12 @@ class _HomeScreenState extends State<HomeScreen> {
       PanelService.instance.closeAll();
     }
     _osd.dismiss();
+    // The mini bar is never fullscreen and has no root cursor region of its
+    // own, so a hidden flag carried across the swap would be stale on the
+    // way back — re-evaluate the cursor on either switch. The chrome's own
+    // countdown is deliberately left alone here: mode switches never
+    // touched it before, and the bar has no chrome block to hide.
+    _restartCursorTimer();
   }
 
   /// Player · Web — entering Web mode closes every player surface the same
@@ -286,8 +431,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     setState(() {});
     // Coming back to Player mode re-arms the chrome countdown the web
-    // branch paused; entering Web the call is simply ignored.
-    _restartHideTimer();
+    // branch paused; entering Web the call is simply ignored — and the
+    // cursor's own countdown is re-evaluated either way, since Web mode
+    // hands the arrow back to the page.
+    _restartIdleTimers();
     // The web surface outlives the swap, so its focus never re-asks
     // itself — move the keyboard by hand, after the frame that just
     // re-attached (or newly attached) the surface. For the player it is
@@ -390,16 +537,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// The pointer entered the chrome block — keep it visible while the user
-  /// works the controls, no matter how still the mouse is.
+  /// works the controls, no matter how still the mouse is. The arrow comes
+  /// back too: it just crossed the screen to get here.
   void _onChromeEnter() {
     if (!_chromeHovered) setState(() => _chromeHovered = true);
-    _wakeChrome();
+    _wakeChromeAndCursor();
   }
 
   /// The pointer left the chrome block — the countdown starts afresh.
   void _onChromeExit() {
     if (_chromeHovered) setState(() => _chromeHovered = false);
-    _wakeChrome();
+    _wakeChromeAndCursor();
+  }
+
+  /// Files hovering over the window. One owner for the flag (the drop
+  /// overlay in both trees reads it), and a cursor re-check on the way in:
+  /// the OS drag loop swallows Flutter's pointer events, so no `onHover`
+  /// would ever fire to reveal a hidden arrow while the files arrive.
+  void _onDropHoverChanged(bool hovering) {
+    if (_dropHovering == hovering) return;
+    setState(() => _dropHovering = hovering);
+    _restartCursorTimer();
   }
 
   void _restartHideTimer() {
@@ -1133,8 +1291,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // Drop follows full mode's rules exactly, panels included: with
           // no playlist open a drop plays, and `_onDropDone` reads the same
           // service the full window does.
-          onDragEntered: (_) => setState(() => _dropHovering = true),
-          onDragExited: (_) => setState(() => _dropHovering = false),
+          onDragEntered: (_) => _onDropHoverChanged(true),
+          onDragExited: (_) => _onDropHoverChanged(false),
           onDragDone: _onDropDone,
           child: MiniShell(dropHovering: _dropHovering),
         ),
@@ -1202,12 +1360,20 @@ class _HomeScreenState extends State<HomeScreen> {
         focusNode: _playerFocus,
         onKeyEvent: _onKeyEvent,
         child: DropTarget(
-          onDragEntered: (_) => setState(() => _dropHovering = true),
-          onDragExited: (_) => setState(() => _dropHovering = false),
+          onDragEntered: (_) => _onDropHoverChanged(true),
+          onDragExited: (_) => _onDropHoverChanged(false),
           onDragDone: _onDropDone,
           child: MouseRegion(
             opaque: false,
-            onHover: (_) => _wakeChrome(),
+            // Fullscreen + idle: the arrow goes down with the chrome.
+            // `defer` while shown (not `basic`) so the child regions that
+            // ask for `click` — panels, OSD cards, playlist rows — still
+            // win the hover, and so this can never override a cursor an
+            // ancestor set.
+            cursor: _cursorHidden
+                ? SystemMouseCursors.none
+                : MouseCursor.defer,
+            onHover: (_) => _wakeChromeAndCursor(),
             child: Stack(
               fit: StackFit.expand,
               children: <Widget>[
@@ -1440,12 +1606,17 @@ class _HomeScreenState extends State<HomeScreen> {
 /// auto-hidden. Hidden entirely while STOPPED (and while idle) — a parked
 /// queue has no progress to draw.
 ///
-/// Local mode renders the filled progress (edge to edge). Channel mode
-/// renders the still soft light instead — the same [StillSoftLight] as
-/// the timeline, brighter (2 px needs the contrast), and the only hairline
-/// that ever shows while live: the timeline exists only while the chrome
-/// is shown and the hairline only while it is hidden, so the signal hands
-/// off and is never duplicated (§10.8c).
+/// Local mode renders the filled progress, edge to edge.
+///
+/// A CHANNEL LIST renders nothing at all. It used to stand in with the
+/// still soft light — the same mark as the timeline's, brightened for a
+/// 2 px slot — but a live stream has no position to fill, and the light
+/// fades out on every buffering stall and back in on every recovery: on
+/// the bottom edge of a fullscreen picture, with the chrome gone, that
+/// read as a buffering lamp glued to the film and pulsing with the
+/// network. The bottom edge now stays clean the moment a playlist lands,
+/// windowed or fullscreen alike. The light still lives inside the
+/// timeline, where it belongs to a controller the user asked for.
 ///
 /// Purely informational: never receives pointer events, and offers no
 /// hover/tooltip/click action.
@@ -1458,6 +1629,7 @@ class _AutoHideProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final PlayerService player = PlayerService.instance;
+    final QueueService queue = QueueService.instance;
     return Positioned(
       left: 0,
       right: 0,
@@ -1468,36 +1640,31 @@ class _AutoHideProgress extends StatelessWidget {
       child: Listener(
         behavior: HitTestBehavior.opaque,
         onPointerDown: (_) {},
-        child: AnimatedOpacity(
-          opacity: visible ? 1 : 0,
-          duration: const Duration(milliseconds: 180),
-          child: ListenableBuilder(
-            listenable: Listenable.merge(<Listenable>[
-              player.position,
-              player.duration,
-              player.transportState,
-              player.isBuffering,
-              QueueService.instance.items,
-            ]),
-            builder: (BuildContext context, Widget? _) {
-              // Channel mode: the light, never a progress fill — a live
-              // stream has no position (§10.8a–c).
-              if (player.isLiveMode) {
-                return StillSoftLight(
-                  visible: player.isLiveReceiving,
-                  peak: 0.5,
-                  radiusX: 0.30,
-                  radiusY: 4.0,
-                  fadeStop: 0.80,
-                );
-              }
-              final Duration dur = player.duration.value;
-              final double frac = dur > Duration.zero
-                  ? (player.position.value.inMilliseconds / dur.inMilliseconds)
-                      .clamp(0.0, 1.0)
-                      .toDouble()
-                  : 0.0;
-              return LayoutBuilder(
+        // The fade sits INSIDE the rebuild, not around it: [visible] reads
+        // the transport state and the shape of the queue, and both change
+        // without the parent ever rebuilding — a hairline that only
+        // re-checked on a chrome rebuild would sit there stale after Stop,
+        // or still glow after a playlist landed.
+        child: ListenableBuilder(
+          listenable: Listenable.merge(<Listenable>[
+            player.position,
+            player.duration,
+            player.transportState,
+            queue.items,
+          ]),
+          builder: (BuildContext context, Widget? _) {
+            // Channel mode reaches here with `visible` false and fades out
+            // over the same 180 ms — no hard cut when the playlist lands.
+            final Duration dur = player.duration.value;
+            final double frac = dur > Duration.zero
+                ? (player.position.value.inMilliseconds / dur.inMilliseconds)
+                    .clamp(0.0, 1.0)
+                    .toDouble()
+                : 0.0;
+            return AnimatedOpacity(
+              opacity: visible ? 1 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints constraints) {
                   final double w = constraints.maxWidth;
                   return Stack(
@@ -1513,18 +1680,25 @@ class _AutoHideProgress extends StatelessWidget {
                     ],
                   );
                 },
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
   /// Live only while an item actually plays or pauses — stopped/idle
-  /// hides it even if the chrome is hidden.
+  /// hides it even if the chrome is hidden — and never for a channel
+  /// list, which has no progress to draw and no light to stand in for one.
+  ///
+  /// Gated on the LIST rather than on `PlayerService.isLiveMode`: that
+  /// also wants `hasMedia`, which is still false in the gap between the
+  /// playlist landing and the first stream connecting — precisely when the
+  /// bottom edge has to be clean already.
   bool get visible {
     if (!chromeHidden) return false;
+    if (QueueService.instance.isChannelList) return false;
     switch (PlayerService.instance.transportState.value) {
       case TransportState.playing:
       case TransportState.paused:
